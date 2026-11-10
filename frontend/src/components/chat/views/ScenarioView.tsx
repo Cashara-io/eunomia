@@ -25,21 +25,21 @@ function MetricRow({ run, i }: { run: ScenarioRun; i: number }) {
   return (
     <li className="soft-panel px-3 py-2.5 flex flex-col gap-1 min-w-0">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <h4 className="text-[14px] font-medium">{words(before.metric)}</h4>
+        <h4 className="text-body font-medium">{words(before.metric)}</h4>
         {before.status !== "approved" && <StatusLabel tone="info">Not approved yet</StatusLabel>}
       </div>
       {/* Geist, not Mono, for the numbers: see MetricView */}
-      <p className="flex flex-wrap items-baseline gap-x-2 text-[22px] font-medium leading-tight" style={big}>
+      <p className="flex flex-wrap items-baseline gap-x-2 text-display font-medium leading-tight" style={big}>
         <span style={{ color: "var(--ink-dim)" }}>{shown.before}</span>
         <span aria-label="becomes">{"→"}</span>
         <span>{shown.after}</span>
         {after.unit && (
-          <span className="font-mono text-[13px] font-normal" style={{ color: "var(--ink-dim)" }}>
+          <span className="font-mono text-detail font-normal" style={{ color: "var(--ink-dim)" }}>
             {after.unit}
           </span>
         )}
       </p>
-      <p className="text-[13px]">
+      <p className="text-detail">
         <span className="font-medium" title={shown.exactDelta == null ? undefined : `Exact change: ${shown.exactDelta}`}>{shown.movement}</span>
         <span style={{ color: "var(--ink-dim)" }}>
           {" "}
@@ -62,7 +62,7 @@ export default function ScenarioView({ view }: { view: Scenario }) {
         <Duo icon={ArrowsLeftRightIcon} size={18} tone="none" className="mt-0.5" />
         <div className="min-w-0 flex-1 flex flex-col gap-1">
           <h3 className="section-title">{view.headline}</h3>
-          <ul className="flex flex-col text-[13px]" aria-label="The changes">
+          <ul className="flex flex-col text-detail" aria-label="The changes">
             {run.changes.map((c, i) => (
               <li key={`${i}-${c}`}>{c}</li>
             ))}
@@ -79,7 +79,7 @@ export default function ScenarioView({ view }: { view: Scenario }) {
       {run.changed.length > 0 && (
         <div className="flex flex-col gap-1">
           <h4 className="label">Changed</h4>
-          <ul className="flex flex-col gap-0.5 text-[13px]">
+          <ul className="flex flex-col gap-0.5 text-detail">
             {run.changed.map((c) => (
               <li key={`${c.entity_id}.${c.property}`} className="flex flex-wrap gap-x-1.5">
                 <Link href={href(c.entity_id, run.vault)} className="font-medium hover:underline underline-offset-2">
@@ -100,7 +100,7 @@ export default function ScenarioView({ view }: { view: Scenario }) {
         </div>
       )}
       {run.removed.length > 0 && (
-        <p className="text-[13px]">
+        <p className="text-detail">
           <span className="label">Removed</span> {run.removed.map((r) => r.name).join(", ")}
         </p>
       )}
@@ -112,7 +112,7 @@ export default function ScenarioView({ view }: { view: Scenario }) {
           <ul className="flex flex-wrap gap-1.5">
             {run.reached.map((r) => (
               <li key={r.entity_id}>
-                <Link href={href(r.entity_id, run.vault)} title={r.via} className="pill !min-h-7 !px-2.5 text-[13px] hover:underline underline-offset-2">
+                <Link href={href(r.entity_id, run.vault)} title={r.via} className="pill !min-h-7 !px-2.5 text-detail hover:underline underline-offset-2">
                   {r.name}
                   <span className="ml-1.5" style={{ color: "var(--ink-dim)" }}>
                     {words(r.kind)}
@@ -125,7 +125,7 @@ export default function ScenarioView({ view }: { view: Scenario }) {
         </details>
       )}
       <MetricWarnings warnings={run.warnings} />
-      <p className="text-[13px] font-medium border-t pt-2.5" style={{ borderColor: "var(--border)" }}>
+      <p className="text-detail font-medium border-t pt-2.5" style={{ borderColor: "var(--border)" }}>
         Nothing was saved: this is a what-if. As of {asOfDate(run.as_of)}.
       </p>
     </section>

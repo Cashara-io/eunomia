@@ -114,7 +114,7 @@ export default function Scene3D({ points, links = [], axes, selectedId, highligh
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     } catch {
       const msg = document.createElement("p");
-      msg.className = "absolute inset-0 flex items-center justify-center text-[12.5px]";
+      msg.className = "absolute inset-0 flex items-center justify-center text-detail";
       msg.style.color = "var(--ink-faint)";
       msg.textContent = "This view needs WebGL, which this browser has turned off.";
       overlay.replaceChildren(msg);
@@ -696,7 +696,7 @@ export default function Scene3D({ points, links = [], axes, selectedId, highligh
       </div>
       {hover && (
         <div
-          className="panel absolute pointer-events-none px-2 py-1 text-[12px] max-w-xs"
+          className="panel absolute pointer-events-none px-2 py-1 text-caption max-w-xs"
           style={{ left: hover.x + 12, top: hover.y + 12, borderRadius: 6, color: "var(--ink)", boxShadow: "var(--shadow-pop)" }}
         >
           {hover.label}
@@ -718,7 +718,7 @@ export default function Scene3D({ points, links = [], axes, selectedId, highligh
               aria-label="Zoom level, drag to change"
               aria-valuenow={100}
               aria-valuetext="100%"
-              className="font-mono text-[12px] w-12 h-[26px] leading-[26px] text-center rounded-[5px] select-none touch-none cursor-ew-resize hover:bg-[var(--surface-raised)]"
+              className="font-mono text-caption w-12 h-[26px] leading-[26px] text-center rounded-[5px] select-none touch-none cursor-ew-resize hover:bg-[var(--surface-raised)]"
               style={{ color: "var(--ink-dim)" }}
               onPointerDown={(e) => {
                 if (e.button !== 0) return;

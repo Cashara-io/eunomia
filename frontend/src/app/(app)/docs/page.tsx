@@ -39,6 +39,16 @@ If ChatGPT can't reach Eunomia, the steps say so. Ask your Eunomia admin to give
 
 Everything is saved in a space. **Personal** is yours alone; a team space is shared with everyone in it. When someone invites you, the invitation appears on Home. See [How Eunomia works](concepts.md) for how spaces work.
 
+## AI provider
+
+An AI provider is optional. Connected AI apps can recall and save memory using their own models. To let Eunomia search by meaning and answer questions in Chat, an admin can add a provider in **Settings > AI provider**. Any OpenAI-compatible endpoint works, including a local model server or proxy. You can skip this during setup and add it later.
+
+The embedding model supports meaning search. The chat model finds people, topics and connections in synced data and answers questions in Chat. Leave the chat model blank for automatic selection: gpt-4o-mini on OpenAI, or the first chat model offered by another endpoint.
+
+## Custom integrations
+
+An extension gives your own script a webhook inbox. Eunomia holds incoming data until the script collects it over the API. The script runs on your computer or server; Eunomia does not host it. Open **Connected sources > Advanced: custom integrations** to create an extension. Its target memory space tells the script where it is expected to save each batch.
+
 ## Changing what your AI remembers
 
 Admins can add **AI instructions**: the instructions AI apps follow, for example *always remember project deadlines*. If there is something your AI app should always remember, ask your admin.
@@ -200,7 +210,7 @@ export default function DocsPage() {
             <div key={g.label} className="flex flex-col gap-1">
               {/* No group label that would just repeat the page title ("Using Eunomia" on its own page). */}
               {g.label !== docTitle && (
-                <h2 className="text-[12px] font-semibold px-3" style={{ color: "var(--ink-dim)" }}>
+                <h2 className="text-caption font-semibold px-3" style={{ color: "var(--ink-dim)" }}>
                   {g.label}
                 </h2>
               )}
@@ -212,7 +222,7 @@ export default function DocsPage() {
                       <button
                         onClick={() => setTopic(t.topic)}
                         aria-current={current ? "page" : undefined}
-                        className={`w-full text-left min-h-10 px-3 rounded-[10px] text-[14px] truncate transition-colors duration-150 ${current ? "font-semibold" : "hover:bg-[var(--surface-raised)]"}`}
+                        className={`w-full text-left min-h-10 px-3 rounded-[10px] text-body truncate transition-colors duration-150 ${current ? "font-semibold" : "hover:bg-[var(--surface-raised)]"}`}
                         style={current ? { background: "var(--accent)", color: "var(--on-accent)" } : { color: "var(--ink)" }}
                       >
                         {t.title}
@@ -225,10 +235,10 @@ export default function DocsPage() {
           ))}
         </div>
         <div className="md:hidden flex flex-col gap-1.5">
-          <span className="text-[14px] font-medium" aria-hidden>Help topic</span>
+          <span className="text-body font-medium" aria-hidden>Help topic</span>
           <Select
             aria-label="Help topic"
-            className="h-11 text-[14px] w-full"
+            className="h-11 text-body w-full"
             value={topic}
             onChange={setTopic}
             placeholder="Loading help"
@@ -238,7 +248,7 @@ export default function DocsPage() {
       </nav>
 
       <div className="min-w-0 flex flex-col gap-4">
-        <article ref={articleRef} className="text-[15px] leading-[1.7] docs">
+        <article ref={articleRef} className="text-reading leading-[1.7] docs">
           {error ? (
             <ErrorLine error={error} />
           ) : body === null ? (
@@ -283,10 +293,10 @@ export default function DocsPage() {
 
       {outline.length > 1 && (
         <aside className="hidden xl:block sticky top-8 self-start" aria-label="On this page">
-          <p className="text-[12px] font-semibold mb-2 pl-3" style={{ color: "var(--ink-dim)" }}>
+          <p className="text-caption font-semibold mb-2 pl-3" style={{ color: "var(--ink-dim)" }}>
             On this page
           </p>
-          <ul className="flex flex-col text-[13px]" style={{ borderLeft: "1px solid var(--border)" }}>
+          <ul className="flex flex-col text-detail" style={{ borderLeft: "1px solid var(--border)" }}>
             {outline.map((h) => (
               <li key={h.id}>
                 <a

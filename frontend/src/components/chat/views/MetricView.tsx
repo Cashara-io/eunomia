@@ -24,7 +24,7 @@ const plural = (n: number, kind: string) => `${words(kind)}${n === 1 ? "" : "s"}
 export function MetricNumber({ run, size = 40 }: { run: MetricRun; size?: number }) {
   if (run.value == null) {
     return (
-      <p className="text-[15px] font-medium" style={{ color: "var(--ink-dim)" }}>
+      <p className="text-reading font-medium" style={{ color: "var(--ink-dim)" }}>
         No value
       </p>
     );
@@ -36,7 +36,7 @@ export function MetricNumber({ run, size = 40 }: { run: MetricRun; size?: number
         {formatNumber(run.value, run.unit)}
       </span>
       {run.unit && (
-        <span className="font-mono text-[13px]" style={{ color: "var(--ink-dim)" }}>
+        <span className="font-mono text-detail" style={{ color: "var(--ink-dim)" }}>
           {run.unit}
         </span>
       )}
@@ -47,7 +47,7 @@ export function MetricNumber({ run, size = 40 }: { run: MetricRun; size?: number
 export function MetricWarnings({ warnings }: { warnings: string[] }) {
   if (warnings.length === 0) return null;
   return (
-    <ul className="flex flex-col gap-1 text-[13px]" aria-label="Notes on this number">
+    <ul className="flex flex-col gap-1 text-detail" aria-label="Notes on this number">
       {warnings.map((w) => (
         <li key={w} className="flex items-start gap-1.5">
           <WarningIcon size={14} weight="bold" className="mt-0.5 shrink-0" aria-hidden />
@@ -91,7 +91,7 @@ export default function MetricView({ view }: { view: Metric }) {
             <h3 className="section-title">{words(run.metric)}</h3>
             {run.status !== "approved" && <StatusLabel tone="info">Not approved yet</StatusLabel>}
           </div>
-          {run.description && <p className="text-[13px]">{run.description}</p>}
+          {run.description && <p className="text-detail">{run.description}</p>}
         </div>
       </header>
       {!run.series && !run.groups && <MetricNumber run={run} />}
@@ -131,7 +131,7 @@ export default function MetricView({ view }: { view: Metric }) {
           </tbody>
         </table>
       )}
-      <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+      <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
         {run.expr_words}. As of {asOfDate(run.as_of)}, from <span className="font-mono">{run.n_entities}</span> {plural(run.n_entities, run.kind)}.
         {run.metric_mapped && ` Asked for ${words(run.metric_mapped.from)}, which was merged into this one.`}
       </p>
@@ -143,13 +143,13 @@ export default function MetricView({ view }: { view: Metric }) {
         <ul className="flex flex-wrap gap-1.5" aria-label="Computed from">
           {current.entities.map((e) => (
             <li key={e.id}>
-              <Link href={entityHref(e)} className="pill !min-h-7 !px-2.5 text-[13px] hover:underline underline-offset-2">
+              <Link href={entityHref(e)} className="pill !min-h-7 !px-2.5 text-detail hover:underline underline-offset-2">
                 {e.name}
               </Link>
             </li>
           ))}
           {more > 0 && (
-            <li className="text-[13px] self-center" style={{ color: "var(--ink-dim)" }}>
+            <li className="text-detail self-center" style={{ color: "var(--ink-dim)" }}>
               and <span className="font-mono">{more}</span> more
             </li>
           )}

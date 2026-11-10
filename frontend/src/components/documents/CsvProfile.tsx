@@ -28,7 +28,7 @@ const percent = (share: number) => `${Math.round(share * 100)}%`;
 
 function LinkTargets({ result, preview = false }: { result: Pick<ImportOut, "reused" | "ambiguous" | "skipped">; preview?: boolean }) {
   return (
-    <div className="flex flex-col gap-1 text-[13px]">
+    <div className="flex flex-col gap-1 text-detail">
       {result.reused.length > 0 && (
         <p data-testid="import-reused">
           {preview ? "Will link to" : "Linked to"} {result.reused.length === 1 ? "an entity" : "entities"} you already have instead of adding new ones:{" "}
@@ -57,7 +57,7 @@ function Imported({ out }: { out: ImportOut }) {
     </>
   );
   return (
-    <div role="status" className="flex flex-col gap-1 text-[13px]">
+    <div role="status" className="flex flex-col gap-1 text-detail">
       <p>
         Imported {n(out.rows, "row", "rows")} as {words(out.kind)}: {n(out.created, "new", "new")}, {n(out.updated, "updated", "updated")},{" "}
         {n(out.values, "value", "values")}.
@@ -73,7 +73,7 @@ function Imported({ out }: { out: ImportOut }) {
           <p style={{ color: "var(--ink-dim)" }}>
             {n(out.bad_count, "cell was", "cells were")} left out. The rest was imported.
           </p>
-          <ul className="flex flex-col gap-0.5 text-[12px]" style={{ color: "var(--ink-dim)" }}>
+          <ul className="flex flex-col gap-0.5 text-caption" style={{ color: "var(--ink-dim)" }}>
             {out.bad.slice(0, 5).map((b) => (
               <li key={`${b.line} ${b.column ?? ""}`}>
                 Line <span className="font-mono">{b.line}</span>
@@ -173,21 +173,21 @@ export default function CsvProfile({ documentId }: { documentId: string }) {
       </div>
 
       {!plan.kind && (
-        <p className="text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
+        <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
           To import these rows as objects, open Ontology for this file&apos;s memory space, use Add data to run Auto-map, and approve what it
           suggests. Then come back here to import them.
         </p>
       )}
       {plan.kind && !plan.ready && (
-        <p className="text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
+        <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
           Mapped to {words(plan.kind)}. Import rows works once an owner approves {words(plan.kind)} and at least one of its properties in Ontology.
         </p>
       )}
       {plan.kind && plan.ready && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[13px]">Name each {words(plan.kind)} by</span>
+          <span className="text-detail">Name each {words(plan.kind)} by</span>
           <Select
-            className="h-8 text-[13px] w-[180px]"
+            className="h-8 text-detail w-[180px]"
             aria-label="Column that names each row"
             value={name}
             options={p.columns.map((c) => ({ value: c, label: c }))}

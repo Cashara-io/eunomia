@@ -107,7 +107,7 @@ export function Copy({
   tone?: string;
 }) {
   if (kind === "Heading")
-    return <h3 className="text-lg font-semibold">{text}</h3>;
+    return <h3 className="text-reading font-semibold">{text}</h3>;
   if (kind === "Badge") return <span className="pill text-xs">{text}</span>;
   if (kind === "Caption")
     return <p className="text-xs text-[var(--ink-dim)]">{text}</p>;

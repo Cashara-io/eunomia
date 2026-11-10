@@ -10,7 +10,7 @@ import { EXAMPLE_QUESTION, Kbd, Note, useMcpAddress } from "@/components/connect
 function Problem({ id, title, children }: { id?: string; title: string; children: React.ReactNode }) {
   return (
     <section id={id} className="guide-step flex flex-col gap-3 py-6 scroll-mt-6" aria-labelledby={id ? `${id}-title` : undefined}>
-      <h3 id={id ? `${id}-title` : undefined} className="text-[17px] font-medium tracking-[-0.015em]">
+      <h3 id={id ? `${id}-title` : undefined} className="text-reading font-medium tracking-[-0.015em]">
         {title}
       </h3>
       {children}
@@ -28,7 +28,7 @@ export default function ConnectionHelpPage() {
       <div className="task-panel p-6 sm:p-8 flex flex-col">
         <div className="flex flex-col gap-3 pb-6" style={{ borderBottom: "1px solid var(--border)" }}>
           <h2 className="connect-title">Let&apos;s get your app connected</h2>
-          <p className="text-[16px]">Choose the issue that matches what you see. You do not need to change technical settings yourself.</p>
+          <p className="text-reading">Choose the issue that matches what you see. You do not need to change technical settings yourself.</p>
         </div>
 
         <Problem id="choose" title="I’m not sure which app to choose">
@@ -93,12 +93,12 @@ export default function ConnectionHelpPage() {
 
         <Problem id="no-memories" title="The app connected but found no memories">
           <Note>That is a normal result for a new account. Try asking the app to save a simple preference, then ask about it again.</Note>
-          <p className="text-[15px]">&ldquo;{EXAMPLE_QUESTION}&rdquo;</p>
+          <p className="text-reading">&ldquo;{EXAMPLE_QUESTION}&rdquo;</p>
           <CopyButton value={EXAMPLE_QUESTION} label="Copy example question" size="sm" className="self-start" />
         </Problem>
 
         <section className="soft-panel px-5 py-5 mt-2 flex flex-col gap-3" aria-labelledby="unfinished-title">
-          <h3 id="unfinished-title" className="text-[17px] font-medium tracking-[-0.015em]">
+          <h3 id="unfinished-title" className="text-reading font-medium tracking-[-0.015em]">
             Sign-in did not finish?
           </h3>
           <Note>

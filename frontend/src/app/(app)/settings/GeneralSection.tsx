@@ -76,10 +76,10 @@ export function ModelSection({ settings }: { settings: AppSettings }) {
         }}
       >
         <PanelHead title="AI provider (optional)">
-          Not required: an agent connected over MCP (Claude, Codex and others) can recall and write memory using its own
-          model. Adding one saves agent tokens, since Eunomia then does embeddings and answer synthesis itself and powers the
-          in-app chat. Any OpenAI-compatible endpoint works, a local model server or proxy included.
+          Add an OpenAI-compatible provider for meaning search and in-app chat.
         </PanelHead>
+
+        <a href="/docs#ai-provider" className="link text-detail self-start">About AI providers</a>
 
         <div className="ledger hairline-rows">
           <div className={row}>

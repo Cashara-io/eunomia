@@ -180,7 +180,7 @@ function TurnHeader({ name, at, children }: { name: string; at?: string; childre
     <div className="flex items-center gap-2 h-5 mb-2">
       <AuthorTag name={name} />
       {at && (
-        <time dateTime={at} className="font-mono text-[11.5px]" style={{ color: "var(--ink-faint)" }}>
+        <time dateTime={at} className="font-mono text-caption" style={{ color: "var(--ink-faint)" }}>
           {timeLabel(at)}
         </time>
       )}
@@ -195,10 +195,10 @@ function ToolRow({ step, live }: { step: ToolStep; live?: boolean }) {
     <>
       {/* the opened rows draw their chevron from summary::before; a running row keeps the same indent */}
       {!inspectable && <span className="w-[14px] shrink-0" aria-hidden />}
-      <span className="text-[13px] font-medium shrink-0" style={{ color: "var(--ink)" }}>
+      <span className="text-detail font-medium shrink-0" style={{ color: "var(--ink)" }}>
         {toolWords(step.name)}
       </span>
-      <span className="ml-auto pl-2 shrink-0 flex items-center gap-1 text-[12px]" style={{ color: "var(--ink-dim)" }}>
+      <span className="ml-auto pl-2 shrink-0 flex items-center gap-1 text-caption" style={{ color: "var(--ink-dim)" }}>
         {/* history rows mount "done" and sit still; live rows draw the check when their tool returns */}
         <SyncMark status={step.running ? "running" : "done"} size={12} />
         <MorphText>{step.running ? "Running" : "Done"}</MorphText>
@@ -265,7 +265,7 @@ function TurnView({ turn, me }: { turn: Turn; me: string | null }) {
       <article>
         {me ? <TurnHeader name={me} at={turn.at} /> : <div className="h-5 mb-2" />}
         <div
-          className="whitespace-pre-wrap break-words text-[15px] leading-relaxed px-4 py-3 rounded-[12px]"
+          className="whitespace-pre-wrap break-words text-reading leading-relaxed px-4 py-3 rounded-[12px]"
           style={{ background: "var(--surface-raised)", color: "var(--ink)" }}
         >
           {turn.content}
@@ -279,7 +279,7 @@ function TurnView({ turn, me }: { turn: Turn; me: string | null }) {
       <ToolSteps steps={turn.steps} />
       <TurnViews steps={turn.steps} />
       {turn.content && (
-        <div className="text-[15px] px-0.5 break-words" style={{ color: "var(--ink)" }}>
+        <div className="text-reading px-0.5 break-words" style={{ color: "var(--ink)" }}>
           <ChatText tree={turn.tree} />
         </div>
       )}
@@ -319,10 +319,10 @@ function ThreadList({
               <button
                 onClick={() => onSelect(t.id)}
                 aria-current={active ? "true" : undefined}
-                className="press flex-1 min-w-0 flex items-center gap-2 text-left min-h-10 pl-2.5 pr-2.5 text-[14px]"
+                className="press flex-1 min-w-0 flex items-center gap-2 text-left min-h-10 pl-2.5 pr-2.5 text-body"
               >
                 <span className="truncate flex-1">{t.title}</span>
-                <span className="thread-time font-mono text-[11px] shrink-0" style={{ color: "var(--ink-faint)" }}>
+                <span className="thread-time font-mono text-caption shrink-0" style={{ color: "var(--ink-faint)" }}>
                   {ageLabel(t.updated_at)}
                 </span>
               </button>
@@ -335,7 +335,7 @@ function ThreadList({
           );
         })}
         {threads?.length === 0 && (
-          <div className="px-2.5 py-2 text-[12px]" style={{ color: "var(--ink-faint)" }}>
+          <div className="px-2.5 py-2 text-caption" style={{ color: "var(--ink-faint)" }}>
             No conversations yet.
           </div>
         )}
@@ -347,16 +347,16 @@ function ThreadList({
 function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return (
     <div className="flex-1 flex flex-col justify-center w-full max-w-[560px] mx-auto py-8">
-      <h2 className="text-[22px] font-medium tracking-[-0.03em]" style={{ color: "var(--ink)" }}>
+      <h2 className="text-page-title font-medium tracking-[-0.03em]" style={{ color: "var(--ink)" }}>
         Ask your memory anything
       </h2>
-      <p className="text-[15px] mt-2 mb-5 leading-relaxed" style={{ color: "var(--ink-dim)" }}>
+      <p className="text-reading mt-2 mb-5 leading-relaxed" style={{ color: "var(--ink-dim)" }}>
         Ask about people, projects or documents you&apos;ve saved. Each answer shows where Eunomia looked, so you can check what it read and
         what it saved. Pick an example or type your own question below.
       </p>
       <div className="ledger hairline-rows overflow-hidden">
         {EXAMPLES.map((ex) => (
-          <button key={ex} onClick={() => onPick(ex)} className="example-row press w-full flex items-center gap-2.5 min-h-11 py-2 px-4 text-left text-[14px]">
+          <button key={ex} onClick={() => onPick(ex)} className="example-row press w-full flex items-center gap-2.5 min-h-11 py-2 px-4 text-left text-body">
             <span className="flex-1">{ex}</span>
             <ArrowElbowDownLeftIcon weight="duotone" size={16} className="shrink-0" style={{ color: "var(--ink-faint)" }} />
           </button>
@@ -628,7 +628,7 @@ export default function ChatPage() {
           <div className="md:hidden flex items-center gap-2 p-2 shrink-0" style={{ borderBottom: "var(--hair) solid var(--border)" }}>
             <Select
               aria-label="Conversation"
-              className="h-10 text-[14px] flex-1 min-w-0"
+              className="h-10 text-body flex-1 min-w-0"
               value={activeId ?? ""}
               onChange={(id) => id && selectThread(id)}
               options={[...(activeId ? [] : [{ value: "", label: "New chat" }]), ...(threads ?? []).map((t) => ({ value: t.id, label: t.title }))]}
@@ -664,7 +664,7 @@ export default function ChatPage() {
               {sending && (
                 <article className="fade-in">
                   <TurnHeader name={ASSISTANT}>
-                    <span className="flex items-center gap-1.5 text-[12px]" style={{ color: "var(--ink-faint)" }}>
+                    <span className="flex items-center gap-1.5 text-caption" style={{ color: "var(--ink-faint)" }}>
                       {streamingText ? (
                         <span>
                           Thought for <span className="font-mono tabular-nums">{secs(thoughtMs ?? 0)}</span>
@@ -680,7 +680,7 @@ export default function ChatPage() {
                   <ToolSteps steps={liveSteps} live />
                   <TurnViews steps={liveSteps} />
                   {streamingText && (
-                    <div className="settle text-[14px] px-0.5 break-words" style={{ color: "var(--ink)" }}>
+                    <div className="settle text-body px-0.5 break-words" style={{ color: "var(--ink)" }}>
                       <ChatText tree={streamingTree} />
                     </div>
                   )}
@@ -689,7 +689,7 @@ export default function ChatPage() {
               {error && (
                 <div
                   role="alert"
-                  className="flex items-start gap-2.5 px-4 py-3 rounded-[10px] text-[14px]"
+                  className="flex items-start gap-2.5 px-4 py-3 rounded-[10px] text-body"
                   style={{ background: "var(--critical-soft)", color: "var(--critical)" }}
                 >
                   <WarningCircleIcon weight="duotone" size={18} className="shrink-0 mt-px" aria-hidden />
@@ -711,7 +711,7 @@ export default function ChatPage() {
                       )}
                     </div>
                     {(error.code && !error.code.startsWith("http.")) || error.traceId ? (
-                      <div className="mt-1 flex flex-wrap items-center gap-x-3 font-mono text-[12px]">
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 font-mono text-caption">
                         {error.code && !error.code.startsWith("http.") && <code>{error.code}</code>}
                         {error.traceId && <span>Trace {error.traceId}</span>}
                       </div>
@@ -740,7 +740,7 @@ export default function ChatPage() {
                 ref={inputRef}
                 aria-label="Message"
                 rows={1}
-                className="composer w-full resize-none bg-transparent outline-none px-4 pt-3.5 pb-1 text-[15px] leading-relaxed"
+                className="composer w-full resize-none bg-transparent outline-none px-4 pt-3.5 pb-1 text-reading leading-relaxed"
                 placeholder={modelReady ? "Ask a question…" : "Set up a model to chat"}
                 disabled={!modelReady}
                 value={input}
@@ -753,7 +753,7 @@ export default function ChatPage() {
                 }}
               />
               <div className="flex items-center gap-2 pl-3.5 pr-2 pb-2">
-                <span className="hidden sm:flex items-center gap-1 text-[12px]" style={{ color: "var(--ink-dim)" }}>
+                <span className="hidden sm:flex items-center gap-1 text-caption" style={{ color: "var(--ink-dim)" }}>
                   <span className="kbd">Enter</span> send <span className="kbd ml-1.5">Shift Enter</span> new line
                 </span>
                 <div className="ml-auto flex">
@@ -791,7 +791,7 @@ export default function ChatPage() {
         .press { transition: transform var(--dur-press) var(--ease-out), background-color var(--dur-hover) ease, color var(--dur-hover) ease; }
         .press:active { transform: scale(0.97); }
         .tool-pre {
-          font: 11.5px/1.55 var(--font-mono), ui-monospace, monospace;
+          font: var(--type-detail)/1.55 var(--font-mono), ui-monospace, monospace;
           color: var(--ink);
           background: var(--surface-raised);
           border: 1px solid var(--border);

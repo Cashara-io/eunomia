@@ -75,7 +75,7 @@ function PreviewBadge({ info }: { info: KindInfo | undefined }) {
   return (
     <span
       data-testid="preview-badge"
-      className="inline-flex items-center rounded-[4px] px-1.5 text-[11px] font-medium leading-[18px]"
+      className="inline-flex items-center rounded-[4px] px-1.5 text-caption font-medium leading-[18px]"
       style={{ color: "var(--warning)", border: "var(--hair) solid var(--warning)" }}
       title={info.note ?? undefined}
     >
@@ -93,21 +93,21 @@ export default function PasswordManagersSection() {
         <h2 id="password-managers-heading" className="section-title">
           Password managers
         </h2>
-        <p className="text-[12.5px] mt-1 max-w-[66ch]" style={{ color: "var(--ink-dim)" }}>
+        <p className="text-detail mt-1 max-w-[66ch]" style={{ color: "var(--ink-dim)" }}>
           Let tools use secrets kept in your own 1Password or Bitwarden Secrets Manager. Eunomia stores only references such as <code className="font-mono">op://Ops/Square/access_token</code>, resolves them for one tool call at a
           time, and logs every use. Values are never stored.
         </p>
       </div>
       {access.isError && <ErrorLine error={failure(access.error, "Could not load the password managers.", " Reload the page to try again.")} />}
       {a && !a.manage_refs ? (
-        <p className="ledger px-4 py-4 text-[13px]" style={{ color: "var(--ink-dim)" }}>
+        <p className="ledger px-4 py-4 text-detail" style={{ color: "var(--ink-dim)" }}>
           Only an owner of this organisation, an instance admin or a vault owner can manage password managers.
         </p>
       ) : a ? (
         <>
           <Helper admin={a.toggle_helper} />
           {!a.manage_providers && (
-            <p className="text-[12.5px] max-w-[66ch]" style={{ color: "var(--ink-dim)" }} data-testid="vault-owner-note">
+            <p className="text-detail max-w-[66ch]" style={{ color: "var(--ink-dim)" }} data-testid="vault-owner-note">
               Only an owner of this organisation or an instance admin can set up a password manager. As a vault owner you can manage the references of the vaults you own and see their resolution log; their secret requests and held secrets are under Secrets agents asked for.
             </p>
           )}
@@ -135,11 +135,11 @@ const HELPER_TONE: Record<string, string> = { off: "var(--ink-faint)", starting:
 /** The exact `.env` line and command, for a server with no updater service (or an admin who prefers it). */
 function ManualSteps({ profile }: { profile: string }) {
   return (
-    <div className="text-[12.5px] flex flex-col gap-1.5" style={{ color: "var(--ink-dim)" }} data-testid="helper-manual">
+    <div className="text-detail flex flex-col gap-1.5" style={{ color: "var(--ink-dim)" }} data-testid="helper-manual">
       <span>
         To switch them on by hand, add <code className="font-mono">{profile}</code> to <code className="font-mono">COMPOSE_PROFILES</code> in the server&apos;s <code className="font-mono">.env</code>, then start it:
       </span>
-      <pre className="field px-3 py-2 font-mono text-[12px] whitespace-pre-wrap">{`COMPOSE_PROFILES=${profile}        # or https,${profile} when HTTPS is on\ndocker compose up -d`}</pre>
+      <pre className="field px-3 py-2 font-mono text-caption whitespace-pre-wrap">{`COMPOSE_PROFILES=${profile}        # or https,${profile} when HTTPS is on\ndocker compose up -d`}</pre>
     </div>
   );
 }
@@ -165,12 +165,12 @@ function Helper({ admin }: { admin: boolean }) {
     <div className="ledger px-4 py-3 flex flex-col gap-3" data-testid="secrets-helper">
       <div className="flex flex-wrap items-center gap-3">
         <span className="dot" style={{ background: HELPER_TONE[s.state] ?? "var(--ink-faint)" }} aria-hidden />
-        <div className="min-w-0 flex-1 text-[13px]">
+        <div className="min-w-0 flex-1 text-detail">
           <span role="status" data-state={s.state}>
             {HELPER_LINE[s.state] ?? s.state}
           </span>
           {s.state === "running" && s.version && <span style={{ color: "var(--ink-faint)" }}> Version {s.version}.</span>}
-          <div className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+          <div className="text-caption" style={{ color: "var(--ink-dim)" }}>
             {waiting ??
               (s.state === "off"
                 ? "Until they are on, every secret reference fails at once and Test connection says the helper is off. Settings and references still work."
@@ -197,13 +197,13 @@ function Helper({ admin }: { admin: boolean }) {
       </div>
       {s.message && s.state !== "running" && <ErrorLine error={{ message: s.message }} />}
       {s.state === "off" && !admin && (
-        <p className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
+        <p className="text-caption" style={{ color: "var(--ink-faint)" }}>
           An instance admin can switch them on here.
         </p>
       )}
       {s.state === "off" && admin && !s.can_request && <ManualSteps profile={s.profile} />}
       {admin && (s.state === "off" || s.state === "starting") && s.can_request && (
-        <p className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
+        <p className="text-caption" style={{ color: "var(--ink-faint)" }}>
           Switching them on or off restarts the backend: the app is away for a few seconds.
         </p>
       )}
@@ -282,11 +282,11 @@ function ProviderRow({ spec, row, loading, manage }: { spec: (typeof KINDS)[numb
       <div className="flex flex-wrap items-center gap-3">
         <KeyIcon {...ICON} aria-hidden style={{ color: "var(--ink-faint)" }} />
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-medium flex items-center gap-2">
+          <div className="text-detail font-medium flex items-center gap-2">
             {name}
             <PreviewBadge info={info} />
           </div>
-          <div className="text-[12px] flex items-center gap-1.5" style={{ color: "var(--ink-dim)" }}>
+          <div className="text-caption flex items-center gap-1.5" style={{ color: "var(--ink-dim)" }}>
             {loading ? (
               <span className="skeleton h-3 w-24" aria-hidden />
             ) : configured ? (
@@ -327,7 +327,7 @@ function ProviderRow({ spec, row, loading, manage }: { spec: (typeof KINDS)[numb
       </div>
 
       {info?.preview && info.note && (
-        <p className="text-[12px] -mt-1" style={{ color: "var(--ink-dim)" }} data-testid="preview-note">
+        <p className="text-caption -mt-1" style={{ color: "var(--ink-dim)" }} data-testid="preview-note">
           {info.note}
         </p>
       )}
@@ -347,7 +347,7 @@ function ProviderRow({ spec, row, loading, manage }: { spec: (typeof KINDS)[numb
               </label>
               <input
                 id={`${id}-host`}
-                className="field h-8 px-3 text-[13px] font-mono w-full"
+                className="field h-8 px-3 text-detail font-mono w-full"
                 placeholder={spec.hostHint}
                 required={spec.host === "required"}
                 value={host}
@@ -364,12 +364,12 @@ function ProviderRow({ spec, row, loading, manage }: { spec: (typeof KINDS)[numb
               type="password"
               autoComplete="off"
               spellCheck={false}
-              className="field h-8 px-3 text-[13px] font-mono w-full"
+              className="field h-8 px-3 text-detail font-mono w-full"
               required={!configured}
               value={token}
               onChange={(e) => setToken(e.target.value)}
             />
-            <span className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
+            <span className="text-caption" style={{ color: "var(--ink-faint)" }}>
               Write-only: it is encrypted before it is stored and is never shown again.
             </span>
           </div>
@@ -385,7 +385,7 @@ function ProviderRow({ spec, row, loading, manage }: { spec: (typeof KINDS)[numb
       )}
       {result &&
         (result.ok ? (
-          <p role="status" className="fade-in text-[12.5px]" style={{ color: "var(--good)" }}>
+          <p role="status" className="fade-in text-detail" style={{ color: "var(--good)" }}>
             {result.text}
           </p>
         ) : (
@@ -467,7 +467,7 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-3 mt-2">
-        <h3 className="text-[13px] font-medium">References</h3>
+        <h3 className="text-detail font-medium">References</h3>
         {!draft && (
           <button type="button" className="btn btn-sm" onClick={startNew}>
             <PlusIcon {...ICON} aria-hidden />
@@ -487,7 +487,7 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
           }}
         >
           <div className="flex items-start justify-between gap-3">
-            <div className="text-[13px] font-medium">{editingId ? "Edit reference" : "New reference"}</div>
+            <div className="text-detail font-medium">{editingId ? "Edit reference" : "New reference"}</div>
             <button type="button" onClick={() => setDraft(null)} aria-label="Cancel" className="btn btn-ghost btn-sm btn-icon -mt-1 -mr-1">
               <XIcon {...ICON} />
             </button>
@@ -500,7 +500,7 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
               id="ref-reference"
               required
               disabled={!!editingId}
-              className="field h-8 px-3 text-[13px] font-mono w-full"
+              className="field h-8 px-3 text-detail font-mono w-full"
               placeholder="op://Ops/Square/access_token or bws://<secret id>"
               value={draft.reference}
               onChange={(e) => setDraft({ ...draft, reference: e.target.value, provider: guessProvider(e.target.value, configured) })}
@@ -519,31 +519,31 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
                   label: kinds.name(k.kind),
                   hint: [configured.includes(k.kind) ? "configured" : "", kinds.info(k.kind)?.preview ? "preview" : ""].filter(Boolean).join(", ") || undefined,
                 }))}
-                className="h-8 text-[13px] w-full"
+                className="h-8 text-detail w-full"
               />
             </div>
             <div className="flex flex-col gap-1.5">
               <span className="label">Bound to vault</span>
-              <Select aria-label="Vault" value={draft.vault_id} onChange={(vault_id) => setDraft({ ...draft, vault_id })} options={vaults.map((v) => ({ value: v.id, label: v.name }))} className="h-8 text-[13px] w-full" />
+              <Select aria-label="Vault" value={draft.vault_id} onChange={(vault_id) => setDraft({ ...draft, vault_id })} options={vaults.map((v) => ({ value: v.id, label: v.name }))} className="h-8 text-detail w-full" />
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="ref-tools" className="label">
               Allowed tools (comma separated; * is any tool that takes secrets)
             </label>
-            <input id="ref-tools" className="field h-8 px-3 text-[13px] font-mono w-full" placeholder="square_charge" value={draft.tools} onChange={(e) => setDraft({ ...draft, tools: e.target.value })} />
+            <input id="ref-tools" className="field h-8 px-3 text-detail font-mono w-full" placeholder="square_charge" value={draft.tools} onChange={(e) => setDraft({ ...draft, tools: e.target.value })} />
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="ref-actors" className="label">
               Allowed people or tokens (optional; empty is any member of the vault)
             </label>
-            <input id="ref-actors" className="field h-8 px-3 text-[13px] font-mono w-full" placeholder="user:… or api_token:…" value={draft.actors} onChange={(e) => setDraft({ ...draft, actors: e.target.value })} />
+            <input id="ref-actors" className="field h-8 px-3 text-detail font-mono w-full" placeholder="user:… or api_token:…" value={draft.actors} onChange={(e) => setDraft({ ...draft, actors: e.target.value })} />
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="ref-label" className="label">
               Label (optional)
             </label>
-            <input id="ref-label" className="field h-8 px-3 text-[13px] w-full" maxLength={120} value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
+            <input id="ref-label" className="field h-8 px-3 text-detail w-full" maxLength={120} value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
           </div>
           <div>
             <button type="submit" className="btn btn-primary btn-sm" disabled={create.isPending || update.isPending || !draft.reference.trim() || !draft.vault_id}>
@@ -556,7 +556,7 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
       {refs.isError && <ErrorLine error={failure(refs.error, "Could not load the references.", " Reload the page to try again.")} />}
 
       <div className="ledger overflow-hidden">
-        <table className="w-full text-[13px] table-fixed">
+        <table className="w-full text-detail table-fixed">
           <thead>
             <tr className="label border-b text-left h-8">
               <th className="px-4 font-medium">Reference</th>
@@ -589,16 +589,16 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
               return (
                 <tr key={r.id} className="h-10" data-testid="secret-ref-row">
                   <td className="px-4 min-w-0">
-                    <div className="font-mono text-[12.5px] truncate" title={r.reference}>
+                    <div className="font-mono text-detail truncate" title={r.reference}>
                       {r.reference}
                     </div>
-                    <div className="text-[12px] truncate" style={{ color: "var(--ink-faint)" }}>
+                    <div className="text-caption truncate" style={{ color: "var(--ink-faint)" }}>
                       {r.label !== r.reference ? `${r.label} · ` : ""}
                       {kinds.name(r.provider)}
                     </div>
                   </td>
                   <td className="px-3 hidden md:table-cell truncate">{vaultName(r.vault_id)}</td>
-                  <td className="px-3 hidden md:table-cell font-mono text-[12px] truncate" title={r.allowed_tools.join(", ")}>{r.allowed_tools.length ? r.allowed_tools.join(", ") : <span style={{ color: "var(--ink-faint)" }}>none</span>}</td>
+                  <td className="px-3 hidden md:table-cell font-mono text-caption truncate" title={r.allowed_tools.join(", ")}>{r.allowed_tools.length ? r.allowed_tools.join(", ") : <span style={{ color: "var(--ink-faint)" }}>none</span>}</td>
                   <td className="px-3 text-right tabular-nums">
                     {c?.ok ?? 0}
                     {refused > 0 && <span style={{ color: "var(--critical)" }}> · {refused} refused</span>}
@@ -636,13 +636,13 @@ function ResolutionLog() {
   const entries = log.data?.entries ?? null;
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-[13px] font-medium mt-2">Resolution log</h3>
-      <p className="text-[12.5px] -mt-1" style={{ color: "var(--ink-dim)" }}>
+      <h3 className="text-detail font-medium mt-2">Resolution log</h3>
+      <p className="text-detail -mt-1" style={{ color: "var(--ink-dim)" }}>
         Every time a tool asked for a secret, and every secret request, fill, transform and outbound call: who, which reference or handle, which tool, and the outcome. Never the value. A vault owner sees the vaults they own. Tool calls themselves are under Settings, Usage.
       </p>
       {log.isError && <ErrorLine error={failure(log.error, "Could not load the resolution log.", " Reload the page to try again.")} />}
       <div className="ledger overflow-hidden">
-        <table className="w-full text-[13px]">
+        <table className="w-full text-detail">
           <thead>
             <tr className="label border-b text-left h-8">
               <th className="px-4 font-medium">When</th>
@@ -675,17 +675,17 @@ function ResolutionLog() {
                 </td>
                 <td className="px-3 whitespace-nowrap">{ACTION_LABEL[e.action] ?? e.action}</td>
                 <td className="px-3 max-w-[280px]">
-                  <div className="font-mono text-[12.5px] truncate" title={e.reference || e.lineage.join(", ")}>
+                  <div className="font-mono text-detail truncate" title={e.reference || e.lineage.join(", ")}>
                     {e.reference || e.lineage.join(", ")}
                   </div>
                   {e.host && (
-                    <div className="text-[12px] truncate" style={{ color: "var(--ink-faint)" }}>
+                    <div className="text-caption truncate" style={{ color: "var(--ink-faint)" }}>
                       to {e.host}
                     </div>
                   )}
                 </td>
-                <td className="px-3 hidden md:table-cell font-mono text-[12px]">{e.tool}</td>
-                <td className="px-3 hidden lg:table-cell font-mono text-[12px]" style={{ color: "var(--ink-dim)" }}>
+                <td className="px-3 hidden md:table-cell font-mono text-caption">{e.tool}</td>
+                <td className="px-3 hidden lg:table-cell font-mono text-caption" style={{ color: "var(--ink-dim)" }}>
                   {e.channel ? `${e.actor_id} · ${e.channel}` : e.actor_id}
                 </td>
                 <td className="px-3">
