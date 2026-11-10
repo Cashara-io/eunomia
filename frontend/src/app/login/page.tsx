@@ -51,7 +51,7 @@ export default function LoginPage() {
       <div className="flex flex-col gap-4">
         <div className="mb-3">
           <h1 className="connect-title">Sign in to Eunomia</h1>
-          <p className="mt-3 text-[16px]" style={{ color: "var(--ink-dim)" }}>
+          <p className="mt-3 text-reading" style={{ color: "var(--ink-dim)" }}>
             {mode === "oidc" ? `Use your ${provider} account.` : "Use your Eunomia email and password."}
           </p>
         </div>
@@ -82,7 +82,7 @@ export default function LoginPage() {
                   autoFocus={!provider && !prefill}
                   autoComplete="email"
                   spellCheck={false}
-                  className="field h-11 px-3 text-[15px]"
+                  className="field h-11 px-3 text-reading"
                   placeholder="you@example.com"
                   aria-invalid={invalid}
                   value={email}
@@ -101,7 +101,7 @@ export default function LoginPage() {
                     required
                     autoFocus={!provider && Boolean(prefill)}
                     autoComplete="current-password"
-                    className="field h-11 w-full pl-3 pr-16 text-[15px]"
+                    className="field h-11 w-full pl-3 pr-16 text-reading"
                     aria-invalid={invalid}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -118,7 +118,7 @@ export default function LoginPage() {
                 {!busy && <ArrowRight size={16} strokeWidth={1.75} aria-hidden />}
               </button>
 
-              <p className="mt-2 text-[14px]" style={{ color: "var(--ink-dim)" }}>
+              <p className="mt-2 text-body" style={{ color: "var(--ink-dim)" }}>
                 No account yet?{" "}
                 <Link href="/register" onClick={(e) => { e.preventDefault(); router.push(keepNext("/register")); }} className="link font-medium">
                   Create one
@@ -137,7 +137,7 @@ function SuspendedNotice({ message }: { message: string }) {
   return (
     <div role="status" className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-[10px]" style={{ background: "var(--surface-raised)" }}>
       <Info size={18} strokeWidth={1.75} aria-hidden className="shrink-0 mt-px" style={{ color: "var(--ink-dim)" }} />
-      <p className="text-[14px] leading-snug" style={{ color: "var(--ink)" }}>
+      <p className="text-body leading-snug" style={{ color: "var(--ink)" }}>
         {message}
       </p>
     </div>

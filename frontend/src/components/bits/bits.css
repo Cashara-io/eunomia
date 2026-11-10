@@ -198,7 +198,7 @@
   border-color: var(--border-strong);
   height: 16px;
   min-width: 16px;
-  font-size: 11.5px;
+  font-size: var(--type-caption);
 }
 
 /* ---- Selection handles snap out when a pointer picked the frame ---- */

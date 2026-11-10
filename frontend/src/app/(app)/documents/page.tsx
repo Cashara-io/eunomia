@@ -102,10 +102,10 @@ function useUploads(maxBytes: number | null, vaultId: string | null, onUploaded:
 }
 
 function DropZone({ maxBytes, disabled, into, onFiles }: { maxBytes: number | null; disabled: boolean; into: Vault | null; onFiles: (f: FileList) => void }) {
-  const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   return (
     <div
+      data-testid="document-drop-zone"
       className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center rounded-[12px]"
       style={{
         border: "1px dashed var(--border-field)",
@@ -125,30 +125,13 @@ function DropZone({ maxBytes, disabled, into, onFiles }: { maxBytes: number | nu
       }}
     >
       <UploadSimpleIcon weight="duotone" size={24} aria-hidden style={{ color: "var(--ink)" }} />
-      <p className="text-[16px]" style={{ color: "var(--ink)" }}>
-        Drop files here, or choose files
+      <p className="text-reading" style={{ color: "var(--ink)" }}>
+        Drop files here, or use Upload above
       </p>
       <p id="upload-guidance" className="label">
         Text, Markdown, JSON, CSV or a text-based PDF{maxBytes !== null ? `, up to ${size(maxBytes)} each` : ""}. They go into{" "}
         {into ? into.name : "your personal space"}.
       </p>
-      <button type="button" disabled={disabled} onClick={() => input.current?.click()} className="btn btn-primary">
-        Choose files
-      </button>
-      <input
-        ref={input}
-        type="file"
-        multiple
-        accept={ACCEPT}
-        className="sr-only"
-        aria-label="Choose files to upload"
-        aria-describedby="upload-guidance"
-        data-testid="document-file-input"
-        onChange={(e) => {
-          if (e.target.files?.length) onFiles(e.target.files);
-          e.target.value = "";
-        }}
-      />
     </div>
   );
 }
@@ -161,13 +144,13 @@ function UploadRows({ rows, onDismiss }: { rows: UploadRow[]; onDismiss: (key: s
         <div key={r.key} className="flex flex-col gap-2 px-4 py-3">
           <div className="flex items-center gap-3">
             <FileTextIcon {...ICON} aria-hidden style={{ color: "var(--ink-faint)" }} />
-            <span className="flex-1 min-w-0 truncate text-[13px]">{r.name}</span>
+            <span className="flex-1 min-w-0 truncate text-detail">{r.name}</span>
             {r.error ? (
               <button type="button" onClick={() => onDismiss(r.key)} aria-label={`Dismiss ${r.name}`} className="btn btn-ghost btn-icon btn-sm">
                 <XIcon {...ICON} />
               </button>
             ) : (
-              <span className="font-mono text-[12px]" style={{ color: "var(--ink-dim)" }}>
+              <span className="font-mono text-caption" style={{ color: "var(--ink-dim)" }}>
                 {r.progress >= 1 ? "Storing…" : `${Math.round(r.progress * 100)}%`}
               </span>
             )}
@@ -306,7 +289,7 @@ function DocumentPanel({ id, chunk, vaults, onClose }: { id: string; chunk: stri
     <section className="task-panel p-5 flex flex-col gap-4 min-w-0" aria-labelledby="document-title" data-testid="document-panel">
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          <h2 id="document-title" className="text-[20px] font-semibold tracking-[-0.015em] break-words">
+          <h2 id="document-title" className="text-heading font-semibold tracking-[-0.015em] break-words">
             {doc.filename}
           </h2>
           <p className="label mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -321,23 +304,23 @@ function DocumentPanel({ id, chunk, vaults, onClose }: { id: string; chunk: stri
         </button>
       </div>
 
-      <div className="flex flex-col gap-1.5 text-[13px]">
+      <div className="flex flex-col gap-1.5 text-detail">
         <span data-testid="document-status">
           <Status status={doc.status} />
         </span>
         {doc.status === "failed" && doc.error && (
-          <p className="text-[12.5px]" style={{ color: "var(--critical)" }}>
+          <p className="text-detail" style={{ color: "var(--critical)" }}>
             {doc.error}
           </p>
         )}
         {doc.status === "indexing" && (
-          <p className="text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
+          <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
             Extracting and indexing the text. Passages appear here when it is done.
           </p>
         )}
         <span className="flex items-center gap-1 min-w-0">
           <span className="label shrink-0">SHA-256</span>
-          <code className="font-mono text-[11.5px] truncate" style={{ color: "var(--ink-dim)" }}>
+          <code className="font-mono text-caption truncate" style={{ color: "var(--ink-dim)" }}>
             {doc.sha256}
           </code>
           <CopyButton value={doc.sha256} label="Copy SHA-256" />
@@ -369,11 +352,11 @@ function DocumentPanel({ id, chunk, vaults, onClose }: { id: string; chunk: stri
           Passages <span className="label font-mono">{detail.chunks.length}</span>
         </h3>
         {detail.chunks.length === 0 ? (
-          <p className="text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
+          <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
             {doc.status === "indexing" ? "Not indexed yet." : "No passages: nothing searchable came out of this file."}
           </p>
         ) : (
-          <ol className="ledger hairline-rows max-h-[520px] overflow-y-auto">
+          <ol className="hairline-rows max-h-[520px] overflow-y-auto">
             {detail.chunks.map((c) => {
               const on = c.chunk_id === chunk;
               const text = chars.slice(c.char_start, Math.min(c.char_end, c.char_start + 600)).join("");
@@ -393,7 +376,7 @@ function DocumentPanel({ id, chunk, vaults, onClose }: { id: string; chunk: stri
                     <span className="flex-1" />
                     <CopyButton value={c.chunk_id} label="Copy passage id" />
                   </span>
-                  <p className="text-[12.5px] whitespace-pre-wrap break-words" style={{ color: "var(--ink-dim)" }}>
+                  <p className="text-detail whitespace-pre-wrap break-words" style={{ color: "var(--ink-dim)" }}>
                     {text}
                     {c.char_end - c.char_start > 600 ? "…" : ""}
                   </p>
@@ -453,7 +436,7 @@ function Documents() {
       <PageHeader
         icon={FilesIcon}
         title="Documents"
-        intro="Notes, specs and exports your AI apps can search, from every space you belong to. A shared space's documents are open to its members."
+        intro="Files your AI apps can search across your memory spaces."
         actions={
           !storageOff && <button type="button" onClick={() => input.current?.click()} disabled={storageOff} className="btn btn-primary">
             <UploadSimpleIcon {...ICON} aria-hidden />
@@ -469,7 +452,9 @@ function Documents() {
           accept={ACCEPT}
           className="sr-only"
           tabIndex={-1}
-          aria-hidden
+          aria-label="Choose files to upload"
+          aria-describedby={storageOff ? undefined : "upload-guidance"}
+          data-testid="document-file-input"
           onChange={(e) => {
             if (e.target.files?.length) uploads.add(e.target.files);
             e.target.value = "";
@@ -499,7 +484,7 @@ function Documents() {
                 )}
                 {vaults.size > 1 && (
                   <Select
-                    className="h-8 text-[13px] w-[200px]"
+                    className="h-8 text-detail w-[200px]"
                     aria-label="Space"
                     value={space ?? "all"}
                     options={[{ value: "all", label: "All spaces" }, ...(vaultList ?? []).map((v) => ({ value: v.id, label: v.name }))]}
@@ -526,7 +511,7 @@ function Documents() {
                   {docs?.length === 0 && (
                     <tr>
                       <td colSpan={7} style={{ color: "var(--ink-dim)", height: 56 }}>
-                        {picked ? `No documents in ${picked.name} yet.` : "No documents yet."} Drop a file above, or ask your AI app to save one for you.
+                        {picked ? `No documents in ${picked.name} yet.` : "No documents yet."} Use Upload, drop a file above or ask your AI app to save one.
                       </td>
                     </tr>
                   )}
@@ -551,16 +536,16 @@ function Documents() {
                         <td className="hidden sm:table-cell whitespace-nowrap" style={{ color: "var(--ink-dim)" }}>
                           {TYPE_LABEL[d.media_type] ?? d.media_type}
                         </td>
-                        <td className="hidden md:table-cell text-right font-mono text-[12px] whitespace-nowrap" style={{ color: "var(--ink-dim)" }}>
+                        <td className="hidden md:table-cell text-right font-mono text-caption whitespace-nowrap" style={{ color: "var(--ink-dim)" }}>
                           {size(d.size_bytes)}
                         </td>
-                        <td className="hidden md:table-cell font-mono text-[12px] whitespace-nowrap" style={{ color: "var(--ink-dim)" }}>
+                        <td className="hidden md:table-cell font-mono text-caption whitespace-nowrap" style={{ color: "var(--ink-dim)" }}>
                           {ago(d.created_at)}
                         </td>
                         <td>
                           <Status status={d.status} />
                         </td>
-                        <td className="hidden sm:table-cell text-right font-mono text-[12px]" style={{ color: "var(--ink-dim)" }}>
+                        <td className="hidden sm:table-cell text-right font-mono text-caption" style={{ color: "var(--ink-dim)" }}>
                           {d.status === "ready" ? d.chunk_count.toLocaleString() : "–"}
                         </td>
                       </tr>
@@ -576,7 +561,7 @@ function Documents() {
           {selected ? (
             <DocumentPanel key={selected} id={selected} chunk={chunk} vaults={vaults} onClose={() => select(null)} />
           ) : (
-            <p className="soft-panel text-[14px] px-4 py-3" style={{ color: "var(--ink-dim)" }}>
+            <p className="soft-panel text-body px-4 py-3" style={{ color: "var(--ink-dim)" }}>
               Choose a document to read its passages, download it, export it or delete it.
             </p>
           )}
@@ -599,7 +584,7 @@ function StorageOff({ isAdmin }: { isAdmin: boolean }) {
         action={
           isAdmin && (
             <span className="field inline-flex items-center gap-2 min-h-10 pl-3 pr-1 max-w-full">
-              <code className="font-mono text-[13px] truncate min-w-0" style={{ color: "var(--ink)" }}>
+              <code className="font-mono text-detail truncate min-w-0" style={{ color: "var(--ink)" }}>
                 {STORAGE_SETTING}
               </code>
               <CopyButton value={STORAGE_SETTING} label="Copy setting" size="sm" className="btn-ghost shrink-0" />

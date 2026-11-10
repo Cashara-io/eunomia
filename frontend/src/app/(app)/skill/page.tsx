@@ -72,13 +72,13 @@ export default function SkillPage() {
 
       <section className="min-w-0 flex flex-col gap-3" aria-label="Instructions">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-mono text-[13px]" style={{ color: "var(--accent-text)" }}>
+          <span className="font-mono text-detail" style={{ color: "var(--accent-text)" }}>
             SKILL.md
           </span>
           {skill === null ? (
             <span className="skeleton h-5 w-24" />
           ) : (
-            <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+            <span className="text-detail" style={{ color: "var(--ink-dim)" }}>
               ·{" "}
               <span aria-label="Skill source">{custom ? "Customised" : "Built-in default"}</span>
             </span>
@@ -118,7 +118,7 @@ export default function SkillPage() {
 
         {/* Always mounted (hidden when idle) so the check draws each time Saved appears. */}
         <div className={saved || error ? "" : "hidden"}>
-          <p className={`${saved ? "flex" : "hidden"} items-center gap-1.5 text-[14px] fade-in`} style={{ color: "var(--ink)" }} role="status">
+          <p className={`${saved ? "flex" : "hidden"} items-center gap-1.5 text-body fade-in`} style={{ color: "var(--ink)" }} role="status">
             <SyncMark status={saved ? "done" : "idle"} />
             Saved. New AI app sessions pick up the change.
           </p>
@@ -139,7 +139,7 @@ export default function SkillPage() {
             <textarea
               aria-label="Skill markdown"
               autoFocus
-              className="block w-full min-h-[64vh] resize-y bg-transparent px-5 py-5 md:px-8 font-mono text-[13px] leading-relaxed focus:outline-none"
+              className="block w-full min-h-[64vh] resize-y bg-transparent px-5 py-5 md:px-8 font-mono text-detail leading-relaxed focus:outline-none"
               style={{ color: "var(--ink)" }}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -152,11 +152,11 @@ export default function SkillPage() {
           ) : (
             <>
               {(meta.name || meta.description) && (
-                <dl className="grid grid-cols-[96px_minmax(0,1fr)] gap-x-4 gap-y-2 px-5 md:px-8 pt-6 text-[14px]">
+                <dl className="grid grid-cols-[96px_minmax(0,1fr)] gap-x-4 gap-y-2 px-5 md:px-8 pt-6 text-body">
                   {meta.name && (
                     <>
                       <dt className="label pt-px">Name</dt>
-                      <dd className="font-mono text-[13px]">{meta.name}</dd>
+                      <dd className="font-mono text-detail">{meta.name}</dd>
                     </>
                   )}
                   {meta.description && (
@@ -169,7 +169,7 @@ export default function SkillPage() {
                   )}
                 </dl>
               )}
-              <article className="docs px-5 pt-6 pb-8 md:px-8 md:pb-10 text-[15px] leading-[1.7]">
+              <article className="docs px-5 pt-6 pb-8 md:px-8 md:pb-10 text-reading leading-[1.7]">
                 <div className="mb-6" style={{ borderTop: "1px solid var(--border)" }} />
                 <Markdown text={skill.replace(FRONTMATTER, "")} />
               </article>
@@ -213,15 +213,15 @@ export default function SkillPage() {
             </tbody>
           </table>
         </div>
-        <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+        <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
           These are the shared instructions for every app. They are not the same as reusable skills an AI app saves for
           itself.
         </p>
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-[14px] font-medium">Refresh file copies</h2>
-        <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
+        <h2 className="text-body font-medium">Refresh file copies</h2>
+        <p className="text-body leading-relaxed" style={{ color: "var(--ink-dim)" }}>
           Only needed for the file copies. Run this from the Eunomia install folder with a token from{" "}
           <Link href="/settings?tab=tokens" className="link">
             Settings, API tokens
@@ -229,7 +229,7 @@ export default function SkillPage() {
           .
         </p>
         <div className="field flex items-center gap-2 pl-3 pr-1 min-h-11">
-          <code className="font-mono text-[13px] flex-1 min-w-0 truncate" title={REFRESH}>
+          <code className="font-mono text-detail flex-1 min-w-0 truncate" title={REFRESH}>
             {REFRESH}
           </code>
           <Tooltip label="Copy command">
