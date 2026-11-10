@@ -71,6 +71,7 @@ jobs:
             --allow-funcs=time,string,search,count,array,vector,math,file,type::file --allow-experimental=files rocksdb:/data/db
           for _ in $(seq 30); do curl -fsS http://127.0.0.1:8231/health >/dev/null && break; sleep 1; done
           TEST_SURREAL_URL=ws://127.0.0.1:8231/rpc cargo test --test jobs job_claims_across_processes -- --nocapture
+          TEST_SURREAL_URL=ws://127.0.0.1:8231/rpc cargo test --test chat_turn_order chat_turns_across_processes -- --exact --nocapture
 
   frontend:
     runs-on: ubuntu-latest
