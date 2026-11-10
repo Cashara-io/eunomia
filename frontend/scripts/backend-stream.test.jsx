@@ -1,5 +1,5 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
-import { streamBackend } from "../src/lib/backend-stream";
+import { streamBackendWithClock } from "../src/lib/backend-stream";
 
 afterEach(() => mock.restore());
 
@@ -12,9 +12,12 @@ async function upload(path) {
   let acknowledged = Promise.withResolvers();
   const ready = Promise.withResolvers();
   const timer = 123;
-  spyOn(performance, "now").mockImplementation(() => now);
-  spyOn(globalThis, "setInterval").mockImplementation((callback) => { tick = callback; return timer; });
-  const clear = spyOn(globalThis, "clearInterval").mockImplementation(() => {});
+  const clear = mock(() => {});
+  const clock = {
+    now: () => now,
+    setInterval(callback) { tick = callback; return timer; },
+    clearInterval: clear,
+  };
   // Consume the actual transformed stream. An abort must cancel that stream and
   // reach the handler's 408 path, even when no new chunk or EOF arrives.
   spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
@@ -26,16 +29,25 @@ async function upload(path) {
     }
     upstreamSignal = init.signal;
     ready.resolve();
-    for await (const chunk of init.body) {
-      received += chunk.byteLength;
-      acknowledged.resolve();
+    // Bun 1.3.14's stream async iterator can hang on abort. The reader API
+    // rejects the pending read, matching fetch's abort behaviour on that runtime.
+    const reader = init.body.getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        received += value.byteLength;
+        acknowledged.resolve();
+      }
+    } finally {
+      reader.releaseLock();
     }
     return Response.json({ bytes: received });
   });
   const body = new ReadableStream({ start(value) { controller = value; } });
-  const response = streamBackend(new Request(`http://proxy.test${path}`, {
+  const response = streamBackendWithClock(new Request(`http://proxy.test${path}`, {
     method: "POST", body, duplex: "half", headers: { authorization: "Bearer valid" },
-  }));
+  }), clock);
   await ready.promise;
   return {
     response,
@@ -79,8 +91,8 @@ for (const path of ["/mcp", "/api/documents?filename=large.csv"]) {
         expect(body.aborted()).toBe(false);
       }
       body.at(25_000);
-      const response = await body.response;
       expect(body.aborted()).toBe(true);
+      const response = await body.response;
       expect(response.status).toBe(408);
       expect(await response.json()).toEqual({ detail: "Upload body timed out" });
       expect(body.clear).toHaveBeenCalledWith(body.timer);
