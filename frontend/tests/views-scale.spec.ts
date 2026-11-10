@@ -100,11 +100,18 @@ test("existing ontology stream refreshes Structure, Overview and kind definition
   await fixture(page);
   let definition: KindItem | null = null;
   let reads = 0;
+  let documentLoads = 0;
+  page.on("request", request => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documentLoads++;
+  });
   await page.route("**/api/vaults/*/ontology", route => {
     reads++;
     const body = { vault: start.vault, strict: false, kinds: definition ? [definition] : [], links: [] } satisfies OntologyOut;
     return route.fulfill({ json: body });
   });
+  await page.route("**/api/vaults/*/objects?*", route => route.fulfill({
+    json: { rows: [], total: 0, offset: 0, limit: 20, columns: [], kind_approved: true },
+  }));
   let send: ((value: object) => void) | undefined;
   await page.routeWebSocket("**/api/events/ws*", ws => {
     send = value => ws.send(JSON.stringify(value));
@@ -114,24 +121,38 @@ test("existing ontology stream refreshes Structure, Overview and kind definition
   await expect(page.getByRole("heading", { name: "Structure: List" })).toBeVisible();
   // Drain the initial hello invalidation, then deliver a burst of agent proposals.
   await page.waitForTimeout(700);
-  const before = reads;
+  const initialDocumentLoads = documentLoads;
+  let sequence = 0;
+  const refresh = async (assertUpdated: () => Promise<void>) => {
+    const before = reads;
+    if (!send) throw new Error("The ontology stream must be connected");
+    for (let i = 0; i < 10; i++) send({ type: "ontology", vault: start.vault, event: { seq: ++sequence } });
+    await assertUpdated();
+    // Catch extra invalidations after the first response, not just the first visible update.
+    await page.waitForTimeout(700);
+    expect(reads - before).toBe(1);
+    expect(documentLoads).toBe(initialDocumentLoads);
+  };
   definition = kind("proposed");
-  for (let seq = 1; seq <= 10; seq++) send?.({ type: "ontology", vault: start.vault, event: { seq } });
-  await expect(page.getByRole("row").filter({ hasText: "delivery" })).toContainText("Suggested");
-  expect(reads - before).toBe(1);
-  definition = kind("approved");
-  send?.({ type: "ontology", vault: start.vault, event: { seq: 11 } });
-  await expect(page.getByRole("row").filter({ hasText: "delivery" })).toContainText("Approved");
-  await page.goto(`/ontology?space=${encodeURIComponent(start.vault)}`);
-  await expect(page.getByRole("heading", { name: "Fixture: Overview" })).toBeVisible();
-  definition = kind("proposed");
-  send?.({ type: "ontology", vault: start.vault, event: { seq: 12 } });
-  await expect(page.getByRole("link", { name: "delivery", exact: true }).first()).toBeVisible();
-  await page.goto(`/ontology/kinds/delivery?space=${encodeURIComponent(start.vault)}`);
+  await refresh(() => expect(page.getByRole("row").filter({ hasText: "delivery" })).toContainText("Suggested"));
+  definition = { ...kind("approved"), entities: 3 };
+  await refresh(() => expect(page.getByRole("row").filter({ hasText: "delivery" })).toContainText("Approved"));
+  await page.getByRole("link", { name: "Overview", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Your business, connected." })).toBeVisible();
+  await page.getByRole("button", { name: "Show table", exact: true }).click();
+  const delivery = page.getByRole("table", { name: "The same kinds as the landscape" })
+    .getByRole("row").filter({ has: page.getByRole("button", { name: "Deliveries", exact: true }) });
+  await expect(delivery.getByRole("cell").first()).toHaveText("3");
+  await page.waitForTimeout(700);
+  definition = { ...kind("approved"), entities: 7 };
+  await refresh(() => expect(delivery.getByRole("cell").first()).toHaveText("7"));
+  await page.locator("summary").filter({ hasText: "More" }).click();
+  await page.getByRole("link", { name: "Structure", exact: true }).click();
+  await page.getByRole("table", { name: "Kinds and link types" }).getByRole("link", { name: "delivery", exact: true }).click();
   await expect(page.getByText("A scheduled delivery", { exact: true }).first()).toBeVisible();
-  definition = { ...kind("approved"), description: "A confirmed delivery" };
-  send?.({ type: "ontology", vault: start.vault, event: { seq: 13 } });
-  await expect(page.getByText("A confirmed delivery", { exact: true }).first()).toBeVisible();
+  await page.waitForTimeout(700);
+  definition = { ...kind("approved"), entities: 7, description: "A confirmed delivery" };
+  await refresh(() => expect(page.getByText("A confirmed delivery", { exact: true }).first()).toBeVisible());
 });
 
 
