@@ -1,3 +1,4 @@
+import { mockOntology } from "./fixtures/ontology-ui";
 import { diagramFixture } from "./fixtures/chat-diagrams";
 import type { Spec } from "@json-render/core";
 import { test, expect, type Locator } from "@playwright/test";
@@ -161,7 +162,7 @@ function fixture(kind: string, state = "full") {
       : kind === "Divider"
         ? {}
         : {
-            title: kind,
+            title: kind === "Diagram" ? "Diagram of House blend connections" : kind,
             summary: "Fixture data for component coverage",
             data: { $state: "/sources/sample" },
             x:
@@ -279,7 +280,8 @@ for (const theme of ["light", "dark"])
     }) => {
       test.setTimeout(120000);
       await page.setViewportSize({ width, height: 900 });
-      await registerAndOnboard(page, uniqueEmail("gen-ui"));
+      if (process.env.E2E_MOCK_API === "1") await mockOntology(page);
+      else await registerAndOnboard(page, uniqueEmail("gen-ui"));
       await page.addInitScript((t) => {
         localStorage.setItem("eunomia-theme", t);
       }, theme);
@@ -392,6 +394,9 @@ for (const theme of ["light", "dark"])
           page.locator(".generative-ui").nth(names.indexOf(name)),
         ).toContainText(name === "Divider" ? "" : name);
       }
+      await expect(
+        page.locator(".generative-ui").nth(names.indexOf("Diagram")).getByRole("heading", { name: "Diagram of House blend connections", exact: true }),
+      ).toBeVisible();
       await expect(
         page.getByText(
           "This display could not be drawn. The source answer is below.",

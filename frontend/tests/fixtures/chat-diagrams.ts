@@ -17,10 +17,18 @@ export function diagramFixture(
       : `entity:item${i}`,
     name,
     kind: ["supplier", "product", "order", "location"][i],
-    focus: i === 0,
+    focus:
+      type === "neighbourhood"
+        ? i === 1
+        : i === 0 || (type === "path" && i === 3),
     emphasis: i === 3,
-    x: i % 2 === 0 ? 80 : 240,
-    y: 70 + Math.floor(i / 2) * 150,
+    x: type === "neighbourhood" ? [460, 460, 730, 190][i] : 150 + i * 260,
+    y:
+      type === "neighbourhood"
+        ? [150, 460, 615, 615][i]
+        : kinds
+          ? 210 - i * 14
+          : 160,
     ...(kinds ? { count: [3, 24, 18, 4][i] } : {}),
     metrics: [],
   }));

@@ -99,7 +99,7 @@ async fn neighbourhood_path_impact_kinds_and_terminal_share_real_data() {
         none["text"]
             .as_str()
             .unwrap()
-            .contains("No path found within 2 hops")
+            .contains("No path found within the search limits (2 hops)")
     );
     let mut short = path;
     short["diagram"]["selection"]["hops"] = json!("one");
@@ -107,7 +107,7 @@ async fn neighbourhood_path_impact_kinds_and_terminal_share_real_data() {
         ok(app.tool("show_view", short).await)["text"]
             .as_str()
             .unwrap()
-            .contains("No path found within 1 hop")
+            .contains("No path found within the search limits (1 hop)")
     );
     let impact = ok(app
         .tool(
@@ -396,4 +396,34 @@ async fn traversal_budget_keeps_totals_as_lower_bounds() {
         source["nodes"].as_array().unwrap().len()
     );
     assert!(out["text"].as_str().unwrap().contains("At least"));
+}
+
+#[cfg(feature = "test-support")]
+#[tokio::test]
+async fn dense_hubs_return_an_honest_partial_result_at_the_deadline() {
+    use eunomia_backend::views::diagram::{Request, resolve_search_deadline_for_test};
+    use std::time::{Duration, Instant};
+    let app = TestApp::new().await;
+    let a = entity(&app, "First hub", "organisation").await;
+    let b = entity(&app, "Second hub", "organisation").await;
+    let mut middle = Vec::new();
+    for i in 0..18 { middle.push(entity(&app, &format!("Spoke {i}"), "order").await); }
+    for from in &middle {
+        link(&app, &a, from, "supplies").await;
+        link(&app, from, &b, "delivered_to").await;
+        for to in &middle { if from != to { link(&app, from, to, "related_to").await; } }
+    }
+    let request = || serde_json::from_value::<Request>(json!({"selection":{"type":"path","from_id":a,"to_id":b,"hops":"three"}})).unwrap();
+    let db = app.db().await;
+    let started = Instant::now();
+    let partial = common::sys(resolve_search_deadline_for_test(&db, &app.user.id, request(), Duration::ZERO)).await.unwrap();
+    assert!(started.elapsed() < Duration::from_secs(3));
+    assert!(partial.partial && partial.total_partial);
+    assert!(partial.notice.as_deref().unwrap().contains("No path found within the search limits"));
+    assert_eq!(partial.nodes.len(), 2);
+    assert!(partial.edges.is_empty());
+    let started = Instant::now();
+    let normal = common::sys(eunomia_backend::views::diagram::resolve(&db, &app.user.id, request())).await.unwrap();
+    assert!(started.elapsed() < Duration::from_secs(4));
+    assert!(normal.nodes.len() <= 12 && normal.edges.len() <= 24);
 }

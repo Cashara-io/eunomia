@@ -1,3 +1,4 @@
+import { boxesIntersect } from "./canvas-geometry";
 import { linkSentence } from "./overview-format";
 import type { KindItem, LinkItem } from "@/lib/queries/ontology";
 
@@ -111,10 +112,7 @@ export function routeLabels(
         if (
           occupied.some(
             (r) =>
-              box.x < r.x + r.w &&
-              box.x + w > r.x &&
-              box.y < r.y + r.h &&
-              box.y + h > r.y,
+              boxesIntersect(box, r),
           )
         )
           continue;

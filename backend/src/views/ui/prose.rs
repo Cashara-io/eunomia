@@ -145,6 +145,16 @@ impl Allowed {
         let bindings: Vec<_> = substitutions.iter().map(|(range, value)| {
             (normalise(&raw[..range.start]).len()..normalise(&raw[..range.end]).len(), normalise(value))
         }).collect();
+        // Treat a rendered binding as one indivisible token, including its unit.
+        // Check its outer boundary even when the numeric scanner stops before a custom unit.
+        for (range, value) in &bindings {
+            if text.get(range.clone()) != Some(value.as_str())
+                || display(&text[..range.start]).chars().next_back().is_some_and(char::is_alphanumeric)
+                || display(&text[range.end..]).chars().next().is_some_and(char::is_alphanumeric)
+            {
+                return Err(bad(format!("bound value must be a complete token in {path}")));
+            }
+        }
         let mut server_ranges: HashMap<std::ops::Range<usize>, HashSet<usize>> = HashMap::new();
         for (source, server) in self.strings.iter().enumerate() {
             let server = normalise(server);
@@ -167,13 +177,11 @@ impl Allowed {
         for span in &numeric {
             let overlaps: Vec<_> = bindings.iter().filter(|(range, _)| range.start < span.end && span.start < range.end).collect();
             let authorised = if !overlaps.is_empty() {
-                // A binding cannot borrow a connector from prose or another binding. Compare
-                // numeric spans inside its server-formatted value, including non-currency units.
-                overlaps.len() == 1 && spans(&overlaps[0].1).into_iter().any(|part| {
-                    overlaps[0].0.start + part.start == span.start
-                        && overlaps[0].0.start + part.end == span.end
-                        && overlaps[0].1[part] == text[span.clone()]
-                })
+                // The full server-rendered token was matched above. Every numeric span
+                // must stay inside that token; prose cannot lend a digit, sign or scale.
+                overlaps.len() == 1
+                    && span.start >= overlaps[0].0.start
+                    && span.end <= overlaps[0].0.end
             } else if iso_span(&text[span.clone()]).is_some() {
                 !text[..span.start].chars().next_back().is_some_and(token)
                     && !following_token(&text[span.end..])
@@ -750,6 +758,21 @@ impl ChatProse {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn bound_values_are_complete_tokens_including_their_custom_units() {
+        let placeholder = "{{/sources/graph/diagram/nodes/0/metrics/0/value}}";
+        for (value, unit, suffix) in [(5, Some("m"), "illion customers"), (12, None, "0"), (3, None, "k"), (5, Some("m"), "m"), (42, Some("orders"), "today")] {
+            let data = json!({"sources":{"graph":{"view":"diagram","diagram":{"nodes":[{"metrics":[{"value":value,"unit":unit}]}]}}}});
+            assert!(resolve(&json!({"title":format!("{placeholder}{suffix}")}), &data).is_err(), "{value} {unit:?} + {suffix}");
+            for prefix in ["customers", "İ", "客", "Ｘ"] {
+                assert!(resolve(&json!({"title":format!("{prefix}{placeholder}")}), &data).is_err(), "{prefix}");
+            }
+        }
+        let data = json!({"sources":{"graph":{"view":"diagram","diagram":{"nodes":[{"metrics":[{"value":42,"unit":"orders"}]}]}}}});
+        for (raw, expected) in [(format!("{placeholder} today"), "42 orders today"), (format!("{placeholder}."), "42 orders."), (format!("{placeholder}, next"), "42 orders, next"), (format!("({placeholder})"), "(42 orders)")] {
+            assert_eq!(resolve(&json!({"title":raw}), &data).unwrap()["title"], expected);
+        }
+    }
     #[test]
     fn diagram_bindings_keep_metric_units_and_refuse_layout_coordinates() {
         let data = json!({"sources":{"graph":{"view":"diagram","diagram":{"total_nodes":2,"nodes":[{"x":80,"metrics":[{"value":42,"unit":"AUD","n_entities":1}]}]}}}});

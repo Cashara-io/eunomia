@@ -70,6 +70,42 @@ for (const theme of ["light", "dark"])
             () => document.documentElement.scrollWidth <= innerWidth,
           ),
         ).toBe(true);
+        const picture = card.getByRole("img");
+        const geometry = await picture.evaluate((svg) => {
+          const boxes = (selector: string) =>
+            [...svg.querySelectorAll(selector)].map((el) => {
+              const r = el.getBoundingClientRect();
+              return { x: r.x, y: r.y, w: r.width, h: r.height };
+            });
+          const labels = boxes("[data-label-box]"),
+            nodes = boxes("[data-node-box]");
+          const intersects = (
+            a: (typeof labels)[number],
+            b: (typeof labels)[number],
+          ) =>
+            a.x < b.x + b.w &&
+            a.x + a.w > b.x &&
+            a.y < b.y + b.h &&
+            a.y + a.h > b.y;
+          const texts = [...svg.querySelectorAll("foreignObject")].map((el) => {
+            const text = el.querySelector("div");
+            return text
+              ? (parseFloat(getComputedStyle(text).fontSize) *
+                  el.getBoundingClientRect().width) /
+                  Number(el.getAttribute("width"))
+              : 0;
+          });
+          return {
+            collision: labels.some(
+              (a, i) =>
+                nodes.some((b) => intersects(a, b)) ||
+                labels.slice(i + 1).some((b) => intersects(a, b)),
+            ),
+            minimum: Math.min(...texts),
+          };
+        });
+        expect(geometry.collision).toBe(false);
+        expect(geometry.minimum).toBeGreaterThanOrEqual(11.9);
         const layout = await card.locator("svg").first().innerHTML();
         await card.getByRole("button", { name: "Table", exact: true }).click();
         await expect(card.getByRole("table")).toHaveCount(2);
@@ -83,7 +119,7 @@ for (const theme of ["light", "dark"])
         await expect(card).toBeVisible();
         expect(await card.locator("svg").first().innerHTML()).toBe(layout);
         await mkdir(output, { recursive: true });
-        await card.scrollIntoViewIfNeeded();
+        await card.evaluate((el) => el.scrollIntoView({ block: "start" }));
         await page.screenshot({
           path: `${output}/${type}-${width}-${theme}.png`,
           fullPage: true,
@@ -114,6 +150,8 @@ test("diagram catalogue source and bounded partial view keep text and values", a
   await page.setViewportSize({ width: 390, height: 1100 });
   await mockOntology(page);
   const view = diagramFixture("impact");
+  view.diagram.edges[0].label =
+    "has_a_particularly_long_relationship_with_this_delivery";
   view.diagram.partial = true;
   view.diagram.total_partial = true;
   view.diagram.total_nodes = 150;
@@ -179,6 +217,25 @@ test("diagram catalogue source and bounded partial view keep text and values", a
   await page.goto("/chat");
   const card = page.locator('[data-diagram="impact"]');
   await expect(card).toBeVisible();
+  expect(
+    await card
+      .getByRole("img")
+      .locator("[data-label-box] foreignObject div")
+      .evaluateAll((elements) =>
+        elements.every((el) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          return (
+            range.getBoundingClientRect().height <=
+            el.getBoundingClientRect().height
+          );
+        }),
+      ),
+  ).toBe(true);
+  await expect(
+    card.getByRole("heading", { name: "Connections", exact: true }),
+  ).toBeVisible();
+  await expect(card.getByRole("img")).toHaveAccessibleName("Connections");
   await expect(card).toContainText("At least 150 objects");
   await expect(card).toContainText("146 more order");
   await card.getByRole("button", { name: "Table", exact: true }).click();

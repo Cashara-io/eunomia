@@ -52,65 +52,102 @@
   background: color-mix(in srgb, var(--ink) 2%, var(--bg));
   border-block: 1px solid var(--border);
 }
-.plane svg {
+.viewport {
+  overflow: auto;
+  max-height: 650px;
+  scrollbar-width: auto;
+  scrollbar-color: var(--ink-dim) var(--bg);
+}
+.viewport:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -3px;
+}
+.viewport > svg {
   display: block;
-  width: 100%;
-  max-width: 460px;
+  max-width: none;
   margin: auto;
 }
+.phone {
+  display: none;
+}
+.scrollCue {
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--ink-dim);
+  border-bottom: 1px solid var(--border);
+}
 .node {
-  color: var(--diagram-hue);
-}
-.plinth {
-  fill: color-mix(in srgb, var(--diagram-hue) 28%, var(--surface));
-  stroke: var(--diagram-hue);
-  stroke-width: 1;
-}
-.side {
-  fill: color-mix(in srgb, var(--diagram-hue) 45%, var(--surface));
-  stroke: var(--diagram-hue);
-  stroke-width: 0.5;
+  color: var(--kind-hue);
 }
 .plate {
   fill: var(--surface);
-  stroke: var(--border);
+  stroke: color-mix(in srgb, var(--kind-hue) 45%, var(--border));
 }
 .node[data-focus="true"] .plate {
-  stroke: var(--diagram-hue);
-  stroke-width: 2;
+  stroke: var(--kind-hue);
+  stroke-width: 2.5;
 }
 .label {
   color: var(--ink);
   text-align: center;
-  font-size: 11px;
-  line-height: 1.25;
+  font-size: 18px;
+  line-height: 1.3;
 }
 .label strong {
-  font-size: 12px;
+  font-size: 20px;
   font-weight: 600;
-  display: block;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  max-height: 30px;
   overflow-wrap: anywhere;
 }
 .label span {
   display: block;
-  font-size: 11px;
-  color: var(--ink-dim);
-  margin-top: 2px;
+  font-size: 18px;
+}
+.label .kind {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: color-mix(in srgb, var(--kind-hue) 60%, var(--ink));
 }
 .edge path {
   stroke: var(--ink-dim);
-  stroke-width: 1;
-  opacity: 0.75;
+  stroke-width: 1.5;
 }
-.edge text {
-  font-size: 11px;
-  fill: var(--ink);
-  paint-order: stroke;
-  stroke: var(--bg);
-  stroke-width: 4px;
-  stroke-linejoin: round;
+.verb rect {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+.verb div {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 18px;
+  line-height: 1.2;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.band {
+  fill: var(--ink-dim);
+  font-size: 18px;
+}
+@media (max-width: 480px) {
+  .viewport {
+    max-height: 480px;
+  }
+  .desktop {
+    display: none;
+  }
+  .phone {
+    display: block;
+  }
 }
 .notice {
   font-size: 12px;

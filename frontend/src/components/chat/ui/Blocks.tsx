@@ -152,7 +152,7 @@ function Block({
     // Source discriminants and their props are validated by the server before persistence.
     if (view.view === "impact" && "start" in view)
       return <ImpactView view={view} />;
-    if (view.view === "diagram" && "diagram" in view) return <DiagramView view={view} />;
+    if (view.view === "diagram" && "diagram" in view) return <DiagramView view={view} title={title} />;
     if (view.view === "subgraph" && "entities" in view)
       return <SubgraphView view={view} />;
     if (view.view === "metric" && "metric" in view)

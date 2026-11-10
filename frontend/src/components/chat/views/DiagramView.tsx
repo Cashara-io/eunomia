@@ -1,58 +1,26 @@
 "use client";
-import { useId, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useId, useState } from "react";
 import Link from "next/link";
-import {
-  CubeIcon,
-  UsersIcon,
-  PackageIcon,
-  ShoppingCartIcon,
-  ReceiptIcon,
-  MapPinIcon,
-  WarehouseIcon,
-  TruckIcon,
-} from "@phosphor-icons/react";
-import { useKindColor } from "@/lib/kindColors";
+import { useLandscapeTint } from "../../twin/landscape-shared";
+import LandscapeSolid from "../../twin/LandscapeSolid";
+import ConnectionKindIcon from "../../twin/ConnectionKindIcon";
+import { humanLabel, plural } from "../../twin/overview-format";
+import { diagramGeometry } from "./diagram-geometry";
 import { words, withUnit } from "./bits";
 import type { DiagramView as Diagram } from "./diagram-schema";
+import shared from "../../twin/overview.module.css";
 import styles from "./diagram.module.css";
-const families: Record<string, string> = {
-  customer: "person",
-  employee: "person",
-  supplier: "person",
-  product: "repository",
-  stock_item: "repository",
-  order: "company",
-  purchase_order: "company",
-  sale: "company",
-  invoice: "file",
-  payment: "file",
-  contract: "symbol",
-  delivery: "organisation",
-  shipment: "organisation",
-  delivery_route: "organisation",
-  warehouse: "location",
-};
-const icons: Record<string, typeof CubeIcon> = {
-  customer: UsersIcon,
-  employee: UsersIcon,
-  person: UsersIcon,
-  supplier: UsersIcon,
-  product: PackageIcon,
-  stock_item: PackageIcon,
-  order: ShoppingCartIcon,
-  purchase_order: ShoppingCartIcon,
-  invoice: ReceiptIcon,
-  payment: ReceiptIcon,
-  location: MapPinIcon,
-  warehouse: WarehouseIcon,
-  shipment: TruckIcon,
-  delivery: TruckIcon,
-};
-export default function DiagramView({ view }: { view: Diagram }) {
+export default function DiagramView({
+  view,
+  title,
+}: {
+  view: Diagram;
+  title?: string;
+}) {
   const d = view.diagram,
     [table, setTable] = useState(false),
-    id = useId().replaceAll(":", ""),
-    color = useKindColor();
+    id = useId().replaceAll(":", "");
+  const heading = title ?? d.title;
   const nodes = new Map(d.nodes.map((n) => [n.id, n]));
   const focus = d.nodes.find((n) => n.focus) ?? d.nodes[0];
   const href =
@@ -71,7 +39,7 @@ export default function DiagramView({ view }: { view: Diagram }) {
           <span className={styles.eyebrow}>
             {d.diagram_type === "kinds" ? "Ontology" : "Connected objects"}
           </span>
-          <h3 id={`${id}-title`}>{d.title}</h3>
+          <h3 id={`${id}-title`}>{heading}</h3>
         </div>
         <button
           type="button"
@@ -145,147 +113,18 @@ export default function DiagramView({ view }: { view: Diagram }) {
           </div>
         ) : (
           <div className={styles.plane}>
-            <svg
-              viewBox={`0 0 320 ${d.height}`}
-              role="img"
-              aria-label={d.title}
-              aria-describedby={`${id}-text`}
-            >
-              <defs>
-                <marker
-                  id={`${id}-arrow`}
-                  markerWidth="7"
-                  markerHeight="7"
-                  refX="6"
-                  refY="3.5"
-                  orient="auto"
-                >
-                  <path d="M0 0 7 3.5 0 7" fill="var(--ink-dim)" />
-                </marker>
-                <pattern
-                  id={`${id}-grid`}
-                  width="32"
-                  height="20"
-                  patternUnits="userSpaceOnUse"
-                  patternTransform="skewY(-14)"
-                >
-                  <path
-                    d="M32 0H0V20"
-                    fill="none"
-                    stroke="var(--border)"
-                    strokeWidth="0.5"
-                  />
-                </pattern>
-              </defs>
-              <rect
-                width="320"
-                height={d.height}
-                fill={`url(#${id}-grid)`}
-                opacity="0.7"
+            <p className={styles.scrollCue}>
+              Follow the arrows · Scroll within the picture to explore ↔ ↕
+            </p>
+            {[false, true].map((phone) => (
+              <DiagramPicture
+                key={String(phone)}
+                d={d}
+                title={heading}
+                id={`${id}-${phone}`}
+                phone={phone}
               />
-              {d.edges.map((e, index) => {
-                const a = nodes.get(e.from),
-                  b = nodes.get(e.to);
-                if (!a || !b) return null;
-                const same = a.y === b.y,
-                  x1 = a.x,
-                  x2 = b.x,
-                  y1 = same
-                    ? a.y - 38
-                    : a.y + (a.y < b.y ? 57 + a.metrics.length * 18 : -43),
-                  y2 = same
-                    ? b.y - 38
-                    : b.y + (a.y < b.y ? -45 : 59 + b.metrics.length * 18),
-                  lane = 20 + (index % 3) * 8;
-                const path = same
-                  ? `M${x1} ${y1} C${x1} ${y1 - lane} ${x2} ${y2 - lane} ${x2} ${y2}`
-                  : `M${x1} ${y1} C${x1} ${(y1 + y2) / 2} ${x2} ${(y1 + y2) / 2} ${x2} ${y2}`;
-                return (
-                  <g key={e.id} className={styles.edge}>
-                    <path
-                      d={path}
-                      fill="none"
-                      markerEnd={`url(#${id}-arrow)`}
-                    />
-                    <text
-                      x={(x1 + x2) / 2 + (same ? 0 : 28)}
-                      y={same ? y1 - lane * 0.75 - 5 : (y1 + y2) / 2 - 22}
-                      textAnchor="middle"
-                    >
-                      {words(e.label)}
-                      {e.count !== undefined ? ` · ${e.count}` : ""}
-                    </text>
-                  </g>
-                );
-              })}
-              {d.nodes.map((n) => {
-                const Icon = icons[n.kind] ?? CubeIcon,
-                  family = families[n.kind] ?? n.kind,
-                  tint =
-                    family === "company"
-                      ? "var(--vault-company)"
-                      : color(family);
-                return (
-                  <g
-                    key={n.id}
-                    transform={`translate(${n.x},${n.y})`}
-                    data-focus={n.focus || n.emphasis}
-                    className={styles.node}
-                    style={{ "--diagram-hue": tint } as CSSProperties}
-                  >
-                    <title>
-                      {n.name} ({words(n.kind)})
-                    </title>
-                    <path
-                      className={styles.plinth}
-                      d="M-62 -8 0 -33 62 -8 0 17Z"
-                    />
-                    <path
-                      className={styles.side}
-                      d="M-62 -8 0 17 62 -8 62 2 0 28 -62 2Z"
-                    />
-                    <Icon
-                      x="-10"
-                      y="-31"
-                      width="20"
-                      height="20"
-                      weight="duotone"
-                      aria-hidden
-                    />
-                    <rect
-                      className={styles.plate}
-                      x="-70"
-                      y="3"
-                      width="140"
-                      height={51 + n.metrics.length * 18}
-                      rx="5"
-                    />
-                    <foreignObject
-                      x="-65"
-                      y="7"
-                      width="130"
-                      height={44 + n.metrics.length * 18}
-                    >
-                      <div className={styles.label}>
-                        <strong>{n.name}</strong>
-                        <span>
-                          {words(n.kind)}
-                          {n.count !== undefined && ` · ${n.count}`}
-                        </span>
-                        {n.metrics.map((m) => (
-                          <span key={m.metric}>
-                            {words(m.metric)}:{" "}
-                            {m.value === null
-                              ? "No value"
-                              : withUnit(m.value, m.unit)}
-                          </span>
-                        ))}
-                      </div>
-                    </foreignObject>
-                  </g>
-                );
-              })}
-            </svg>
+            ))}
           </div>
         )}
       </div>
@@ -305,5 +144,199 @@ export default function DiagramView({ view }: { view: Diagram }) {
         {href && <Link href={href}>Open in Ontology ↗</Link>}
       </footer>
     </figure>
+  );
+}
+
+function DiagramPicture({
+  d,
+  title,
+  id,
+  phone,
+}: {
+  d: Diagram["diagram"];
+  title: string;
+  id: string;
+  phone: boolean;
+}) {
+  const g = diagramGeometry(d, phone),
+    { tint } = useLandscapeTint();
+  const viewport = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const frame = viewport.current;
+    if (!frame || d.diagram_type !== "neighbourhood") return;
+    const centre = () => {
+      const focus = frame.querySelector('[data-focus="true"]');
+      if (!focus || !frame.clientWidth) return;
+      const box = focus.getBoundingClientRect(),
+        bounds = frame.getBoundingClientRect();
+      frame.scrollLeft +=
+        box.x + box.width / 2 - bounds.x - frame.clientWidth / 2;
+      frame.scrollTop +=
+        box.y + box.height / 2 - bounds.y - frame.clientHeight / 2;
+    };
+    const observer = new ResizeObserver(centre);
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, [d]);
+  const maxWidth =
+    phone && (d.diagram_type === "path" || d.diagram_type === "impact")
+      ? 320
+      : 670;
+  const scale = Math.min(1, maxWidth / g.width);
+  return (
+    <div className={phone ? styles.phone : styles.desktop}>
+      <div
+        ref={viewport}
+        className={styles.viewport}
+        tabIndex={0}
+        role="region"
+        aria-label="Scrollable ontology picture"
+      >
+        <svg
+          viewBox={`${g.left} ${g.top} ${g.width} ${g.height}`}
+          style={{
+            width: Math.max(g.width * scale, g.width * (phone ? 0.86 : 0.67)),
+          }}
+          role="img"
+          aria-label={title}
+          aria-describedby={`${id.replace(/-(true|false)$/, "")}-text`}
+        >
+          <defs>
+            <marker
+              id={`${id}-arrow`}
+              markerWidth="8"
+              markerHeight="8"
+              refX="7"
+              refY="4"
+              orient="auto"
+            >
+              <path d="M0 0 8 4 0 8Z" fill="var(--ink)" />
+            </marker>
+            <pattern
+              id={`${id}-grid`}
+              width="42"
+              height="42"
+              patternTransform="matrix(1 -.05 .36 .62 0 0)"
+              patternUnits="userSpaceOnUse"
+            >
+              <path
+                d="M42 0H0V42"
+                fill="none"
+                stroke="var(--border-strong)"
+                strokeWidth="0.5"
+              />
+            </pattern>
+          </defs>
+          <rect
+            x={g.left}
+            y={g.top}
+            width={g.width}
+            height={g.height}
+            fill={`url(#${id}-grid)`}
+            opacity=".3"
+          />
+          {!g.nodes.length && (
+            <text x="20" y="50" className={styles.band}>
+              No objects in this selection
+            </text>
+          )}
+          {g.bands.map((b) => (
+            <text key={b.text} x={b.x} y={b.y + 20} className={styles.band}>
+              {b.text}
+            </text>
+          ))}
+          {g.nodes.map((n) => (
+            <g key={n.id} className={shared.form} style={tint(n.kind)}>
+              <g transform={`translate(${n.x * 0.2},${n.y * 0.2}) scale(.8)`}>
+                <LandscapeSolid x={n.x} y={n.y} height={n.height / 0.8} />
+              </g>
+            </g>
+          ))}
+          {g.edges.map((e) => (
+            <g
+              key={e.id}
+              className={styles.edge}
+              data-edge-from={e.from}
+              data-edge-to={e.to}
+            >
+              <path d={e.path} fill="none" markerEnd={`url(#${id}-arrow)`} />
+              <title>{e.label}</title>
+            </g>
+          ))}
+          {g.nodes.map((n) => (
+            <g
+              key={n.id}
+              data-node-box={n.id}
+              className={`${shared.form} ${styles.node}`}
+              style={tint(n.kind)}
+              data-focus={n.focus || n.emphasis}
+            >
+              <title>
+                {n.name} ({humanLabel(n.kind)})
+              </title>
+              <rect
+                x={n.box.x}
+                y={n.box.y}
+                width={n.box.w}
+                height={n.box.h}
+                fill="transparent"
+                pointerEvents="none"
+              />
+              <rect
+                className={styles.plate}
+                x={n.x - 80}
+                y={n.box.y + 6}
+                width="160"
+                height={n.plateHeight}
+                rx="7"
+              />
+              <foreignObject
+                x={n.x - 76}
+                y={n.box.y + 9}
+                width="152"
+                height={n.plateHeight - 4}
+              >
+                <div className={styles.label}>
+                  <span className={styles.kind}>
+                    <ConnectionKindIcon kind={n.kind} />
+                    {d.diagram_type === "kinds"
+                      ? `${n.count ?? 0} ${plural(humanLabel(n.kind).toLowerCase(), n.count)}`
+                      : humanLabel(n.kind)}
+                  </span>
+                  {d.diagram_type !== "kinds" && <strong>{n.name}</strong>}
+                  {n.metrics.map((m) => (
+                    <span key={m.metric}>
+                      {words(m.metric)}:{" "}
+                      {m.value === null
+                        ? "No value"
+                        : withUnit(m.value, m.unit)}
+                    </span>
+                  ))}
+                </div>
+              </foreignObject>
+            </g>
+          ))}
+          {g.edges.map((e) => (
+            <g key={e.id} data-label-box={e.id} className={styles.verb}>
+              <rect
+                x={e.box.x}
+                y={e.box.y}
+                width={e.box.w}
+                height={e.box.h}
+                rx="8"
+              />
+              <foreignObject
+                x={e.box.x + 4}
+                y={e.box.y}
+                width={e.box.w - 8}
+                height={e.box.h}
+              >
+                <div>{e.label}</div>
+              </foreignObject>
+            </g>
+          ))}
+        </svg>
+      </div>
+    </div>
   );
 }

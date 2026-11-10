@@ -13,6 +13,7 @@ use surrealdb::types::RecordId;
 
 pub const MAX_NODES: usize = 12;
 pub const MAX_EDGES: usize = 24;
+const SEARCH_DEADLINE: std::time::Duration = std::time::Duration::from_secs(3);
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Hops {
@@ -144,6 +145,10 @@ fn node(e: EntityRef, focus: bool) -> Node {
 }
 
 pub async fn resolve(db: &OrgDb, owner: &RecordId, request: Request) -> AppResult<Diagram> {
+    resolve_with_deadline(db, owner, request, SEARCH_DEADLINE).await
+}
+
+async fn resolve_with_deadline(db: &OrgDb, owner: &RecordId, request: Request, budget: std::time::Duration) -> AppResult<Diagram> {
     if request.emphasis.len() > MAX_NODES || request.annotations.len() > 4 {
         return Err(bad(
             "diagram supports at most twelve emphasis references and four metric references",
@@ -226,7 +231,7 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, request: Request) -> AppResul
                 .values()
                 .filter(|n| n.vault.to_string() == start.vault)
                 .map(|n| {
-                    node(
+                    let mut item = node(
                         EntityRef {
                             id: n.id.to_string(),
                             name: n.name.clone(),
@@ -234,7 +239,9 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, request: Request) -> AppResul
                             vault: start.vault.clone(),
                         },
                         n.id.to_string() == start.id,
-                    )
+                    );
+                    item.x = usize::from(*walk.hops.get(&n.id.to_string()).unwrap_or(&0));
+                    item
                 })
                 .collect();
             let edges = walk
@@ -291,8 +298,19 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, request: Request) -> AppResul
                 return Err(bad("diagram references must share one vault"));
             }
             let id = crate::rid::parse(&start.id).map_err(|_| bad("invalid focus reference"))?;
-            let g = neighbourhood::neighbourhood(db, owner, &id, Some(hops.depth().into()), None)
-                .await?;
+            // Bound the entire graph fetch, including node/fact hydration. The bounded walk
+            // already caps rows per hub and in total; a deadline also bounds slow queries.
+            let search = neighbourhood::neighbourhood(db, owner, &id, Some(hops.depth().into()), None);
+            let (g, timed_out) = match tokio::time::timeout(budget, search).await {
+                Ok(result) => (result?, false),
+                Err(_) => (neighbourhood::Neighbourhood {
+                    vault: start.vault.clone(), depth: hops.depth(),
+                    nodes: vec![neighbourhood::Node {
+                        id: start.id.clone(), name: start.name.clone(), kind: start.kind.clone(),
+                        summary: None, facts: vec![], properties: vec![],
+                    }], edges: vec![], link_types: vec![], truncated: true,
+                }, true),
+            };
             let (dist, predecessors) = shortest(&start.id, &g.edges, direction, hops.depth());
             let mut ids: HashSet<_> = dist.keys().cloned().collect();
             let mut path_edges = HashSet::new();
@@ -310,10 +328,12 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, request: Request) -> AppResul
                 }
                 if !dist.contains_key(&t.id) {
                     notice = Some(format!(
-                        "No path found within {} {}. This does not mean no relationship exists.{}",
+                        "No path found within the search limits ({} {}). This does not mean no relationship exists.{}",
                         hops.depth(),
                         if hops.depth() == 1 { "hop" } else { "hops" },
-                        if g.truncated {
+                        if timed_out {
+                            " The three-second search deadline was reached."
+                        } else if g.truncated {
                             " The search reached its resource limit."
                         } else {
                             ""
@@ -326,7 +346,8 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, request: Request) -> AppResul
                 .into_iter()
                 .filter(|n| ids.contains(&n.id))
                 .map(|n| {
-                    node(
+                    let distance = usize::from(*dist.get(&n.id).unwrap_or(&0));
+                    let mut item = node(
                         EntityRef {
                             id: n.id,
                             name: n.name,
@@ -334,14 +355,18 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, request: Request) -> AppResul
                             vault: g.vault.clone(),
                         },
                         false,
-                    )
+                    );
+                    item.x = distance;
+                    item
                 })
                 .collect();
             // An authorised but unreached destination is still labelled from the server.
             if let Some(t) = &target
                 && !nodes.iter().any(|n| n.id == t.id)
             {
-                nodes.push(node(t.clone(), false));
+                let mut item = node(t.clone(), false);
+                item.x = usize::from(hops.depth()) + 1;
+                nodes.push(item);
             }
             for n in &mut nodes {
                 n.focus = n.id == start.id || target.as_ref().is_some_and(|t| n.id == t.id);
@@ -378,7 +403,7 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, request: Request) -> AppResul
                 edges,
                 g.truncated,
             );
-            out.notice = notice;
+            out.notice = notice.or_else(|| timed_out.then(|| "Partial neighbourhood: the three-second search deadline was reached.".into()));
             out
         }
     };
@@ -508,18 +533,43 @@ impl Diagram {
         self.edges.truncate(MAX_EDGES);
         self.omitted_edges = self.total_edges.saturating_sub(self.edges.len());
         self.partial |= !self.groups.is_empty() || self.omitted_edges > 0;
-        let row_height = 150
-            + 18 * self
-                .nodes
-                .iter()
-                .map(|n| n.metrics.len())
-                .max()
-                .unwrap_or(0);
-        for (i, n) in self.nodes.iter_mut().enumerate() {
-            n.x = if i % 2 == 0 { 80 } else { 240 };
-            n.y = 70 + (i / 2) * row_height;
+        // Persist semantic positions with the result. Rendering never queries or runs a force layout.
+        let row_height = 210 + 20 * self.nodes.iter().map(|n| n.metrics.len()).max().unwrap_or(0);
+        match self.diagram_type.as_str() {
+            "path" | "impact" => {
+                self.nodes.sort_by(|a, b| (a.x, &a.kind, &a.name, &a.id).cmp(&(b.x, &b.kind, &b.name, &b.id)));
+                let mut lanes = BTreeMap::new();
+                for n in &mut self.nodes {
+                    let lane = lanes.entry(n.x).or_insert(0);
+                    n.y = 160 + *lane * row_height;
+                    *lane += 1;
+                    n.x = 150 + n.x * 260;
+                }
+            }
+            "neighbourhood" => {
+                let count = self.nodes.len().saturating_sub(1).max(1);
+                let radius = 310.0_f64.max(count as f64 * 48.0);
+                let centre = radius as usize + 150;
+                let mut i = 0;
+                for n in &mut self.nodes {
+                    if n.focus { n.x = centre; n.y = centre; continue; }
+                    let angle = -std::f64::consts::FRAC_PI_2 + i as f64 * std::f64::consts::TAU / count as f64;
+                    n.x = (centre as f64 + radius * angle.cos()).round() as usize;
+                    n.y = (centre as f64 + radius * angle.sin()).round() as usize;
+                    i += 1;
+                }
+            }
+            _ => {
+                // Same receding rows and square-root height convention as Overview.
+                self.nodes.sort_by(|a, b| a.kind.cmp(&b.kind));
+                for (i, n) in self.nodes.iter_mut().enumerate() {
+                    n.x = 150 + (i % 4) * 260 + (i / 4) * 12;
+                    n.y = 210 + (i / 4) * 250 - (i % 4) * 14;
+                }
+            }
         }
-        self.height = row_height * self.nodes.len().div_ceil(2).max(1);
+        self.height = self.nodes.iter().map(|n| n.y + 80).max().unwrap_or(200);
+
     }
     pub fn text(&self) -> String {
         let mut text = format!(
@@ -596,4 +646,9 @@ pub fn schema() -> serde_json::Value {
         "emphasis":{"type":"array","maxItems":MAX_NODES,"items":id},
         "annotations":{"type":"array","maxItems":4,"items":{"type":"object","additionalProperties":false,"required":["entity_id","metric"],"properties":{"entity_id":id,"metric":id}}}
     }})
+}
+
+#[cfg(feature = "test-support")]
+pub async fn resolve_search_deadline_for_test(db: &OrgDb, owner: &RecordId, request: Request, budget: std::time::Duration) -> AppResult<Diagram> {
+    resolve_with_deadline(db, owner, request, budget).await
 }
