@@ -32,7 +32,6 @@ import {
 import styles from "./review.module.css";
 import { useReviewArming } from "./use-review-arming";
 import ReviewEvidence from "./ReviewEvidence";
-import { useReviewSticky } from "./use-review-sticky";
 import MergePreview from "./MergePreview";
 import { humanLabel, ReviewTime } from "./review-format";
 import { useReviewActivity } from "./review-activity";
@@ -113,8 +112,6 @@ export default function Definition({
     (state.kind !== "saved" && incoming.item.revision !== d.item.revision);
   const busy = locked || state.kind === "saving";
   const canDecide = isOwner && !busy && !stale && state.kind !== "saved";
-  const sticky = useReviewSticky(reviewRegion, incoming.id, incoming.item.revision,
-    isOwner && state.kind !== "saved" && incoming.id === d.id && incoming.item.revision === d.item.revision);
   const arming = useReviewArming({
     id: d.id, revision: d.item.revision,
     incomingId: incoming.id, incomingRevision: incoming.item.revision,
@@ -261,13 +258,12 @@ export default function Definition({
             e.action === ({ approve: "approved", reject: "rejected", merge: "merged", describe: "described" }[state.operation]),
         )
       : undefined;
-  const evidence = <ReviewEvidence definition={d} data={data} evidenceId={`${reasonId}-evidence`} />;
+  const evidence = <ReviewEvidence definition={d} data={data} sectionPrefix={reasonId} />;
   const displayed = state.kind === "saved" ? state.definition : d;
 
   return (
     <article
       ref={reviewRegion} className={styles.reading} aria-busy={busy}
-      data-sticky-decisions={sticky}
       onKeyDownCapture={event => {
         if (event.key === "Escape") arming.disarm();
       }}
@@ -376,6 +372,16 @@ export default function Definition({
         </>
       ) : (
         <>
+          <nav className={styles.sectionIndex} aria-label="Review sections">
+            <a href={`#${reasonId}-changes`}>What changes</a>
+            <a href={`#${reasonId}-source`}>Read the source</a>
+            <a href={`#${reasonId}-context`}>In your business</a>
+            <a href={`#${reasonId}-consequence`}>If you approve</a>
+            {isOwner && <>
+              <a href={`#${reasonId}-reason`}>Your reason</a>
+              <a href={`#${reasonId}-decide`}>Decide</a>
+            </>}
+          </nav>
           {stale && (
             <section role="alert" className={styles.notice}>
               <h4 className="font-medium mb-2">This definition changed</h4>
@@ -500,7 +506,7 @@ export default function Definition({
           )}
           {isOwner ? (
             <>
-              <section className={styles.section}>
+              <section id={`${reasonId}-reason`} className={styles.section}>
                 <label className={styles.reason} htmlFor={reasonId}>
                   Your reason, saved with the decision (optional)
                   <textarea
@@ -531,8 +537,7 @@ export default function Definition({
                   </button>
                 </div>
               )}
-              <footer className={styles.actions}>
-                <a className={styles.evidenceLink} href={`#${reasonId}-evidence`}>Review evidence</a>
+              <footer id={`${reasonId}-decide`} className={styles.actions}>
                 <span className={styles.armedHint}>Keyboard decision ready. Press <kbd>Enter</kbd> to confirm, or <kbd>Esc</kbd> to cancel.</span>
                 <span className={styles.shortcuts}>
                   {busy ? (

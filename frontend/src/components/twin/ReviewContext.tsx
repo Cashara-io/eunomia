@@ -9,11 +9,11 @@ import { STATUS } from "./DefinitionRows";
 import landscapeStyles from "./overview.module.css";
 import styles from "./review.module.css";
 
-export default function ReviewContext({ definition: d, data }: { definition: Definition; data: OntologyOut }) {
+export default function ReviewContext({ definition: d, data, sectionId }: { definition: Definition; data: OntologyOut; sectionId?: string }) {
   const { kinds, links, total } = reviewContext(d, data);
   const { tint } = useLandscapeTint();
   const id = useId();
-  return <figure className={styles.contextPicture} aria-label="Where this definition sits">
+  return <figure id={sectionId} className={styles.contextPicture} aria-label="Where this definition sits">
     <figcaption><strong>In your business</strong><span>Local context · Focus raised, heights are not counts</span></figcaption>
     <svg viewBox={`0 0 ${Math.max(1, kinds.length) * 200} 140`} aria-hidden="true" className={styles.contextPlane}>
       <defs>

@@ -10,22 +10,22 @@ import styles from "./review.module.css";
 export default function ReviewEvidence({
   definition: d,
   data,
-  evidenceId,
+  sectionPrefix,
 }: {
   definition: DefinitionItem;
   data: OntologyOut;
-  evidenceId?: string;
+  sectionPrefix: string;
 }) {
   return (
     <>
-      <section className={styles.section} aria-label="What changes">
+      <section id={`${sectionPrefix}-changes`} className={styles.section} aria-label="What changes">
         <h4>
           <ArrowsLeftRightIcon size={18} aria-hidden />What changes
         </h4>
         <p className={styles.dim}>{affected(d)}.</p>
         <ReviewComparison before={d.item.status === "proposed" ? undefined : d} after={d} />
       </section>
-      <Evidence definition={d} data={data} evidenceId={evidenceId} />
+      <Evidence definition={d} data={data} sectionPrefix={sectionPrefix} />
     </>
   );
 }
@@ -33,11 +33,11 @@ export default function ReviewEvidence({
 export function Evidence({
   definition: d,
   data,
-  evidenceId,
+  sectionPrefix,
 }: {
   definition: DefinitionItem;
   data?: OntologyOut;
-  evidenceId?: string;
+  sectionPrefix?: string;
 }) {
   const samples =
     d.type === "metric"
@@ -54,7 +54,7 @@ export function Evidence({
     ) ?? [];
   return (
     <>
-      <section id={evidenceId} className={styles.section} aria-label="Source evidence">
+      <section id={sectionPrefix ? `${sectionPrefix}-source` : undefined} className={styles.section} aria-label="Source evidence">
         <h4>
           <FingerprintIcon size={18} aria-hidden />Read the source
         </h4>
@@ -100,8 +100,8 @@ export function Evidence({
           <p className={`${styles.dim} mt-3`}>No sample values recorded.</p>
         )}
       </section>
-      {data && <ReviewContext definition={d} data={data} />}
-      <section className={styles.section} aria-label="Consequence of approving">
+      {data && <ReviewContext definition={d} data={data} sectionId={sectionPrefix ? `${sectionPrefix}-context` : undefined} />}
+      <section id={sectionPrefix ? `${sectionPrefix}-consequence` : undefined} className={styles.section} aria-label="Consequence of approving">
         <h4>
           <CheckCircleIcon size={18} aria-hidden />If you approve
         </h4>

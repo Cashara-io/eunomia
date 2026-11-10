@@ -117,50 +117,62 @@ test("inbox labels retain definition identity before type for real-backend flows
 });
 
 
-for (const width of [390, 1440]) for (const theme of ["light", "dark"]) test(`decision bar waits for both evidence sections and resets on identity or revision at ${width} ${theme}`, async ({ page }) => {
+for (const width of [390, 1440]) for (const theme of ["light", "dark"]) test(`decisions stay after the detail without overlapping content at ${width} ${theme}`, async ({ page }) => {
   const fixture = await mockReview(page);
+  fixture.model.kinds[0].properties[0].samples = Array.from({ length: 20 }, (_, i) => `AUD ${12 + i}.00`);
   await page.setViewportSize({ width, height: 900 });
   await page.addInitScript(theme => localStorage.setItem("eunomia-theme", theme), theme);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(reviewUrl);
-  const bar = page.locator('[aria-label="Selected suggestion"] footer');
-  await expect(bar).not.toBeInViewport();
-  await expect(bar).toHaveCSS("position", "static");
-  if (process.env.ONTOLOGY_REVIEW_FIGURES) await page.screenshot({ path: `${process.env.ONTOLOGY_REVIEW_FIGURES}/initial-${width}-${theme}.png` });
-  await page.getByRole("region", { name: "Source evidence", exact: true }).scrollIntoViewIfNeeded();
-  await expect(bar).toHaveCSS("position", "static");
-  await page.getByRole("region", { name: "Consequence of approving", exact: true }).scrollIntoViewIfNeeded();
-  await expect(bar).toHaveCSS("position", "sticky");
-  await expect(bar.getByRole("button", { name: "Approve Unit cost", exact: true })).toBeInViewport();
-  if (process.env.ONTOLOGY_REVIEW_FIGURES) await page.screenshot({ path: `${process.env.ONTOLOGY_REVIEW_FIGURES}/sticky-${width}-${theme}.png` });
-  await bar.getByRole("link", { name: "Review evidence", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Read the source", exact: true })).toBeInViewport();
-  const comparison = page.getByRole("region", { name: "What changes", exact: true });
-  await comparison.scrollIntoViewIfNeeded();
-  const boxes = await Promise.all([comparison.boundingBox(), bar.boundingBox()]);
-  expect(boxes.every(Boolean)).toBe(true);
-  expect(boxes[0]!.y + boxes[0]!.height).toBeLessThanOrEqual(boxes[1]!.y);
-  fixture.model.kinds[0].properties[0].revision = 2;
-  fixture.notifyOntologyChange();
-  await expect(page.getByRole("region", { name: "Selected suggestion", exact: true })).toContainText("This definition changed");
-  await expect(bar).toHaveCSS("position", "static");
-  await page.getByRole("button", { name: "Review latest version", exact: true }).click();
-  await expect(bar).toHaveCSS("position", "static");
-  await page.getByRole("region", { name: "Source evidence", exact: true }).scrollIntoViewIfNeeded();
-  await page.getByRole("region", { name: "Consequence of approving", exact: true }).scrollIntoViewIfNeeded();
-  await expect(bar).toHaveCSS("position", "sticky");
-  await page.getByRole("heading", { name: "Unit cost", exact: true }).focus();
-  await page.keyboard.press("j");
-  await expect(page.getByRole("heading", { name: "Gross profit", exact: true })).toBeFocused();
-  await expect(page.locator('[aria-label="Selected suggestion"] footer')).toHaveCSS("position", "static");
+  const detail = page.getByRole("region", { name: "Selected suggestion", exact: true });
+  const bar = detail.locator("footer");
+  const approve = bar.getByRole("button", { name: "Approve Unit cost", exact: true });
+  await expect(approve).not.toBeInViewport();
+  if (process.env.ONTOLOGY_REVIEW_FIGURES) {
+    await page.screenshot({ path: `${process.env.ONTOLOGY_REVIEW_FIGURES}/initial-${width}-${theme}.png` });
+  }
+  // Sample the start, middle and end of the reading path, then return upwards.
+  for (const name of ["What changes", "Source evidence", "Consequence of approving", "Your reason", "Decide", "Source evidence", "What changes"]) {
+    const target = name === "Your reason" ? detail.locator("textarea") : name === "Decide" ? bar : detail.getByRole("region", { name, exact: true });
+    await target.scrollIntoViewIfNeeded();
+    expect(await bar.evaluate(el => getComputedStyle(el).position)).toBe("static");
+    const overlaps = await bar.evaluate(el => {
+      const bar = el.getBoundingClientRect();
+      const article = el.closest("article")!;
+      return [...article.querySelectorAll("header, nav, section, figure, details, textarea")]
+        .filter(other => !el.contains(other) && other.checkVisibility())
+        .filter(other => {
+          const box = other.getBoundingClientRect();
+          return box.width > 0 && box.height > 0 && box.left < bar.right && box.right > bar.left && box.top < bar.bottom && box.bottom > bar.top;
+        }).map(other => other.getAttribute("aria-label") || other.tagName);
+    });
+    expect(overlaps).toEqual([]);
+  }
+  await approve.scrollIntoViewIfNeeded();
+  await expect(approve).toBeInViewport();
   expect(fixture.mutations).toHaveLength(0);
 });
 
-test("a detail that fits the viewport never needs a sticky bar", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 5000 });
-  await mockReview(page);
+for (const width of [390, 1440]) test(`section index only navigates to the detail sections at ${width}`, async ({ page }) => {
+  const fixture = await mockReview(page);
+  await page.setViewportSize({ width, height: 900 });
   await page.goto(reviewUrl);
-  await expect(page.locator('[aria-label="Selected suggestion"] footer')).toHaveCSS("position", "static");
+  const index = page.getByRole("navigation", { name: "Review sections", exact: true });
+  await expect(index.getByRole("button")).toHaveCount(0);
+  await expect(index.locator('form, input, [data-review-decision], [role="button"]')).toHaveCount(0);
+  await expect(index.getByRole("link")).toHaveText(["What changes", "Read the source", "In your business", "If you approve", "Your reason", "Decide"]);
+  for (const link of await index.getByRole("link").all()) {
+    const href = await link.getAttribute("href");
+    expect(href).toMatch(/^#.+/);
+    await link.click();
+    const target = page.locator(`[id="${href!.slice(1)}"]`);
+    await expect(target).toBeInViewport();
+    expect(await target.evaluate(el => el.getBoundingClientRect().top)).toBeGreaterThanOrEqual(0);
+    await expect(page.getByRole("button", { name: "Approve Unit cost", exact: true })).not.toBeFocused();
+    await expect(page.getByText(/Keyboard decision ready/)).not.toBeVisible();
+  }
+  expect(fixture.mutations).toHaveLength(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
 test("new definition is a labelled proposal without invented differences", async ({ page }) => {
