@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Request } from "@playwright/test";
 import { mockReview, reviewUrl } from "./fixtures/ontology-review";
 
 for (const theme of ["light", "dark"]) {
@@ -208,23 +208,90 @@ test("navigation focus ring hugs the heading text", async ({ page }) => {
 });
 
 test("inbox shares a page of identity-matched activity and cancels on navigation", async ({ page }) => {
-  await mockReview(page);
+  const fixture = await mockReview(page);
+  fixture.model.kinds.push(...Array.from({ length: 12 }, (_, i) => ({
+    ...fixture.model.kinds[1], kind: `fixture_${i}`, description: `Fixture kind ${i}`,
+  })));
+  // The hello cursor normally invalidates reads after 400 ms. Keep this channel
+  // quiet so this test measures page sharing and navigation, not live refetches.
+  await page.routeWebSocket("**/api/events/ws*", ws => {
+    ws.send(JSON.stringify({ type: "hello", vaults: { business: 0 }, ontology: {} }));
+  });
+  await page.clock.install();
   const requests: string[] = [];
   const aborted: string[] = [];
-  page.on("requestfailed", request => { if (request.url().includes("/ontology/activity?") && new URL(request.url()).searchParams.get("limit") !== "5") aborted.push(request.url()); });
+  const active = new Set<Request>();
+  const duplicates: string[] = [];
+  const isInbox = (request: Request) => {
+    const url = new URL(request.url());
+    return url.pathname.endsWith("/ontology/activity") && url.searchParams.get("limit") === "200";
+  };
+  page.on("request", request => {
+    if (!isInbox(request)) return;
+    if ([...active].some(other => other.url() === request.url())) duplicates.push(request.url());
+    active.add(request);
+    requests.push(request.url());
+  });
+  page.on("requestfinished", request => active.delete(request));
+  page.on("requestfailed", request => {
+    if (isInbox(request)) aborted.push(request.url());
+    active.delete(request);
+  });
   await page.route("**/ontology/activity?**", route => {
-    if (new URL(route.request().url()).searchParams.get("limit") === "5") return route.fallback();
-    requests.push(route.request().url());
+    if (!isInbox(route.request())) return route.fallback();
+    // Leave the page read pending to expose per-row requests and cancellation.
   });
   await page.goto("/ontology/review?space=business");
+  await expect(page.locator("a[data-definition]")).toHaveCount(10);
   await expect.poll(() => requests.length).toBeGreaterThan(0);
+  await page.clock.runFor(600);
   expect(requests).toHaveLength(1);
+  expect(active.size).toBe(1);
+  expect(duplicates).toEqual([]);
   expect(new URL(requests[0]).searchParams.has("definition_type")).toBe(false);
-  await page.getByRole("searchbox", { name: "Search suggestions", exact: true }).fill("warehouse");
-  await expect.poll(() => aborted.length).toBeGreaterThan(0);
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.locator("a[data-definition]")).toHaveCount(7);
+  await expect.poll(() => aborted.length).toBe(1);
   await expect.poll(() => requests.length).toBe(2);
-  await page.getByRole("link", { name: "Overview", exact: true }).click();
+  await page.clock.runFor(600);
+  expect(requests).toHaveLength(2);
+  expect(active.size).toBe(1);
+  await page.getByRole("searchbox", { name: "Search suggestions", exact: true }).fill("warehouse");
+  await expect(page.locator("a[data-definition]")).toHaveCount(2);
   await expect.poll(() => aborted.length).toBe(2);
+  await expect.poll(() => requests.length).toBe(3);
+  await page.clock.runFor(600);
+  expect(requests).toHaveLength(3);
+  expect(active.size).toBe(1);
+  await page.getByRole("link", { name: "Overview", exact: true }).click();
+  await expect.poll(() => aborted.length).toBe(3);
+  expect(active.size).toBe(0);
+});
+
+test("an ontology hello replaces the pending inbox read once", async ({ page }) => {
+  await mockReview(page);
+  let hello = () => {};
+  await page.routeWebSocket("**/api/events/ws*", ws => {
+    hello = () => ws.send(JSON.stringify({ type: "hello", vaults: { business: 0 }, ontology: { business: 0 } }));
+  });
+  await page.clock.install();
+  let requests = 0;
+  let aborted = 0;
+  page.on("requestfailed", request => {
+    if (new URL(request.url()).searchParams.get("limit") === "200") aborted += 1;
+  });
+  await page.route("**/ontology/activity?**", route => {
+    if (new URL(route.request().url()).searchParams.get("limit") !== "200") return route.fallback();
+    requests += 1;
+  });
+  await page.goto("/ontology/review?space=business");
+  await expect.poll(() => requests).toBe(1);
+  hello();
+  await page.clock.runFor(600);
+  await expect.poll(() => aborted).toBe(1);
+  await expect.poll(() => requests).toBe(2);
+  await page.clock.runFor(600);
+  expect(requests).toBe(2);
 });
 
 for (const width of [390, 1440]) test(`shortcut pairs and proposal stay readable at 200% text at ${width}`, async ({ page }) => {
