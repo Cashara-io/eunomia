@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 import { ArrowsMergeIcon } from "@phosphor-icons/react/ssr";
-import { words } from "./DefinitionRows";
+import { humanLabel } from "./review-format";
 import type { Definition } from "./model";
 import { affected, mergeConflicts } from "./review-model";
 import styles from "./review.module.css";
@@ -22,7 +22,7 @@ export default function MergePreview({
 }) {
   const target = targets.find((t) => t.id === targetId);
   return (
-    <section className={styles.section} aria-label="Merge preview">
+    <section className={styles.section} aria-label="Merge preview" data-merge-open={Boolean(target)}>
       <h4>
         <ArrowsMergeIcon size={18} weight="duotone" />
         Merge instead
@@ -31,7 +31,7 @@ export default function MergePreview({
         Choose a destination to inspect. Nothing is saved until you confirm.
       </p>
       <label className="flex flex-col gap-2">
-        Merge {words(d.name)} into
+        Merge {humanLabel(d.name)} into
         <select
           ref={selectRef}
           className="field p-3 w-full"
@@ -42,7 +42,7 @@ export default function MergePreview({
           <option value="">Choose a destination</option>
           {targets.map((t) => (
             <option key={t.id} value={t.id}>
-              {words(t.name)}
+              {humanLabel(t.name)}
             </option>
           ))}
         </select>
@@ -50,7 +50,7 @@ export default function MergePreview({
       {target && (
         <div className={`${styles.reveal} mt-5`}>
           <h4>
-            {words(d.name)} → {words(target.name)}
+            {humanLabel(d.name)} → {humanLabel(target.name)}
           </h4>
           <dl className={styles.diff}>
             <div>

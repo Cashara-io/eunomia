@@ -1,7 +1,8 @@
 import { FileTextIcon } from "@phosphor-icons/react/ssr";
-import { STATUS, words } from "./DefinitionRows";
+import { STATUS } from "./DefinitionRows";
 import type { OntologyOut } from "@/lib/queries/ontology";
 import type { Definition as DefinitionItem } from "./model";
+import { humanLabel } from "./review-format";
 import { affected } from "./review-model";
 import styles from "./review.module.css";
 
@@ -42,7 +43,7 @@ export default function ReviewEvidence({
             <dd className={styles.fields}>
               {d.type === "property" && (
                 <>
-                  <span className={styles.tag}>{words(d.item.datatype)}</span>
+                  <span className={styles.tag}>{humanLabel(d.item.datatype)}</span>
                   {d.item.unit && (
                     <span className={styles.tag}>{d.item.unit}</span>
                   )}
@@ -61,7 +62,7 @@ export default function ReviewEvidence({
               )}
               {d.type === "link" && (
                 <span>
-                  {words(d.item.from_kind)} → {words(d.item.to_kind)}
+                  {humanLabel(d.item.from_kind)} → {humanLabel(d.item.to_kind)}
                 </span>
               )}
               {d.type !== "link" && d.item.synonyms.length > 0 && (
@@ -151,7 +152,7 @@ export function Evidence({
         <div className={styles.consequence}>
           <p>
             {d.type === "property"
-              ? `AI apps can save typed ${words(d.name)} values for ${words(d.kind)}.`
+              ? `AI apps can save typed ${humanLabel(d.name)} values for ${humanLabel(d.kind)}.`
               : d.type === "metric"
                 ? "AI apps can run this metric by name."
                 : d.type === "link"
@@ -169,7 +170,7 @@ export function Evidence({
           <div className={`${styles.fields} mt-4`}>
             {dependencies.map((k) => (
               <span className={styles.tag} key={k.kind}>
-                {words(k.kind)}:{" "}
+                {humanLabel(k.kind)}:{" "}
                 {k.built_in || k.status === "approved"
                   ? "available"
                   : "approval required"}

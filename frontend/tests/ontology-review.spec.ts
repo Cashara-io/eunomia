@@ -5,7 +5,7 @@ const reasonLabel = "Your reason, saved with the decision (optional)";
 const detail = (page: Page) =>
   page.getByRole("region", { name: "Selected suggestion", exact: true });
 async function chooseMerge(page: Page, target: string) {
-  await expect(detail(page)).toContainText("unit cost");
+  await expect(detail(page)).toContainText("Unit cost");
   const options = page.getByRole("group", { name: "Other definition options" });
   if (
     (await options.count()) &&
@@ -13,7 +13,7 @@ async function chooseMerge(page: Page, target: string) {
   )
     await options.locator("summary").first().click();
   const picker = page.getByRole("combobox", {
-    name: "Merge unit cost into",
+    name: "Merge Unit cost into",
     exact: true,
   });
   if (await picker.evaluate((e) => e.tagName === "SELECT"))
@@ -29,11 +29,11 @@ test("merge selection never saves, preview precedes one final mutation", async (
 }) => {
   const fixture = await mockReview(page);
   await page.goto(reviewUrl);
-  await chooseMerge(page, "price");
+  await chooseMerge(page, "Price");
   expect(fixture.mutations).toHaveLength(0);
   await expect(
     page.getByRole("region", { name: "Merge preview" }),
-  ).toContainText("unit cost → price");
+  ).toContainText("Unit cost → Price");
   await expect(
     page.getByRole("region", { name: "Merge preview" }),
   ).toContainText("6,000 recorded values");
@@ -44,7 +44,7 @@ test("merge selection never saves, preview precedes one final mutation", async (
     .dblclick();
   await expect(
     page.getByRole("region", { name: "Saved decision" }),
-  ).toContainText("Saved.");
+  ).toContainText("merged into Price");
   expect(fixture.mutations).toHaveLength(1);
   expect(fixture.mutations[0]).toMatchObject({
     revision: 1,
@@ -89,28 +89,30 @@ test("keyboard queue, approval, rejection, Escape and focus", async ({
   const fixture = await mockReview(page);
   await page.goto("/ontology/review?space=business");
   await expect(page.locator("a[data-definition]").first()).toBeVisible();
+  await page.getByRole("region", { name: "Ontology review", exact: true }).focus();
   await page.keyboard.press("j");
   await expect(
-    page.getByRole("heading", { name: "unit cost", exact: true }),
+    page.getByRole("heading", { name: "Unit cost", exact: true }),
   ).toBeFocused();
-  await page.getByLabel(reasonLabel).fill("A reason with a r j k");
+  await page.getByLabel(reasonLabel).focus();
+  await page.keyboard.type("A reason with a r j k");
   expect(fixture.mutations).toHaveLength(0);
-  await page.getByRole("heading", { name: "unit cost", exact: true }).focus();
+  await page.getByRole("heading", { name: "Unit cost", exact: true }).focus();
   await page.keyboard.press("j");
   await expect(
-    page.getByRole("heading", { name: "gross profit", exact: true }),
+    page.getByRole("heading", { name: "Gross profit", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("k");
   await expect(
-    page.getByRole("heading", { name: "unit cost", exact: true }),
+    page.getByRole("heading", { name: "Unit cost", exact: true }),
   ).toBeFocused();
-  await chooseMerge(page, "price");
+  await chooseMerge(page, "Price");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Confirm merge" })).toHaveCount(
     0,
   );
   await expect(
-    page.getByRole("combobox", { name: "Merge unit cost into", exact: true }),
+    page.getByRole("combobox", { name: "Merge Unit cost into", exact: true }),
   ).toBeFocused();
   expect(fixture.mutations).toHaveLength(0);
   await page.keyboard.press("Escape");
@@ -118,15 +120,20 @@ test("keyboard queue, approval, rejection, Escape and focus", async ({
   await expect(page.locator("a[data-definition]").first()).toBeFocused();
   await page.keyboard.press("j");
   await expect(
-    page.getByRole("heading", { name: "unit cost", exact: true }),
+    page.getByRole("heading", { name: "Unit cost", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("a");
+  expect(fixture.mutations).toHaveLength(0);
+  await expect(page.getByRole("button", { name: "Approve Unit cost", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: /^Saved\./ })).toBeFocused();
   await page.getByRole("button", { name: "Next suggestion" }).click();
   await expect(
-    page.getByRole("heading", { name: "gross profit", exact: true }),
+    page.getByRole("heading", { name: "Gross profit", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("r");
+  expect(fixture.mutations).toHaveLength(1);
+  await page.keyboard.press("Enter");
   await expect(
     page.getByRole("region", { name: "Saved decision" }),
   ).toContainText("rejected");
@@ -140,7 +147,7 @@ test("network failure keeps reason and evidence, local Retry confirms Saved", as
   await page.goto(reviewUrl);
   await page.getByLabel(reasonLabel).fill("Matches the source definition");
   await page
-    .getByRole("button", { name: "Approve unit cost", exact: true })
+    .getByRole("button", { name: "Approve Unit cost", exact: true })
     .click();
   await expect(
     page.getByRole("button", { name: "Retry", exact: true }),
@@ -168,11 +175,11 @@ test("stale revision shows changed fields and keeps the draft until re-review", 
   await page.goto(reviewUrl);
   await page.getByLabel(reasonLabel).fill("Check the cost basis");
   await page
-    .getByRole("button", { name: "Approve unit cost", exact: true })
+    .getByRole("button", { name: "Approve Unit cost", exact: true })
     .click();
   await expect(detail(page).getByRole("alert")).toContainText("Now: AUD/kg");
   await expect(
-    page.getByRole("button", { name: "Approve unit cost", exact: true }),
+    page.getByRole("button", { name: "Approve Unit cost", exact: true }),
   ).toBeDisabled();
   await expect(page.getByLabel(reasonLabel)).toHaveValue(
     "Check the cost basis",
@@ -185,7 +192,7 @@ test("stale revision shows changed fields and keeps the draft until re-review", 
     "Check the cost basis",
   );
   await page
-    .getByRole("button", { name: "Approve unit cost", exact: true })
+    .getByRole("button", { name: "Approve Unit cost", exact: true })
     .click();
   await expect(
     page.getByRole("region", { name: "Saved decision" }),
@@ -218,10 +225,10 @@ test("saving retains evidence and disables competing decisions", async ({
   await page.goto(reviewUrl);
   await page.getByLabel(reasonLabel).fill("Reviewed source");
   await page
-    .getByRole("button", { name: "Approve unit cost", exact: true })
+    .getByRole("button", { name: "Approve Unit cost", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "Approve unit cost", exact: true }),
+    page.getByRole("button", { name: "Approve Unit cost", exact: true }),
   ).toBeDisabled();
   await expect(
     page.getByRole("button", { name: "Reject", exact: true }),
@@ -354,7 +361,7 @@ for (const width of [1440, 390])
         ) {
           await chooseMerge(
             page,
-            state === "merge-conflict" ? "quantity" : "price",
+            state === "merge-conflict" ? "Quantity" : "Price",
           );
           if (state === "merge-cancelled") await page.keyboard.press("Escape");
           if (state === "merge-saved") {
@@ -381,7 +388,7 @@ for (const width of [1440, 390])
             .getByLabel(reasonLabel)
             .fill("Matches the source column and our cost definition.");
           await page
-            .getByRole("button", { name: "Approve unit cost", exact: true })
+            .getByRole("button", { name: "Approve Unit cost", exact: true })
             .click();
         }
         if (["save-error", "retry-saved"].includes(state))
@@ -496,7 +503,7 @@ test("a live refresh reveals changed fields without replacing a drafted reason",
     "Compare with the supplier invoice",
   );
   await expect(
-    page.getByRole("button", { name: "Approve unit cost", exact: true }),
+    page.getByRole("button", { name: "Approve Unit cost", exact: true }),
   ).toBeDisabled();
   expect(fixture.mutations).toHaveLength(0);
 });
@@ -524,17 +531,17 @@ test("description editing keeps revision preconditions and Escape cancels withou
   await page
     .getByRole("button", { name: "Edit description", exact: true })
     .click();
-  await page
-    .getByLabel("Description", { exact: true })
-    .fill("Cost including freight");
+  await page.getByLabel("Description", { exact: true }).focus();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.type("Cost including freight");
   await page.keyboard.press("Escape");
   expect(fixture.mutations).toHaveLength(0);
   await page
     .getByRole("button", { name: "Edit description", exact: true })
     .click();
-  await page
-    .getByLabel("Description", { exact: true })
-    .fill("Cost including freight");
+  await page.getByLabel("Description", { exact: true }).focus();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.type("Cost including freight");
   await page
     .getByRole("button", { name: "Save description", exact: true })
     .click();
@@ -553,11 +560,12 @@ for (const width of [320, 390, 1440])
     await page.emulateMedia({ reducedMotion: "reduce" });
     await mockReview(page);
     await page.goto(reviewUrl);
-    await chooseMerge(page, "quantity");
+    await chooseMerge(page, "Quantity");
     await expect(
       page.getByRole("region", { name: "Merge preview" }),
     ).toContainText("Data types differ: money and integer.");
-    await page.getByLabel(reasonLabel).fill("A long explanation ".repeat(20));
+    await page.getByLabel(reasonLabel).focus();
+    await page.keyboard.type("A long explanation ".repeat(20));
     await page
       .getByRole("button", { name: "Confirm merge", exact: true })
       .scrollIntoViewIfNeeded();
@@ -573,7 +581,7 @@ for (const width of [320, 390, 1440])
     await page.keyboard.press("Escape");
     expect(
       await page
-        .getByRole("combobox", { name: "Merge unit cost into", exact: true })
+        .getByRole("combobox", { name: "Merge Unit cost into", exact: true })
         .inputValue(),
     ).toBe("");
   });
@@ -606,15 +614,16 @@ test("200% text, forced colours and queue touch targets", async ({ page }) => {
   await mockReview(page);
   await page.goto("/ontology/review?space=business");
   const checkbox = page.getByRole("checkbox", {
-    name: "Select unit cost",
+    name: "Select Unit cost",
     exact: true,
   });
   const target = await checkbox.locator("..").boundingBox();
   expect(target?.width).toBeGreaterThanOrEqual(44);
   expect(target?.height).toBeGreaterThanOrEqual(44);
+  await page.getByRole("region", { name: "Ontology review", exact: true }).focus();
   await page.keyboard.press("j");
   await expect(
-    page.getByRole("heading", { name: "unit cost", exact: true }),
+    page.getByRole("heading", { name: "Unit cost", exact: true }),
   ).toBeFocused();
   await page.emulateMedia({ forcedColors: "active" });
   await page.evaluate(() => {
@@ -633,7 +642,7 @@ test("200% text, forced colours and queue touch targets", async ({ page }) => {
     }
   });
   await page
-    .getByRole("button", { name: "Approve unit cost", exact: true })
+    .getByRole("button", { name: "Approve Unit cost", exact: true })
     .scrollIntoViewIfNeeded();
   expect(
     await page.evaluate(
@@ -641,7 +650,7 @@ test("200% text, forced colours and queue touch targets", async ({ page }) => {
     ),
   ).toBe(true);
   await expect(
-    page.getByRole("button", { name: "Approve unit cost", exact: true }),
+    page.getByRole("button", { name: "Approve Unit cost", exact: true }),
   ).toBeVisible();
 });
 
@@ -658,11 +667,11 @@ test("phone filters fold away and the queue keeps its search after inspection", 
   await page
     .getByText("Search and filter suggestions", { exact: true })
     .click();
-  await page.getByRole("searchbox").fill("unit cost");
+  await page.getByRole("searchbox").fill("Unit cost");
   await page.locator("a[data-definition]").first().click();
   await page
     .getByRole("button", { name: "Back to queue", exact: true })
     .click();
-  await expect(page.getByRole("searchbox")).toHaveValue("unit cost");
-  await expect(page).toHaveURL(/q=unit\+cost/);
+  await expect(page.getByRole("searchbox")).toHaveValue("Unit cost");
+  await expect(page).toHaveURL(/q=Unit\+cost/);
 });

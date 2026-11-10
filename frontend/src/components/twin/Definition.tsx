@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
+import {
+  useEffect, useEffectEvent, useId, useRef, useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
@@ -16,16 +19,21 @@ import {
   useTryMetric,
   type OntologyOut,
 } from "@/lib/queries/ontology";
-import { MetricRow, STATUS, words } from "./DefinitionRows";
+import { MetricRow, STATUS } from "./DefinitionRows";
 import {
   definitions,
   twinHref,
   type Definition as DefinitionItem,
 } from "./model";
-import { isTyping, mergeTargets, reviewFields } from "./review-model";
+import {
+  hasReviewOverlay, ignoreReviewKey, mergeTargets, reviewFields,
+  savedDecision, supportsMerge,
+} from "./review-model";
 import styles from "./review.module.css";
 import ReviewEvidence from "./ReviewEvidence";
 import MergePreview from "./MergePreview";
+import { humanLabel, ReviewTime } from "./review-format";
+import { isReviewOwner, ownerOnly } from "./review-access";
 
 const activitySchema = z.object({
   events: z.array(
@@ -50,7 +58,6 @@ type SaveState =
   | {
       kind: "saved";
       definition: DefinitionItem;
-      action: Action;
       reason: string;
     };
 
@@ -78,6 +85,10 @@ export default function Definition({
   const [reason, setReason] = useState(initialReason);
   const [targetId, setTargetId] = useState("");
   const [description, setDescription] = useState<string | null>(null);
+  const reviewRegion = useRef<HTMLElement>(null);
+  const approveButton = useRef<HTMLButtonElement>(null);
+  const rejectButton = useRef<HTMLButtonElement>(null);
+  const [ownerDenied, setOwnerDenied] = useState(false);
   const editButton = useRef<HTMLButtonElement>(null);
   const [state, setState] = useState<SaveState>({ kind: "idle" });
   const inFlight = useRef(false);
@@ -139,7 +150,16 @@ export default function Definition({
       setState({ kind: "stale", refreshFailed: true });
     }
   }
-  async function decide(action: Action) {
+  async function decide(
+    action: Action,
+    seen = { id: d.id, revision: d.item.revision },
+  ) {
+    if (!isOwner || !isReviewOwner(cache, data.vault)) {
+      setOwnerDenied(true);
+      return;
+    }
+    if (action.action === "reject" && action.merge_into && !supportsMerge(d)) return;
+    if (seen.id !== d.id || seen.revision !== d.item.revision) return;
     if (!canDecide || inFlight.current) return;
     inFlight.current = true;
     onBusyChange?.(true);
@@ -172,7 +192,7 @@ export default function Definition({
         throw new Error(
           "The server response did not include this definition. Refresh before deciding again.",
         );
-      setState({ kind: "saved", definition: updated, action, reason });
+      setState({ kind: "saved", definition: updated, reason });
       haptic("success");
     } catch (e) {
       if (e instanceof ApiError && e.code === "ontology.stale_revision") {
@@ -192,22 +212,27 @@ export default function Definition({
       onBusyChange?.(false);
     }
   }
+  function decisionKeyDown(
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    action: Action,
+  ) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const ignored = ignoreReviewKey(event.nativeEvent, reviewRegion.current) || hasReviewOverlay();
+    event.preventDefault();
+    if (ignored) return;
+    void decide(action, { id: d.id, revision: d.item.revision });
+  }
   const shortcut = useEffectEvent((e: KeyboardEvent) => {
-    if (
-      e.defaultPrevented ||
-      e.metaKey ||
-      e.ctrlKey ||
-      e.altKey ||
-      document.querySelector("dialog[open]")
-    )
-      return;
-    if (e.key === "Escape" && targetId && !busy) {
+    if (ignoreReviewKey(e, reviewRegion.current, true)) return;
+    // Escape cancels this review's inline preview, but never a separate overlay.
+    if (e.key === "Escape" && targetId && !busy && !hasReviewOverlay(false)) {
       e.preventDefault();
       e.stopImmediatePropagation();
       setTargetId("");
       mergeSelect.current?.focus();
       return;
     }
+    if (hasReviewOverlay()) return;
     if (e.key === "Escape" && description !== null && !busy) {
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -215,15 +240,10 @@ export default function Definition({
       editButton.current?.focus();
       return;
     }
-    if (isTyping(e.target) || !canDecide || targetId || description !== null)
-      return;
-    if (e.key.toLowerCase() === "a") {
+    if (!canDecide || targetId || description !== null) return;
+    if (e.key === "a" || (e.key === "r" && !builtIn)) {
       e.preventDefault();
-      void decide({ action: "approve" });
-    }
-    if (e.key.toLowerCase() === "r" && !builtIn) {
-      e.preventDefault();
-      void decide({ action: "reject" });
+      (e.key === "a" ? approveButton : rejectButton).current?.focus();
     }
   });
   useEffect(() => {
@@ -245,11 +265,11 @@ export default function Definition({
   const displayed = state.kind === "saved" ? state.definition : d;
 
   return (
-    <article className={styles.reading} aria-busy={busy}>
+    <article ref={reviewRegion} className={styles.reading} aria-busy={busy}>
       <header className={styles.identity}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 ref={heading} tabIndex={-1}>
-            {words(d.name)}
+            {humanLabel(d.name)}
           </h3>
           <span
             className={styles.suggested}
@@ -262,8 +282,8 @@ export default function Definition({
         </div>
         <div className={styles.meta}>
           <span>
-            {words(d.type)}
-            {d.type !== "kind" && ` on ${words(d.kind)}`}
+            {humanLabel(d.type)}
+            {d.type !== "kind" && ` on ${humanLabel(d.kind)}`}
           </span>
           <span>
             {proposer
@@ -289,40 +309,28 @@ export default function Definition({
               <CheckIcon size={24} weight="duotone" />
             </span>
             <h4 ref={receiptHeading} tabIndex={-1}>
-              Saved. {words(d.name).replace(/^./, (c) => c.toUpperCase())}{" "}
-              {state.action.action === "describe"
-                ? "description updated"
-                : state.action.action === "approve"
-                  ? "approved"
-                  : state.action.merge_into
-                    ? `merged into ${words(state.action.merge_into)}`
-                    : "rejected"}
+              Saved. {humanLabel(d.name)}{" "}
+              {savedDecision(d, state.definition).sentence}
               .
             </h4>
             <p className={styles.dim}>The server confirmed this decision.</p>
             <dl>
               <dt>Definition</dt>
               <dd>
-                {words(d.name)}, version {state.definition.item.revision}
+                {humanLabel(d.name)}, version {state.definition.item.revision}
               </dd>
               <dt>Reviewed version</dt>
               <dd>{d.item.revision}</dd>
               <dt>Decision</dt>
               <dd>
-                {state.action.action === "describe"
-                  ? "Edit description"
-                  : state.action.action === "approve"
-                    ? "Approve"
-                    : state.action.merge_into
-                      ? "Reject and redirect"
-                      : "Reject without merging"}
+                {savedDecision(d, state.definition).label}
               </dd>
               <dt>Reason</dt>
               <dd>{state.reason || "No reason supplied"}</dd>
               <dt>Recorded by</dt>
               <dd>
                 {receiptEvent
-                  ? `${receiptEvent.actor_name} · ${new Date(receiptEvent.at).toLocaleString("en-AU")}`
+                  ? <>{receiptEvent.actor_name} · <ReviewTime at={receiptEvent.at} /></>
                   : "Actor and time are awaiting the activity record."}
               </dd>
             </dl>
@@ -392,7 +400,9 @@ export default function Definition({
               )}
             </section>
           )}
+          {ownerDenied && <p role="alert" className={styles.notice}>{ownerOnly}</p>}
           {evidence}
+          {!supportsMerge(d) && <p className={`${styles.dim} px-6 pb-4`}>Merging is not available for links.</p>}
           {d.type === "metric" && (
             <details className={styles.section}>
               <summary className="cursor-pointer min-h-11">
@@ -516,7 +526,7 @@ export default function Definition({
                     </>
                   ) : (
                     <>
-                      <kbd>A</kbd> Approve <kbd>R</kbd> Reject
+                      <kbd>A</kbd> Focus Approve <kbd>R</kbd> Focus Reject <kbd>Enter</kbd> Confirm
                     </>
                   )}
                 </span>
@@ -577,6 +587,8 @@ export default function Definition({
                         <button
                           className="btn btn-sm"
                           disabled={!canDecide}
+                          ref={rejectButton}
+                          onKeyDown={(event) => decisionKeyDown(event, { action: "reject" })}
                           onClick={() => void decide({ action: "reject" })}
                         >
                           <XIcon size={16} />
@@ -586,10 +598,12 @@ export default function Definition({
                       <button
                         className="btn btn-primary btn-sm"
                         disabled={!canDecide}
+                        ref={approveButton}
+                        onKeyDown={(event) => decisionKeyDown(event, { action: "approve" })}
                         onClick={() => void decide({ action: "approve" })}
                       >
                         <CheckIcon size={16} />
-                        Approve {words(d.name)}
+                        Approve {humanLabel(d.name)}
                       </button>
                     </>
                   )}

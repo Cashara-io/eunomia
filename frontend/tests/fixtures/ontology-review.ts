@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, WebSocketRoute } from "@playwright/test";
 import type { OntologyOut } from "../../src/lib/gen";
 
 export const at = "2026-11-10T03:32:00Z";
@@ -111,6 +111,8 @@ export async function mockReview(
   page: Page,
   options: {
     member?: boolean;
+    omitRedirect?: boolean;
+    afterDecision?: (count: number) => Promise<void>;
     mode?:
       | "success"
       | "network"
@@ -127,6 +129,8 @@ export async function mockReview(
     model.links = [];
   }
   let mode = options.mode;
+  let member = options.member;
+  let socket: WebSocketRoute | undefined;
   const mutations: Record<string, unknown>[] = [];
   const events = [
     {
@@ -138,6 +142,7 @@ export async function mockReview(
     },
   ];
   await page.routeWebSocket("**/api/events/ws*", (ws) => {
+    socket = ws;
     ws.send(
       JSON.stringify({
         type: "hello",
@@ -166,7 +171,7 @@ export async function mockReview(
             id: "business",
             name: "Banksia Coffee",
             kind: "org",
-            role: options.member ? "member" : "owner",
+            role: member ? "member" : "owner",
             created_at: at,
           },
         ],
@@ -209,7 +214,7 @@ export async function mockReview(
         item.status =
           body.decision.action === "approve" ? "approved" : "rejected";
       if ("merge_into" in item)
-        item.merge_into = body.decision.merge_into ?? null;
+        item.merge_into = options.omitRedirect ? null : body.decision.merge_into ?? null;
       item.revision += 1;
       events.unshift({
         action:
@@ -223,6 +228,7 @@ export async function mockReview(
         at,
         reason: body.reason ?? null,
       });
+      await options.afterDecision?.(mutations.length);
       return json(model);
     }
     if (path.endsWith("/ontology")) {
@@ -268,6 +274,13 @@ export async function mockReview(
   });
   return {
     mutations,
+    notifyOntologyChange() {
+      socket?.send(JSON.stringify({ type: "ontology", vault: "business", event: { seq: 1 } }));
+    },
+    async setMember(value: boolean) {
+      member = value;
+      socket?.send(JSON.stringify({ type: "vault", vault: "business", op: "role_changed" }));
+    },
     get model() {
       return model;
     },

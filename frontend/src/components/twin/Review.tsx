@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { WarningCircleIcon } from "@phosphor-icons/react/ssr";
 import styles from "./review.module.css";
-import { isTyping } from "./review-model";
+import { hasReviewOverlay, ignoreReviewKey, savedDecision, supportsMerge } from "./review-model";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api";
 import {
@@ -20,7 +20,7 @@ import type { Vault } from "@/lib/types";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import StatusLabel from "@/components/ui/StatusLabel";
 import Definition, { RevisionChanges } from "./Definition";
-import { STATUS, words } from "./DefinitionRows";
+import { STATUS } from "./DefinitionRows";
 import {
   Filter,
   Pagination,
@@ -37,11 +37,14 @@ import {
   type Definition as DefinitionItem,
 } from "./model";
 
+import { humanLabel } from "./review-format";
+import { isReviewOwner, ownerOnly } from "./review-access";
+
 function describe(d: DefinitionItem) {
-  if (d.type === "kind") return `Kind ${words(d.name)}`;
-  if (d.type === "link") return `Link type ${words(d.name)}`;
+  if (d.type === "kind") return `Kind ${humanLabel(d.name)}`;
+  if (d.type === "link") return `Link type ${humanLabel(d.name)}`;
   const what = d.type === "property" ? "Property" : "Metric";
-  return `${what} ${words(d.name)} on ${words(d.kind)}`;
+  return `${what} ${humanLabel(d.name)} on ${humanLabel(d.kind)}`;
 }
 
 type Receipt = {
@@ -68,6 +71,8 @@ export default function Review({
   const [singleBusy, setSingleBusy] = useState(false);
   const busy = batchBusy || singleBusy;
   const queue = useRef<HTMLElement>(null);
+  const reviewRegion = useRef<HTMLDivElement>(null);
+  const [ownerDenied, setOwnerDenied] = useState(false);
   const returnId = useRef<string | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [stale, setStale] = useState<DefinitionItem[]>([]);
@@ -92,7 +97,7 @@ export default function Review({
       (!params.get("type") ||
         params.get("type") === "all" ||
         d.type === params.get("type")) &&
-      `${d.name} ${words(d.name)} ${d.kind} ${words(d.kind)} ${d.item.description ?? ""} ${d.item.reason ?? ""}`
+      `${d.name} ${humanLabel(d.name)} ${d.kind} ${humanLabel(d.kind)} ${d.item.description ?? ""} ${d.item.reason ?? ""}`
         .toLowerCase()
         .includes(q),
   );
@@ -130,18 +135,16 @@ export default function Review({
     }
   }, [selected]);
   const keyboard = useEffectEvent((e: KeyboardEvent) => {
-    if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || busy)
-      return;
+    if (ignoreReviewKey(e, reviewRegion.current, true) || busy || hasReviewOverlay()) return;
     if (
       e.key === "Escape" &&
       selected &&
-      !document.querySelector("dialog[open]")
+      !hasReviewOverlay()
     ) {
       e.preventDefault();
       closeDetail();
       return;
     }
-    if (isTyping(e.target) || document.querySelector("dialog[open]")) return;
     const direction =
       e.key.toLowerCase() === "j" ? 1 : e.key.toLowerCase() === "k" ? -1 : 0;
     if (!direction || rows.length === 0) return;
@@ -198,6 +201,8 @@ export default function Review({
     d: DefinitionItem,
     action: "approve" | "reject" | "merge",
   ) {
+    if (!isReviewOwner(qc, vault.id)) throw new Error(ownerOnly);
+    if (action === "merge" && !supportsMerge(d)) throw new Error("Merging is not available for links.");
     const path = { vault_id: vault.id };
     const decision: { action: "approve" | "reject"; merge_into?: string } =
       action === "merge"
@@ -254,6 +259,11 @@ export default function Review({
     }
   }
   async function runBatch() {
+    if (!owner || !isReviewOwner(qc, vault.id)) {
+      setOwnerDenied(true);
+      setConfirm(null);
+      return;
+    }
     if (
       !confirm ||
       busy ||
@@ -266,17 +276,15 @@ export default function Review({
     const order = { kind: 0, property: 1, link: 2, metric: 3 };
     for (const d of [...batch].sort((a, b) => order[a.type] - order[b.type])) {
       try {
-        qc.setQueryData(ontologyKeys.vault(vault.id), await decide(d, confirm));
+        const saved = await decide(d, confirm);
+        qc.setQueryData(ontologyKeys.vault(vault.id), saved);
+        const updated = definitions(saved).find(item => item.id === d.id);
+        if (!updated) throw new Error("The server response did not include this definition. Refresh before deciding again.");
         haptic("success");
         results.push({
           id: d.id,
           name: describe(d),
-          result:
-            confirm === "approve"
-              ? "Approved"
-              : confirm === "merge"
-                ? `Merged into ${words(mergeTarget)}`
-                : "Rejected without merging",
+          result: humanLabel(savedDecision(d, updated).sentence),
         });
       } catch (e) {
         haptic("error");
@@ -311,7 +319,8 @@ export default function Review({
     URL.revokeObjectURL(url);
   }
   return (
-    <>
+    <div ref={reviewRegion} role="region" aria-label="Ontology review" tabIndex={0}>
+      {ownerDenied && <p role="alert" className={styles.notice}>{ownerOnly}</p>}
       {newItems.length > 0 && (
         <div aria-live="polite">
           <button
@@ -379,7 +388,7 @@ export default function Review({
                     <label className={styles.queuecheck}>
                       <input
                         type="checkbox"
-                        aria-label={`Select ${words(d.name)}`}
+                        aria-label={`Select ${humanLabel(d.name)}`}
                         disabled={busy}
                         checked={checked.some((row) => row.id === d.id)}
                         onChange={(e) =>
@@ -405,10 +414,10 @@ export default function Review({
                     })}
                   >
                     <strong className="[overflow-wrap:anywhere]">
-                      {words(d.name)}
+                      {humanLabel(d.name)}
                     </strong>
                     <span className="label">
-                      {d.type} · {words(d.kind)}
+                      {humanLabel(d.type)}{d.type !== "kind" && ` on ${humanLabel(d.kind)}`}
                     </span>
                     {d.item.status === "proposed" ? (
                       <span className={styles.risk}>
@@ -510,7 +519,7 @@ export default function Review({
                             <option value="">Choose a target</option>
                             {mergeOptions.map((target) => (
                               <option key={target} value={target}>
-                                {words(target)}
+                                {humanLabel(target)}
                               </option>
                             ))}
                           </select>
@@ -622,13 +631,13 @@ export default function Review({
           {confirm === "approve"
             ? "AI apps will be able to use the approved definitions. Required kinds are decided first. Dependencies can still refuse individual decisions."
             : confirm === "merge"
-              ? `New writes under each selected definition will use ${words(mergeTarget)}. Existing objects stay where they are.`
+              ? `New writes under each selected definition will use ${humanLabel(mergeTarget)}. Existing objects stay where they are.`
               : "New writes under rejected definitions may be refused. No selected definition will be merged."}
         </p>
         <ul className="max-h-40 overflow-auto list-disc pl-5">
           {batch.map((d) => (
             <li key={d.id}>
-              {words(d.name)} ({d.type})
+              {humanLabel(d.name)} ({d.type})
             </li>
           ))}
         </ul>
@@ -639,7 +648,7 @@ export default function Review({
           retrying.
         </p>
       </ConfirmDialog>
-    </>
+    </div>
   );
 }
 
@@ -653,7 +662,7 @@ function ReviewFilters({ data }: { data: OntologyOut }) {
         param="kind"
         options={[
           { value: "all", label: "All kinds" },
-          ...data.kinds.map((k) => ({ value: k.kind, label: words(k.kind) })),
+          ...data.kinds.map((k) => ({ value: k.kind, label: humanLabel(k.kind) })),
         ]}
       />
       <Filter

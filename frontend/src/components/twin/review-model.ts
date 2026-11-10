@@ -1,5 +1,6 @@
 import type { OntologyOut } from "@/lib/queries/ontology";
 import { definitions, type Definition } from "./model";
+import { humanLabel } from "./review-format";
 
 export function reviewFields(d: Definition): Record<string, string> {
   return {
@@ -17,13 +18,13 @@ export function reviewFields(d: Definition): Record<string, string> {
       : {}),
     ...(d.type === "link"
       ? {
-          From: d.item.from_kind,
-          Relationship: d.item.label,
-          To: d.item.to_kind,
+          From: humanLabel(d.item.from_kind),
+          Relationship: humanLabel(d.item.label),
+          To: humanLabel(d.item.to_kind),
         }
       : {
           Aliases: d.item.synonyms.join(", ") || "None",
-          "Merge destination": d.item.merge_into || "None",
+          "Merge destination": d.item.merge_into ? humanLabel(d.item.merge_into) : "None",
         }),
     "Suggested reason": d.item.reason || "None",
     ...(d.type === "property" || d.type === "link"
@@ -43,7 +44,41 @@ export function reviewFields(d: Definition): Record<string, string> {
   };
 }
 
+export function supportsMerge(d: Definition) {
+  switch (d.type) {
+    case "kind":
+    case "property":
+    case "metric":
+      return true;
+    case "link":
+      return false;
+  }
+}
+
+export function savedDecision(before: Definition, after: Definition) {
+  if (
+    before.item.description !== after.item.description &&
+    before.item.status === after.item.status
+  )
+    return { sentence: "description updated", label: "Edit description" };
+  if (after.item.status === "approved")
+    return { sentence: "approved", label: "Approve" };
+  if (after.item.status === "rejected") {
+    const redirect = after.type !== "link" ? after.item.merge_into : null;
+    return redirect
+      ? {
+          sentence: `merged into ${humanLabel(redirect)}`,
+          label: "Reject and redirect",
+        }
+      : { sentence: "rejected", label: "Reject without merging" };
+  }
+  return after.item.status === "proposed"
+    ? { sentence: "still suggested", label: "Suggested" }
+    : { sentence: "in use", label: "In use" };
+}
+
 export function mergeTargets(d: Definition, data: OntologyOut) {
+  if (!supportsMerge(d)) return [];
   return definitions(data).filter(
     (t) =>
       t.type === d.type &&
@@ -116,10 +151,32 @@ export function mergeConflicts(
 export function isTyping(target: EventTarget | null) {
   return (
     target instanceof HTMLElement &&
-    Boolean(
-      target.closest(
-        "input, textarea, select, [contenteditable=true], [role=combobox], [role=dialog], dialog",
-      ),
-    )
+    (target.isContentEditable || Boolean(target.closest(
+      'input, textarea, select, [role="textbox"], [role="combobox"], [role="searchbox"]',
+    )))
+  );
+}
+
+export function hasReviewOverlay(includeMerge = true) {
+  return [...document.querySelectorAll<HTMLElement>(
+    'dialog[open], select:open, [aria-modal="true"], :popover-open, [role="listbox"], [role="menu"], [aria-haspopup][aria-expanded="true"]' +
+      (includeMerge ? ', [data-merge-open="true"]' : ''),
+  )].some(element => {
+    const style = getComputedStyle(element);
+    return !element.hidden && style.display !== "none" && style.visibility !== "hidden";
+  });
+}
+
+export function ignoreReviewKey(
+  event: KeyboardEvent,
+  region: HTMLElement | null,
+  allowEscape = false,
+) {
+  return (
+    event.defaultPrevented || event.shiftKey || event.ctrlKey || event.altKey ||
+    event.metaKey || event.repeat || event.isComposing ||
+    (isTyping(event.target) && !(allowEscape && event.key === "Escape")) ||
+    !region?.contains(document.activeElement) ||
+    !region.contains(event.target instanceof Node ? event.target : null)
   );
 }

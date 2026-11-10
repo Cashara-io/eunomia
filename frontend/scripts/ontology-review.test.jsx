@@ -4,6 +4,8 @@ import {
   mergeConflicts,
   mergeTargets,
   reviewFields,
+  savedDecision,
+  supportsMerge,
 } from "../src/components/twin/review-model";
 import { definitions } from "../src/components/twin/model";
 import { reviewFixture } from "../tests/fixtures/ontology-review";
@@ -51,5 +53,35 @@ describe("review evidence", () => {
       "Source mapping": "stock_item.csv: csv, unit_cost",
       Samples: "AUD 12.00; AUD 13.20",
     });
+  });
+});
+
+
+test("links have no merge destinations even with matching endpoints", () => {
+  const model = reviewFixture();
+  model.links.push({ ...model.links[0], label: "delivered_to" });
+  const source = definitions(model).find(d => d.type === "link");
+  expect(mergeTargets(source, model)).toEqual([]);
+});
+
+
+test("merge support matches kind, property, metric and link decisions", () => {
+  const items = definitions(reviewFixture());
+  for (const item of items)
+    expect(supportsMerge(item)).toBe(item.type !== "link");
+});
+
+test("receipt outcomes come from returned status and redirect", () => {
+  const before = definitions(reviewFixture())[1];
+  const model = reviewFixture();
+  const property = model.kinds[0].properties[0];
+  property.status = "rejected";
+  property.merge_into = null;
+  expect(savedDecision(before, definitions(model)[1])).toEqual({
+    sentence: "rejected", label: "Reject without merging",
+  });
+  property.merge_into = "price";
+  expect(savedDecision(before, definitions(model)[1])).toEqual({
+    sentence: "merged into Price", label: "Reject and redirect",
   });
 });

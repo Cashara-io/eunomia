@@ -1,3 +1,11 @@
+.reading,
+:global([aria-label="Ontology review"]) {
+  --review-amber: #895d0c;
+}
+:global([data-theme="dark"]) .reading,
+:global([data-theme="dark"]) :global([aria-label="Ontology review"]) {
+  --review-amber: #d8a640;
+}
 .workspace {
   min-width: 0;
 }
@@ -90,7 +98,7 @@
   height: 18px;
 }
 .risk {
-  color: var(--warning);
+  color: var(--review-amber);
   font-size: 12px;
   display: flex;
   gap: 6px;
