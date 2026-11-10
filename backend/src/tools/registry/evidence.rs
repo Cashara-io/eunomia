@@ -38,7 +38,7 @@ pub fn for_tool(name: &str) -> Option<Policy> {
         "memory_write" => &["entity/name", "entity/kind", "entity/aliases", "memory/text", "memory/type", "memory/source", "kind_mapped/from"],
         "memory_write_batch" => &["results/*/error", "results/*/kind_mapped/from"],
         "memory_update" => &["text", "type"],
-        "code_entity_upsert" => &["name", "kind", "summary"],
+        "code_entity_upsert" => &["name", "kind", "aliases", "summary"],
         "entity_update" => &["name", "aliases", "summary"],
         "code_relate" | "entity_relate" => &["in", "out", "label", "source"],
         "entity_set_property" => &[ "value/property", "value/value", "value/unit", "value/as_of", "value/source", "property_mapped/from"],

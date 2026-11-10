@@ -540,7 +540,8 @@ fn chat_claims(text: &str, context: &ChatUnit, units: &[ChatUnit]) -> Vec<(std::
     let digit_unit = DIGIT_UNIT.get_or_init(|| Regex::new(r"^ *(?P<unit>per +[0-9]+ +[\p{L}]+|[\p{L}]+(?:\^?[0-9]+)?(?:/[\p{L}]+(?:\^?[0-9]+)?)+|[\p{L}]+\^?[0-9]+)\b").unwrap());
     // Recognise common physical units even when none of the evidence uses them. Otherwise
     // a currency prefix could incorrectly turn the unknown suffix in "$3 to 5 kg" into money.
-    let standard_units: Vec<_> = ["kg", "g", "mg", "t", "lb", "lbs", "oz", "l", "ml", "m", "km", "cm", "mm", "h", "hr", "hrs", "days", "hours"].into_iter().map(ChatUnit::parse).collect();
+    // Interpret ambiguous m as metres only when an evidence unit identifies it.
+    let standard_units: Vec<_> = ["kg", "g", "mg", "t", "lb", "lbs", "oz", "l", "ml", "km", "cm", "mm", "h", "hr", "hrs", "days", "hours"].into_iter().map(ChatUnit::parse).collect();
     let mut out = Vec::new();
     for mut span in chat_spans(text) {
         if out.last().is_some_and(|(r, _): &(std::ops::Range<usize>, Option<ChatNumber>)| span.start < r.end) { continue; }
@@ -896,6 +897,7 @@ mod tests {
             (json!({"value":34.578125,"unit":"%"}), "34.58%", "34.57%"),
             (json!({"value":615548,"unit":"AUD"}), "$615.5k", "$616.5k"),
             (json!({"value":615548000,"unit":"AUD"}), "$615.5M", "$616.5M"),
+            (json!({"value":615548000}), "615.5M", "616.5M"),
             (json!({"value":615548000000_i64,"unit":"AUD"}), "$615.5 billion", "$616.5 billion"),
             (json!({"value":615548,"unit":"AUD"}), "AUD 615.5 thousand", "AUD 616.5 thousand"),
             (json!({"value":615548000,"unit":"AUD"}), "615.5 million AUD", "616.5 million AUD"),

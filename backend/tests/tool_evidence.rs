@@ -210,7 +210,7 @@ async fn seeded_success_contract_covers_every_registered_tool() {
         ("memory_write", json!({"subject_name":"sample999777","subject_kind":"person","text":"sample999777"}), "/memory/version", json!(1)),
         ("memory_write_batch", json!({"items":[{"subject_name":"sample999777","subject_kind":"person","text":"sample999777"}]}), "/written", json!(1)),
         ("memory_update", json!({"memory_id":memory,"text":"sample999777"}), "/version", json!(2)),
-        ("code_entity_upsert", json!({"kind":"repository","name":"sample999777","summary":"sample999777"}), "/id", json!("<server-id>")),
+        ("code_entity_upsert", json!({"kind":"repository","name":"Fixture repository (999777)","summary":"sample999777"}), "/id", json!("<server-id>")),
         ("code_relate", json!({"from_id":entity,"to_id":other,"label":"sample999777"}), "/direction", Value::Null),
         ("entity_relate", json!({"from_id":entity,"to_id":other,"label":"sample999777","reason":"sample999777"}), "/direction", Value::Null),
         ("entity_merge", json!({"winner_id":entity,"loser_id":other}), "/kind", json!("person")),
@@ -230,6 +230,9 @@ async fn seeded_success_contract_covers_every_registered_tool() {
         ("vault_delete", json!({"vault_id":spare}), "/deleted", json!(true)),
     ];
     for (name, args, pointer, expected) in cases {
+        if name == "code_entity_upsert" {
+            success(app.tool(name, json!({"kind":"repository","name":"Fixture repository"})).await);
+        }
         receipt(&app, name, args, pointer, expected).await;
         covered.insert(name);
     }
