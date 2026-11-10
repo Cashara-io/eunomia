@@ -495,7 +495,7 @@ test("a live refresh reveals changed fields without replacing a drafted reason",
   const property = fixture.model.kinds[0].properties[0];
   property.description = "Cost including freight";
   property.revision = 2;
-  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await page.getByRole("button", { name: "Refresh ontology", exact: true }).click();
   await expect(detail(page).getByRole("alert")).toContainText(
     "Now: Cost including freight",
   );
