@@ -121,7 +121,7 @@ export default function Overview({
       {kinds.length === 0 ? (
         <section className={styles.firstRun} aria-label="No business kinds yet">
           <div className={styles.emptyMark} aria-hidden>
-            <PlusIcon size={32} weight="duotone" />
+            <PlusIcon size={24} weight="duotone" />
           </div>
           <h2>Give your records a shared language.</h2>
           <p>

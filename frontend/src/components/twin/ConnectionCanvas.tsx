@@ -45,7 +45,7 @@ type Mark = FormAnchor & {
   group?: Layout["groups"][number];
 };
 function labelPlates(marks: Mark[], zoom: number) {
-  const small = Math.max(12, 11 / zoom), name = Math.max(17, 13 / zoom);
+  const small = Math.max(12, 12 / zoom), name = Math.max(16, 13 / zoom);
   const boxes = marks.map(n => ({ x: n.x - 85, y: n.y - n.height - 30 * n.scale, w: 170, h: n.height + 60 }));
   const plates = new Map<string, { top: number; height: number }>();
   for (const n of [...marks].sort((a, b) => a.y - b.y || a.id.localeCompare(b.id))) {
@@ -164,9 +164,9 @@ export default function ConnectionCanvas({
       saveInput({ focus, camera, expanded });
     }
   }, [camera, layout, expanded, focus, saveInput]);
-  const smallText = Math.max(12, 11 / camera.zoom);
-  const nameText = Math.max(17, 13 / camera.zoom);
-  const verbScale = Math.max(1, 11 / (14 * camera.zoom));
+  const smallText = Math.max(12, 12 / camera.zoom);
+  const nameText = Math.max(16, 13 / camera.zoom);
+  const verbScale = Math.max(1, 12 / (14 * camera.zoom));
   const detail = camera.zoom < Math.min(0.55, fitCamera.zoom * 0.8) ? "low" : "full";
   const onScreen = (n: { x: number; y: number }) =>
     n.x * camera.zoom + camera.x > -180 &&
@@ -457,7 +457,7 @@ export default function ConnectionCanvas({
                     height={30 * verbScale}
                     rx="15"
                   />
-                  <text y={5 * verbScale} textAnchor="middle" style={{ fontSize: 14 * verbScale }}>
+                  <text y={5} textAnchor="middle" fontSize={14} transform={`scale(${verbScale})`}>
                     {r.label.replaceAll("_", " ")}
                   </text>
                 </g>

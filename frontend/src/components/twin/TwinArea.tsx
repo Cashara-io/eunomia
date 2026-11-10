@@ -93,7 +93,7 @@ export default function TwinArea({
         <>
           <h1 className="page-title">Ontology</h1>
           <h2 className="section-title">Choose a memory space</h2>
-          <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+          <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
             {space
               ? "This space is unavailable. Choose a space you can access."
               : "Each space has its own kinds, links and review decisions."}
@@ -119,7 +119,7 @@ export default function TwinArea({
                 className="flex items-center justify-between gap-3 p-4 hover:bg-[var(--surface-raised)]"
               >
                 <VaultChip tone={vaultTone(v.kind)} name={v.name} />
-                <span className="text-[13px]">
+                <span className="text-detail">
                   {v.role === "owner" ? "Owner" : "Member"}
                 </span>
               </Link>
@@ -292,7 +292,7 @@ function SelectedSpace({
         >
           <h2 className="section-title">Add data</h2>
           <AutomapBar vaultId={vault.id} />
-          <p className="text-[13px]">
+          <p className="text-detail">
             Auto-map suggests definitions. It does not import rows. Review the
             suggestions, then preview and import your CSV in Documents.
           </p>
