@@ -18,6 +18,7 @@ use axum::{
 use serde_json::Value;
 
 use crate::cache::search::Envelope;
+use crate::rid::RecordIdExt;
 use crate::sources::base::{Conn, Source};
 
 #[derive(Clone)]
@@ -27,6 +28,8 @@ pub struct Route {
     query: Vec<&'static str>,
     body_has: Vec<&'static str>,
     delay_ms: u64,
+    gate: Option<(Arc<tokio::sync::Notify>, Arc<tokio::sync::Notify>)>,
+    stream_gate: Option<(usize, Arc<tokio::sync::Notify>, Arc<tokio::sync::Notify>)>,
     status: u16,
     body: Value,
     headers: Vec<(&'static str, String)>,
@@ -37,7 +40,7 @@ pub struct Route {
 }
 
 pub fn route(method: &str, path: &str, body: Value) -> Route {
-    Route { method: method.parse().unwrap(), path: path.to_string(), query: vec![], body_has: vec![], delay_ms: 0, status: 200, body, headers: vec![], raw: None, remaining: None, truncated: false }
+    Route { method: method.parse().unwrap(), path: path.to_string(), query: vec![], body_has: vec![], delay_ms: 0, gate: None, stream_gate: None, status: 200, body, headers: vec![], raw: None, remaining: None, truncated: false }
 }
 
 impl Route {
@@ -68,6 +71,18 @@ impl Route {
     /// Answer after `ms` milliseconds (a slow provider).
     pub fn delay(mut self, ms: u64) -> Self {
         self.delay_ms = ms;
+        self
+    }
+
+    /// Signal that the request arrived, then hold its response until released by the test.
+    pub fn gated(mut self, entered: Arc<tokio::sync::Notify>, release: Arc<tokio::sync::Notify>) -> Self {
+        self.gate = Some((entered, release));
+        self
+    }
+
+    /// Send a prefix of the raw response, then hold the rest at a stream boundary.
+    pub fn stream_gated(mut self, prefix_bytes: usize, entered: Arc<tokio::sync::Notify>, release: Arc<tokio::sync::Notify>) -> Self {
+        self.stream_gate = Some((prefix_bytes, entered, release));
         self
     }
 
@@ -162,9 +177,30 @@ async fn handle(State(st): State<MockState>, method: Method, uri: Uri, headers: 
     let Some(r) = found else {
         return (StatusCode::NOT_FOUND, format!("mock: no route for {method} {uri}")).into_response();
     };
+    if let Some((entered, release)) = &r.gate {
+        entered.notify_one();
+        tokio::time::timeout(std::time::Duration::from_secs(15), release.notified()).await.expect("mock response gate timed out");
+    }
     tokio::time::sleep(std::time::Duration::from_millis(r.delay_ms)).await;
     let out = r.raw.clone().unwrap_or_else(|| r.body.to_string().replace("{base}", &st.base));
     let mut resp = (StatusCode::from_u16(r.status).unwrap(), [("content-type", "application/json")], out).into_response();
+    if let Some((prefix_bytes, entered, release)) = r.stream_gate {
+        let bytes = Bytes::from(r.raw.clone().expect("stream gate needs a raw response"));
+        let parts = (bytes.slice(..prefix_bytes), bytes.slice(prefix_bytes..));
+        *resp.body_mut() = axum::body::Body::from_stream(futures::stream::unfold((0, parts, entered, release), |(step, parts, entered, release)| async move {
+            let chunk = match step {
+                0 => parts.0.clone(),
+                1 => {
+                    entered.notify_one();
+                    tokio::time::timeout(std::time::Duration::from_secs(15), release.notified()).await.expect("mock stream gate timed out");
+                    parts.1.clone()
+                }
+                _ => return None,
+            };
+            Some((Ok::<_, std::io::Error>(chunk), (step + 1, parts, entered, release)))
+        }));
+        resp.headers_mut().remove("content-length");
+    }
     if r.truncated {
         *resp.body_mut() = axum::body::Body::from_stream(futures::stream::unfold(0, |step| async move {
             match step {
@@ -228,4 +264,39 @@ pub async fn assert_fetch_fails(src: &dyn Source, status: u16, path: &str, crede
     .await;
     let err = src.fetch(&mock.conn(credentials), None).await.expect_err("fetch should fail");
     assert!(err.message.contains(needle), "error {:?} should mention {needle:?}", err.message);
+}
+
+// Per-thread gates cannot block other tests, and never hold the map lock across an await.
+type WriteGates = std::collections::BTreeMap<(String, &'static str), (Arc<tokio::sync::Notify>, Arc<tokio::sync::Notify>)>;
+fn write_gates() -> &'static Mutex<WriteGates> {
+    static GATES: std::sync::OnceLock<Mutex<WriteGates>> = std::sync::OnceLock::new();
+    GATES.get_or_init(Mutex::default)
+}
+
+/// Holds a chat persistence boundary open. Dropping it also releases a waiting request.
+pub struct ChatWriteGate {
+    key: (String, &'static str),
+    pub entered: Arc<tokio::sync::Notify>,
+    pub release: Arc<tokio::sync::Notify>,
+}
+
+pub fn gate_chat_write(thread: &surrealdb::types::RecordId, point: &'static str) -> ChatWriteGate {
+    let gate = ChatWriteGate { key: (thread.to_string(), point), entered: Arc::default(), release: Arc::default() };
+    assert!(write_gates().lock().unwrap().insert(gate.key.clone(), (gate.entered.clone(), gate.release.clone())).is_none());
+    gate
+}
+
+impl Drop for ChatWriteGate {
+    fn drop(&mut self) {
+        write_gates().lock().unwrap().remove(&self.key);
+        self.release.notify_one();
+    }
+}
+
+pub async fn chat_write_checkpoint(thread: &surrealdb::types::RecordId, point: &'static str) {
+    let gate = write_gates().lock().unwrap().get(&(thread.to_string(), point)).cloned();
+    if let Some((entered, release)) = gate {
+        entered.notify_one();
+        tokio::time::timeout(std::time::Duration::from_secs(15), release.notified()).await.expect("chat write gate timed out");
+    }
 }
