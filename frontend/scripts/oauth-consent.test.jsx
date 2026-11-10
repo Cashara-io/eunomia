@@ -18,5 +18,7 @@ test("OAuth consent discloses read and write across Personal and team spaces bef
   expect(html).toContain("Read memories in every space you belong to");
   expect(html).toContain("Save memories in every space you belong to");
   expect(html).toContain("including your Personal space and team spaces");
+  expect(html).toContain("Add, change or delete memories in every space you belong to, as you.");
+  expect(html).not.toContain("ones it saved");
   expect(html.indexOf("including your Personal space and team spaces")).toBeLessThan(html.indexOf(">Allow<"));
 });

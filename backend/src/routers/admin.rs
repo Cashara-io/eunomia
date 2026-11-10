@@ -348,6 +348,8 @@ fn why_words(detail: &str) -> Option<&'static str> {
         "expired" => Some("The share code had expired"),
         "used" => Some("The share code had already been used"),
         "malformed" => Some("The share code was malformed or did not match"),
+        "unknown" => Some("The share code was not found"),
+        "mac" => Some("The share code authentication did not match"),
         "no_account" => Some("No account has that email yet"),
         "member" => Some("Already a member"),
         "pending" => Some("Already invited, not answered yet"),

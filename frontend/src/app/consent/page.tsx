@@ -12,7 +12,7 @@ import { InputModeTracker } from "@/components/bits/motion";
 // Each permission in plain words: what the app can do, and what that means for you.
 const SCOPE_WORDS: Record<string, { title: string; detail: string }> = {
   "memory:read": { title: "Read memories in every space you belong to", detail: "Look up what you and your other AI apps have saved, in the memory spaces you can see." },
-  "memory:write": { title: "Save memories in every space you belong to", detail: "Add new memories and change or delete ones it saved, as you." },
+  "memory:write": { title: "Save memories in every space you belong to", detail: "Add, change or delete memories in every space you belong to, as you." },
   "vaults:admin": { title: "Manage your memory spaces", detail: "Create, rename, share and delete memory spaces." },
   connectors: { title: "Manage your connected sources", detail: "See and sync sources like GitHub or Gmail that you connected to Eunomia." },
 };

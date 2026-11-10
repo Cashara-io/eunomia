@@ -440,60 +440,99 @@ fn share_role_defaults_preserve_existing_edit_codes_and_links() {
 }
 
 #[test]
-fn join_refusals_are_generic_but_host_audit_reasons_are_distinct() {
+fn join_refusals_are_generic_and_complete_the_same_work_before_audit() {
     run(|| async {
         let host = Node::new("audit-host").await;
         let vault = host.vault("Audit").await;
-        let code = host.code(&vault, "edit").await;
-        let share = peers::decode_code(&code).unwrap().share;
         let path = format!("/api/peer/v1/{}/join", host.app.user.org.key());
-        let request = json!({"share":share, "guest_instance":"untrusted", "nonce_g":"n", "mac":"bad"});
         let mut replies = vec![];
-        for (reason, body) in [
-            ("malformed", json!({"share":"bad"})),
-            ("malformed", json!({"share":"not-a-key", "guest_instance":"untrusted", "nonce_g":"n", "mac":"bad"})),
-            ("malformed", json!({"share": "00000000000000000000000000000000", "guest_instance":"untrusted", "nonce_g":"n", "mac":"bad"})),
-            ("malformed", request.clone()),
-            ("expired", request.clone()),
-            ("used", request.clone()),
-        ] {
-            if reason == "expired" {
-                host.app.db().await.test_raw().query("UPDATE $id SET expires_at = time::now() - 1d").bind(("id", RecordId::new("peer_share", share.clone()))).await.unwrap().check().unwrap();
-            } else if reason == "used" {
-                host.app.db().await.test_raw().query("UPDATE $id SET used_at = time::now(), secret_enc = NONE").bind(("id", RecordId::new("peer_share", share.clone()))).await.unwrap().check().unwrap();
+        let mut expected_audits = vec![];
+        // Near-limit data exercises the formerly state-dependent join + HMAC work. Oversized
+        // count and bytes must also take the whole refusal path, without hashing that payload.
+        for addrs in [vec!["a".repeat(1023); 32], vec!["a".repeat(2048); 32], vec!["a".into(); 33]] {
+            let oversized = addrs.len() > peers::MAX_JOIN_ADDRS || addrs.iter().map(String::len).sum::<usize>() > peers::MAX_JOIN_ADDR_BYTES;
+            let mut work = vec![];
+            for case in ["unknown", "used", "expired", "malformed", "mac", "invalid-key", "invalid-mac"] {
+                let code = host.code(&vault, "edit").await;
+                let share = peers::decode_code(&code).unwrap().share;
+                let mut body = json!({"share":share, "guest_instance":"untrusted", "guest_addrs":addrs, "nonce_g":"n", "mac":"00".repeat(32)});
+                match case {
+                    "unknown" => body["share"] = "00000000000000000000000000000000".into(),
+                    "invalid-key" => body["share"] = "not-a-key".into(),
+                    "invalid-mac" => body["mac"] = "bad".into(),
+                    "malformed" => body["guest_org"] = json!(42),
+                    "used" => { host.app.db().await.test_raw().query("UPDATE $id SET used_at = time::now(), secret_enc = NONE").bind(("id", RecordId::new("peer_share", share.clone()))).await.unwrap().check().unwrap(); },
+                    "expired" => { host.app.db().await.test_raw().query("UPDATE $id SET expires_at = time::now() - 1d").bind(("id", RecordId::new("peer_share", share.clone()))).await.unwrap().check().unwrap(); },
+                    _ => {},
+                }
+                let req = Request::builder().method("POST").uri(&path)
+                    .header("content-type", "application/json")
+                    .header("traceparent", "00-11111111111111111111111111111111-2222222222222222-01")
+                    .body(Body::from(body.to_string())).unwrap();
+                let (reply, steps) = peers::test_join_steps(host.app.router.clone().oneshot(req)).await;
+                let reply = reply.unwrap();
+                assert_eq!(steps.iter().map(|s| s.0).collect::<Vec<_>>(), ["bounded", "lookup", "decrypt", "mac", "decision", "audit"], "{case}");
+                let hashed_bytes = steps.iter().find(|s| s.0 == "mac").unwrap().1;
+                if oversized { assert!(hashed_bytes < 256, "oversize payload was hashed"); }
+                else { assert!(hashed_bytes > 32_000, "large payload did not reach HMAC: {case}"); }
+                // Invalid share keys have a different public length. All other cases hash the
+                // same byte count, including a structurally malformed object and invalid MAC.
+                if case != "invalid-key" { work.push(steps); }
+                assert_eq!(reply.status(), StatusCode::FORBIDDEN);
+                let status = reply.status();
+                let headers = reply.headers().clone();
+                let bytes = reply.into_body().collect().await.unwrap().to_bytes();
+                replies.push((status, headers, bytes));
+                let reason = if oversized || matches!(case, "malformed" | "invalid-key") { "malformed" }
+                    else if case == "invalid-mac" { "mac" } else { case };
+                expected_audits.push(format!("why={reason}"));
+                let mut result = host.app.state.control.test_raw().query("SELECT actor_kind, actor_id, target, detail FROM audit_event WHERE action = 'peer.join'").await.unwrap();
+                let rows: Vec<Value> = result.take(0).unwrap();
+                let mut details: Vec<_> = rows.iter().map(|r| r["detail"].as_str().unwrap().to_string()).collect();
+                let mut expected = expected_audits.clone();
+                details.sort(); expected.sort();
+                assert_eq!(details, expected, "{case}: each request adds exactly its true audit reason");
+                for row in rows {
+                    assert_eq!(row["actor_kind"], "anonymous");
+                    assert_eq!(row["actor_id"], "");
+                    assert_eq!(row["target"], "");
+                }
             }
-            // The same caller trace makes byte equality meaningful, including all headers.
+            assert!(work.windows(2).all(|p| p[0] == p[1]));
+        }
+        // Extractor failures also run the same path, including missing fields and invalid JSON.
+        for raw in ["null", "{}", "{\"guest_addrs\": [\"large but invalid\"]"] {
             let req = Request::builder().method("POST").uri(&path)
                 .header("content-type", "application/json")
                 .header("traceparent", "00-11111111111111111111111111111111-2222222222222222-01")
-                .body(Body::from(body.to_string())).unwrap();
-            let reply = host.app.router.clone().oneshot(req).await.unwrap();
-            assert_eq!(reply.status(), StatusCode::FORBIDDEN);
+                .body(Body::from(raw)).unwrap();
+            let (reply, steps) = peers::test_join_steps(host.app.router.clone().oneshot(req)).await;
+            assert_eq!(steps.iter().map(|s| s.0).collect::<Vec<_>>(), ["bounded", "lookup", "decrypt", "mac", "decision", "audit"]);
+            let reply = reply.unwrap();
             let status = reply.status();
             let headers = reply.headers().clone();
             let bytes = reply.into_body().collect().await.unwrap().to_bytes();
             replies.push((status, headers, bytes));
-            let (_, audit) = host.app.http("GET", "/api/admin/audit?category=sharing", None, true).await;
-            let rows = audit["results"].as_array().unwrap();
-            let refused = rows.iter().find(|r| r["action"] == "peer.join" && r["ok"] == false).expect("host refusal is audited");
-            let expected = match reason {
-                "expired" => "The share code had expired",
-                "used" => "The share code had already been used",
-                _ => "The share code was malformed or did not match",
-            };
-            assert_eq!(refused["reason"], expected);
-            assert_eq!(refused["actor_email"], "", "never attribute an anonymous request to the share owner");
         }
-        assert!(replies.windows(2).all(|pair| pair[0] == pair[1]));
-        let mut result = host.app.state.control.test_raw().query("SELECT actor_kind, actor_id, target, detail FROM audit_event WHERE action = 'peer.join'").await.unwrap();
-        let rows: Vec<Value> = result.take(0).unwrap();
-        assert_eq!(rows.len(), 6);
-        for row in rows {
-            assert_eq!(row["actor_kind"], "anonymous");
-            assert_eq!(row["actor_id"], "");
-            assert_eq!(row["target"], "");
-            assert!(["why=malformed", "why=expired", "why=used"].contains(&row["detail"].as_str().unwrap()));
-        }
+        assert!(replies.windows(2).all(|p| p[0] == p[1]), "status, headers and raw bytes must match");
+    });
+}
+
+#[test]
+fn old_version_peer_joins_without_optional_identity_or_address_fields() {
+    run(|| async {
+        let host = Node::new("legacy-host").await;
+        let vault = host.vault("Legacy").await;
+        let code = peers::decode_code(&host.code(&vault, "edit").await).unwrap();
+        let secret = peers::crypto::unb64(&code.secret).unwrap();
+        let nonce = peers::crypto::random_id();
+        let mac = peers::crypto::mac(&secret, &["join", &code.share, "legacy-instance", "", "", "", &nonce]);
+        let path = format!("/api/peer/v1/{}/join", host.app.user.org.key());
+        let (status, reply) = host.app.http("POST", &path, Some(json!({"share":code.share,"guest_instance":"legacy-instance","nonce_g":nonce,"mac":mac})), false).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(reply["role"], "edit");
+        assert!(peers::crypto::verify_mac(&secret, &["joined", &code.share, reply["link"].as_str().unwrap(), &nonce,
+            reply["nonce_h"].as_str().unwrap(), "Legacy", "edit", reply["host_instance"].as_str().unwrap(), reply["host_name"].as_str().unwrap()], reply["mac"].as_str().unwrap()));
     });
 }
 
@@ -509,19 +548,4 @@ fn mcp_share_codes_default_to_read_and_allow_explicit_edit() {
         let edit = app.tool("vault_share_code", json!({"vault_id":vault, "role":"edit"})).await;
         assert_eq!(edit["role"], "edit");
     });
-}
-
-#[test]
-fn refusal_audit_work_does_not_depend_on_share_existence() {
-    let source = include_str!("../src/peers/mod.rs");
-    let refusal = source.split("pub(crate) async fn refuse_join").nth(1).unwrap()
-        .split("pub async fn accept_join").next().unwrap();
-    assert!(!refusal.contains("user: Option"), "never select the audit path from share ownership");
-    assert!(!refusal.contains("user.is_none()"));
-    assert_eq!(refusal.matches("ORG_FIRST_OWNER.on").count(), 1);
-    assert_eq!(refusal.matches("crate::audit::record(").count(), 1);
-    assert!(refusal.find("ORG_FIRST_OWNER.on").unwrap() < refusal.find("crate::audit::record(").unwrap());
-    let calls: Vec<_> = source.lines().filter(|line| line.contains("refuse_join(state,")).collect();
-    assert!(calls.len() >= 6);
-    assert!(calls.iter().all(|line| !line.contains("created_by") && !line.contains("None,")));
 }

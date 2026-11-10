@@ -18,7 +18,6 @@ async fn mint(app: &TestApp, vault: Option<&str>) -> String {
 }
 
 async fn call(app: &TestApp, token: &str, name: &str, args: Value) -> Value {
-    assert!(args.get("vault_id").is_none(), "this loop exercises unqualified calls");
     let req = Request::builder().method("POST").uri("/mcp")
         .header("authorization", format!("Bearer {token}")).header("content-type", "application/json")
         .body(Body::from(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":name,"arguments":args}}).to_string())).unwrap();
@@ -111,10 +110,38 @@ async fn default_personal_token_uploads_searches_and_resolves_its_document() {
 
 #[tokio::test(flavor="multi_thread", worker_threads=2)]
 async fn every_mcp_tool_with_a_default_token_stays_personal_or_has_an_intended_refusal() {
+    walk_bound_token(false, false).await;
+}
+
+#[tokio::test(flavor="multi_thread", worker_threads=2)]
+async fn every_mcp_tool_with_a_team_token_stays_bound_or_has_an_intended_refusal() {
+    walk_bound_token(true, false).await;
+}
+
+#[tokio::test(flavor="multi_thread", worker_threads=2)]
+async fn every_mcp_tool_with_a_restricted_admin_token_stays_bound_or_has_an_intended_refusal() {
+    walk_bound_token(true, true).await;
+}
+
+async fn walk_bound_token(team_bound: bool, admin: bool) {
     use eunomia_backend::{jobs::{WorkerConfig, handlers, worker}, scopes};
     use std::collections::BTreeSet;
-    let app = TestApp::with_settings(eunomia_backend::config::Settings { embeddings_backend:"stub".into(), ..common::test_settings() }).await;
-    let token = mint(&app, None).await;
+    let app = TestApp::with_settings(eunomia_backend::config::Settings { embeddings_backend:"stub".into(), public_url:"https://token-walk.example.test".into(), ..common::test_settings() }).await;
+    let personal = app.tool("ontology_get", json!({})).await["vault"].as_str().unwrap().to_string();
+    let created_team = app.tool("vault_create", json!({"name":"Walk team", "kind":"org"})).await["id"].as_str().unwrap().to_string();
+    let bound = if team_bound { &created_team } else { &personal };
+    let team = if team_bound { personal.clone() } else { created_team.clone() };
+    let mut body = json!({"name":"walk-token"});
+    if team_bound { body["vault_id"] = bound.clone().into(); }
+    if admin { body["scopes"] = json!(["memory:read", "memory:write", "vaults:admin"]); }
+    let (status, issued) = app.http_session("POST", "/api/auth/tokens", Some(body)).await;
+    assert_eq!(status, 200);
+    let token = issued["token"].as_str().unwrap().to_string();
+    if admin {
+        let colleague = common::register(&app.state, "colleague@example.test").await;
+        app.tool("vault_invite", json!({"vault_id":bound,"email":colleague.email})).await;
+        common::sys(eunomia_backend::vaults::service::accept_invitation(&app.db().await, &app.state.control, &colleague.id, &rid::parse(bound).unwrap())).await.unwrap();
+    }
     let request = Request::builder().method("POST").uri("/mcp")
         .header("authorization",format!("Bearer {token}")).header("content-type","application/json")
         .body(Body::from(json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}).to_string())).unwrap();
@@ -128,14 +155,12 @@ async fn every_mcp_tool_with_a_default_token_stays_personal_or_has_an_intended_r
     }
     let get = tools.iter().find(|t|t["name"]=="get").unwrap();
     assert!(get["inputSchema"]["required"].as_array().unwrap().contains(&json!("id")),"ordinary required arguments stay required");
-    let personal = app.tool("ontology_get", json!({})).await["vault"].as_str().unwrap().to_string();
-    let team = app.tool("vault_create", json!({"name":"OUTSIDE_SPACE_CANARY", "kind":"org"})).await["id"].as_str().unwrap().to_string();
     app.tool("memory_write", json!({"vault_id":team,"subject_name":"OUTSIDE_SPACE_CANARY needle","subject_kind":"outside_only_canary","text":"OUTSIDE_SPACE_CANARY"})).await;
     let team_cursor = app.tool("changes_since", json!({"vault_id":team})).await["next"].clone();
     let first = ok(&app,&token,"memory_write",json!({"subject_name":"Personal One needle","subject_kind":"person","text":"PERSONAL needle"})).await;
     let second = ok(&app,&token,"memory_write",json!({"subject_name":"Personal Two needle","subject_kind":"person","text":"PERSONAL neighbour"})).await;
     let a = &first["entity"]["id"]; let b = &second["entity"]["id"]; let fact = &first["memory"]["id"];
-    let record = Envelope {id:"fixture:note:personal".into(),source:"fixture".into(),type_:"fixture.note".into(),external_id:"personal".into(),title:"PERSONAL needle".into(),body_text:"PERSONAL needle".into(),..Default::default()};
+    let record = Envelope {id:"fixture:note:personal".into(),source:"fixture".into(),type_:"fixture.note".into(),external_id:"personal".into(),title:"PERSONAL needle".into(),body_text:"PERSONAL needle".into(),placement:Some(Placement { vault:Some(rid::parse(bound).unwrap()), writable:Arc::new(vec![rid::parse(bound).unwrap()]), ..Default::default() }),..Default::default()};
     common::sys(cache::upsert(&app.db().await,&app.user.id,&record)).await.unwrap();
     let (stop, stopped) = tokio::sync::watch::channel(false);
     tokio::spawn(worker::run(app.state.clone(),handlers::registry(),WorkerConfig{id:"default-walk".into(),poll:std::time::Duration::from_millis(20),..WorkerConfig::default()},stopped));
@@ -145,9 +170,9 @@ async fn every_mcp_tool_with_a_default_token_stays_personal_or_has_an_intended_r
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         }
     }).await.unwrap();
-    app.tool("ontology_propose",json!({"kinds":[{"kind":"product"}],"properties":[{"kind":"product","name":"price","datatype":"money","unit":"AUD","source_map":[{"source":"document","record_type":doc["id"],"path":"price"}]}],"metrics":[{"kind":"product","name":"total_price","expr":{"agg":"sum","property":"price"}}]})).await;
+    app.tool("ontology_propose",json!({"vault_id":bound,"kinds":[{"kind":"product"}],"properties":[{"kind":"product","name":"price","datatype":"money","unit":"AUD","source_map":[{"source":"document","record_type":doc["id"],"path":"price"}]}],"metrics":[{"kind":"product","name":"total_price","expr":{"agg":"sum","property":"price"}}]})).await;
     for (route,body) in [("kinds",json!({"kind":"product","decision":{"action":"approve"}})),("properties",json!({"kind":"product","name":"price","decision":{"action":"approve"}})),("metrics",json!({"kind":"product","name":"total_price","decision":{"action":"approve"}}))] {
-        assert_eq!(app.http_session("POST",&format!("/api/vaults/{personal}/ontology/{route}/decide"),Some(body)).await.0,200);
+        assert_eq!(app.http_session("POST",&format!("/api/vaults/{bound}/ontology/{route}/decide"),Some(body)).await.0,200);
     }
     let product = ok(&app,&token,"memory_write",json!({"subject_kind":"product","subject_name":"Fixture product","text":"PERSONAL product"})).await["entity"].clone();
     let skill = ok(&app,&token,"skill_save",json!({"name":"personal-fixture","description":"PERSONAL","body":"PERSONAL needle"})).await;
@@ -191,25 +216,64 @@ async fn every_mcp_tool_with_a_default_token_stays_personal_or_has_an_intended_r
     let mut walked = BTreeSet::new();
     for (name,args) in cases {
         assert!(walked.insert(name));
+        // Every tool advertising a vault selector must reject the same valid foreign vault.
+        if registry::all_tools()[name].schema["properties"].get("vault_id").is_some() {
+            let mut foreign = args.clone();
+            foreign["vault_id"] = team.clone().into();
+            let refused = call(&app,&token,name,foreign).await;
+            assert_eq!(refused["code"], "auth.scope", "foreign {name}: {refused}");
+        }
         let value = call(&app,&token,name,args).await;
         if matches!(name,"secret_transform"|"http_request") {
             assert_eq!(value["code"],"secret.unavailable","{name}: {value}");
             assert!(value["error"].as_str().is_some_and(|m| !m.is_empty()));
         } else { assert!(value.get("error").is_none(),"{name}: {value}"); }
         let public = value.to_string();
-        assert!(!public.contains("OUTSIDE_SPACE_CANARY") && !public.contains("outside_only_canary") && !public.contains(&team),"{name} escaped Personal");
+        assert!(!public.contains("OUTSIDE_SPACE_CANARY") && !public.contains("outside_only_canary") && !public.contains(&team),"{name} escaped its binding");
     }
-    for name in registry::all_tools().keys().copied().filter(|name| scopes::for_tool(name,registry::is_read_only(name))==scopes::VAULTS_ADMIN) {
-        assert!(walked.insert(name));
-        let v = call(&app,&token,name,json!({})).await;
-        assert_eq!(v["code"],"auth.scope","{name}: {v}");
-        assert!(v["error"].as_str().is_some_and(|m| m.contains("vaults:admin")),"{name} explains its administrative refusal: {v}");
-    }
-    assert_eq!(walked,registry::all_tools().keys().copied().collect());
     for (name,args) in [("vault_get",json!({"vault_id":team})),("search",json!({"vault_id":team,"query":"needle"})),("memory_write",json!({"vault_id":team,"subject_name":"Escape","subject_kind":"person","text":"must not write"})),("document_upload",json!({"vault_id":team,"filename":"escape.txt","text":"must not write"}))] {
         let ((_,value),_) = common::http(&app.router,"POST",&format!("/api/tools/{name}"),Some(args),Some(&token),None).await;
         assert_eq!(value["code"],"auth.scope","explicit {name} must not override the credential: {value}");
     }
+    // Valid arguments reach the binding guard even when administrative scope is granted.
+    // Membership refusals use the sole owner, so the walk cannot remove its own authority.
+    let admin_cases = [
+        ("vault_create", json!({"name":"Escape"}), Some("bound")),
+        ("vault_clone", json!({}), Some("bound")),
+        ("vault_merge", json!({"vault_id_a":bound,"vault_id_b":team}), Some("bound")),
+        ("vault_join_shared", json!({"share_code":"unused-fixture"}), Some("bound")),
+        ("vault_repair", json!({}), None),
+        ("vault_rename", json!({"name":"Renamed bound"}), None),
+        ("vault_share_code", json!({}), None),
+        ("vault_invite", json!({"email":app.user.email}), Some("already a member")),
+        ("vault_remove_member", json!({"email":app.user.email}), Some("last owner")),
+        ("vault_set_role", json!({"email":app.user.email,"role":"owner"}), None),
+        ("vault_transfer_ownership", json!({"email":app.user.email}), Some("already own")),
+        ("vault_accept_invitation", json!({}), Some("no pending invitation")),
+        ("vault_decline_invitation", json!({}), Some("no pending invitation")),
+        ("vault_peer_sync", json!({"link_id":"00000000000000000000000000000000"}), Some("No such shared space link.")),
+        ("vault_leave", json!({}), Some("last owner")),
+        // Last: deleting the bound team is permitted with admin scope.
+        ("vault_delete", json!({}), None),
+    ];
+    for (name,args,expected) in admin_cases {
+        assert_eq!(scopes::for_tool(name,registry::is_read_only(name)), scopes::VAULTS_ADMIN);
+        assert!(walked.insert(name));
+        if registry::all_tools()[name].schema["properties"].get("vault_id").is_some() {
+            let mut foreign = args.clone();
+            foreign["vault_id"] = team.clone().into();
+            assert_eq!(call(&app,&token,name,foreign).await["code"], "auth.scope", "foreign {name}");
+        }
+        let v = call(&app,&token,name,args).await;
+        if !admin || expected == Some("bound") {
+            assert_eq!(v["code"],"auth.scope","{name}: {v}");
+        } else if let Some(message) = expected {
+            assert!(v["error"].as_str().is_some_and(|s| s.contains(message)), "{name}: {v}");
+            assert_ne!(v["code"], "auth.scope", "admin must exercise the service guard");
+        } else { assert!(v.get("error").is_none(), "{name}: {v}"); }
+        assert!(!v.to_string().contains("OUTSIDE_SPACE_CANARY"), "{name} leaked the foreign space");
+    }
+    assert_eq!(walked,registry::all_tools().keys().copied().collect());
     assert_eq!(app.tool("changes_since",json!({"vault_id":team})).await["next"],team_cursor,"no unqualified write changed the team space");
     stop.send(true).unwrap();
 }

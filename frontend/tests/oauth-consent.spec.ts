@@ -31,5 +31,6 @@ test("OAuth consent explains read and write access to every member space", async
   await expect(page.getByText("Read memories in every space you belong to", { exact: true })).toBeVisible();
   await expect(page.getByText("Save memories in every space you belong to", { exact: true })).toBeVisible();
   await expect(page.getByText("These permissions apply to every space you belong to, including your Personal space and team spaces.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Add, change or delete memories in every space you belong to, as you.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Allow", exact: true })).toBeVisible();
 });
