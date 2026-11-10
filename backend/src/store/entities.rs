@@ -35,9 +35,9 @@ pub const WRITE_FACT: Stmt = Stmt::at(
         CREATE memory SET owner = $owner, vault = $vault, subject = $subject, text = $text, type = $type, source = $source RETURN *, vault.name AS vault_name;
         LET $cur = (SELECT VALUE id FROM $obs_id);
         IF array::len($cur) > 0 {
-            UPDATE $obs_id SET status = "stale" WHERE status != "stale"
+            UPDATE $obs_id SET status = "stale", version = version + 1
         } ELSE {
-            UPDATE memory SET status = "stale" WHERE subject = $subject AND type = "observation" AND status != "stale"
+            UPDATE memory SET status = "stale", version = version + 1 WHERE subject = $subject AND type = "observation"
         };
         COMMIT TRANSACTION;"#,
     1, // BEGIN 0, CREATE 1
@@ -60,9 +60,9 @@ pub const RELATE_WITH_REASON: Stmt = Stmt::at(
         };
         IF array::len($memory) > 0 {
             IF array::len((SELECT VALUE id FROM $obs_id)) > 0 {
-                UPDATE $obs_id SET status = "stale" WHERE status != "stale"
+                UPDATE $obs_id SET status = "stale", version = version + 1
             } ELSE {
-                UPDATE memory SET status = "stale" WHERE subject = $in AND type = "observation" AND status != "stale"
+                UPDATE memory SET status = "stale", version = version + 1 WHERE subject = $in AND type = "observation"
             }
         };
         RETURN { relation: $edge[0], memory: $memory[0] ?? NONE, created: array::len($existing) = 0 };
@@ -82,13 +82,14 @@ pub const FIND_RELATION: Stmt = Stmt::new(
 pub const DELETE_RECORD: Stmt = Stmt::new("entities.delete_record", "DELETE $id");
 
 // Edit a memory and, for a raw fact, make its subject's observation stale -- one transaction, like
-// WRITE_FACT and DELETE_MEMORY, so an edit never leaves an observation summarising the old text as
-// fresh. An edited raw fact is current again (no longer superseded); an observation keeps its status.
+// WRITE_FACT and DELETE_MEMORY. Advancing the observation version also rejects an in-flight
+// rebuild from before this edit, even if the observation was already stale. An edited raw fact is
+// current again (no longer superseded); an observation keeps its status.
 pub const UPDATE_MEMORY_TEXT: Stmt = Stmt::at(
     "entities.update_memory_text",
     r#"BEGIN TRANSACTION;
         UPDATE $id SET version = version + 1, updated_at = time::now(), text = $text, status = IF type = "observation" THEN status ELSE NONE END RETURN AFTER;
-        IF $raw { UPDATE memory SET status = "stale" WHERE subject = $subject AND type = "observation" };
+        IF $raw { UPDATE memory SET status = "stale", version = version + 1 WHERE subject = $subject AND type = "observation" };
         COMMIT TRANSACTION;"#,
     1, // BEGIN 0, UPDATE 1
 );
@@ -96,7 +97,7 @@ pub const UPDATE_MEMORY_TYPE: Stmt = Stmt::at(
     "entities.update_memory_type",
     r#"BEGIN TRANSACTION;
         UPDATE $id SET version = version + 1, updated_at = time::now(), type = $type RETURN AFTER;
-        IF $raw { UPDATE memory SET status = "stale" WHERE subject = $subject AND type = "observation" };
+        IF $raw { UPDATE memory SET status = "stale", version = version + 1 WHERE subject = $subject AND type = "observation" };
         COMMIT TRANSACTION;"#,
     1, // BEGIN 0, UPDATE 1
 );
@@ -104,7 +105,7 @@ pub const UPDATE_MEMORY_TEXT_TYPE: Stmt = Stmt::at(
     "entities.update_memory_text_type",
     r#"BEGIN TRANSACTION;
         UPDATE $id SET version = version + 1, updated_at = time::now(), text = $text, type = $type, status = IF $type = "observation" THEN status ELSE NONE END RETURN AFTER;
-        IF $raw { UPDATE memory SET status = "stale" WHERE subject = $subject AND type = "observation" };
+        IF $raw { UPDATE memory SET status = "stale", version = version + 1 WHERE subject = $subject AND type = "observation" };
         COMMIT TRANSACTION;"#,
     1, // BEGIN 0, UPDATE 1
 );
@@ -119,7 +120,7 @@ pub const DELETE_MEMORY: Stmt = Stmt::new(
         DELETE $id;
         IF $raw {
             DELETE memory WHERE subject = $subject AND type = "observation" AND source_memories = [$id];
-            UPDATE memory SET status = "stale", updated_at = time::now(),
+            UPDATE memory SET status = "stale", version = version + 1, updated_at = time::now(),
                 source_memories = IF source_memories THEN array::complement(source_memories, [$id]) ELSE NONE END
                 WHERE subject = $subject AND type = "observation";
         };
