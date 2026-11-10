@@ -189,3 +189,23 @@ test("missing object fallback cannot leak its Back query during checking or unkn
   await page.getByRole("button", {name:"Try again",exact:true}).click();
   await expect(page.getByRole("link", {name:"Back to Objects"})).toHaveAttribute("href", back);
 });
+test("browser Back cannot reveal a previous search while access is unknown", async ({ page }) => {
+  const { state } = await mockReceipts(page);
+  await page.goto("/ontology/objects?space=business&kind=product&search=House+blend+1kg");
+  await expect(page.getByLabel("Search objects")).toHaveValue("House blend 1kg");
+  await page.evaluate(() => history.pushState(null, "", "?space=business&kind=product&search=Other+search"));
+  await expect(page.getByLabel("Search objects")).toHaveValue("Other search");
+  await page.clock.install();
+  state.membership = "pending";
+  await cacheAction(page, "recheck");
+  await expect(page.getByText("Checking access", {exact:true})).toBeVisible();
+  await page.clock.fastForward(11_000);
+  await expect(page.getByRole("button", {name:"Try again",exact:true})).toBeVisible();
+  const back = page.evaluate(() => new Promise<void>(resolve => window.addEventListener("popstate", () => resolve(), {once:true})));
+  await page.goBack();
+  await back;
+  await noProtectedValues(page);
+  state.membership = "ok";
+  await page.getByRole("button", {name:"Try again",exact:true}).click();
+  await expect(page.getByLabel("Search objects")).toHaveValue("House blend 1kg");
+});

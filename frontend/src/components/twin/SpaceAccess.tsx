@@ -168,10 +168,22 @@ function AccessGate({ space, children, queries: protectedQueries }: { space: str
     for (const query of queries.getAll()) check(query);
     if (protectedQueries.checkOnMount) confirm();
     const recheck = () => { if (protectedQueries.checkOnMount) confirm(); };
+    const withholdNavigation = () => {
+      if (state.kind !== "checking" && state.kind !== "unknown") return;
+      if (window.location.pathname !== withheld.current?.pathname || new URLSearchParams(window.location.search).get("space") !== space) return;
+      const safeQuery = `?${new URLSearchParams({ space })}`;
+      if (window.location.search !== safeQuery || window.location.hash) {
+        withheld.current = { pathname: window.location.pathname, search: window.location.search, hash: window.location.hash };
+        setWithheldParams(new URLSearchParams(withheld.current.search));
+        window.history.replaceState(null, "", window.location.pathname + safeQuery);
+      }
+    };
+    window.addEventListener("popstate", withholdNavigation);
     window.addEventListener("focus", recheck);
     window.addEventListener("offline", recheck);
     window.addEventListener("online", recheck);
     return () => {
+      window.removeEventListener("popstate", withholdNavigation);
       window.removeEventListener("focus", recheck);
       window.removeEventListener("offline", recheck);
       window.removeEventListener("online", recheck);
