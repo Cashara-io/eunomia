@@ -227,6 +227,15 @@ pub const EDGES_TOUCHING: Stmt = Stmt::at(
        RETURN array::concat($outs, $ins);"#,
     2, // two LETs, then the RETURN
 );
+/// One indexed direction at a time, so sparse lists leave the budget for busier nodes.
+pub const EDGES_IN_DIRECTION: Stmt = Stmt::new(
+    "entities.edges_in_direction",
+    r#"RETURN IF $outgoing {
+        (SELECT id, in, out, label, in.vault AS from_vault, out.vault AS to_vault FROM relates_to WHERE in = $id LIMIT $limit)
+    } ELSE {
+        (SELECT id, in, out, label, in.vault AS from_vault, out.vault AS to_vault FROM relates_to WHERE out = $id LIMIT $limit)
+    };"#,
+);
 /// Whether `$id` has any relation, either way, to an entity in its own vault `$vault`.
 pub const HAS_RELATION: Stmt = Stmt::at(
     "entities.has_relation",
@@ -349,6 +358,7 @@ pub const ALL: &[&Stmt] = &[
     &MEMORIES_OF,
     &EDGES_AMONG,
     &EDGES_TOUCHING,
+    &EDGES_IN_DIRECTION,
     &HAS_RELATION,
     &NODES_BY_ID,
     &RELATIONS_BY_ID,
@@ -528,4 +538,50 @@ pub fn names_by_prefix<'a>(db: &'a OrgDb) -> Q<'a> {
 pub fn explain_name_lookup<'a>(db: &'a OrgDb, table: &str, prefix: bool) -> Q<'a> {
     assert!(crate::entities::service::ENTITY_TABLES.contains(&table));
     dynamic(db, "entities.explain_name_lookup", format!("{} EXPLAIN", name_lookup_select(table, prefix)))
+}
+
+/// Deterministic rows for the isolated view regression fixtures. The caller must prove mem:// first.
+#[cfg(feature = "test-support")]
+pub async fn seed_view_fixture(db: &OrgDb, owner: &surrealdb::types::RecordId, vault: &surrealdb::types::RecordId, count: usize) {
+    let ids: Vec<_> = (0..count).map(|i| surrealdb::types::RecordId::new("entity", format!("fixture{i}"))).collect();
+    db.test_raw().query(r#"
+        FOR $id IN $ids {
+            CREATE $id SET owner = $owner, vault = $vault, kind = 'sample', name = 'Item ' + <string>$id;
+        };
+    "#).bind(("owner", owner.clone())).bind(("vault", vault.clone()))
+        .bind(("ids", ids)).await.unwrap().check().unwrap();
+}
+
+#[cfg(feature = "test-support")]
+pub async fn seed_dense_view_links(db: &OrgDb, start: &surrealdb::types::RecordId, count: usize) {
+    let ids: Vec<_> = (0..count).map(|i| surrealdb::types::RecordId::new("entity", format!("fixture{i}"))).collect();
+    let mut pairs = Vec::new();
+    for i in 0..count {
+        pairs.push(vec![start.clone(), ids[i].clone()]);
+        for j in 1..22 { pairs.push(vec![ids[i].clone(), ids[(i + j) % count].clone()]); }
+    }
+    db.test_raw().query(r#"
+        FOR $ends IN $pairs {
+            LET $from = $ends[0];
+            LET $to = $ends[1];
+            RELATE $from->relates_to->$to SET label = 'touches';
+        };
+    "#).bind(("pairs", pairs)).await.unwrap().check().unwrap();
+}
+
+#[cfg(feature = "test-support")]
+pub async fn seed_view_item(db: &OrgDb, owner: &surrealdb::types::RecordId, vault: &surrealdb::types::RecordId, id: &surrealdb::types::RecordId) {
+    db.test_raw().query("CREATE $id SET owner = $owner, vault = $vault, kind = 'sample', name = 'AAA inserted'")
+        .bind(("id", id.clone())).bind(("owner", owner.clone())).bind(("vault", vault.clone())).await.unwrap().check().unwrap();
+}
+
+#[cfg(feature = "test-support")]
+pub async fn seed_view_values(db: &OrgDb, vault: &surrealdb::types::RecordId) {
+    db.test_raw().query(r#"
+        LET $property = (SELECT VALUE id FROM ontology_property WHERE vault = $vault AND name = 'score' LIMIT 1)[0];
+        FOR $e IN (SELECT VALUE id FROM entity WHERE vault = $vault AND kind = 'sample') {
+            CREATE entity_property SET vault = $vault, entity = $e, property = $property, value_num = 1,
+                as_of = d'2026-01-01T00:00:00.987654321Z', origin = 'agent';
+        };
+    "#).bind(("vault", vault.clone())).await.unwrap().check().unwrap();
 }

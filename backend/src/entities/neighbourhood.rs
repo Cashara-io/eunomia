@@ -154,6 +154,12 @@ pub(crate) async fn relations_of(db: &OrgDb, vault: &RecordId, id: &RecordId) ->
     Ok((out, cut))
 }
 
+#[cfg(feature = "test-support")]
+tokio::task_local! {
+    /// Actual edge rows materialised by this task, before filtering or deduplication.
+    pub static FETCHED_EDGE_ROWS: std::cell::Cell<usize>;
+}
+
 /// What [`walk`] reached.
 pub(crate) struct Walk {
     /// The starts, then each entity in the order it was reached.
@@ -170,6 +176,24 @@ pub(crate) struct Walk {
 /// `vault`. At most [`MAX_NODES`] entities, [`MAX_EDGES`] relations and [`MAX_EDGES_PER_ENTITY`]
 /// relations each way from any one entity.
 pub(crate) async fn walk(db: &OrgDb, vault: &RecordId, starts: &[RecordId], depth: u8) -> AppResult<Walk> {
+    walk_bounded(db, vault, starts, depth, WalkLimits { nodes: MAX_NODES, edges: MAX_EDGES, fetched_rows: MAX_EDGES * 4, per_entity: MAX_EDGES_PER_ENTITY }, &[]).await
+}
+
+pub(crate) struct WalkLimits {
+    pub nodes: usize,
+    pub edges: usize,
+    pub per_entity: usize,
+    /// Includes duplicate, cross-vault and label-filtered rows from both query directions.
+    /// One extra lookahead row may be read to prove that work was cut.
+    pub fetched_rows: usize,
+}
+
+/// A bounded selection with separate caps for fetched rows and unique output edges.
+pub(crate) async fn walk_bounded(
+    db: &OrgDb, vault: &RecordId, starts: &[RecordId], depth: u8,
+    limits: WalkLimits, labels: &[String],
+) -> AppResult<Walk> {
+    let WalkLimits { nodes: max_nodes, edges: max_edges, per_entity: edge_limit, fetched_rows: max_fetch } = limits;
     let mut order: Vec<RecordId> = Vec::new();
     let mut seen: HashMap<String, u8> = HashMap::new();
     for s in starts {
@@ -182,49 +206,55 @@ pub(crate) async fn walk(db: &OrgDb, vault: &RecordId, starts: &[RecordId], dept
     let mut edge_ids: HashSet<String> = HashSet::new();
     let mut truncated = false;
     let mut frontier = order.clone();
-    for hop in 1..=depth {
-        if frontier.is_empty() || edges.len() >= MAX_EDGES {
-            break;
-        }
-        // one more than the cap, to tell a full list from a cut one
-        let mut res = q::EDGES_TOUCHING.on(db).bind(("ids", frontier)).bind(("limit", MAX_EDGES_PER_ENTITY + 1)).await?;
-        let lists: Vec<Vec<EdgeRow>> = res.take(q::EDGES_TOUCHING.slot)?;
-        let mut touching = Vec::new();
-        for mut list in lists {
-            if list.len() > MAX_EDGES_PER_ENTITY {
-                truncated = true;
-                list.truncate(MAX_EDGES_PER_ENTITY);
-            }
-            touching.extend(list);
-        }
+    let mut fetched = 0;
+    'walk: for hop in 1..=depth {
+        if frontier.is_empty() { break; }
         let mut next = Vec::new();
-        // an edge from before relations were confined to one vault stays hidden
-        for e in touching.into_iter().filter(|e| e.from_vault.as_ref() == Some(vault) && e.to_vault.as_ref() == Some(vault)) {
-            if edge_ids.contains(&e.id.to_string()) {
-                continue;
-            }
-            if edges.len() >= MAX_EDGES {
-                truncated = true;
-                break;
-            }
-            // one end is on the frontier, so at most the other is new
-            let new_end = [&e.from, &e.to].into_iter().find(|end| !seen.contains_key(&end.to_string()));
-            if let Some(end) = new_end {
-                if seen.len() >= MAX_NODES {
-                    truncated = true;
-                    continue;
+        // Allocate against actual rows fetched, not an equal share of a batch. An empty
+        // direction spends nothing, leaving its whole allowance for the next direction.
+        for id in &frontier {
+            for outgoing in [true, false] {
+                let remaining = max_fetch.saturating_sub(fetched);
+                // One lookahead row distinguishes an exactly full budget from omitted work.
+                // When the budget is spent, empty directions still prove completeness.
+                let limit = remaining.saturating_add(1).min(edge_limit.saturating_add(1));
+                let mut res = q::EDGES_IN_DIRECTION.on(db).bind(("id", id.clone()))
+                    .bind(("outgoing", outgoing)).bind(("limit", limit)).await?;
+                let mut list: Vec<EdgeRow> = res.take(0)?;
+                let count = list.len();
+                fetched += count;
+                #[cfg(feature = "test-support")]
+                let _ = FETCHED_EDGE_ROWS.try_with(|n| n.set(n.get() + count));
+                let budget_cut = count > remaining;
+                truncated |= count > edge_limit || budget_cut;
+                list.truncate(edge_limit.min(remaining));
+                for e in list.into_iter().filter(|e| e.from_vault.as_ref() == Some(vault) && e.to_vault.as_ref() == Some(vault)) {
+                    if (!labels.is_empty() && !labels.contains(&e.label)) || edge_ids.contains(&e.id.to_string()) { continue; }
+                    if edges.len() >= max_edges { truncated = true; break 'walk; }
+                    let new_end = [&e.from, &e.to].into_iter().find(|end| !seen.contains_key(&end.to_string()));
+                    if let Some(end) = new_end {
+                        if seen.len() >= max_nodes { truncated = true; continue; }
+                        seen.insert(end.to_string(), hop);
+                        via.insert(end.to_string(), e.clone());
+                        order.push(end.clone());
+                        next.push(end.clone());
+                    }
+                    edge_ids.insert(e.id.to_string());
+                    edges.push(e);
                 }
-                seen.insert(end.to_string(), hop);
-                via.insert(end.to_string(), e.clone());
-                order.push(end.clone());
-                next.push(end.clone());
+                if budget_cut { break 'walk; }
             }
-            edge_ids.insert(e.id.to_string());
-            edges.push(e);
         }
         frontier = next;
     }
     Ok(Walk { order, hops: seen, via, edges, truncated })
+}
+
+/// Exercise the real traversal with a small row budget in embedded integration tests.
+#[cfg(feature = "test-support")]
+pub async fn walk_fetch_budget_for_test(db: &OrgDb, vault: &RecordId, start: RecordId, budget: usize) -> AppResult<(usize, bool)> {
+    let walk = walk_bounded(db, vault, &[start], 1, WalkLimits { nodes: 150, edges: 600, per_entity: 500, fetched_rows: budget }, &[]).await?;
+    Ok((walk.edges.len(), walk.truncated))
 }
 
 /// Breadth-first from `entity_id` over its relations in both directions, `depth` hops (default

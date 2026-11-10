@@ -571,6 +571,7 @@ async fn legacy_export_and_reopened_chat_share_checked_content_and_turn_evidence
     let other = eunomia_backend::rid::parse(other["id"].as_str().unwrap()).unwrap();
     for (role, content) in [
         ("user", "Explain 12"),
+        ("assistant", ""),
         ("tool", "{\"count\":34}"),
         ("assistant", "Useful **advice**: 12 and 34. Fake 999."),
         ("user", "A new turn"),
@@ -579,7 +580,8 @@ async fn legacy_export_and_reopened_chat_share_checked_content_and_turn_evidence
         common::sys(async { eunomia_backend::store::app::CHAT_MESSAGE_CREATE.on(&db)
             .bind(("owner", app.user.id.clone())).bind(("thread_id", rid.clone()))
             .bind(("role", role.to_string())).bind(("content", content.to_string()))
-            .bind(("tool_calls", Option::<Vec<Value>>::None)).bind(("tool_call_id", Option::<String>::None)).await })
+            .bind(("tool_calls", (role == "assistant" && content.is_empty()).then(|| vec![json!({"id":"legacy_count","function":{"name":"entities_search","arguments":"{}"}})])))
+            .bind(("tool_call_id", (role == "tool").then(|| "legacy_count".to_string()))).await })
             .await.unwrap().check().unwrap();
         if role == "tool" {
             common::sys(async { eunomia_backend::store::app::CHAT_MESSAGE_CREATE.on(&db)
@@ -601,10 +603,10 @@ async fn legacy_export_and_reopened_chat_share_checked_content_and_turn_evidence
         assert_eq!(chat["tree"], export["tree"]);
         assert!(export["id"].as_str().unwrap().starts_with("chat_message:"));
     }
-    let first = exported[2]["content"].as_str().unwrap();
+    let first = exported[3]["content"].as_str().unwrap();
     assert!(first.contains("12 and 34") && first.contains("[unverified number]"));
     assert!(!first.contains("999"));
-    let next = exported[4]["content"].as_str().unwrap();
+    let next = exported[5]["content"].as_str().unwrap();
     assert_eq!(next.matches("[unverified number]").count(), 2);
 }
 

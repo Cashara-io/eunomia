@@ -9,7 +9,9 @@ export type Step = { id: string; from: EntityRef; label: string; to: EntityRef }
 export type Affected = { entity: EntityRef; path: Step[]; why: string };
 
 /** `linked` is false when the start has no saved links at all, so there was nothing to follow. */
-export type ImpactView = { view: "impact"; start: EntityRef; headline: string; affected: Affected[]; linked?: boolean; text: string };
+export type ImpactReach = { depth: number; kinds: string[]; labels: string[] };
+export type ImpactPage = { reach: ImpactReach; page: number; page_size: number; total: number; has_more: boolean; truncated: boolean; total_partial: boolean; next_cursor: string | null };
+export type ImpactView = { view: "impact"; start: EntityRef; headline: string; affected: Affected[]; pagination?: ImpactPage; linked?: boolean; text: string };
 
 export type SubgraphView = { view: "subgraph"; title: string; entities: EntityRef[]; relations: Step[]; text: string };
 
@@ -34,7 +36,7 @@ export type MetricRun = {
 };
 
 /** A metric's number, with the entities it came from as receipts. */
-export type MetricView = { view: "metric"; metric: MetricRun; entities: EntityRef[]; text: string };
+export type MetricView = { view: "metric"; metric: MetricRun; entities: EntityRef[]; evidence?: { args: Record<string, unknown>; next_cursor: string | null }; text: string };
 
 /** One metric in a what-if (`scenario_run`, backend/src/ontology/scenario.rs). */
 export type ScenarioMetric = {

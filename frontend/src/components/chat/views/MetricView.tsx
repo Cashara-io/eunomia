@@ -1,3 +1,6 @@
+"use client";
+import { useState } from "react";
+import { invoke } from "@/lib/queries/tools";
 import Link from "next/link";
 import { ChartBarIcon, WarningIcon } from "@phosphor-icons/react/ssr";
 import Duo from "@/components/ui/Duo";
@@ -59,7 +62,26 @@ export function MetricWarnings({ warnings }: { warnings: string[] }) {
  * when, and the entities it came from, each a link. A series is a small table. */
 export default function MetricView({ view }: { view: Metric }) {
   const run = view.metric;
-  const more = run.n_entities - view.entities.length;
+  const [loaded, setLoaded] = useState<Pick<Metric, "entities" | "evidence"> | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const current = loaded ?? view;
+  const more = run.n_entities - current.entities.length;
+  async function loadMore() {
+    if (!current.evidence?.next_cursor || pending) return;
+    setPending(true);
+    setError("");
+    try {
+      const next = await invoke<Metric | { error: string }>("show_view", {
+        ...current.evidence.args, view: "metric", evidence_cursor: current.evidence.next_cursor,
+      });
+      if ("error" in next) throw new Error(next.error);
+      const entities = new Map(current.entities.map(e => [e.id, e]));
+      for (const entity of next.entities) entities.set(entity.id, entity);
+      setLoaded({ entities: [...entities.values()], evidence: next.evidence });
+    } catch { setError("Could not load evidence. Try again."); }
+    finally { setPending(false); }
+  }
   return (
     <section className="ledger p-4 flex flex-col gap-3" aria-label={`The metric ${words(run.metric)}`}>
       <header className="flex items-start gap-2.5">
@@ -113,9 +135,13 @@ export default function MetricView({ view }: { view: Metric }) {
         {run.expr_words}. As of {asOfDate(run.as_of)}, from <span className="font-mono">{run.n_entities}</span> {plural(run.n_entities, run.kind)}.
         {run.metric_mapped && ` Asked for ${words(run.metric_mapped.from)}, which was merged into this one.`}
       </p>
-      {view.entities.length > 0 && (
+      {current.entities.length > 0 && (
+        <details className="text-[13px]">
+          <summary className="cursor-pointer" style={{ color: "var(--ink-dim)" }}>
+            Based on {run.n_entities.toLocaleString("en-AU")} items, show evidence
+          </summary>
         <ul className="flex flex-wrap gap-1.5" aria-label="Computed from">
-          {view.entities.map((e) => (
+          {current.entities.map((e) => (
             <li key={e.id}>
               <Link href={entityHref(e)} className="pill !min-h-7 !px-2.5 text-detail hover:underline underline-offset-2">
                 {e.name}
@@ -128,6 +154,10 @@ export default function MetricView({ view }: { view: Metric }) {
             </li>
           )}
         </ul>
+        {current.evidence?.next_cursor && <button className="btn btn-sm mt-2" disabled={pending} onClick={() => void loadMore()}>Show more evidence</button>}
+        {pending && <p role="status">Loading evidence…</p>}
+        {error && <p role="alert">{error}</p>}
+        </details>
       )}
       <MetricWarnings warnings={run.warnings} />
     </section>
