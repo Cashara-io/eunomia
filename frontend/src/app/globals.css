@@ -1,5 +1,27 @@
 @import "tailwindcss";
 
+/* Ordinary app copy: 12/13/14/16/20/24. The established page title keeps
+   its 22px role. Scene labels, chart axes and metric readouts are separate. */
+:root {
+  --type-caption: 0.75rem;
+  --type-detail: 0.8125rem;
+  --type-body: 0.875rem;
+  --type-reading: 1rem;
+  --type-heading: 1.25rem;
+  --type-display: 1.5rem;
+  --type-page-title: 1.375rem;
+}
+
+@theme inline {
+  --text-caption: var(--type-caption);
+  --text-detail: var(--type-detail);
+  --text-body: var(--type-body);
+  --text-reading: var(--type-reading);
+  --text-heading: var(--type-heading);
+  --text-display: var(--type-display);
+  --text-page-title: var(--type-page-title);
+}
+
 /* ---- Eunomia: Bauhaus Memory ----
    Source of truth: DESIGN.md. A calm cream page, black ink, and three flat
    colours that each mean one kind of memory: red is personal, yellow is
@@ -1143,3 +1165,22 @@ svg[viewBox="0 0 256 256"] > path[opacity="0.2"] {
 .generation-placeholder { min-height: 240px; }
 @keyframes generation-shimmer { to { transform: translateX(100%); } }
 @media (prefers-reduced-motion: reduce) { .generation-fallback::after { animation: none; display: none; } }
+
+
+/* Shared roles adopt the scale without removing the older declarations. */
+@layer base {
+  body { font-size: var(--type-body); }
+}
+@layer components {
+  .page-title { font-size: var(--type-page-title); }
+  .connect-title { font-size: var(--type-heading); }
+  .section-title { font-size: var(--type-reading); }
+  .page-intro, .btn, .tab { font-size: var(--type-body); }
+  .btn-sm, .pill, .data-table, .field { font-size: var(--type-detail); }
+  .eyebrow, .label, .caps, .kbd, .author-tag, .nav-badge, .space-chip, .vault-chip { font-size: var(--type-caption); }
+  .md h1, .docs .md h1 { font-size: var(--type-display); }
+  .md h2, .docs .md h2 { font-size: var(--type-heading); }
+  .md h3, .md h4 { font-size: var(--type-reading); }
+  .md code, .md pre code { font-size: var(--type-detail); }
+  .docs .md td, .docs .md th { font-size: var(--type-body); }
+}

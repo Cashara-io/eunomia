@@ -24,7 +24,7 @@ const TONE: Record<Tone, string> = {
 /** A section's one-line status: a 6px dot and a few words ("Off", "On · expires 3 Feb"). */
 export function StatusLine({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   return (
-    <p className="flex items-center gap-2 text-[13px] min-w-0" style={{ color: "var(--ink)" }}>
+    <p className="flex items-center gap-2 text-detail min-w-0" style={{ color: "var(--ink)" }}>
       <span className="dot" style={{ background: TONE[tone] }} aria-hidden />
       <span role="status" className="min-w-0">
         {children}
@@ -37,7 +37,7 @@ export function StatusLine({ tone, children }: { tone: Tone; children: React.Rea
 export function CopyField({ value, reveal = false }: { value: string; reveal?: boolean }) {
   return (
     <div className="field flex items-center gap-2 min-h-10 pl-3 pr-1">
-      <code className="flex-1 min-w-0 truncate text-[13px] font-mono" style={{ color: "var(--ink)" }}>
+      <code className="flex-1 min-w-0 truncate text-detail font-mono" style={{ color: "var(--ink)" }}>
         {reveal ? <DecryptReveal key={value} text={value} /> : value}
       </code>
       <CopyButton value={value} size="sm" className="shrink-0" />
@@ -88,7 +88,7 @@ export function PanelHead({
           {status}
         </div>
         {children && (
-          <p className="text-[15px] leading-relaxed mt-1.5 max-w-[68ch]" style={{ color: "var(--ink-dim)" }}>
+          <p className="text-reading leading-relaxed mt-1.5 max-w-[68ch]" style={{ color: "var(--ink-dim)" }}>
             {children}
           </p>
         )}
@@ -119,7 +119,7 @@ export function RevokeButton({ label, onRevoke, warn }: { label: string; onRevok
     );
   return (
     <span className="inline-flex items-center gap-1">
-      {warn && <span className="text-[13px] mr-1" style={{ color: "var(--critical)" }}>{warn}</span>}
+      {warn && <span className="text-detail mr-1" style={{ color: "var(--critical)" }}>{warn}</span>}
       <button type="button" onClick={confirm} disabled={busy} className="btn btn-danger-solid btn-sm">
         {busy ? "Revoking…" : "Revoke"}
       </button>

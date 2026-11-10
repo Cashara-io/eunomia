@@ -13,7 +13,7 @@ export const EXAMPLE_QUESTION = "Use Eunomia to look for memories about me.";
 /** "Connect your AI app / ChatGPT": the way back to Home, then where you are. */
 export function Trail({ here }: { here: string }) {
   return (
-    <nav aria-label="Breadcrumb" className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+    <nav aria-label="Breadcrumb" className="text-body" style={{ color: "var(--ink-dim)" }}>
       <Link href="/" className="link">
         Connect your AI app
       </Link>{" "}
@@ -25,11 +25,11 @@ export function Trail({ here }: { here: string }) {
 export function GuideStep({ n, title, children }: { n?: number; title: React.ReactNode; children: React.ReactNode }) {
   return (
     <li className="guide-step flex flex-col gap-3 py-6">
-      <h3 className="text-[17px] font-semibold leading-snug">
+      <h3 className="text-reading font-semibold leading-snug">
         {n !== undefined && <span>{n}. </span>}
         {title}
       </h3>
-      <div className="flex flex-col gap-3 text-[15px] leading-relaxed" style={{ color: "var(--ink)" }}>
+      <div className="flex flex-col gap-3 text-reading leading-relaxed" style={{ color: "var(--ink)" }}>
         {children}
       </div>
     </li>
@@ -37,12 +37,12 @@ export function GuideStep({ n, title, children }: { n?: number; title: React.Rea
 }
 
 export const Note = ({ children }: { children: React.ReactNode }) => (
-  <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
+  <p className="text-body leading-relaxed" style={{ color: "var(--ink-dim)" }}>
     {children}
   </p>
 );
 
-export const Kbd = ({ children }: { children: React.ReactNode }) => <code className="font-mono text-[0.92em] px-1 rounded-[3px]" style={{ background: "var(--surface-raised)" }}>{children}</code>;
+export const Kbd = ({ children }: { children: React.ReactNode }) => <code className="font-mono text-detail px-1 rounded-[3px]" style={{ background: "var(--surface-raised)" }}>{children}</code>;
 
 /** A command to paste into a terminal: ink block, then one primary copy button.
  * Lines never wrap (a flag split across lines is easy to mistype); long ones scroll sideways. */
@@ -52,7 +52,7 @@ export function CommandBlock({ value, label = "Command" }: { value: string; labe
       <pre
         aria-label={label}
         tabIndex={0}
-        className="w-full max-w-full font-mono text-[13px] leading-relaxed whitespace-pre overflow-x-auto px-4 py-3.5 rounded-[12px]"
+        className="w-full max-w-full font-mono text-detail leading-relaxed whitespace-pre overflow-x-auto px-4 py-3.5 rounded-[12px]"
         style={{ background: "var(--surface-raised)", color: "var(--ink)", border: "1px solid var(--border)" }}
       >
         {value}
@@ -163,12 +163,12 @@ export function CheckConnection({ app, onConfirmed }: { app: AiApp; onConfirmed:
       </div>
       <div aria-live="polite">
         {state.status === "not-yet" && (
-          <p className="soft-panel px-4 py-3 text-[14px] leading-relaxed">
+          <p className="soft-panel px-4 py-3 text-body leading-relaxed">
             <strong>Not connected yet.</strong> Eunomia has not seen a sign-in from {app.name}. Finish step 3 (sign in and choose Allow), then check again.
           </p>
         )}
         {state.status === "failed" && (
-          <p className="text-[14px]" style={{ color: "var(--critical)" }}>
+          <p className="text-body" style={{ color: "var(--critical)" }}>
             Could not reach Eunomia to check. Reload the page, then try again.
           </p>
         )}
@@ -194,19 +194,19 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
         <h2 id="approved-title" className="connect-title">
           Your AI app is connected
         </h2>
-        <p className="text-[16px]">
+        <p className="text-reading">
           Eunomia has confirmed {connection.via === "sign-in" ? "your sign-in" : "that this app is using its key"}. Your app can now use the memories you approved.
         </p>
         <div className="soft-panel px-5 py-4 flex flex-col gap-1.5">
-          <p className="text-[16px] font-medium">
+          <p className="text-reading font-medium">
             {connection.name} · {connection.via === "sign-in" ? "Access approved" : "Connected with an API token"}
           </p>
-          <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+          <p className="text-body" style={{ color: "var(--ink-dim)" }}>
             Your connection is ready. If no memories have been saved yet, a search can return no results. That is normal.
           </p>
         </div>
         <div className="soft-panel flex flex-col gap-3 items-start px-5 py-4">
-          <p className="text-[16px]">{EXAMPLE_QUESTION}</p>
+          <p className="text-reading">{EXAMPLE_QUESTION}</p>
           <CopyButton value={EXAMPLE_QUESTION} label="Copy example question" size="sm" />
         </div>
         <Note>
@@ -245,7 +245,7 @@ export function GuideFrame({ id, intro, children }: { id: AppId; intro?: React.R
       <PageHeader title={title} intro={<Trail here={id === "other" ? "More options" : app.name} />} />
       <section className="task-panel p-6 sm:p-8 flex flex-col" aria-label={id === "other" ? "Steps for another AI app" : `Steps for ${app.name}`}>
         {/* The breadcrumb above is the way back to the other apps. */}
-        {intro && <p className="pb-6 text-[14px] leading-relaxed">{intro}</p>}
+        {intro && <p className="pb-6 text-body leading-relaxed">{intro}</p>}
         {children}
       </section>
     </div>
