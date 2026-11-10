@@ -42,15 +42,15 @@ x[12]	Pass	Pass
 [12]thousand	Pass	Pass
 [5 m]	Fail	Pass
 [42 orders]	Fail	Pass
-[5 m].	Fail	Pass
-[5 m], and	Fail	Pass
-([5 m])	Fail	Pass
-[5 m]; next	Fail	Pass
-[5 m]: next	Fail	Pass
-[5 m]?	Fail	Pass
-[5 m]!	Fail	Pass
-"[5 m]"	Fail	Pass
-'[5 m]'	Fail	Pass
+[5 m].	Fail	Fail
+[5 m], and	Fail	Fail
+([5 m])	Fail	Fail
+[5 m]; next	Fail	Fail
+[5 m]: next	Fail	Fail
+[5 m]?	Fail	Fail
+[5 m]!	Fail	Fail
+"[5 m]"	Fail	Fail
+'[5 m]'	Fail	Fail
 [5 m] - next	Fail	Fail
 ([5 m])/s	Fail	Fail
 [5 m].m	Fail	Fail
@@ -58,12 +58,12 @@ x[12]	Pass	Pass
 [5 m],m	Fail	Fail
 ([5 m]).m	Fail	Fail
 [5 m]:s	Fail	Fail
-"[5 m]."	Fail	Pass
-[5 m]. Next	Fail	Pass
+"[5 m]."	Fail	Fail
+[5 m]. Next	Fail	Fail
 ([5 m]) squared	Fail	Fail
 "[5 m]"-squared	Fail	Fail
-([5 m]).	Fail	Pass
-([5 m]), and	Fail	Pass
+([5 m]).	Fail	Fail
+([5 m]), and	Fail	Fail
 [5 m]-squared	Fail	Fail
 [5 m]-per-second	Fail	Fail
 [5 m] - million	Fail	Fail
@@ -71,7 +71,7 @@ x[12]	Pass	Pass
 [5 m]\nnext	Fail	Fail
 [5 m]\nsquared	Fail	Fail
 ([5 m])\nsquared	Fail	Fail
-[5 m].\nNext	Fail	Pass
+[5 m].\nNext	Fail	Fail
 [5 m]\n	Fail	Pass
 [5 m]   long	Fail	Fail
 [42] orders today	Pass	Pass
@@ -80,10 +80,20 @@ x[12]	Pass	Pass
 [5 m] %	Fail	Fail
 [5 m]²	Fail	Fail
 [5 m]^2	Fail	Fail
-[5 m]]	Fail	Pass
-[5 m]}	Fail	Pass
+[5 m]]	Fail	Fail
+[5 m]}	Fail	Fail
 [5 m per second]	Fail	Pass
 [5 m squared]	Fail	Pass
 [5 m cubed]	Fail	Pass
 [5 °]	Fail	Pass
 '[12]'	Fail	Fail
+-([5 m])	Fail	Fail
+±[5 m]	Fail	Fail
+negative [5 m]	Fail	Fail
+twice [5 m]	Fail	Fail
+[2]×[5 m]	Fail	Fail
+[2] x [5 m]	Fail	Fail
+[5 m] : [2 m]	Fail	Fail
+[5 m] . [2]	Fail	Fail
+([5 m])!	Fail	Fail
+[5 ']'	Fail	Fail

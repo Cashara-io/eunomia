@@ -342,10 +342,10 @@ async fn annotation_metric_is_approved_and_scoped_to_its_object() {
     assert_eq!(node["metrics"][0]["value"], 1.0);
     assert_eq!(node["metrics"][0]["unit"], "orders");
     assert!(out["text"].as_str().unwrap().contains("1 orders"));
-    let ui=ok(app.tool("show_view",json!({"view":"ui","sources":{"graph":{"type":"diagram","diagram":arg["diagram"]}},"spec":{"root":"text","elements":{"text":{"type":"Text","props":{"text":"Object count {{/sources/graph/diagram/nodes/0/metrics/0/value}}"}}}}})).await);
+    let ui=ok(app.tool("show_view",json!({"view":"ui","sources":{"graph":{"type":"diagram","diagram":arg["diagram"]}},"spec":{"root":"text","elements":{"text":{"type":"Text","props":{"text":"{{/sources/graph/diagram/nodes/0/metrics/0/value}}"}}}}})).await);
     assert_eq!(
         ui["spec"]["elements"]["text"]["props"]["text"],
-        "Object count 1 orders"
+        "1 orders"
     );
 }
 

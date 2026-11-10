@@ -193,26 +193,12 @@ impl Allowed {
 
 }
 // The scanner stops before custom units. Accept the whole rendered value only
-// when nothing can read as part of it. A line break is no boundary: display
-// renders it as a space.
+// when it is the entire text. Any neighbour (a sign, a word, punctuation, a
+// second binding) can change the quantity, so none is allowed.
 fn complete_custom_binding(raw: &str, substitutions: &[(std::ops::Range<usize>, String)], text: &str, range: &std::ops::Range<usize>, value: &str) -> bool {
-    if text.get(range.clone()) != Some(value)
-        || display(&text[..range.start]).chars().next_back().is_some_and(token)
-        || spans(value).first().is_some_and(|span| *span == (0..value.len()))
-    { return false; }
-    let Some((original, _)) = substitutions.iter().find(|(r, _)| normalise(&raw[..r.start]).len() == range.start) else { return false; };
-    // Nothing may attach to the binding: `(5 m)/s`, `(5 m) squared` and `5 m.m`
-    // all change the quantity. Sentence punctuation ends the clause only when
-    // whitespace or the end follows it. Closers alone must end the text.
-    let stop = |c: char| matches!(c, '.' | ',' | ';' | ':' | '?' | '!');
-    let closer = |c: char| matches!(c, ')' | ']' | '}' | '\'' | '"' | '\u{2018}' | '\u{2019}' | '\u{201c}' | '\u{201d}');
-    let rest = raw[original.end..].trim_start();
-    let after = rest.trim_start_matches(|c| stop(c) || closer(c));
-    if rest[..rest.len() - after.len()].chars().any(stop) {
-        after.chars().next().is_none_or(char::is_whitespace)
-    } else {
-        after.trim_start().is_empty()
-    }
+    if text.get(range.clone()) != Some(value) || spans(value).first().is_some_and(|span| *span == (0..value.len())) { return false; }
+    let [(original, _)] = substitutions else { return false; };
+    raw[..original.start].trim().is_empty() && raw[original.end..].trim().is_empty()
 }
 // Dates are a single span, including ranges. No endpoint can license a prefix or suffix.
 fn iso_span(text: &str) -> Option<Vec<String>> {
@@ -881,8 +867,8 @@ mod tests {
         }
         let data = json!({"sources":{"graph":{"view":"diagram","diagram":{"nodes":[{"metrics":[{"value":42,"unit":"orders"}]}]}}}});
         assert_eq!(resolve(&json!({"cells":[{"text":placeholder}], "items":[{"text":placeholder}]}), &data).unwrap(), json!({"cells":[{"text":"42 orders"}], "items":[{"text":"42 orders"}]}));
-        for (raw, expected) in [(format!("{placeholder}."), "42 orders."), (format!("{placeholder}, next"), "42 orders, next"), (format!("({placeholder})"), "(42 orders)")] {
-            assert_eq!(resolve(&json!({"title":raw}), &data).unwrap()["title"], expected);
+        for raw in [format!("{placeholder}."), format!("{placeholder}, next"), format!("({placeholder})"), format!("twice {placeholder}"), format!("-({placeholder})"), format!("{placeholder} : {placeholder}")] {
+            assert!(resolve(&json!({"title":raw}), &data).is_err(), "{raw}");
         }
     }
     #[test]
@@ -891,7 +877,8 @@ mod tests {
         assert_eq!(bound("/sources/graph/diagram/nodes/0/metrics/0/value", &data).unwrap(), "42.00 AUD");
         assert_eq!(bound("/sources/graph/diagram/total_nodes", &data).unwrap(), "2");
         let custom = json!({"sources":{"graph":{"view":"diagram","diagram":{"nodes":[{"metrics":[{"value":42,"unit":"orders"}]}]}}}});
-        assert_eq!(resolve(&json!({"title":"Count {{/sources/graph/diagram/nodes/0/metrics/0/value}}"}), &custom).unwrap()["title"], "Count 42 orders");
+        assert_eq!(resolve(&json!({"title":"{{/sources/graph/diagram/nodes/0/metrics/0/value}}"}), &custom).unwrap()["title"], "42 orders");
+        assert!(resolve(&json!({"title":"Count {{/sources/graph/diagram/nodes/0/metrics/0/value}}"}), &custom).is_err());
         assert!(resolve(&json!({"title":"Count {{/sources/graph/diagram/nodes/0/metrics/0/value}}999"}), &custom).is_err());
         assert!(bound("/sources/graph/diagram/nodes/0/x", &data).is_err());
     }
