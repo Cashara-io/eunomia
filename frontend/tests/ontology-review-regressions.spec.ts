@@ -184,6 +184,8 @@ test("an armed decision cannot write after the on-screen revision changes", asyn
   fixture.notifyOntologyChange();
   await expect(region(page).getByRole("alert")).toContainText("Now: Changed while reviewing");
   await page.keyboard.press("Enter");
+  await expect(approve(page)).not.toBeFocused();
+  await expect(page.getByRole("region", { name: "Saved decision" })).toHaveCount(0);
   expect(fixture.mutations).toHaveLength(0);
 });
 
@@ -206,19 +208,69 @@ test("a batch rechecks the role between writes", async ({ page }) => {
 });
 
 
-for (const navigation of ["Escape", "j"]) {
-  test(`A, ${navigation}, Enter without waiting never saves a cancelled review`, async ({ page }) => {
-    const fixture = await mockReview(page);
-    await page.goto(reviewUrl);
-    await expect(heading(page)).toBeFocused();
-    await page.keyboard.press("a");
-    await page.keyboard.press(navigation);
-    await page.keyboard.press("Enter");
-    await expect(page).not.toHaveURL(new RegExp(encodeURIComponent(JSON.stringify(["property", "stock_item", "unit_cost"]))));
-    await expect(page.getByRole("region", { name: "Saved decision" })).toHaveCount(0);
-    expect(fixture.mutations).toHaveLength(0);
-  });
+const cancelledRow = (page: Page) => page.getByRole("listitem").filter({
+  has: page.locator('a[data-definition]', { hasText: "Unit cost" }),
+});
+
+for (const timing of ["without waiting", "with settled focus between keys", "with 6x CPU throttling"] as const) {
+  for (const navigation of ["Escape", "j"] as const) {
+    test(`A, ${navigation}, Enter ${timing} never saves a cancelled review`, async ({ page }) => {
+      const fixture = await mockReview(page);
+      const cdp = timing === "with 6x CPU throttling" ? await page.context().newCDPSession(page) : null;
+      await cdp?.send("Emulation.setCPUThrottlingRate", { rate: 6 });
+      try {
+        await page.goto(reviewUrl);
+        await expect(heading(page)).toBeFocused();
+        await page.keyboard.press("a");
+        if (timing === "with settled focus between keys") await expect(approve(page)).toBeFocused();
+        await page.keyboard.press(navigation);
+        const destination = navigation === "Escape" ? cancelledRow(page) : region(page).getByRole("heading", { name: "Gross profit", exact: true });
+        if (timing === "with settled focus between keys") await expect(destination).toBeFocused();
+        await page.keyboard.press("Enter");
+        // Wait for the actual focus handoff, rather than a transient URL change.
+        await expect(destination).toBeFocused();
+        // Also exercise Enter after the handoff, regardless of when the first Enter landed.
+        await page.keyboard.press("Enter");
+        await expect(destination).toBeFocused();
+        if (navigation === "Escape") {
+          await expect(page).not.toHaveURL(/selected=/);
+          await expect(heading(page)).toHaveCount(0);
+          await expect(cancelledRow(page)).toHaveAttribute("aria-current", "true");
+        } else {
+          await expect(page).toHaveURL(new RegExp(encodeURIComponent(JSON.stringify(["metric", "stock_item", "gross_profit"]))));
+        }
+        await expect(page.getByRole("region", { name: "Saved decision" })).toHaveCount(0);
+        expect(fixture.mutations).toHaveLength(0);
+      } finally {
+        await cdp?.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+        await cdp?.detach();
+      }
+    });
+  }
 }
+
+test("Escape returns to a non-activating row, Tab then Enter deliberately reopens it", async ({ page }) => {
+  const fixture = await mockReview(page);
+  await page.goto(reviewUrl);
+  await expect(heading(page)).toBeFocused();
+  await page.keyboard.press("a");
+  await page.keyboard.down("Escape");
+  await page.keyboard.press("Enter");
+  await page.keyboard.up("Escape");
+  await expect(cancelledRow(page)).toBeFocused();
+  await expect(page).not.toHaveURL(/selected=/);
+  await expect(page.getByRole("region", { name: "Saved decision" })).toHaveCount(0);
+  expect(fixture.mutations).toHaveLength(0);
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("checkbox", { name: "Select Unit cost", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.locator("a[data-definition]").first()).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(heading(page)).toBeFocused();
+  await expect(page).toHaveURL(/selected=/);
+  await expect(page.getByRole("region", { name: "Saved decision" })).toHaveCount(0);
+  expect(fixture.mutations).toHaveLength(0);
+});
 
 for (const status of ["approved", "rejected", "proposed"] as const) {
   test(`an unchanged description on a ${status} definition gets a describe receipt`, async ({ page }) => {

@@ -74,7 +74,7 @@ export default function Review({
   const reviewRegion = useRef<HTMLDivElement>(null);
   const decisionReview = useRef<ReviewHandle>(null);
   const [ownerDenied, setOwnerDenied] = useState(false);
-  const returnId = useRef<string | null>(null);
+  const [returnId, setReturnId] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [stale, setStale] = useState<DefinitionItem[]>([]);
   const [reviewEpoch, setReviewEpoch] = useState(0);
@@ -110,7 +110,7 @@ export default function Review({
   const waiting = current.filter((d) => d.item.status === "proposed").length;
   function closeDetail() {
     decisionReview.current?.beginNavigation();
-    returnId.current = selected?.id ?? null;
+    setReturnId(selected?.id ?? null);
     update({ selected: "" });
   }
   function nextSuggestion() {
@@ -126,17 +126,16 @@ export default function Review({
     } else closeDetail();
   }
   useEffect(() => {
-    if (!selected && returnId.current) {
-      const id = returnId.current;
+    if (!selected && returnId) {
       queue.current
         ?.querySelectorAll<HTMLAnchorElement>("a[data-definition]")
         .forEach((link) => {
-          if (link.dataset.definition === id)
-            link.focus({ preventScroll: true });
+          // Keep a following Enter from activating the link that Escape just closed.
+          if (link.dataset.definition === returnId)
+            link.closest("li")?.focus({ preventScroll: true });
         });
-      returnId.current = null;
     }
-  }, [selected]);
+  }, [selected, returnId]);
   const keyboard = useEffectEvent((e: KeyboardEvent) => {
     if (ignoreReviewKey(e, reviewRegion.current, true) || busy || hasReviewOverlay()) return;
     if (
@@ -389,6 +388,8 @@ export default function Review({
                   key={d.id}
                   className={`${styles.queueitem} flex items-center`}
                   data-selected={selected?.id === d.id}
+                  tabIndex={-1}
+                  aria-current={!selected && returnId === d.id ? "true" : undefined}
                 >
                   {owner && d.item.status === "proposed" && (
                     <label className={styles.queuecheck}>

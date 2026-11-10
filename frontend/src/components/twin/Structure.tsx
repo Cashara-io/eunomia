@@ -161,7 +161,9 @@ export default function Structure({
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={3}>
-                    No definitions match. Change the search or filters.
+                    {data.kinds.some(visibleKind) || data.links.length > 0
+                      ? "No definitions match. Change the search or filters."
+                      : "No definitions recorded yet. Use Add data to map your records."}
                   </td>
                 </tr>
               )}
