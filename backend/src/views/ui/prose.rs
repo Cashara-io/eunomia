@@ -193,9 +193,8 @@ impl Allowed {
 
 }
 // The scanner stops before custom units. Accept the whole rendered value only
-// at a structural boundary, never before another word or a dash (a dash can
-// join a suffix such as -squared). Inspect raw whitespace
-// because normalise collapses line breaks into spaces.
+// when nothing can read as part of it. A line break is no boundary: display
+// renders it as a space.
 fn complete_custom_binding(raw: &str, substitutions: &[(std::ops::Range<usize>, String)], text: &str, range: &std::ops::Range<usize>, value: &str) -> bool {
     if text.get(range.clone()) != Some(value)
         || display(&text[..range.start]).chars().next_back().is_some_and(token)
@@ -204,16 +203,15 @@ fn complete_custom_binding(raw: &str, substitutions: &[(std::ops::Range<usize>, 
     let Some((original, _)) = substitutions.iter().find(|(r, _)| normalise(&raw[..r.start]).len() == range.start) else { return false; };
     // Nothing may attach to the binding: `(5 m)/s`, `(5 m) squared` and `5 m.m`
     // all change the quantity. Sentence punctuation ends the clause only when
-    // whitespace or the end follows it. Closers alone must end the line.
-    let horizontal = |c: char| c.is_whitespace() && !matches!(c, '\n' | '\r');
+    // whitespace or the end follows it. Closers alone must end the text.
     let stop = |c: char| matches!(c, '.' | ',' | ';' | ':' | '?' | '!');
     let closer = |c: char| matches!(c, ')' | ']' | '}' | '\'' | '"' | '\u{2018}' | '\u{2019}' | '\u{201c}' | '\u{201d}');
-    let rest = raw[original.end..].trim_start_matches(horizontal);
+    let rest = raw[original.end..].trim_start();
     let after = rest.trim_start_matches(|c| stop(c) || closer(c));
     if rest[..rest.len() - after.len()].chars().any(stop) {
         after.chars().next().is_none_or(char::is_whitespace)
     } else {
-        after.trim_start_matches(horizontal).chars().next().is_none_or(|c| matches!(c, '\n' | '\r'))
+        after.trim_start().is_empty()
     }
 }
 // Dates are a single span, including ranges. No endpoint can license a prefix or suffix.
