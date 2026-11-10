@@ -193,7 +193,8 @@ impl Allowed {
 
 }
 // The scanner stops before custom units. Accept the whole rendered value only
-// at a structural boundary, never before another word. Inspect raw whitespace
+// at a structural boundary, never before another word or a dash (a dash can
+// join a suffix such as -squared). Inspect raw whitespace
 // because normalise collapses line breaks into spaces.
 fn complete_custom_binding(raw: &str, substitutions: &[(std::ops::Range<usize>, String)], text: &str, range: &std::ops::Range<usize>, value: &str) -> bool {
     if text.get(range.clone()) != Some(value)
@@ -203,8 +204,8 @@ fn complete_custom_binding(raw: &str, substitutions: &[(std::ops::Range<usize>, 
     let Some((original, _)) = substitutions.iter().find(|(r, _)| normalise(&raw[..r.start]).len() == range.start) else { return false; };
     match raw[original.end..].trim_start_matches(|c: char| c.is_whitespace() && !matches!(c, '\n' | '\r')).chars().next() {
         None => true,
-        Some(c) => matches!(c, '.' | ',' | ';' | ':' | ')' | ']' | '}' | '\'' | '"' | '-' | '?' | '!' | '\n' | '\r'
-            | '\u{2018}' | '\u{2019}' | '\u{201c}' | '\u{201d}' | '\u{2013}' | '\u{2014}'),
+        Some(c) => matches!(c, '.' | ',' | ';' | ':' | ')' | ']' | '}' | '\'' | '"' | '?' | '!' | '\n' | '\r'
+            | '\u{2018}' | '\u{2019}' | '\u{201c}' | '\u{201d}'),
     }
 }
 // Dates are a single span, including ranges. No endpoint can license a prefix or suffix.

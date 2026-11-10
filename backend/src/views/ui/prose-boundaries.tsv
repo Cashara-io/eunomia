@@ -51,7 +51,11 @@ x[12]	Pass	Pass
 [5 m]!	Fail	Pass
 "[5 m]"	Fail	Pass
 '[5 m]'	Fail	Pass
-[5 m] - next	Fail	Pass
+[5 m] - next	Fail	Fail
+[5 m]-squared	Fail	Fail
+[5 m]-per-second	Fail	Fail
+[5 m] - million	Fail	Fail
+[5 m] – next	Fail	Fail
 [5 m]\nnext	Fail	Pass
 [5 m]   long	Fail	Fail
 [42] orders today	Pass	Pass
