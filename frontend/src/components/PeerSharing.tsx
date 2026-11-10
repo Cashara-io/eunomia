@@ -80,26 +80,26 @@ function PeerRow({ link, isOwner, vaultId, vaultName }: { link: PeerLink; isOwne
   return (
     <li className="flex flex-col gap-2 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <span className="text-[15px] font-medium [overflow-wrap:anywhere]">{name}</span>
-        <span className="text-[12px] font-mono" style={{ color: "var(--ink-dim)" }} title="This Eunomia's ID, to compare with what it shows">
+        <span className="text-reading font-medium [overflow-wrap:anywhere]">{name}</span>
+        <span className="text-caption font-mono" style={{ color: "var(--ink-dim)" }} title="This Eunomia's ID, to compare with what it shows">
           ID {link.peer_fingerprint}
         </span>
       </div>
-      <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+      <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
         {guest ? `This space is a copy from ${name}.` : `${name} has a copy of this space.`} {ROLE_WORDS[link.role]}.
         {guest && link.role === "read" && " Changes made here stay on this Eunomia."}
       </p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <StatusLabel tone={tone}>{words}</StatusLabel>
-        {matchWords(link) && <span className="text-[13px]">{matchWords(link)}</span>}
+        {matchWords(link) && <span className="text-detail">{matchWords(link)}</span>}
       </div>
-      <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+      <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
         {synced ? `Last synced ${synced}` : "Not synced yet"}
         {link.address && guest ? ` · via ${link.address}` : ""}
         {link.last_report?.documents_not_shared ? " · Documents aren't shared yet" : ""}
       </p>
       {link.status === "unreachable" && link.last_error && guest && (
-        <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+        <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
           Last problem: {link.last_error}
         </p>
       )}
@@ -175,7 +175,7 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
             : "Keep a copy of this space on someone else's Eunomia, kept in step."
       }
     >
-      <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+      <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
         {isOwner
           ? role === "read"
             ? "The other Eunomia gets a full copy of this space that stays in step with changes made here. It can read but not change anything."
@@ -195,13 +195,13 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
 
       {isOwner && (
         <div className="flex flex-col gap-2 pt-1">
-          <label htmlFor={roleId} className="text-[13px] font-medium">
+          <label htmlFor={roleId} className="text-detail font-medium">
             What the other Eunomia can do
           </label>
           <div className="flex flex-wrap items-center gap-2">
             <Select
               id={roleId}
-              className="h-10 text-[14px] w-[200px]"
+              className="h-10 text-body w-[200px]"
               value={role}
               onChange={(v) => setRole(v as PeerRole)}
               options={[
@@ -226,13 +226,13 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
             </button>
           </div>
           {error && (
-            <p role="alert" className="text-[13px]" style={{ color: "var(--critical)" }}>
+            <p role="alert" className="text-detail" style={{ color: "var(--critical)" }}>
               {error}
             </p>
           )}
           {made && (
             <div className="flex flex-col gap-1.5">
-              <label htmlFor={codeId} className="text-[13px] font-medium">
+              <label htmlFor={codeId} className="text-detail font-medium">
                 Share code ({ROLE_WORDS[made.role].toLowerCase()})
               </label>
               <div className="flex items-start gap-2">
@@ -242,24 +242,24 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
                   rows={3}
                   value={made.code}
                   onFocus={(e) => e.currentTarget.select()}
-                  className="field flex-1 min-w-0 px-3 py-2 text-[12px] font-mono break-all resize-none"
+                  className="field flex-1 min-w-0 px-3 py-2 text-caption font-mono break-all resize-none"
                 />
                 <CopyButton value={made.code} label="Copy" size="sm" />
               </div>
-              <p className="text-[13px]">
+              <p className="text-detail">
                 Send this code to the person running the other Eunomia. It works once and expires on {day(made.expires_at)}.
               </p>
-              <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+              <p className="text-caption" style={{ color: "var(--ink-dim)" }}>
                 This Eunomia&apos;s ID is <span className="font-mono">{made.fingerprint}</span>. The other side will show it after joining.
               </p>
             </div>
           )}
           {codes.length > 0 && (
             <div className="flex flex-col gap-1 pt-1">
-              <span className="text-[13px] font-medium">Codes not used yet</span>
+              <span className="text-detail font-medium">Codes not used yet</span>
               <ul className="flex flex-col gap-1">
                 {codes.map((c) => (
-                  <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+                  <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 text-detail">
                     <span>
                       {ROLE_WORDS[c.role]} · expires {day(c.expires_at)}
                     </span>
@@ -314,7 +314,7 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
     <>
       <button
         type="button"
-        className="link inline-flex items-center gap-1.5 min-h-10 text-[14px] font-medium"
+        className="link inline-flex items-center gap-1.5 min-h-10 text-body font-medium"
         onClick={() => setOpen(true)}
       >
         <SignInIcon {...ICON} />
@@ -344,20 +344,20 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
             });
           }}
         >
-          <h2 id={titleId} className="text-[20px] font-semibold leading-tight tracking-[-0.01em]">
+          <h2 id={titleId} className="text-heading font-semibold leading-tight tracking-[-0.01em]">
             Connect to another Eunomia
           </h2>
           {joined ? (
-            <p className="text-[14px]" role="status">
+            <p className="text-body" role="status">
               Joined. “{joined}” is now in your spaces, and it will stay in step with the other Eunomia by itself.
             </p>
           ) : (
             <>
-              <p className="text-[14px] leading-relaxed">
+              <p className="text-body leading-relaxed">
                 Paste the share code someone running another Eunomia sent you. This Eunomia makes a new space with a full copy and keeps it in step. Invitations from people on this Eunomia appear on the Memory spaces page instead.
               </p>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor={codeId} className="text-[14px] font-medium">
+                <label htmlFor={codeId} className="text-body font-medium">
                   Share code
                 </label>
                 <textarea
@@ -368,11 +368,11 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
                   placeholder="eunomia1:…"
                   autoComplete="off"
                   spellCheck={false}
-                  className="field px-3 py-2 text-[13px] font-mono break-all"
+                  className="field px-3 py-2 text-detail font-mono break-all"
                 />
               </div>
               {join.isPending && (
-                <p className="text-[13px]" role="status">
+                <p className="text-detail" role="status">
                   Connecting to the other Eunomia…
                 </p>
               )}

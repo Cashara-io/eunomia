@@ -94,7 +94,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter memories"
             aria-label="Filter memories"
-            className="bg-transparent outline-none text-[14px] flex-1 min-w-0"
+            className="bg-transparent outline-none text-body flex-1 min-w-0"
           />
         </div>
         <div className="flex items-center justify-between gap-2 min-h-[22px]">
@@ -111,7 +111,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
 
       <div ref={rowsBox} className="hairline-rows overflow-y-auto min-h-0 flex-1 max-h-[340px] lg:max-h-none" role="group" aria-label="Memories" style={{ borderTop: "var(--hair) solid var(--border)" }}>
         {rows.length === 0 && (
-          <p className="p-4 text-[13px]" style={{ color: "var(--ink-dim)" }}>
+          <p className="p-4 text-detail" style={{ color: "var(--ink-dim)" }}>
             No memories match.
           </p>
         )}
@@ -141,7 +141,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
               }}
             >
               <span
-                className="shrink-0 mt-px inline-flex items-center justify-center rounded-[4px] font-mono text-[10px] font-semibold"
+                className="shrink-0 mt-px inline-flex items-center justify-center rounded-[4px] font-mono text-caption font-semibold"
                 style={{
                   width: 18,
                   height: 18,
@@ -154,7 +154,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
                 {on ? num : ""}
               </span>
               <span className="min-w-0 flex-1 flex flex-col gap-0.5">
-                <span className="text-[14px] leading-snug line-clamp-2" style={{ color: "var(--ink)" }}>
+                <span className="text-body leading-snug line-clamp-2" style={{ color: "var(--ink)" }}>
                   {p.label}
                 </span>
                 <span className="label flex items-center gap-1.5 min-w-0">
@@ -177,7 +177,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
           aria-label="Comparison"
         >
           <div className="flex items-baseline justify-between gap-2">
-            <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>
+            <h3 className="text-reading font-semibold" style={{ color: "var(--ink)" }}>
               Comparing {n}
             </h3>
             {sim.data && <span className="label">{sim.data.space === "semantic" ? "Full embedding vectors" : "Word-hash vectors"}</span>}
@@ -194,7 +194,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
                   [n === 2 ? "Map distance" : "Mean map gap", n === 2 ? fmt(projected[0]?.[1] ?? NaN) : fmt(avgOff(projected))],
                 ].map(([l, v]) => (
                   <div key={l} className="flex flex-col">
-                    <dd className="font-mono text-[17px] leading-tight order-1" style={{ color: "var(--ink)" }}>
+                    <dd className="font-mono text-reading leading-tight order-1" style={{ color: "var(--ink)" }}>
                       {v}
                     </dd>
                     <dt className="label order-2">{l}</dt>
@@ -212,7 +212,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
                 </div>
               )}
               {n > 2 && pairs.length > 0 && (
-                <ul className="flex flex-col gap-1 text-[12.5px]">
+                <ul className="flex flex-col gap-1 text-detail">
                   <li className="flex justify-between gap-2">
                     <span style={{ color: "var(--ink-dim)" }}>Closest: {pairLine(pairs[0].i, pairs[0].j)}</span>
                     <span className="font-mono">{fmt(pairs[0].cos)}</span>
@@ -232,7 +232,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
                 ))}
               </div>
               <div
-                className="grid gap-px text-[11px] font-mono"
+                className="grid gap-px text-caption font-mono"
                 style={{ gridTemplateColumns: `18px repeat(${n}, minmax(0, 1fr))` }}
                 role="table"
                 aria-label={`${MODES.find((m) => m.id === mode)!.label} matrix`}
@@ -251,7 +251,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
 
               <ol className="flex flex-col gap-1">
                 {selection.map((id, i) => (
-                  <li key={id} className="flex items-start gap-2 text-[12px]">
+                  <li key={id} className="flex items-start gap-2 text-caption">
                     <span className="font-mono shrink-0 w-4 text-right" style={{ color: "var(--accent)" }}>
                       {i + 1}
                     </span>

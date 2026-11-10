@@ -130,7 +130,7 @@ export default function RoutingSection({ label, connector }: { label: string; co
         <h2 id="routing-heading" className="section-title">
           Where will my items go?
         </h2>
-        <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
+        <p className="text-body leading-relaxed" style={{ color: "var(--ink-dim)" }}>
           {(() => {
             const dest = vaults?.find((v) => v.id === (routing.default_vault ?? personal?.id));
             const shared = dest && !dest.is_default;
@@ -148,13 +148,13 @@ export default function RoutingSection({ label, connector }: { label: string; co
       </div>
       <div className="ledger flex flex-col hairline-rows">
         <div className="p-4 flex flex-col gap-1.5">
-          <label htmlFor="routing-destination" className="text-[14px] font-medium">
+          <label htmlFor="routing-destination" className="text-body font-medium">
             Destination space
           </label>
           {vaults ? (
             <Select
               id="routing-destination"
-              className="h-10 text-[14px] w-full"
+              className="h-10 text-body w-full"
               value={routing.default_vault ?? personal?.id ?? ""}
               onChange={(v) => edit({ ...routing, default_vault: v })}
               options={vaultOptions}
@@ -162,15 +162,15 @@ export default function RoutingSection({ label, connector }: { label: string; co
           ) : (
             <span className="skeleton h-10 w-full" aria-hidden />
           )}
-          <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+          <span className="text-detail" style={{ color: "var(--ink-dim)" }}>
             Items no rule matches go here.
           </span>
         </div>
 
         <div className="p-4 flex flex-col gap-3">
           <div className="flex flex-col gap-0.5">
-            <span className="text-[14px] font-medium">Advanced: rules</span>
-            <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+            <span className="text-body font-medium">Advanced: rules</span>
+            <span className="text-detail" style={{ color: "var(--ink-dim)" }}>
               {routing.rules.length ? "Send matching items to another space. Checked top to bottom; the first match wins." : `No rules: every ${label} item goes to the destination space.`}
             </span>
           </div>
@@ -182,12 +182,12 @@ export default function RoutingSection({ label, connector }: { label: string; co
                 return (
                   <li key={i} className="flex flex-col gap-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[13px] w-4 text-right" style={{ color: "var(--ink-dim)" }} aria-hidden>
+                      <span className="text-detail w-4 text-right" style={{ color: "var(--ink-dim)" }} aria-hidden>
                         {n}
                       </span>
                       <Select
                         aria-label={`Rule ${n} field`}
-                        className="h-10 text-[14px] w-36"
+                        className="h-10 text-body w-36"
                         value={rule.field}
                         onChange={(v) => setRule(i, { field: v })}
                         options={fields.map((f) => ({ value: f, label: fieldInfo(f).label }))}
@@ -198,18 +198,18 @@ export default function RoutingSection({ label, connector }: { label: string; co
                         aria-invalid={bad || undefined}
                         aria-describedby={bad ? `rule-err-${i}` : undefined}
                         spellCheck={false}
-                        className="field h-10 px-3 text-[14px] flex-1 min-w-[120px]"
+                        className="field h-10 px-3 text-body flex-1 min-w-[120px]"
                         style={bad ? { borderColor: "var(--critical)" } : undefined}
                         placeholder={fieldInfo(rule.field).placeholder}
                         value={rule.value}
                         onChange={(e) => setRule(i, { value: e.target.value })}
                       />
-                      <span className="text-[13px]" style={{ color: "var(--ink-dim)" }} aria-hidden>
+                      <span className="text-detail" style={{ color: "var(--ink-dim)" }} aria-hidden>
                         to
                       </span>
                       <Select
                         aria-label={`Rule ${n} space`}
-                        className="h-10 text-[14px] w-40"
+                        className="h-10 text-body w-40"
                         value={rule.vault}
                         onChange={(v) => setRule(i, { vault: v })}
                         options={vaultOptions}
@@ -239,7 +239,7 @@ export default function RoutingSection({ label, connector }: { label: string; co
                       </span>
                     </div>
                     {bad && (
-                      <p id={`rule-err-${i}`} className="text-[13px] pl-6" style={{ color: "var(--critical)" }}>
+                      <p id={`rule-err-${i}`} className="text-detail pl-6" style={{ color: "var(--critical)" }}>
                         Enter a {fieldInfo(rule.field).label.toLowerCase()} for this rule, or remove it.
                       </p>
                     )}
@@ -266,15 +266,15 @@ export default function RoutingSection({ label, connector }: { label: string; co
           <button type="button" className="btn btn-primary min-w-[112px]" onClick={save} disabled={saving || draft === null} aria-busy={saving || undefined}>
             {savedFlash ? "Saved" : saving ? "Saving…" : "Save routing"}
           </button>
-          <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+          <span className="text-detail" style={{ color: "var(--ink-dim)" }}>
             Applies to items imported from now on.
           </span>
         </div>
       </div>
 
       <div className="flex flex-col gap-2 pt-1" style={{ borderTop: "1px solid var(--border)" }}>
-        <h3 className="text-[15px] font-medium pt-3 tracking-[-0.015em]">Move previously imported items</h3>
-        <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+        <h3 className="text-reading font-medium pt-3 tracking-[-0.015em]">Move previously imported items</h3>
+        <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
           {draft !== null
             ? "Save the routing first."
             : `Re-file the ${label} items already imported, with the facts drawn from them, to where the current routing sends them.`}
@@ -298,7 +298,7 @@ export default function RoutingSection({ label, connector }: { label: string; co
         <p style={{ color: "var(--ink-dim)" }}>The originals in {label} stay unchanged.</p>
       </ConfirmDialog>
       {moveResult && (
-        <p role="status" className="text-[14px] fade-in" style={{ color: moveResult.ok ? "var(--good)" : "var(--critical)" }}>
+        <p role="status" className="text-body fade-in" style={{ color: moveResult.ok ? "var(--good)" : "var(--critical)" }}>
           {moveResult.text}
         </p>
       )}

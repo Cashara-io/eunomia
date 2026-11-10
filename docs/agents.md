@@ -732,7 +732,7 @@ The name-only mint audit includes all Playwright specs, backend tests and
 | `frontend/tests/skill.spec.ts` | Minimal token already fits MCP instructions and skill retrieval. Keep the name-only mint. |
 | `frontend/tests/secret-requests.spec.ts` | Minimal token already fits Personal secret requests and status. Keep the name-only mint and user-approval boundary. |
 | `frontend/tests/click-fixes.spec.ts` | The minted token is a token-management fixture. Listing, renaming and revoking use the browser session, so no elevated token is needed. |
-| `frontend/tests/brand-and-motion.spec.ts`, `security-defaults.spec.ts` | Presentation mocks or creation-contract interceptions, not a consumer using a name-only token for broad calls. Keep the safe creation contract. |
+| `frontend/tests/brand-and-motion.spec.ts`, `security-defaults.spec.ts`, `type-scale.spec.ts` | Presentation mocks or creation-contract interceptions, not a consumer using a name-only token for broad calls. Keep the safe creation contract. |
 | `frontend/tests/every-tool.spec.ts`, `mcp.spec.ts`, `recall-eval.spec.ts`, `vault-isolation.spec.ts` | Already explicitly request broader scopes and all spaces for tests that deliberately administer or compare spaces. Keep those deliberate opt-ins (a). |
 | Ontology Playwright fixtures | Already select their intended vault explicitly. Keep the selected-vault opt-in (a). |
 | `backend/tests/auth_scopes.rs` | Deliberate default, token CRUD, cache and authority tests. Keep minimal name-only mints. Replace the obsolete blanket record-refusal assertion with scoped success and no Personal leakage into a team-bound read. |

@@ -63,7 +63,7 @@ function validate(f: FieldDef, value: string, required: boolean, connector: stri
 
 function Breadcrumb({ label }: { label: string }) {
   return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[13px]" style={{ color: "var(--ink-dim)" }}>
+    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-detail" style={{ color: "var(--ink-dim)" }}>
       <Link href="/connectors" className="link">
         Connected sources
       </Link>
@@ -81,7 +81,7 @@ export default function ConnectorSetupPage({ params }: { params: Promise<{ kind:
       <div className="max-w-2xl flex flex-col gap-6">
         <Breadcrumb label={kind} />
         <PageHeader title="Unknown connector" />
-        <div className="ledger px-5 py-4 flex items-center justify-between gap-4 flex-wrap text-[14px]">
+        <div className="ledger px-5 py-4 flex items-center justify-between gap-4 flex-wrap text-body">
           <span style={{ color: "var(--ink-dim)" }}>There is no source called &ldquo;{kind}&rdquo;.</span>
           <Link href="/connectors" className="btn">
             Browse connected sources
@@ -333,7 +333,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
   const defaultInterval = sourceKey ? SOURCE_DEFAULT_INTERVAL[sourceKey] ?? 900 : 900;
 
   const showHelp = helpChoice ?? !(connected || isDemo);
-  const stepTitle = "text-[18px] font-semibold tracking-[-0.01em]";
+  const stepTitle = "text-heading font-semibold tracking-[-0.01em]";
   const fieldBox = "field flex items-center gap-2 h-10 px-3";
 
   return (
@@ -363,7 +363,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
       {loadError && <ErrorLine error={loadError} />}
 
       {isDemo && (
-        <p className="soft-panel text-[14px] px-4 py-3" style={{ color: "var(--ink-dim)" }}>
+        <p className="soft-panel text-body px-4 py-3" style={{ color: "var(--ink-dim)" }}>
           This source is showing example data. Save your own key below to switch over.
         </p>
       )}
@@ -375,7 +375,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
               <h2 id="step-key" className={stepTitle}>
                 1. Get your connection key
               </h2>
-              <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+              <p className="text-body" style={{ color: "var(--ink-dim)" }}>
                 {meta.label} gives you a key that lets Eunomia read your items. It is stored encrypted and only sent to {meta.label}.
               </p>
               {meta.help && (
@@ -383,7 +383,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                   <button type="button" className="btn self-start" aria-expanded={showHelp} aria-controls="key-help" onClick={() => setHelpChoice(!showHelp)}>
                     {showHelp ? `Hide ${meta.label} instructions` : `Show ${meta.label} instructions`}
                   </button>
-                  <div id="key-help" hidden={!showHelp} className="soft-panel p-4 text-[14px] leading-relaxed break-words">
+                  <div id="key-help" hidden={!showHelp} className="soft-panel p-4 text-body leading-relaxed break-words">
                     {meta.help}
                   </div>
                 </>
@@ -396,7 +396,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
               </h2>
 
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="field-connection-name" className="text-[14px] font-medium">
+                <label htmlFor="field-connection-name" className="text-body font-medium">
                   Connection name {!isNew && <span style={{ color: "var(--ink-dim)" }}>(optional)</span>}
                 </label>
                 <div className={fieldBox} style={nameError ? { borderColor: "var(--critical)" } : undefined}>
@@ -405,7 +405,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                     type="text"
                     autoComplete="off"
                     maxLength={100}
-                    className="flex-1 min-w-0 bg-transparent outline-none text-[14px]"
+                    className="flex-1 min-w-0 bg-transparent outline-none text-body"
                     placeholder="For example work@example.com or Kitchen Pocket"
                     value={name ?? connector?.label ?? ""}
                     onChange={(e) => {
@@ -417,11 +417,11 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                   />
                 </div>
                 {nameError ? (
-                  <p id="err-connection-name" className="text-[13px]" style={{ color: "var(--critical)" }}>
+                  <p id="err-connection-name" className="text-detail" style={{ color: "var(--critical)" }}>
                     {nameError}
                   </p>
                 ) : (
-                  <p id="help-connection-name" className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+                  <p id="help-connection-name" className="text-detail" style={{ color: "var(--ink-dim)" }}>
                     Tells this {meta.label} connection apart from others of the same kind.
                   </p>
                 )}
@@ -433,7 +433,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                 const describedBy = err ? `err-${f.key}` : undefined;
                 return (
                   <div key={f.key} className="flex flex-col gap-1.5">
-                    <label htmlFor={`field-${f.key}`} className="text-[14px] font-medium">
+                    <label htmlFor={`field-${f.key}`} className="text-body font-medium">
                       {f.label} {isOptional(f) && <span style={{ color: "var(--ink-dim)" }}>(optional)</span>}
                     </label>
                     <div className={fieldBox} style={err ? { borderColor: "var(--critical)" } : undefined}>
@@ -442,7 +442,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                         type={f.secret && !reveal ? "password" : "text"}
                         autoComplete="off"
                         spellCheck={false}
-                        className="flex-1 min-w-0 bg-transparent outline-none text-[14px] font-mono"
+                        className="flex-1 min-w-0 bg-transparent outline-none text-body font-mono"
                         placeholder={connected && f.secret ? "Saved. Paste a new value to replace it" : f.placeholder}
                         value={values[f.key] || ""}
                         onChange={(e) => setField(f.key, e.target.value)}
@@ -452,7 +452,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                       {f.secret && <SecretToggle shown={!!reveal} label={f.label} onToggle={() => setShown((s) => ({ ...s, [f.key]: !s[f.key] }))} />}
                     </div>
                     {err && (
-                      <p id={describedBy} className="text-[13px]" style={{ color: "var(--critical)" }}>
+                      <p id={describedBy} className="text-detail" style={{ color: "var(--critical)" }}>
                         {err}
                       </p>
                     )}
@@ -462,7 +462,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
 
               {meta.webhooks && webhookUrl !== null && (
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="field-webhook-url" className="text-[14px] font-medium">
+                  <label htmlFor="field-webhook-url" className="text-body font-medium">
                     Webhook URL <span style={{ color: "var(--ink-dim)" }}>(optional, for instant updates)</span>
                   </label>
                   <div className="flex items-center gap-2">
@@ -470,14 +470,14 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                       id="field-webhook-url"
                       type="text"
                       spellCheck={false}
-                      className="field flex-1 min-w-0 h-10 px-3 text-[13px] font-mono"
+                      className="field flex-1 min-w-0 h-10 px-3 text-detail font-mono"
                       value={webhookUrl}
                       onChange={(e) => setWebhookUrl(e.target.value)}
                       aria-describedby="webhook-help"
                     />
                     <CopyButton value={() => webhookUrl} size="sm" className="h-10 w-[84px]" />
                   </div>
-                  <p id="webhook-help" className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+                  <p id="webhook-help" className="text-detail" style={{ color: "var(--ink-dim)" }}>
                     Register this with {meta.label} so updates arrive straight away instead of on the next scheduled update. If {meta.label} needs a
                     public address, replace <span className="font-mono">{new URL(apiOrigin()).host}</span> with your tunnel host before copying.
                   </p>
@@ -498,7 +498,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
             <h2 id="step-check" className={stepTitle}>
               3. Check and import your items
             </h2>
-            <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+            <p className="text-body" style={{ color: "var(--ink-dim)" }}>
               After saving, choose Test connection to check that {meta.label} accepts your details.
               {sourceKey ? " Then choose Sync now to bring in your items. You can leave this page while Eunomia imports them." : ""}
             </p>
@@ -507,12 +507,12 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                 <SyncMark status={testing ? "running" : testResult ? (testResult.ok ? "done" : "failed") : "idle"} size={18} />
                 {testing ? "Testing…" : "Test connection"}
               </button>
-              <span className="text-[14px] flex items-center gap-1.5 min-w-0" aria-live="polite">
+              <span className="text-body flex items-center gap-1.5 min-w-0" aria-live="polite">
                 {testResult?.ok && <StatusLabel tone="good">Connection works</StatusLabel>}
               </span>
             </div>
             {!(connected || isDemo) && (
-              <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+              <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
                 Save your details first; then you can check the connection.
               </p>
             )}
@@ -531,18 +531,18 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                     {syncing ? "Syncing…" : "Sync now"}
                   </button>
                   {syncing && (
-                    <span className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+                    <span className="text-body" style={{ color: "var(--ink-dim)" }}>
                       Importing from {meta.label}…
                     </span>
                   )}
                 </div>
                 {syncMessage && (
-                  <span role="status" className="text-[14px] break-words" style={{ color: syncMessage.state === "partial" ? "var(--warning)" : syncMessage.state === "done" ? "var(--good)" : "var(--critical)" }}>
+                  <span role="status" className="text-body break-words" style={{ color: syncMessage.state === "partial" ? "var(--warning)" : syncMessage.state === "done" ? "var(--good)" : "var(--critical)" }}>
                     {syncMessage.text}
                   </span>
                 )}
                 {syncMessage?.state === "failed" && (
-                  <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+                  <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
                     If this mentions sign-in or permission (HTTP 401 or 403), update your key in step 2. Otherwise try Sync now again; items already
                     imported are kept.
                   </p>
@@ -557,19 +557,19 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                 Automatic updates
               </h2>
               <div className="flex items-end justify-between gap-4 flex-wrap">
-                <label htmlFor="sync-interval" className="flex flex-col gap-0.5 text-[14px] font-medium">
+                <label htmlFor="sync-interval" className="flex flex-col gap-0.5 text-body font-medium">
                   Sync interval
-                  <span className="text-[13px] font-normal" style={{ color: "var(--ink-dim)" }}>
+                  <span className="text-detail font-normal" style={{ color: "var(--ink-dim)" }}>
                     How often Eunomia checks {meta.label} for new items.
                   </span>
                 </label>
                 <div className="flex items-center gap-2">
-                  <span className="text-[13px] w-16 text-right" aria-live="polite" style={{ color: intervalState === "error" ? "var(--critical)" : "var(--good)" }}>
+                  <span className="text-detail w-16 text-right" aria-live="polite" style={{ color: intervalState === "error" ? "var(--critical)" : "var(--good)" }}>
                     {intervalState === "saved" ? "Saved" : intervalState === "error" ? "Not saved" : ""}
                   </span>
                   <Select
                     id="sync-interval"
-                    className="h-10 text-[14px] w-48"
+                    className="h-10 text-body w-48"
                     value={String(override ?? defaultInterval)}
                     onChange={(v) => saveInterval(Number(v))}
                     options={SYNC_INTERVAL_PRESETS.map((p) => ({
@@ -590,7 +590,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
               <h2 id="paused-heading" className="section-title">
                 Disconnected
               </h2>
-              <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+              <p className="text-body" style={{ color: "var(--ink-dim)" }}>
                 Eunomia isn&apos;t importing from {meta.label} right now. Everything it already brought in is still here.
               </p>
               <button type="button" className="btn btn-primary self-start" disabled={disconnecting} onClick={reconnect}>
@@ -607,7 +607,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
               <div className="flex flex-col gap-4">
                 {connected && (
                   <div className="flex flex-col gap-2">
-                    <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+                    <p className="text-body" style={{ color: "var(--ink-dim)" }}>
                       <strong style={{ color: "var(--ink)" }}>Disconnect</strong> stops importing from {meta.label}. Everything already imported stays,
                       and you can connect again any time.
                     </p>
@@ -618,7 +618,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                 )}
                 {added && (
                   <div className="flex flex-col gap-2">
-                    <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+                    <p className="text-body" style={{ color: "var(--ink-dim)" }}>
                       <strong style={{ color: "var(--ink)" }}>Remove</strong> deletes this connection and everything imported through it. Other{" "}
                       {meta.label} connections stay.
                     </p>
@@ -665,7 +665,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
             <h2 id="routing-pending" className="section-title">
               Where will my items go?
             </h2>
-            <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+            <p className="text-body" style={{ color: "var(--ink-dim)" }}>
               New items are saved in your Personal memory space, where only you can read them. After saving you can choose a shared space instead.
             </p>
           </aside>

@@ -61,7 +61,7 @@ export default function ConsentPage() {
     <div className="min-h-screen w-full flex flex-col px-6 py-6 sm:px-10" style={{ background: "var(--canvas)" }}>
       <InputModeTracker />
       <header className="flex items-center justify-between">
-        <span className="inline-flex items-center gap-2 text-[20px] font-semibold tracking-[-0.03em]">
+        <span className="inline-flex items-center gap-2 text-heading font-semibold tracking-[-0.03em]">
           <EunomiaMark size={24} />
           eunomia
         </span>
@@ -101,7 +101,7 @@ export default function ConsentPage() {
                 <h1 className="connect-title">Allow {info.client.name} to use Eunomia?</h1>
               </div>
 
-              <p className="text-[16px] leading-[1.55]" style={{ color: "var(--ink)" }}>
+              <p className="text-reading leading-[1.55]" style={{ color: "var(--ink)" }}>
                 <span className="font-medium" style={{ color: "var(--ink)" }}>
                   {info.client.name}
                 </span>{" "}
@@ -112,7 +112,7 @@ export default function ConsentPage() {
                 . If you choose Allow, it will be able to:
               </p>
 
-              <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+              <p className="text-body" style={{ color: "var(--ink-dim)" }}>
                 These permissions apply to every space you belong to, including your Personal space and team spaces.
               </p>
 
@@ -121,9 +121,9 @@ export default function ConsentPage() {
                   const words = SCOPE_WORDS[s.scope];
                   return (
                     <li key={s.scope} className="px-4 py-3 flex flex-col gap-0.5">
-                      <span className="text-[15px] font-semibold">{words?.title ?? s.description}</span>
+                      <span className="text-reading font-semibold">{words?.title ?? s.description}</span>
                       {words && (
-                        <span className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+                        <span className="text-body" style={{ color: "var(--ink-dim)" }}>
                           {words.detail}
                         </span>
                       )}
@@ -132,7 +132,7 @@ export default function ConsentPage() {
                 })}
               </ul>
 
-              <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+              <p className="text-body" style={{ color: "var(--ink-dim)" }}>
                 It cannot see your password. After you decide, you go back to{" "}
                 <code className="font-mono" style={{ color: "var(--ink-dim)" }}>
                   {info.redirect_host}
@@ -142,7 +142,7 @@ export default function ConsentPage() {
 
               {info.loopback && (
                 <div
-                  className="flex items-start gap-2 rounded-[10px] px-3 py-2.5 text-[14px] leading-[1.45]"
+                  className="flex items-start gap-2 rounded-[10px] px-3 py-2.5 text-body leading-[1.45]"
                   style={{ background: "var(--critical-soft)", color: "var(--critical)" }}
                 >
                   <ShieldWarningIcon weight="duotone" size={18} className="mt-[2px] shrink-0" aria-hidden />
@@ -161,7 +161,7 @@ export default function ConsentPage() {
                   Deny
                 </button>
               </div>
-              <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+              <p className="text-body" style={{ color: "var(--ink-dim)" }}>
                 Deny sends you back without connecting. You can disconnect an allowed app any time in Settings, under Connected apps.
               </p>
             </div>

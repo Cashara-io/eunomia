@@ -64,16 +64,16 @@ function NotReachable({ url }: { url: string }) {
     `An admin can turn on HTTPS in Eunomia's settings, or put the server behind a public https:// address another way. Thanks!`;
   return (
     <section className="flex flex-col gap-4 py-2" aria-labelledby="unreachable-title">
-      <h2 id="unreachable-title" className="text-[20px] font-semibold leading-snug">
+      <h2 id="unreachable-title" className="text-heading font-semibold leading-snug">
         Your Eunomia admin needs to make this server reachable from the internet first
       </h2>
-      <p className="text-[15px] leading-relaxed">
+      <p className="text-reading leading-relaxed">
         ChatGPT connects from OpenAI&apos;s servers, so it can&apos;t reach <Kbd>{address}</Kbd>. Once the server has a public <Kbd>https://</Kbd> address,
         open this page from that address and the steps appear here.
       </p>
       <div className="flex flex-col gap-2">
-        <span className="text-[14px] font-semibold">Message for your admin</span>
-        <p aria-label="Message for your admin" className="soft-panel px-4 py-3 text-[14px] leading-relaxed whitespace-pre-wrap">
+        <span className="text-body font-semibold">Message for your admin</span>
+        <p aria-label="Message for your admin" className="soft-panel px-4 py-3 text-body leading-relaxed whitespace-pre-wrap">
           {message}
         </p>
         <CopyButton value={message} label="Copy message" size="sm" className="btn-primary self-start" />
@@ -96,7 +96,7 @@ function TokenFallback({ initial }: { initial: "claude" | "codex" | "other" }) {
   return (
     <li className="guide-step py-6">
     <details>
-      <summary className="cursor-pointer text-[15px] font-semibold min-h-11 flex items-center">Advanced: use an API token</summary>
+      <summary className="cursor-pointer text-reading font-semibold min-h-11 flex items-center">Advanced: use an API token</summary>
       <div className="pt-3 flex flex-col gap-3">
         <Note>Use this only if your app cannot open the Eunomia sign-in page. The token is shown once; you can revoke it any time under Settings, API tokens.</Note>
         <ConnectAgents initialClient={initial} />
@@ -123,7 +123,7 @@ function ChatGptGuide({ app, url, onConfirmed }: { app: AiApp; url: string; onCo
           </a>
         </GuideStep>
         <GuideStep n={2} title="Add Eunomia with these details">
-          <dl className="soft-panel grid grid-cols-[minmax(0,140px)_minmax(0,1fr)] gap-x-4 gap-y-2.5 px-5 py-4 text-[14px]">
+          <dl className="soft-panel grid grid-cols-[minmax(0,140px)_minmax(0,1fr)] gap-x-4 gap-y-2.5 px-5 py-4 text-body">
             <dt style={{ color: "var(--ink-dim)" }}>Name</dt>
             <dd>Eunomia</dd>
             <dt style={{ color: "var(--ink-dim)" }}>Server URL</dt>
@@ -146,7 +146,7 @@ function ChatGptGuide({ app, url, onConfirmed }: { app: AiApp; url: string; onCo
           </p>
           <CheckConnection app={app} onConfirmed={onConfirmed} />
           <aside className="soft-panel px-5 py-4 flex flex-col gap-2 mt-2" aria-labelledby="no-custom">
-            <h4 id="no-custom" className="text-[15px] font-semibold">
+            <h4 id="no-custom" className="text-reading font-semibold">
               Can&apos;t see the option to add your own server?
             </h4>
             <Note>

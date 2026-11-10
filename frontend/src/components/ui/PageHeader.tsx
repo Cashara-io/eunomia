@@ -1,5 +1,5 @@
 
-/** The page header: a 26px title (a provider mark beside it when there is
+/** The page header: a shared 22px title (a provider mark beside it when there is
  * one), actions on the right, a hairline rule, then at most one short line
  * that says what the page is for. `icon` is accepted but not drawn: the nav
  * already carries the page's icon. */
