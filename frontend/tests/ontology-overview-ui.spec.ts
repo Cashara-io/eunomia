@@ -265,13 +265,13 @@ for (const width of [1440, 390])
         .getByRole("region", { name: "Objects per kind" })
         .getByRole("button", { name: "Customers: 2,100 objects" }),
     ).toHaveAttribute("data-dim", "false");
-    await expect(page.locator('[data-map-id]')).toHaveAttribute("data-highlight", /k\d+/);
+    await expect(page.locator('[data-kind="warehouse"] svg')).toHaveCSS("opacity", "0.35");
     await page
       .getByRole("region", { name: "Objects per kind" })
       .getByRole("button", { name: "Products: 1,240 objects" })
       .focus();
     await expect(page.locator('[data-kind="product"] svg')).toHaveCSS("opacity", "1");
-    await expect(page.locator('[data-map-id]')).toHaveAttribute("data-highlight", /k\d+/);
+    await expect(page.locator('[data-kind="warehouse"] svg')).toHaveCSS("opacity", "0.35");
     if (width === 390) {
       expect(
         await page.locator('[data-testid="kind-landscape"] > svg').isVisible(),
