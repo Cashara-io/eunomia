@@ -96,11 +96,12 @@ const tx = (statements: string[]) => `BEGIN TRANSACTION;\n${statements.join("\n"
 // was built from. Embeddings can be made to hang.
 let llm: http.Server;
 let hangEmbeddings = false;
+let consolidationGate: Promise<void> | undefined;
 function startLlm() {
   llm = http.createServer((req, res) => {
     let body = "";
     req.on("data", (c) => (body += c));
-    req.on("end", () => {
+    req.on("end", async () => {
       res.setHeader("Content-Type", "application/json");
       if (req.url?.endsWith("/models")) {
         // chat-model discovery: nothing listed, so the default model is used
@@ -119,6 +120,7 @@ function startLlm() {
         res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ entities: [], facts: [], relations: [] }) } }] }));
         return;
       }
+      await consolidationGate;
       const current = /Current belief: (.*)\n/.exec(prompt)?.[1] ?? "(none yet)";
       const facts = prompt.split("New raw facts:\n")[1].split("\n").filter((l) => l.startsWith("- ")).map((l) => l.slice(2));
       const belief = [...(current === "(none yet)" ? [] : [current]), ...facts].join("; ");
@@ -207,23 +209,40 @@ test.describe.serial("memory correctness", () => {
     expect(obs.text).toContain("Paris");
     expect(obs.status).toBe("fresh");
 
-    await ok("memory_update", { memory_id: fact, text: "Alice lives in Berlin" });
-    const stale = observationOf(await ok("entities_get", { id: alice }));
-    expect(stale).toHaveLength(1);
-    expect(stale[0].status).toBe("stale");
-    const recalled = await ok("recall", { query: "Alice Mover Paris" });
-    // the stale belief never surfaces; the background reconciler may already have rebuilt the observation (same id, now Berlin)
-    expect(recalled.results.map((r: Json) => r.text)).not.toContain(obs.text);
-    expect(recalled.results.map((r: Json) => r.text)).toContain("Alice lives in Berlin");
+    // Hold model replies so the reconciler cannot rebuild before we inspect
+    // the stale observation and prove recall excludes it.
+    let releaseRebuild = () => {};
+    consolidationGate = new Promise<void>((resolve) => { releaseRebuild = resolve; });
+    try {
+      await ok("memory_update", { memory_id: fact, text: "Alice lives in Berlin" });
+      const stale = observationOf(await ok("entities_get", { id: alice }));
+      expect(stale).toHaveLength(1);
+      expect(stale[0].status).toBe("stale");
+      const recalled = await ok("recall", { query: "Alice Mover Paris" });
+      expect(recalled.results.map((r: Json) => r.id)).not.toContain(obs.id);
+      expect(recalled.results.map((r: Json) => r.text)).not.toContain(obs.text);
+      expect(recalled.results.map((r: Json) => r.text)).toContain("Alice lives in Berlin");
+    } finally {
+      consolidationGate = undefined;
+      releaseRebuild();
+    }
 
     if (!llmMode) return;
-    expect((await ok("consolidate_observations", { subject_id: alice })).consolidated).toEqual([alice]);
-    const [rebuilt] = observationOf(await ok("entities_get", { id: alice }));
-    expect(rebuilt.text).toBe("Alice lives in Berlin");
-    expect(rebuilt.status).toBe("fresh");
-    expect(rebuilt.source_memories).toEqual([fact]);
+    const result = await ok("consolidate_observations", { subject_id: alice });
+    expect(result.errors).toEqual([]);
+    // The reconciler may finish first, or win the optimistic write while the
+    // tool is awaiting its model. Either caller must leave the same rebuild.
+    expect([...result.consolidated, ...result.skipped]).toEqual([alice]);
+    await expect.poll(async () => observationOf(await ok("entities_get", { id: alice }))).toEqual([
+      expect.objectContaining({
+        id: obs.id,
+        text: "Alice lives in Berlin",
+        status: "fresh",
+        source_memories: [fact],
+      }),
+    ]);
     const again = await ok("recall", { query: "Alice Mover" });
-    expect(again.results.map((r: Json) => r.id)).toContain(rebuilt.id);
+    expect(again.results.map((r: Json) => r.id)).toContain(obs.id);
   });
 
   test("deleting the only supporting fact removes the observation; lineage keeps only surviving facts", async () => {

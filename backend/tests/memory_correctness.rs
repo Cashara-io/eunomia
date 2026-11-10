@@ -126,6 +126,69 @@ async fn observations_follow_their_evidence() {
     assert_eq!(observations(&app.tool("entities_get", json!({"id": alice})).await)[0]["status"], "stale");
 }
 
+/// The reconciler uses the same consolidation service as the tool. Force it to finish
+/// both before a tool call and while that call is waiting for its model response.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_background_rebuild_can_win_before_or_during_explicit_consolidation() {
+    use eunomia_backend::entities::consolidate::consolidate_subject;
+    use eunomia_backend::sources::mock::{route, serve};
+    use std::sync::Arc;
+    use tokio::sync::Notify;
+
+    let entered = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let answer = |belief: &str| json!({"choices": [{"message": {"content": json!({"belief": belief}).to_string()}}]});
+    let mock = serve(vec![
+        route("POST", "/embeddings", json!({"data": [{"index": 0, "embedding": vec![0.01; 1536]}]})),
+        route("POST", "/chat/completions", answer("Alice lives in Paris")).body("Alice lives in Paris"),
+        route("POST", "/chat/completions", answer("Alice lives in Berlin"))
+            .body("Alice lives in Berlin").times(1).gated(entered.clone(), release.clone()),
+        route("POST", "/chat/completions", answer("Alice lives in Berlin")).body("Alice lives in Berlin"),
+    ]).await;
+    let mut settings = common::test_settings();
+    settings.openai_api_key = Some("sk-test".into());
+    settings.openai_base_url = mock.base.clone();
+    settings.openai_chat_model = "test-model".into();
+    let app = Arc::new(TestApp::with_settings(settings).await);
+    let w = app.tool("memory_write", json!({"subject_name": "Alice Mover", "subject_kind": "person", "text": "Alice lives in Paris"})).await;
+    let alice = w["entity"]["id"].as_str().unwrap().to_string();
+    let fact = w["memory"]["id"].as_str().unwrap().to_string();
+    assert_eq!(app.tool("consolidate_observations", json!({"subject_id": alice})).await["consolidated"], json!([alice]));
+    let old = observations(&app.tool("entities_get", json!({"id": alice})).await);
+
+    app.tool("memory_update", json!({"memory_id": fact, "text": "Alice lives in Berlin"})).await;
+    assert_eq!(observations(&app.tool("entities_get", json!({"id": alice})).await)[0]["status"], "stale");
+    assert!(!ids(&app.tool("recall", json!({"query": "Alice Mover Paris"})).await, "results").contains(&old[0]["id"].as_str().unwrap().to_string()));
+
+    let foreground = {
+        let app = app.clone();
+        let alice = alice.clone();
+        tokio::spawn(async move { app.tool("consolidate_observations", json!({"subject_id": alice})).await })
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(10), entered.notified()).await.unwrap();
+    let db = app.db().await;
+    let subject = eunomia_backend::rid::parse(&alice).unwrap();
+    let rebuilt = common::sys(consolidate_subject(&db, &app.state.settings, &app.user.id, &subject, None)).await.unwrap().unwrap();
+    assert_eq!(rebuilt.text, "Alice lives in Berlin");
+    release.notify_one();
+    let lost_race = foreground.await.unwrap();
+    assert_eq!(lost_race["consolidated"], json!([]));
+    assert_eq!(lost_race["skipped"], json!([alice]));
+    assert_eq!(lost_race["errors"], json!([]));
+
+    let already_done = app.tool("consolidate_observations", json!({"subject_id": alice})).await;
+    assert_eq!(already_done["consolidated"], json!([]));
+    assert_eq!(already_done["skipped"], json!([alice]));
+    assert_eq!(already_done["errors"], json!([]));
+    let obs = observations(&app.tool("entities_get", json!({"id": alice})).await);
+    assert_eq!(obs.len(), 1);
+    assert_eq!(obs[0]["id"], old[0]["id"]);
+    assert_eq!(obs[0]["text"], "Alice lives in Berlin");
+    assert_eq!(obs[0]["status"], "fresh");
+    assert_eq!(obs[0]["source_memories"], json!([fact]));
+    assert!(ids(&app.tool("recall", json!({"query": "Alice Mover"})).await, "results").contains(&rebuilt.id));
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn deleting_facts_prunes_lineage_and_removes_a_sole_source_observation() {
     let app = TestApp::new().await;
