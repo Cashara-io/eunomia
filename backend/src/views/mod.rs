@@ -11,6 +11,7 @@
 //! text is trimmed, capped and has secrets dropped as in a memory. The result is the resolved view, with
 //! names and kinds from the database, plus [`Shown::text`], a plain rendering for a terminal.
 
+pub mod diagram;
 mod decimal;
 mod cursor;
 pub(crate) mod impact;
@@ -48,6 +49,7 @@ const MAX_WHY: usize = 300;
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "view", rename_all = "snake_case")]
 pub enum ViewSpec {
+    Diagram { diagram: diagram::Request },
     Ui { spec: serde_json::Value, sources: std::collections::BTreeMap<String, ui::Source> },
     Impact {
         start_id: String,
@@ -109,6 +111,7 @@ pub struct Affected {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(tag = "view", rename_all = "snake_case")]
 pub enum View {
+    Diagram { diagram: diagram::Diagram },
     Ui { spec: serde_json::Value, data: serde_json::Value },
     /// `linked` is false when the start has no saved relation at all: an empty `affected` then means
     /// there was nothing to follow, not that nothing is affected.
@@ -142,6 +145,7 @@ tokio::task_local! {
 /// Resolves and checks `spec` for `owner`.
 pub async fn show(db: &OrgDb, owner: &RecordId, spec: ViewSpec) -> AppResult<Shown> {
     let view = match spec {
+        ViewSpec::Diagram { diagram } => View::Diagram { diagram: diagram::resolve(db, owner, diagram).await? },
         ViewSpec::Ui { spec, sources } => ui::resolve(db, owner, spec, sources, TURN_STARTED.try_with(|start| *start).unwrap_or_default()).await?,
         ViewSpec::Impact { start_id, headline, affected, reach, page, cursor } => {
             if let Some(reach) = reach {
@@ -372,6 +376,7 @@ impl View {
     /// The view as plain text, for a terminal or any client that shows only text.
     pub fn text(&self) -> String {
         match self {
+            View::Diagram { diagram } => diagram.text(),
             View::Ui { spec, data } => ui::text(spec, data),
             View::Impact { start, headline, affected, linked, pagination } => {
                 let mut out = format!("{headline}\nStarting from {} ({}).", start.name, words(&start.kind));

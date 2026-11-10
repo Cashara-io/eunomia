@@ -105,6 +105,18 @@ pub static DYNAMIC_SEEN: std::sync::Mutex<std::collections::BTreeSet<&'static st
 #[cfg(feature = "test-support")]
 pub static SENT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+#[cfg(feature = "test-support")]
+#[derive(Default)]
+pub struct DeadlineProbe {
+    pub deadline: Option<tokio::time::Instant>,
+    pub issued: usize,
+    pub after_deadline: usize,
+}
+#[cfg(feature = "test-support")]
+tokio::task_local! {
+    pub static DEADLINE_PROBE: std::cell::RefCell<DeadlineProbe>;
+}
+
 /// For the few statements whose text is built at runtime (a table name or
 /// an optional clause). Still named, so they still trace.
 // ponytail: not covered by every_query_executes; `tests/dynamic_queries.rs` drives each builder instead. Keep these rare.
@@ -157,6 +169,7 @@ pub struct Q<'a> {
     scope: Scope,
     /// Set when the text names a table of the other database: the await fails and nothing is sent.
     denied: Option<String>,
+    deadline: Option<tokio::time::Instant>,
 }
 
 impl<'a> Q<'a> {
@@ -175,7 +188,13 @@ impl<'a> Q<'a> {
             crate::pool::no_org_context(&format!("{name} reaches for {table} in the wrong database"));
             format!("statement {name} {CROSSING_MARK}: it names {table}, which lives in the other database")
         });
-        Q { name, inner: db.query(format!("-- op:{name} trace:{trace}\n{sql}")), scope, denied }
+        Q { name, inner: db.query(format!("-- op:{name} trace:{trace}\n{sql}")), scope, denied, deadline: None }
+    }
+
+    /// Recheck after waiting for a database slot, immediately before submitting the request.
+    pub fn until(mut self, deadline: tokio::time::Instant) -> Self {
+        self.deadline = Some(deadline);
+        self
     }
 
     pub fn bind(mut self, bindings: impl IntoVariables) -> Self {
@@ -204,7 +223,18 @@ impl<'a> IntoFuture for Q<'a> {
             async move {
                 // provisioning and migrations (root) are rare and may run long: they do not queue
                 let _slot = if limited { in_flight().acquire().await.ok() } else { None };
+                if self.deadline.is_some_and(|deadline| tokio::time::Instant::now() >= deadline) {
+                    return Err(surrealdb::Error::thrown("query deadline reached".into()));
+                }
                 let started = Instant::now();
+                #[cfg(feature = "test-support")]
+                let _ = DEADLINE_PROBE.try_with(|probe| {
+                    let mut p = probe.borrow_mut();
+                    if let Some(deadline) = p.deadline {
+                        p.issued += 1;
+                        p.after_deadline += usize::from(tokio::time::Instant::now() >= deadline);
+                    }
+                });
                 let res = self.inner.await.and_then(surface_root_cause);
                 let span = tracing::Span::current();
                 span.record("duration_ms", started.elapsed().as_millis() as u64);

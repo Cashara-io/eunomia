@@ -20,7 +20,8 @@ fn schema() -> serde_json::Value {
     json!({
         "type": "object",
         "properties": {
-            "view": {"type": "string", "enum": ["impact", "subgraph", "metric", "scenario", "ui"], "description": "`impact`: what a change, delay or problem with one entity affects. `subgraph`: how some entities connect. `metric`: an approved metric's number, run again by the server. `scenario`: a what-if, its metrics before and after, run again by the server"},
+            "view": {"type": "string", "enum": ["impact", "subgraph", "metric", "scenario", "ui", "diagram"], "description": "`impact`: what a change, delay or problem with one entity affects. `subgraph`: how some entities connect. `metric`: an approved metric's number, run again by the server. `scenario`: a what-if, its metrics before and after, run again by the server"},
+            "diagram": views::diagram::schema(),
             "spec": views::ui::catalog()["schema"].clone(),
             "sources": views::ui::sources_schema(),
             "start_id": {"type": "string", "description": "impact: the entity that changed"},
@@ -87,6 +88,9 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                         if let Some(scenario) = source.get_mut("scenario")
                             && let Err(e) = super::resolve_vault_names(&state.db, owner, scenario).await { return Ok(json!({"error":e})); }
                     }
+                }
+                if args["view"] == "diagram" && args.as_object().is_some_and(|a| a.keys().any(|k| k != "view" && k != "diagram")) {
+                    return Ok(json!({"error":"diagram accepts only view and diagram; labels, values and positions come from the server"}));
                 }
                 let spec: ViewSpec = match serde_json::from_value(args) {
                     Ok(s) => s,

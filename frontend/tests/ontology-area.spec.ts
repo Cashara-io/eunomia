@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { registerAndOnboard, uniqueEmail } from "./helpers";
+import { mockReview } from "./fixtures/ontology-review";
 
 async function choose(page: Page, label: string, option: string) {
   await page.getByRole("combobox", { name: label, exact: true }).click();
@@ -456,4 +457,29 @@ test("batch merge stores its reason for each selected definition", async ({
         event.reason === "Duplicate names for a store",
     ),
   ).toBeTruthy();
+});
+
+
+test("mocked kind details preserve stored synonyms and source text", async ({ page }) => {
+  const { model } = await mockReview(page);
+  const kind = model.kinds[0];
+  kind.kind = "store";
+  kind.status = "proposed";
+  kind.synonyms = ["shop"];
+  kind.description = "a shop_with_its OWN spelling";
+  kind.reason = "matched shop_records.csv without changing owner_words";
+  await page.goto("/ontology/kinds/store?space=business");
+  await expect(page.getByText("Also called shop", { exact: true })).toBeVisible();
+  const proposal = page.getByRole("list", { name: "New definition", exact: true });
+  await expect(proposal).toContainText(kind.description);
+  await expect(page.getByRole("region", { name: "Source evidence", exact: true })).toContainText(kind.reason);
+
+  kind.synonyms = ["corner_shop", "iShop"];
+  await page.reload();
+  await expect(page.getByText("Also called corner_shop, iShop", { exact: true })).toBeVisible();
+  await choose(page, "Kind section", "Properties");
+  await page.getByText("unit cost (money, AUD)", { exact: true }).click();
+  const source = page.getByRole("region", { name: "Source evidence", exact: true });
+  await expect(source.getByText("stock_item.csv", { exact: true })).toBeVisible();
+  await expect(source.getByText("csv · unit_cost", { exact: true })).toBeVisible();
 });

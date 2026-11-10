@@ -37,6 +37,9 @@ import {
   type Definition as DefinitionItem,
 } from "./model";
 
+import { proposalEvent, useReviewInboxActivity } from "./review-activity";
+import ReviewInboxMeta, { ReviewTypeIcon } from "./ReviewInboxMeta";
+import { useLandscapeTint } from "./landscape-shared";
 import { humanLabel } from "./review-format";
 import { useConfirmedSpaceAccess } from "./SpaceAccess";
 import { isReviewOwner, ownerOnly } from "./review-access";
@@ -60,6 +63,7 @@ export default function Review({
   vault: Vault;
   data: OntologyOut;
 }) {
+  const { tint } = useLandscapeTint();
   const confirmed = useConfirmedSpaceAccess();
   const { params, update } = useTwinParams();
   const qc = useQueryClient();
@@ -106,6 +110,7 @@ export default function Review({
   );
   const page = pageNumber(params.get("page"), rows.length);
   const shown = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const inboxActivity = useReviewInboxActivity(vault.id, params.toString(), confirmed && shown.length > 0);
   const selected = all.find((d) => d.id === params.get("selected"));
   const batch = checked.filter((d) => shown.some((row) => row.id === d.id));
   const owner = vault.role === "owner";
@@ -365,7 +370,7 @@ export default function Review({
         <div className="hidden lg:flex gap-3">
           <ReviewFilters data={data} />
         </div>
-        <details className="lg:hidden text-[13px]">
+        <details className="lg:hidden text-detail">
           <summary className="cursor-pointer min-h-11 py-3">
             Search and filter suggestions
           </summary>
@@ -382,14 +387,16 @@ export default function Review({
         >
           <div className={styles.queue}>
             <div className={styles.queuehead}>
-              <h3 className="font-medium">Waiting for review</h3>
+              <h3 className="font-medium">Decision inbox</h3>
               <span>{rows.length}</span>
             </div>
+            <p className={styles.inboxOrder}>Grouped by kind. Properties, metrics and links keep their place.</p>
             <ul>
               {shown.map((d) => (
                 <li
                   key={d.id}
                   className={`${styles.queueitem} flex items-center`}
+                  style={tint(d.kind)}
                   data-selected={selected?.id === d.id}
                   tabIndex={-1}
                   aria-current={!selected && returnId === d.id ? "true" : undefined}
@@ -426,12 +433,14 @@ export default function Review({
                       selected: d.id,
                     })}
                   >
-                    <strong className="[overflow-wrap:anywhere]">
+                    <strong className={styles.inboxTitle}>
+                      <ReviewTypeIcon definition={d} />
                       {humanLabel(d.name)}
                     </strong>
-                    <span className="label">
+                    <span className={styles.inboxKind}>
                       {humanLabel(d.type)}{d.type !== "kind" && ` on ${humanLabel(d.kind)}`}
                     </span>
+                    <ReviewInboxMeta proposer={proposalEvent(inboxActivity.data?.events ?? [], d)} definition={d} />
                     {d.item.status === "proposed" ? (
                       <span className={styles.risk}>
                         <WarningCircleIcon size={14} weight="duotone" />
@@ -448,11 +457,11 @@ export default function Review({
                 </li>
               ))}
               {shown.length === 0 && (
-                <li className="p-4 text-[13px]">
+                <li className="p-4 text-detail">
                   {newItems.length > 0 && status === "proposed"
                     ? "New suggestions are ready. Use the notice above to show them."
                     : waiting === 0 && status === "proposed"
-                      ? "Nothing is waiting for review. Use All statuses to inspect earlier decisions."
+                      ? "Nothing is waiting for review. New suggestions from AI apps will appear here. Use All statuses to inspect earlier decisions."
                       : "No definitions match. Change the search or filters."}
                 </li>
               )}
@@ -460,12 +469,12 @@ export default function Review({
           </div>
           <Pagination page={page} total={rows.length} />
           {owner && shown.some((d) => d.item.status === "proposed") && (
-            <details className="mb-4 text-[13px]">
+            <details className="mb-4 text-detail">
               <summary className="cursor-pointer min-h-11 py-3">
                 Review a batch
               </summary>
               <div className="flex flex-col gap-3 mb-4">
-                <label className="flex items-center gap-2 text-[13px]">
+                <label className="flex items-center gap-2 text-detail">
                   <input
                     type="checkbox"
                     disabled={busy}
@@ -497,7 +506,7 @@ export default function Review({
                       />
                     </label>
                     <p
-                      className="text-[12px]"
+                      className="text-caption"
                       style={{ color: "var(--ink-dim)" }}
                     >
                       Your reason is saved with each successful decision. You
@@ -521,7 +530,7 @@ export default function Review({
                     </div>
                     {mergeOptions.length > 0 && (
                       <div className="flex flex-wrap gap-2 items-center">
-                        <label className="text-[13px]">
+                        <label className="text-detail">
                           Merge selected into{" "}
                           <select
                             className="field p-2"
@@ -583,7 +592,7 @@ export default function Review({
               />
             </>
           ) : (
-            <p className="text-[13px] p-8" style={{ color: "var(--ink-dim)" }}>
+            <p className="text-detail p-8" style={{ color: "var(--ink-dim)" }}>
               Choose a definition to inspect the proposed change, evidence,
               consequences and merge options.
             </p>
@@ -593,8 +602,8 @@ export default function Review({
       {receipt && (
         <section role="status" className="ledger p-4 flex flex-col gap-3">
           <h3 className="section-title">Batch results</h3>
-          <p className="text-[13px]">Submitted reason: {receipt.reason}</p>
-          <ul className="text-[13px] max-h-60 overflow-auto">
+          <p className="text-detail">Submitted reason: {receipt.reason}</p>
+          <ul className="text-detail max-h-60 overflow-auto">
             {receipt.results.map((r) => {
               const before = stale.find((d) => d.id === r.id);
               const after = current.find((d) => d.id === r.id);

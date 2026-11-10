@@ -1,0 +1,210 @@
+.card {
+  margin: 16px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+  color: var(--ink);
+  width: 100%;
+  min-width: 0;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 16px;
+  padding: 18px 18px 8px;
+}
+.header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.toggle {
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: var(--bg);
+  flex-shrink: 0;
+  min-height: 36px;
+  cursor: pointer;
+}
+.toggle:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+.summary {
+  padding: 0 18px 12px;
+  font-size: 12px;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+.plane {
+  background: color-mix(in srgb, var(--ink) 2%, var(--bg));
+  border-block: 1px solid var(--border);
+}
+.viewport {
+  overflow: auto;
+  max-height: 650px;
+  scrollbar-width: auto;
+  scrollbar-color: var(--ink-dim) var(--bg);
+}
+.viewport:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -3px;
+}
+.viewport > svg {
+  display: block;
+  max-width: none;
+  margin: auto;
+}
+.phone {
+  display: none;
+}
+.scrollCue {
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--ink-dim);
+  border-bottom: 1px solid var(--border);
+}
+.node {
+  color: var(--kind-hue);
+}
+.plate {
+  fill: var(--surface);
+  stroke: color-mix(in srgb, var(--kind-hue) 45%, var(--border));
+}
+.node[data-focus="true"] .plate {
+  stroke: var(--kind-hue);
+  stroke-width: 2.5;
+}
+.label {
+  color: var(--ink);
+  text-align: center;
+  font-size: 18px;
+  line-height: 1.3;
+}
+.label strong {
+  font-size: 20px;
+  font-weight: 600;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.label span {
+  display: block;
+  font-size: 18px;
+}
+.label .kind {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: color-mix(in srgb, var(--kind-hue) 60%, var(--ink));
+}
+.edge path {
+  stroke: var(--ink-dim);
+  stroke-width: 1.5;
+}
+.verb rect {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+.verb div {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 18px;
+  line-height: 1.2;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.band {
+  fill: var(--ink-dim);
+  font-size: 18px;
+}
+@media (max-width: 480px) {
+  .viewport {
+    max-height: min(480px, max(160px, calc(100dvh - 360px)));
+  }
+  .desktop {
+    display: none;
+  }
+  .phone {
+    display: block;
+  }
+}
+.notice {
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 18px;
+  margin: 0;
+  color: var(--ink-dim);
+}
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 18px;
+  font-size: 10px;
+  color: var(--ink-dim);
+}
+.footer a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.tableWrap {
+  overflow: auto;
+  font-size: 12px;
+  padding: 0 18px 12px;
+}
+.tableWrap table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.tableWrap caption {
+  text-align: left;
+  font-weight: 600;
+  padding: 10px 0;
+}
+.tableWrap th,
+.tableWrap td {
+  padding: 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 480px) {
+  .header {
+    padding: 14px 12px 8px;
+    gap: 8px;
+  }
+  .summary,
+  .notice {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .header h3 {
+    font-size: 14px;
+  }
+  .footer {
+    padding: 12px;
+  }
+}

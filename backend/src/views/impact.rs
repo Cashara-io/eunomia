@@ -36,21 +36,14 @@ pub struct ImpactPage {
 }
 
 pub async fn resolve(db: &OrgDb, owner: &RecordId, start_id: &str, headline: &str, reach: ImpactReach, page: usize, cursor: Option<&str>) -> AppResult<View> {
-    if !(1..=neighbourhood::MAX_DEPTH).contains(&reach.depth) || reach.kinds.len() > 50 || reach.labels.len() > 50 {
-        return Err(AppError::bad_request("reach needs depth 1 to 3, at most 50 kinds and 50 labels"));
-    }
-    let graph = Resolved::load(db, owner, std::iter::once(start_id), std::iter::empty()).await?;
-    let start = graph.entity(start_id)?;
-    let vault = crate::rid::parse(&start.vault).map_err(|_| AppError::bad_request("invalid vault"))?;
-    let id = crate::rid::parse(start_id).map_err(|_| AppError::bad_request("invalid start"))?;
+    let (start, id) = selection_start(db, owner, start_id, &reach).await?;
     let scope = super::cursor::scope(&(start.id.as_str(), &reach));
     let boundary = super::cursor::Cursor::read(cursor, &scope)?;
     if (boundary.is_none() && page != 0) || boundary.as_ref().is_some_and(|c| page != 0 && page != c.page) {
         return Err(AppError::bad_request("later pages require the returned next_cursor as cursor; page alone is not a boundary"));
     }
     let page = boundary.as_ref().map_or(0, |c| c.page);
-    let walk = neighbourhood::walk_bounded(db, &vault, std::slice::from_ref(&id), reach.depth, neighbourhood::WalkLimits { nodes: 10_001, edges: 40_000, fetched_rows: 40_000, per_entity: 40_000 }, &reach.labels).await?;
-    let nodes = neighbourhood::load_nodes(db, walk.order.clone()).await?;
+    let (walk, nodes) = selection_walk(db, &start, &id, &reach).await?;
     let mut selected: Vec<_> = nodes.values().filter(|n| n.id != id && (reach.kinds.is_empty() || reach.kinds.contains(&n.kind()))).collect();
     // IDs do not change when a name or a shortest path changes between requests.
     selected.sort_by_key(|n| n.id.to_string());
@@ -80,6 +73,26 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, start_id: &str, headline: &st
     prose.result(&serde_json::json!({"start":start,"affected":affected,"total":total}));
     let headline = crate::chat::tree::plain_text(&prose.safe_tree(&clean("headline", headline, MAX_HEADLINE)?));
     Ok(View::Impact { start, headline, affected, linked, pagination: Some(pagination) })
+}
+pub(crate) async fn selection(db: &OrgDb, owner: &RecordId, start_id: &str, reach: &ImpactReach) -> AppResult<(EntityRef, RecordId, neighbourhood::Walk, std::collections::HashMap<String, neighbourhood::NodeRow>)> {
+    let (start, id) = selection_start(db, owner, start_id, reach).await?;
+    let (walk, nodes) = selection_walk(db, &start, &id, reach).await?;
+    Ok((start, id, walk, nodes))
+}
+async fn selection_start(db: &OrgDb, owner: &RecordId, start_id: &str, reach: &ImpactReach) -> AppResult<(EntityRef, RecordId)> {
+    if !(1..=neighbourhood::MAX_DEPTH).contains(&reach.depth) || reach.kinds.len() > 50 || reach.labels.len() > 50 {
+        return Err(AppError::bad_request("reach needs depth 1 to 3, at most 50 kinds and 50 labels"));
+    }
+    let graph = Resolved::load(db, owner, std::iter::once(start_id), std::iter::empty()).await?;
+    let start = graph.entity(start_id)?;
+    let id = crate::rid::parse(start_id).map_err(|_| AppError::bad_request("invalid start"))?;
+    Ok((start, id))
+}
+async fn selection_walk(db: &OrgDb, start: &EntityRef, id: &RecordId, reach: &ImpactReach) -> AppResult<(neighbourhood::Walk, std::collections::HashMap<String, neighbourhood::NodeRow>)> {
+    let vault = crate::rid::parse(&start.vault).map_err(|_| AppError::bad_request("invalid vault"))?;
+    let walk = neighbourhood::walk_bounded(db, &vault, std::slice::from_ref(id), reach.depth, neighbourhood::WalkLimits { nodes: 10_001, edges: 40_000, fetched_rows: 40_000, per_entity: 40_000 }, &reach.labels).await?;
+    let nodes = neighbourhood::load_nodes(db, walk.order.clone()).await?;
+    Ok((walk, nodes))
 }
 fn entity(n: &neighbourhood::NodeRow) -> EntityRef {
     EntityRef { id: n.id.to_string(), name: n.name.clone(), kind: n.kind(), vault: n.vault.to_string() }

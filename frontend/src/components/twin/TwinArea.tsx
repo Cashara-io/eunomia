@@ -27,6 +27,7 @@ import { OverviewHighlight } from "./OverviewHighlight";
 import Structure from "./Structure";
 import KindDetail from "./KindDetail";
 import Review from "./Review";
+import ReviewSkeleton from "./ReviewSkeleton";
 import Objects from "./Objects";
 import Connections from "./Connections";
 import { ProtectedSpaceContent, useConfirmedSpaceAccess } from "./SpaceAccess";
@@ -329,10 +330,10 @@ function SelectedSpace({
       ) : !data ? (
         view === "overview" ? (
           <OverviewSkeleton />
-        ) : (
+        ) : view === "review" ? <ReviewSkeleton /> : (
           <LoadingSkeleton
             label="Loading the ontology"
-            layout={view === "review" ? "rows" : "table"}
+            layout="table"
             rows={5}
           />
         )

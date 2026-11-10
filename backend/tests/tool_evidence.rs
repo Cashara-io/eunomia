@@ -186,6 +186,7 @@ async fn seeded_success_contract_covers_every_registered_tool() {
         ("ontology_coverage", json!({"question":"sample999777 total score"}), "/vault", vault.clone()),
         ("metric_eval", json!({"metric":"total_score","filters":[{"property":"score","op":"lt","value":999777}]}), "/value", json!(42.0)),
         ("scenario_run", json!({"changes":[{"set":{"entity_id":entity,"property":"score","value":50}},{"scale":{"kind":"person","property":"score","factor":1,"filters":[{"property":"score","op":"lt","value":999777}]}}],"metrics":["total_score"]}), "/baseline/0/value", json!(42.0)),
+        ("show_view", json!({"view":"diagram","diagram":{"selection":{"type":"neighbourhood","focus_id":entity,"hops":"one"}}}), "/diagram/total_nodes", json!(2)),
         ("show_view", json!({"view":"impact","start_id":entity,"headline":"Fixture impact","reach":{"depth":1,"kinds":["person","sample999777"]}}), "/pagination/total", json!(1)),
         ("show_view", json!({"view":"ui","spec":{"root":"a","elements":{"a":{"type":"Stat","props":{"title":"Score","summary":"Fixture score","data":{"$state":"/sources/m/metric/value"}}}}},"sources":{"m":{"type":"metric","metric":"total_score","filters":[{"property":"score","op":"lt","value":999777}]}}}), "/data/sources/m/metric/value", json!(42.0)),
         ("document_list", json!({"limit":999777}), "/total", json!(1)),
@@ -289,4 +290,11 @@ async fn selector_refusals_never_turn_request_values_into_evidence() {
             assert!(!has_canary(&computed), "{name}/{key}: refusal registered a request value as evidence");
         }
     }
+}
+
+#[test]
+fn diagram_layout_does_not_authorise_business_numbers() {
+ let out=json!({"view":"diagram","diagram":{"height":999777,"bands":[{"distance":999777,"shown":42,"omitted":1,"x":999777}],"nodes":[{"x":999777,"y":999777,"distance":999777,"count":42}],"total_nodes":2,"total_edges":1}});
+ let computed=evidence::for_tool("show_view").unwrap().computed(&out);
+ assert!(!has_canary(&computed));assert_eq!(computed["diagram"]["nodes"][0]["count"],42);assert_eq!(computed["diagram"]["total_nodes"],2);assert_eq!(computed["diagram"]["bands"][0]["shown"],42);
 }
