@@ -215,6 +215,26 @@ test('masked neighbourhood loss removes protected text during a delayed membersh
   await expect.poll(async () => (await cacheKeys(page)).filter(k => k.includes('business'))).toEqual([]);
 });
 
+test('a membership check that never answers times out, stays closed and offers a retry', async ({page}) => {
+  await setup(page);
+  await page.getByRole('searchbox').fill('North');
+  await expect(page.getByLabel('Object search results')).toContainText('North Coast Beans');
+  await page.clock.install();
+  let requested = () => {};
+  const started = new Promise<void>(resolve => {requested = resolve;});
+  // Never fulfilled: the request hangs until the page aborts it.
+  await page.route('**/api/vaults/business/members', () => { requested(); });
+  await page.route('**/api/tools/entities_neighbourhood', r => r.fulfill({json:{error:'not found',code:'entity.not_found'}}));
+  await page.getByLabel('Refresh ontology').click();
+  await started;
+  await expect(page.getByRole('status').filter({hasText:'Checking access'})).toBeVisible();
+  await expectNoProtectedContent(page);
+  await page.clock.fastForward(11_000);
+  await expect(page.getByRole('button', {name:'Try again', exact:true})).toBeVisible();
+  await expect(page.getByRole('status').filter({hasText:'Checking access'})).toHaveCount(0);
+  await expectNoProtectedContent(page);
+});
+
 for (const failure of ['network', '500']) for (const outcome of ['confirmed', 'denied']) {
   test(`masked neighbourhood with ${failure} membership failure stays closed, retry ${outcome}`, async ({page}) => {
     await setup(page);

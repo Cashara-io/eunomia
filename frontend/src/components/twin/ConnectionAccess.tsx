@@ -11,6 +11,8 @@ type Access =
   | { kind: "unknown"; attempt: number }
   | { kind: "denied" };
 
+const CHECK_DEADLINE_MS = 10_000;
+
 const ConfirmedAccess = createContext(true);
 export const useConfirmedConnectionAccess = () => useContext(ConfirmedAccess);
 export function ConnectionContent({ children }: { children: ReactNode }) {
@@ -72,7 +74,13 @@ export default function ConnectionAccess({ space, children }: { space: string; c
       const current = ++generation;
       transition({ kind: "checking", attempt });
       // ListMembers permits every member and checks the requested vault, not an entity.
-      void call(listMembers({ path: { vault_id: space }, signal: controller.signal })).then(() => {
+      // A membership check that never answers must not leave "Checking access" up for ever:
+      // after the deadline this attempt is aborted, and the catch below moves to unknown and retries.
+      const attemptAbort = new AbortController();
+      const abortAttempt = () => attemptAbort.abort();
+      controller.signal.addEventListener("abort", abortAttempt, { once: true });
+      const deadline = setTimeout(abortAttempt, CHECK_DEADLINE_MS);
+      void call(listMembers({ path: { vault_id: space }, signal: attemptAbort.signal })).then(() => {
         if (controller.signal.aborted || current !== generation) return;
         const ids = [...pendingMissing];
         pendingMissing.clear();
@@ -85,6 +93,9 @@ export default function ConnectionAccess({ space, children }: { space: string; c
           transition({ kind: "unknown", attempt });
           timer = setTimeout(() => confirm(), Math.min(30_000, 2_000 * 2 ** Math.min(attempt - 1, 4)));
         }
+      }).finally(() => {
+        clearTimeout(deadline);
+        controller.signal.removeEventListener("abort", abortAttempt);
       });
     }
     retry.current = () => confirm();
