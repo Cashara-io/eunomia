@@ -145,26 +145,6 @@ impl Allowed {
         let bindings: Vec<_> = substitutions.iter().map(|(range, value)| {
             (normalise(&raw[..range.start]).len()..normalise(&raw[..range.end]).len(), normalise(value))
         }).collect();
-        // Treat a rendered binding as one indivisible token, including its unit.
-        // Check its outer boundary even when the numeric scanner stops before a custom unit.
-        for (range, value) in &bindings {
-            let suffix = &text[range.end..];
-            let ordinal_value = value.strip_prefix('-').or_else(|| value.strip_prefix('+')).unwrap_or(value);
-            let ordinal = ordinal_value.chars().all(|c| c.is_ascii_digit())
-                && ["st", "nd", "rd", "th"].iter().any(|ending| suffix.strip_prefix(ending)
-                    .is_some_and(|rest| !following_token(rest)));
-            // Unit operators remain attached even across whitespace. Plain following words
-            // keep main's existing behaviour, including the scale-word gaps tracked in #226.
-            let continuation = suffix.trim_start().chars().next().is_some_and(|c|
-                currency(c) || matches!(c, '/' | '\u{2044}' | '%' | '‰' | '^' | '·' | '⋅' | '×' | '÷' | '∕' | '*' | '+' | '-'));
-            if text.get(range.clone()) != Some(value.as_str())
-                || display(&text[..range.start]).chars().next_back().is_some_and(char::is_alphanumeric)
-                || (!ordinal && suffix.chars().next().is_some_and(char::is_alphanumeric))
-                || continuation
-            {
-                return Err(bad(format!("bound value must be a complete token in {path}")));
-            }
-        }
         let mut server_ranges: HashMap<std::ops::Range<usize>, HashSet<usize>> = HashMap::new();
         for (source, server) in self.strings.iter().enumerate() {
             let server = normalise(server);
@@ -187,11 +167,16 @@ impl Allowed {
         for span in &numeric {
             let overlaps: Vec<_> = bindings.iter().filter(|(range, _)| range.start < span.end && span.start < range.end).collect();
             let authorised = if !overlaps.is_empty() {
-                // The full server-rendered token was matched above. Every numeric span
-                // must stay inside that token; prose cannot lend a digit, sign or scale.
-                overlaps.len() == 1
-                    && span.start >= overlaps[0].0.start
-                    && span.end <= overlaps[0].0.end
+                // Preserve main's exact-span rule, including its bare-number behaviour.
+                // Only a complete custom-unit binding at a clause boundary is exempt.
+                overlaps.len() == 1 && (overlaps[0].0 == *span && overlaps[0].1 == text[span.clone()]
+                    || (span.start >= overlaps[0].0.start
+                            // The scanner also consumes an opening single quote as a
+                            // possible numeric separator. Keep a standalone quote as punctuation.
+                            || text.get(span.start..overlaps[0].0.start) == Some("'")
+                                && !text[..span.start].chars().next_back().is_some_and(token))
+                        && span.end <= overlaps[0].0.end
+                        && complete_custom_binding(raw, substitutions, &text, &overlaps[0].0, &overlaps[0].1))
             } else if iso_span(&text[span.clone()]).is_some() {
                 !text[..span.start].chars().next_back().is_some_and(token)
                     && !following_token(&text[span.end..])
@@ -206,6 +191,21 @@ impl Allowed {
         Ok(())
     }
 
+}
+// The scanner stops before custom units. Accept the whole rendered value only
+// at a structural boundary, never before another word. Inspect raw whitespace
+// because normalise collapses line breaks into spaces.
+fn complete_custom_binding(raw: &str, substitutions: &[(std::ops::Range<usize>, String)], text: &str, range: &std::ops::Range<usize>, value: &str) -> bool {
+    if text.get(range.clone()) != Some(value)
+        || display(&text[..range.start]).chars().next_back().is_some_and(token)
+        || spans(value).first().is_some_and(|span| *span == (0..value.len()))
+    { return false; }
+    let Some((original, _)) = substitutions.iter().find(|(r, _)| normalise(&raw[..r.start]).len() == range.start) else { return false; };
+    match raw[original.end..].trim_start_matches(|c: char| c.is_whitespace() && !matches!(c, '\n' | '\r')).chars().next() {
+        None => true,
+        Some(c) => matches!(c, '.' | ',' | ';' | ':' | ')' | ']' | '}' | '\'' | '"' | '-' | '?' | '!' | '\n' | '\r'
+            | '\u{2018}' | '\u{2019}' | '\u{201c}' | '\u{201d}' | '\u{2013}' | '\u{2014}'),
+    }
 }
 // Dates are a single span, including ranges. No endpoint can license a prefix or suffix.
 fn iso_span(text: &str) -> Option<Vec<String>> {
@@ -815,49 +815,29 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn boundary_probe_matches_main_except_intentional_tightening_and_custom_units() {
-        // prefix, bound token, suffix, main acceptance, required acceptance.
-        let cases = [
-            ("", "5 m", "illion customers", false, false),
-            ("", "5 m", "/s", false, false),
-            ("", "12", "0", false, false),
-            ("", "12", ".5", false, false),
-            ("", "12", ",000", false, false),
-            ("", "3", "k", true, false),
-            ("", "3", " k", true, true),
-            ("", "3", " thousand", true, true),
-            ("", "3", "%", false, false),
-            ("-", "3", "", false, false),
-            ("(", "3", ")", true, true),
-            ("x", "12", "", true, false),
-            ("", "12", "x 10", false, false),
-            ("", "12", " x 10", false, false),
-            ("", "12", " times ten", true, true),
-            ("", "12", "e6", false, false),
-            ("", "5 m", " long", false, true),
-            ("", "5", " million", true, true),
-            ("", "12", ".", true, true),
-            ("", "12", ",", true, true),
-            ("", "12", ")", true, true),
-            ("", "12", ":", true, true),
-            ("(", "12", " items)", true, true),
-            ("", "12", "-item", false, false),
-            ("", "12", "th", true, true),
-            ("", "42 orders", " today", false, true),
-            ("客", "12", "", true, false),
-            ("", "5 m", "%", false, false),
-            ("-", "5 m", "", false, false),
-        ];
-        for (prefix, value, suffix, main_expected, expected) in cases {
-            let raw = format!("{prefix}{value}{suffix}");
-            let subs = [(prefix.len()..prefix.len() + value.len(), value.to_string())];
+    fn boundary_probe_matches_main_except_custom_units_at_clause_boundaries() {
+        // Brackets mark the exact server binding. Both verdicts are committed
+        // alongside every input, including the pre-existing gaps owned by #226.
+        for row in include_str!("prose-boundaries.tsv").lines().skip(1) {
+            let columns: Vec<_> = row.split('\t').collect();
+            assert_eq!(columns.len(), 3, "{row}");
+            let mut raw = String::new();
+            let mut subs = Vec::new();
+            let mut rest = columns[0];
+            while let Some((before, tail)) = rest.split_once('[') {
+                raw.push_str(before);
+                let (value, tail) = tail.split_once(']').unwrap();
+                let start = raw.len();
+                raw.push_str(value);
+                subs.push((start..raw.len(), value.to_string()));
+                rest = tail;
+            }
+            raw.push_str(rest);
+            let raw = raw.replace("\\n", "\n");
             let allowed = Allowed::default();
-            assert_eq!(main_check(&allowed, &raw, &subs, "probe").is_ok(), main_expected, "main: {raw}");
-            assert_eq!(allowed.check(&raw, &subs, "probe").is_ok(), expected, "current: {raw}");
+            assert_eq!(main_check(&allowed, &raw, &subs, "probe").is_ok(), columns[1] == "Pass", "main: {row}");
+            assert_eq!(allowed.check(&raw, &subs, "probe").is_ok(), columns[2] == "Pass", "PR: {row}");
         }
-        let subs = [(0..2, "12".into()), (2..4, "34".into())];
-        assert!(main_check(&Allowed::default(), "1234", &subs, "probe").is_err());
-        assert!(Allowed::default().check("1234", &subs, "probe").is_err());
         for value in ["12", "-12", "+12"] {
           for suffix in ["st", "nd", "rd", "th", "st.", "nd,", "rd)", "th item"] {
             let raw = format!("{value}{suffix}");
@@ -885,7 +865,7 @@ mod tests {
     #[test]
     fn bound_values_are_complete_tokens_including_their_custom_units() {
         let placeholder = "{{/sources/graph/diagram/nodes/0/metrics/0/value}}";
-        for (value, unit, suffix) in [(5, Some("m"), "illion customers"), (12, None, "0"), (3, None, "k"), (5, Some("m"), "m"), (42, Some("orders"), "today")] {
+        for (value, unit, suffix) in [(5, Some("m"), "illion customers"), (5, Some("m"), "m"), (42, Some("orders"), "today"), (5, Some("m"), " long"), (42, Some("orders"), " today"), (5, Some("m"), " million"), (5, Some("m"), " squared"), (5, Some("m"), " per second")] {
             let data = json!({"sources":{"graph":{"view":"diagram","diagram":{"nodes":[{"metrics":[{"value":value,"unit":unit}]}]}}}});
             assert!(resolve(&json!({"title":format!("{placeholder}{suffix}")}), &data).is_err(), "{value} {unit:?} + {suffix}");
             for prefix in ["customers", "İ", "客", "Ｘ"] {
@@ -893,7 +873,8 @@ mod tests {
             }
         }
         let data = json!({"sources":{"graph":{"view":"diagram","diagram":{"nodes":[{"metrics":[{"value":42,"unit":"orders"}]}]}}}});
-        for (raw, expected) in [(format!("{placeholder} today"), "42 orders today"), (format!("{placeholder}."), "42 orders."), (format!("{placeholder}, next"), "42 orders, next"), (format!("({placeholder})"), "(42 orders)")] {
+        assert_eq!(resolve(&json!({"cells":[{"text":placeholder}], "items":[{"text":placeholder}]}), &data).unwrap(), json!({"cells":[{"text":"42 orders"}], "items":[{"text":"42 orders"}]}));
+        for (raw, expected) in [(format!("{placeholder}."), "42 orders."), (format!("{placeholder}, next"), "42 orders, next"), (format!("({placeholder})"), "(42 orders)")] {
             assert_eq!(resolve(&json!({"title":raw}), &data).unwrap()["title"], expected);
         }
     }
