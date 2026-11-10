@@ -1203,3 +1203,62 @@
 .map .landmark {
   opacity: 1;
 }
+
+.issueCount {
+  color: var(--accent);
+  font-weight: 600;
+}
+.attentionFilter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.attentionFilter input {
+  width: auto;
+}
+.inspectorAction {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.inspectorAction svg {
+  flex-shrink: 0;
+}
+.kindIssues {
+  margin-top: 1rem;
+  overflow-wrap: anywhere;
+}
+.kindIssues li + li {
+  margin-top: 0.5rem;
+}
+.kindBars {
+  max-height: 26rem;
+  overflow-y: auto;
+}
+.flatCaption {
+  display: none;
+}
+.map[data-selection]:where(:not([data-selection=""])) .route,
+.map[data-selection]:where(:not([data-selection=""])) .routeLabel {
+  display: none;
+}
+.map[data-selection]:where(:not([data-selection=""])) .form {
+  opacity: 0.12;
+}
+.map[data-selection]:where(:not([data-selection=""])) .landmark {
+  opacity: 0.3;
+}
+.map[data-selection]:where(:not([data-selection=""])) .landmark .kindTitle svg {
+  opacity: 0.2;
+}
+@container (max-width: 40em) {
+  .planeCaption,
+  .routeToggle {
+    display: none;
+  }
+  .flatCaption {
+    display: inline;
+  }
+}

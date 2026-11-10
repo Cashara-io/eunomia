@@ -85,3 +85,20 @@ for (const count of [1, 16, 60, 120])
         ).toBe(false);
       }
   });
+
+for (const count of [16, 60, 120])
+  test(`low-count kinds with owner issues join the top kinds at ${count}`, () => {
+    const kinds = Array.from({ length: count }, (_, i) => ({
+      ...fixture.ontology.kinds[0],
+      kind: `kind_${i}`,
+      entities: count - i,
+    }));
+    const attention = new Set(kinds.slice(-2).map((k) => k.kind));
+    const layout = overviewLayout(kinds, [], attention);
+    for (const kind of attention)
+      expect(layout.nodes.some((n) => n.kind.kind === kind)).toBe(true);
+    expect(layout.nodes.length).toBeLessThanOrEqual(20);
+    for (const kind of kinds.slice(0, 16))
+      expect(layout.nodes.some((n) => n.kind.kind === kind.kind)).toBe(true);
+    expect(layout.nodes.length + layout.overflow.length).toBe(count);
+  });

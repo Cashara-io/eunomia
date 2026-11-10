@@ -17,7 +17,6 @@ import {
   GraphIcon,
   TableIcon,
   XIcon,
-  WarningCircleIcon,
 } from "@phosphor-icons/react";
 import type { OntologyOut } from "@/lib/queries/ontology";
 import { useKindColor } from "@/lib/kindColors";
@@ -56,7 +55,8 @@ export type LandscapePin = {
   count?: number;
 };
 export type Highlight =
-  { type: "kind"; key: string } | { type: "link"; key: string };
+  | { type: "kind"; key: string }
+  | { type: "link"; key: string };
 
 export default function KindSummary({
   data,
@@ -83,7 +83,29 @@ export default function KindSummary({
         ),
     [data.links, kinds],
   );
-  const layout = useMemo(() => overviewLayout(kinds, links), [kinds, links]);
+  const issuesByKind = useMemo(() => {
+    const groups = new Map<string, LandscapePin[]>();
+    for (const pin of pins)
+      groups.set(pin.kind, [...(groups.get(pin.kind) ?? []), pin]);
+    return groups;
+  }, [pins]);
+  const issueCount = (kind: string) =>
+    (issuesByKind.get(kind) ?? []).reduce(
+      (sum, pin) => sum + (pin.count ?? 1),
+      0,
+    );
+  const layout = useMemo(
+    () => overviewLayout(kinds, links, new Set(issuesByKind.keys())),
+    [kinds, links, issuesByKind],
+  );
+  const overflowIssues = layout.overflow.reduce(
+    (sum, k) => sum + issueCount(k.kind),
+    0,
+  );
+  const totalIssues = pins.reduce((sum, pin) => sum + (pin.count ?? 1), 0);
+  const unplacedIssues = pins.filter(
+    (p) => !kinds.some((k) => k.kind === p.kind),
+  );
   const unlinkedArea = useMemo(() => {
     const unlinkedNodes = layout.nodes.filter((n) => !n.linked);
     return unlinkedNodes.length
@@ -96,6 +118,18 @@ export default function KindSummary({
       : null;
   }, [layout]);
   const [showAll, setShowAll] = useState(false);
+  const [attentionOnly, setAttentionOnly] = useState(false);
+  const [allBars, setAllBars] = useState(false);
+  const rankedKinds = useMemo(
+    () =>
+      [...kinds].sort(
+        (a, b) => b.entities - a.entities || a.kind.localeCompare(b.kind),
+      ),
+    [kinds],
+  );
+  const chartKinds = rankedKinds.filter(
+    (k, i) => allBars || i < 12 || issuesByKind.has(k.kind),
+  );
   const [moreOpen, setMoreOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [pinGroup, setPinGroup] = useState<{
@@ -106,7 +140,7 @@ export default function KindSummary({
   const [hovered, setHovered] = useState<Highlight | null>(null);
   const [focused, setFocused] = useState<Highlight | null>(null);
   const [selected, setSelected] = useState<Highlight | null>(null);
-  const active = focused ?? hovered ?? selected;
+  const active = selected ?? focused ?? hovered;
   const pinIssuesRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (pinGroup) pinIssuesRef.current?.focus();
@@ -241,8 +275,19 @@ export default function KindSummary({
       ? [focusLink]
       : [];
   const labelledRoutes = useMemo(
-    () => routeLabels(layout, layout.edges),
-    [layout],
+    () =>
+      routeLabels(
+        layout,
+        selected
+          ? layout.edges.filter((e) =>
+              selected.type === "kind"
+                ? e.link.from_kind === selected.key ||
+                  e.link.to_kind === selected.key
+                : e.key === selected.key,
+            )
+          : layout.edges,
+      ),
+    [layout, selected],
   );
   const token = (item: Highlight | null) =>
     item?.type === "kind"
@@ -257,7 +302,7 @@ export default function KindSummary({
       related: typeof layout.edges,
       names: string[],
     ) => {
-      const activeRoot = `${root}[data-highlight="${token}"]`;
+      const activeRoot = `${root}[data-highlight="${token}"][data-selection]`;
       return (
         related
           .map(
@@ -297,11 +342,12 @@ export default function KindSummary({
         .join("\n")
     );
   }, [id, kinds, layout]);
-  const visibleRoutes = layout.edges.filter(
-    (e) =>
-      showAll ||
-      e.idle ||
-      (active && relevantLink(e.key, e.link.from_kind, e.link.to_kind)),
+  const visibleRoutes = layout.edges.filter((e) =>
+    selected
+      ? relevantLink(e.key, e.link.from_kind, e.link.to_kind)
+      : showAll ||
+        e.idle ||
+        !!(active && relevantLink(e.key, e.link.from_kind, e.link.to_kind)),
   ).length;
   return (
     <section
@@ -345,7 +391,7 @@ export default function KindSummary({
         </button>
       </div>
       <button
-        className="btn btn-ghost btn-sm"
+        className={`btn btn-ghost btn-sm ${styles.routeToggle}`}
         aria-pressed={showAll}
         onClick={() => setShowAll((value) => !value)}
       >
@@ -357,21 +403,17 @@ export default function KindSummary({
           Square-root scale · equal footprints
         </span>
       </div>
-      {pins.length > 0 && (
-        <div className={styles.mapNotices}>
-          {[
-            pins.find((p) => p.type === "proposal"),
-            pins.find((p) => p.type === "stale"),
-          ]
-            .filter((p) => p !== undefined)
-            .map((pin) => (
-              <Link key={pin.href} href={pin.href}>
-                <WarningCircleIcon size={14} weight="fill" aria-hidden />
-                {pin.label}
-                <ArrowRightIcon size={12} aria-hidden />
-              </Link>
-            ))}
-        </div>
+      {totalIssues > 0 && (
+        <section className={styles.mapNotices} aria-label="Owner attention">
+          <span className={styles.issueCount}>
+            {totalIssues} {plural("issue", totalIssues)} need attention
+          </span>
+          {unplacedIssues.map((p) => (
+            <Link key={p.href} href={p.href}>
+              {p.label}
+            </Link>
+          ))}
+        </section>
       )}
       {table ? (
         <div
@@ -522,12 +564,32 @@ export default function KindSummary({
           <button
             className="btn btn-ghost"
             aria-expanded={moreOpen}
-            onClick={() => setMoreOpen((value) => !value)}
+            onClick={() => {
+              if (!moreOpen) setAttentionOnly(overflowIssues > 0);
+              setMoreOpen((value) => !value);
+            }}
           >
             {layout.overflow.length} more kinds
+            {overflowIssues > 0 && (
+              <span
+                className={styles.issueCount}
+                data-issue-count={overflowIssues}
+              >
+                {" "}
+                · {overflowIssues} {plural("issue", overflowIssues)}
+              </span>
+            )}
           </button>
           {moreOpen && (
             <section aria-label="More kinds">
+              <label className={styles.attentionFilter}>
+                <input
+                  type="checkbox"
+                  checked={attentionOnly}
+                  onChange={(e) => setAttentionOnly(e.target.checked)}
+                />
+                Needs attention only
+              </label>
               <label>
                 Find a kind
                 <input
@@ -539,6 +601,7 @@ export default function KindSummary({
               </label>
               <ul>
                 {layout.overflow
+                  .filter((k) => !attentionOnly || issueCount(k.kind) > 0)
                   .filter((k) =>
                     [k.kind, humanLabel(k.kind)].some((name) =>
                       name
@@ -556,7 +619,27 @@ export default function KindSummary({
                       </button>{" "}
                       <span className={styles.nodeCount}>
                         {k.entities.toLocaleString("en-AU")} objects
-                      </span>
+                      </span>{" "}
+                      <span
+                        className={
+                          issueCount(k.kind)
+                            ? styles.issueCount
+                            : styles.caption
+                        }
+                        data-issue-count={issueCount(k.kind)}
+                      >
+                        {issueCount(k.kind)}{" "}
+                        {plural("issue", issueCount(k.kind))}
+                      </span>{" "}
+                      <Link
+                        className="link"
+                        href={
+                          issuesByKind.get(k.kind)?.[0]?.href ??
+                          twinHref("/ontology/review", space)
+                        }
+                      >
+                        Review {humanLabel(k.kind)}
+                      </Link>
                     </li>
                   ))}
               </ul>
@@ -602,7 +685,16 @@ export default function KindSummary({
         <span>
           {kinds.length} {plural("kind", kinds.length)} · {links.length}{" "}
           recorded link types
-          {` · ${visibleRoutes} of ${links.length} routes shown`}
+          <span className={styles.planeCaption}>
+            {table
+              ? ` · All ${links.length} recorded relationships listed`
+              : ` · ${visibleRoutes} of ${links.length} routes shown`}
+          </span>
+          <span className={styles.flatCaption}>
+            {" "}
+            · All {links.length} recorded relationships listed
+            {layout.overflow.length > 0 ? " in Recorded links below" : ""}
+          </span>
           {layout.overflow.length > 0 &&
             ` · ${layout.nodes.length} kinds on the landscape; all ${kinds.length} in the table`}
         </span>
@@ -652,7 +744,7 @@ export default function KindSummary({
                   ) && <span>No named examples returned</span>}
                 </div>
                 <Link
-                  className="btn btn-primary btn-sm"
+                  className={`btn btn-primary btn-sm ${styles.inspectorAction}`}
                   href={twinHref("/ontology/objects", space, {
                     kind: focusKind?.kind ?? focusLink?.from_kind ?? "",
                   })}
@@ -663,6 +755,29 @@ export default function KindSummary({
                   )}{" "}
                   <ArrowRightIcon size={14} aria-hidden />
                 </Link>
+                {focusKind && (
+                  <section
+                    aria-label={`${humanLabel(focusKind.kind)} pending issues`}
+                    className={styles.kindIssues}
+                  >
+                    <h4>
+                      {issueCount(focusKind.kind)}{" "}
+                      {plural("issue", issueCount(focusKind.kind))} pending
+                    </h4>
+                    <ul>
+                      {(issuesByKind.get(focusKind.kind) ?? []).map((p) => (
+                        <li key={p.href}>
+                          <Link className="link" href={p.href}>
+                            {p.label}
+                            {p.count
+                              ? ` (${p.count} ${plural("stale value", p.count)})`
+                              : ""}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
               </div>
               {(["in", "out"] as const).map((direction) => {
                 const items = detailLinks.filter((l) =>
@@ -719,49 +834,50 @@ export default function KindSummary({
             <span className={styles.caption}>Same scale across all kinds</span>
           </h3>
           <div className={styles.kindBars}>
-            {[...kinds]
-              .sort(
-                (a, b) =>
-                  b.entities - a.entities || a.kind.localeCompare(b.kind),
-              )
-              .map((kind) => (
-                <button
-                  key={kind.kind}
-                  className={styles.barRow}
-                  data-dim={!!active && !neighbours.has(kind.kind)}
-                  aria-label={`${plural(humanLabel(kind.kind))}: ${kind.entities.toLocaleString("en-AU")} objects`}
-                  onMouseEnter={() =>
-                    setHovered({ type: "kind", key: kind.kind })
-                  }
-                  onMouseLeave={() => setHovered(null)}
-                  onFocus={() => {
-                    setHovered(null);
-                    setFocused({ type: "kind", key: kind.kind });
-                  }}
-                  onBlur={() => setFocused(null)}
-                  onClick={() => choose({ type: "kind", key: kind.kind })}
-                >
-                  <span>{plural(humanLabel(kind.kind))}</span>
-                  <span className={styles.nodeCount}>
-                    {kind.entities.toLocaleString("en-AU")}
-                  </span>
-                  <svg
-                    viewBox="0 0 100 5"
-                    preserveAspectRatio="none"
-                    aria-hidden
-                  >
-                    <Bar
-                      x={0}
-                      y={0}
-                      width={objectScale(kind.entities)}
-                      height={5}
-                      fill={hue(kind.kind)}
-                      rx={1}
-                    />
-                  </svg>
-                </button>
-              ))}
+            {chartKinds.map((kind) => (
+              <button
+                key={kind.kind}
+                className={styles.barRow}
+                data-objects={kind.entities}
+                data-dim={!!active && !neighbours.has(kind.kind)}
+                aria-label={`${plural(humanLabel(kind.kind))}: ${kind.entities.toLocaleString("en-AU")} objects`}
+                onMouseEnter={() =>
+                  setHovered({ type: "kind", key: kind.kind })
+                }
+                onMouseLeave={() => setHovered(null)}
+                onFocus={() => {
+                  setHovered(null);
+                  setFocused({ type: "kind", key: kind.kind });
+                }}
+                onBlur={() => setFocused(null)}
+                onClick={() => choose({ type: "kind", key: kind.kind })}
+              >
+                <span>{plural(humanLabel(kind.kind))}</span>
+                <span className={styles.nodeCount}>
+                  {kind.entities.toLocaleString("en-AU")}
+                </span>
+                <svg viewBox="0 0 100 5" preserveAspectRatio="none" aria-hidden>
+                  <Bar
+                    x={0}
+                    y={0}
+                    width={objectScale(kind.entities)}
+                    height={5}
+                    fill={hue(kind.kind)}
+                    rx={1}
+                  />
+                </svg>
+              </button>
+            ))}
           </div>
+          {kinds.length > 12 && (
+            <button
+              className="btn btn-ghost btn-sm"
+              aria-expanded={allBars}
+              onClick={() => setAllBars((value) => !value)}
+            >
+              {allBars ? "Show fewer kinds" : `Show all ${kinds.length} kinds`}
+            </button>
+          )}
         </section>
         <section aria-label="Links per link type" className={styles.chartPanel}>
           <h3>

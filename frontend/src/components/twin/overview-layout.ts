@@ -6,19 +6,27 @@ export const linkKey = (link: LinkItem) =>
 
 // Stable rows on a gently receding plane. Height uses a square-root scale so a
 // large kind has presence without hiding smaller kinds. Zero stays flat.
-export function overviewLayout(kinds: KindItem[], links: LinkItem[]) {
+export function overviewLayout(
+  kinds: KindItem[],
+  links: LinkItem[],
+  attention: ReadonlySet<string> = new Set(),
+) {
   const linked = new Set(links.flatMap((l) => [l.from_kind, l.to_kind]));
   const ranked = [...kinds].sort(
     (a, b) => b.entities - a.entities || a.kind.localeCompare(b.kind),
   );
-  const overflow = ranked.slice(16);
-  const sorted = ranked
-    .slice(0, 16)
-    .sort(
-      (a, b) =>
-        Number(!linked.has(a.kind)) - Number(!linked.has(b.kind)) ||
-        a.kind.localeCompare(b.kind),
-    );
+  const shown = new Set(
+    [
+      ...ranked.slice(0, 16),
+      ...ranked.slice(16).filter((k) => attention.has(k.kind)),
+    ].slice(0, 20),
+  );
+  const overflow = ranked.filter((k) => !shown.has(k));
+  const sorted = [...shown].sort(
+    (a, b) =>
+      Number(!linked.has(a.kind)) - Number(!linked.has(b.kind)) ||
+      a.kind.localeCompare(b.kind),
+  );
   const max = Math.max(1, ...kinds.map((k) => k.entities));
   const rows = Math.max(1, Math.ceil(sorted.length / 4));
   const height = 65 + rows * 225;
