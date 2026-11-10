@@ -228,7 +228,7 @@
 }
 .contour text {
   fill: var(--ink-dim);
-  font-size: var(--type-body);
+  font-size: 14px;
 }
 .focusRing {
   fill: var(--accent-soft);
@@ -253,7 +253,7 @@
 }
 .route text {
   fill: var(--ink);
-  font-size: var(--type-body);
+  font-size: 14px;
 }
 @keyframes flow {
   to {

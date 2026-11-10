@@ -603,7 +603,7 @@ export function MetricRow({
           role="status"
           className="soft-panel px-3 py-2.5 flex flex-col gap-1.5 max-w-md"
         >
-          <MetricNumber run={tried} size={22} />
+          <MetricNumber run={tried} size={24} />
           <p className="text-caption" style={{ color: "var(--ink-dim)" }}>
             As of {asOfDate(tried.as_of)}, from{" "}
             <span className="font-mono">{tried.n_entities}</span>{" "}

@@ -5,29 +5,39 @@ import { join } from "node:path";
 const steps = [12, 13, 14, 16, 20, 24];
 const roles = ["caption", "detail", "body", "reading", "heading", "display"];
 const globals = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
-const tokenPattern = /var\(--type-([\w-]+)\)/g;
+const scaleToken = /^var\(--type-(caption|detail|body|reading|heading|display)\)$/;
+const cameraToken = /^var\(--(?:name|small)-text,\s*var\(--type-(reading|caption)\)\)$/;
 
 function offScale(source) {
   const failures = [];
-  const check = (value) => {
-    for (const match of value.matchAll(/(-?\d*\.?\d+)(px|rem|em|vw|vh|%)/g)) {
-      const size = Number(match[1]) * (match[2] === "rem" ? 16 : 1);
-      if (!["px", "rem"].includes(match[2]) || !steps.includes(size)) failures.push(match[0]);
+  const check = (raw, unitless = false) => {
+    const value = raw.trim().replace(/^(["'`])(.*)\1$/, "$2");
+    if (scaleToken.test(value) || cameraToken.test(value)) return;
+    const literal = value.match(/^(\d+(?:\.\d+)?)(px|rem)?$/);
+    if (literal && (literal[2] || unitless)) {
+      const size = Number(literal[1]) * (literal[2] === "rem" ? 16 : 1);
+      if (steps.includes(size)) return;
     }
-    for (const match of value.matchAll(tokenPattern)) {
-      if (!roles.includes(match[1])) failures.push(match[0]);
-    }
+    failures.push(raw);
   };
-  for (const match of source.matchAll(/\btext-\[([^\]]+)\]/g)) check(match[1]);
-  for (const match of source.matchAll(/\b(?:font-size|font)\s*:\s*([^;\n}]+)/g)) check(match[1]);
-  for (const match of source.matchAll(/\bfontSize\s*(?:=\s*\{([^}]+)\}|=\s*["']([^"']+)["']|:\s*([^,}\n]+))/g)) {
-    const value = (match[1] ?? match[2] ?? match[3]).trim();
+  for (const match of source.matchAll(/\btext-\[([^\]]+)\]/g)) {
+    const value = match[1].replace(/^length:/, "");
+    if (/^var\(--(?:ink|accent|surface|border|warning)[\w-]*\)$/.test(value)) continue;
     check(value);
-    if (/^["']?\d+(?:\.\d+)?["']?$/.test(value) && !steps.includes(Number(value.replace(/["']/g, "")))) failures.push(value);
-    if (/^\d+(?:\.\d+)?$/.test(value)) continue;
-    if (!/["']|var\(/.test(value)) failures.push(value);
+  }
+  for (const match of source.matchAll(/\bfont-size\s*:\s*([^;\n}]+)/g)) check(match[1]);
+  for (const match of source.matchAll(/\bfont\s*:\s*([^;\n}]+)/g)) {
+    const value = match[1].trim();
+    if (value === "inherit") continue;
+    const size = value.match(/^(?:(?:normal|italic|oblique|bold|bolder|lighter|[1-9]00)\s+)*(var\(--[\w-]+\)|[\d.]+(?:px|rem|em|vw|vh|%))(?=\s|\/|$)/);
+    if (size) check(size[1]);
+    else failures.push(value);
+  }
+  for (const match of source.matchAll(/(?:["']?\bfontSize["']?\s*:\s*([^,}\n]+)|\b(?:fontSize|font-size)\s*=\s*(?:\{([^}]+)\}|(["'])(.*?)\3))/g)) {
+    check(match[1] ?? match[2] ?? match[4], true);
   }
   for (const match of source.matchAll(/\btext-(lg|[3-9]xl|page-title)\b/g)) failures.push(match[0]);
+  for (const match of source.matchAll(/<MetricNumber\b[^>]*\bsize=\{([^}]+)\}/g)) check(match[1], true);
   return failures;
 }
 
@@ -63,4 +73,22 @@ test("typography guard catches off-scale utilities, CSS and SVG or style literal
     expect(offScale(`fontSize="${step}"; font-size: ${step / 16}rem;`)).toEqual([]);
   }
   expect(offScale('className="text-[var(--ink-dim)]" font-size: var(--type-detail);')).toEqual([]);
+});
+
+for (const source of [
+  'style={{"fontSize": 15}}',
+  '<MetricNumber run={result} size={22} />',
+  '<text font-size="11">',
+  '--label-size: 11px; font-size: var(--label-size);',
+  'font-size: calc(12px + 13px);',
+]) test(`typography guard rejects ${source}`, () => {
+  expect(offScale(source).length).toBeGreaterThan(0);
+});
+
+for (const source of [
+  'fontSize: `13px`',
+  '<MetricNumber run={result} size={24} />',
+  'font: 14px/18px sans-serif;',
+]) test(`typography guard accepts ${source}`, () => {
+  expect(offScale(source)).toEqual([]);
 });

@@ -110,7 +110,7 @@ export default memo(function LandscapePlane({
             x={unlinkedArea.left}
             y={unlinkedArea.bottom + 43}
             fill="var(--ink-dim)"
-            fontSize="var(--type-body)"
+            fontSize={14}
           >
             Not linked yet
           </text>

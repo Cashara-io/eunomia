@@ -5,11 +5,13 @@ import { mockConnections, neighbourhood } from "./fixtures/connections";
 import { mockReview } from "./fixtures/ontology-review";
 import { mockReceipts } from "./fixtures/receipts";
 
+test.skip(!process.env.ONTOLOGY_TYPE_SCALE_SCREENSHOTS, "Set ONTOLOGY_TYPE_SCALE_SCREENSHOTS to capture evidence");
+
 for (const width of [1440, 390]) for (const theme of ["light", "dark"]) {
   for (const view of ["overview", "connections", "review", "profile"]) {
     test(`type scale ${view} ${width} ${theme}`, async ({ page, baseURL }) => {
-      test.skip(!process.env.ONTOLOGY_TYPE_SCALE_SCREENSHOTS, "Set ONTOLOGY_TYPE_SCALE_SCREENSHOTS to capture evidence");
-      expect(baseURL).toBe("http://127.0.0.1:23131");
+      expect(new URL(baseURL ?? "").hostname).toBe("127.0.0.1");
+      expect([3000, 8000, 8001, 3600, 8600, 3700, 18470, 18471, 18472, 18473]).not.toContain(Number(new URL(baseURL ?? "").port));
       await page.clock.setFixedTime(new Date("2026-11-11T00:00:00Z"));
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
       await page.emulateMedia({ reducedMotion: "reduce" });

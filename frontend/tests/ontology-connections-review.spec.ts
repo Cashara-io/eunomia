@@ -102,7 +102,11 @@ test('Fit text is legible, zoom reduces detail, routes fan out and labels do not
   await expect(page.locator('[data-edge-label]:visible')).toHaveCount(13);
   const sizes = await page.locator('[data-camera]').evaluate(el => {
     const zoom = Number(el.getAttribute('data-camera')?.split(',')[2]);
-    return [...el.querySelectorAll('[class*="markKind"], [data-edge-label] text')].map(n => parseFloat(getComputedStyle(n).fontSize)*zoom);
+    return [...el.querySelectorAll('[class*="markKind"], [data-edge-label] text')].map(n => {
+      const matrix = n instanceof SVGTextElement ? n.getScreenCTM() : null;
+      const scale = matrix ? Math.hypot(matrix.a, matrix.b) : zoom;
+      return parseFloat(getComputedStyle(n).fontSize) * scale;
+    });
   });
   expect(Math.min(...sizes)).toBeGreaterThanOrEqual(10.99);
   const starts = await page.locator('[data-edge-path][data-from="house"]').evaluateAll(paths => paths.map(p => p.getAttribute('data-start')));

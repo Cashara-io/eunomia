@@ -363,7 +363,7 @@ export default function ConnectionCanvas({
           data-detail={detail}
           data-camera={`${camera.x},${camera.y},${camera.zoom}`}
           style={{
-            ...{ "--small-text": `${smallText}px`, "--name-text": `${nameText}px`, "--verb-scale": verbScale },
+            ...{ "--small-text": `${smallText}px`, "--name-text": `${nameText}px` },
             transform: `translate(${camera.x}px,${camera.y}px) scale(${camera.zoom})`,
           }}
         >
@@ -457,7 +457,7 @@ export default function ConnectionCanvas({
                     height={30 * verbScale}
                     rx="15"
                   />
-                  <text y={5 * verbScale} textAnchor="middle" style={{ fontSize: "calc(var(--type-body) * var(--verb-scale))" }}>
+                  <text y={5} textAnchor="middle" fontSize={14} transform={`scale(${verbScale})`}>
                     {r.label.replaceAll("_", " ")}
                   </text>
                 </g>
