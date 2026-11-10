@@ -423,10 +423,24 @@ fn chat_spans(text: &str) -> Vec<std::ops::Range<usize>> {
         if text[span.clone()].starts_with("top ") { span.start += 4; }
         if out.last().is_some_and(|r: &std::ops::Range<usize>| span.start < r.end) { continue; }
         if let Some(m) = suffix.find(&text[span.end..]) { span.end += m.end(); }
-        out.push(span);
+        // The whole-span scanner deliberately keeps ambiguous arithmetic together. Split only
+        // a simple two-endpoint range here, leaving dates, fractions and exponents untouched.
+        static RANGE: OnceLock<Regex> = OnceLock::new();
+        let range = RANGE.get_or_init(|| Regex::new(&format!(r"^(?P<left>(?:\p{{Sc}}|{CURRENCY_CODE})? *[0-9]+(?:\.[0-9]+)?) *- *(?P<right>[0-9]+(?:\.[0-9]+)?(?: *{CURRENCY_CODE})?)$" )).unwrap());
+        if let Some(c) = range.captures(&text[span.clone()]) {
+            for part in ["left", "right"] {
+                let m = c.name(part).unwrap();
+                out.push(span.start + m.start()..span.start + m.end());
+            }
+        } else { out.push(span); }
     }
     out
 }
+
+fn coordinated(gap: &str) -> bool {
+    matches!(gap.trim(), "and" | "or" | "," | ", and" | ", or" | "to" | "up to" | "-")
+}
+
 impl ChatNumber {
     fn parse(raw: &str, context: &ChatUnit) -> Option<Self> {
         static NUMBER: OnceLock<Regex> = OnceLock::new();
@@ -524,6 +538,9 @@ fn opaque_identifier(text: &str) -> bool {
 fn chat_claims(text: &str, context: &ChatUnit, units: &[ChatUnit]) -> Vec<(std::ops::Range<usize>, Option<ChatNumber>)> {
     static DIGIT_UNIT: OnceLock<Regex> = OnceLock::new();
     let digit_unit = DIGIT_UNIT.get_or_init(|| Regex::new(r"^ *(?P<unit>per +[0-9]+ +[\p{L}]+|[\p{L}]+(?:\^?[0-9]+)?(?:/[\p{L}]+(?:\^?[0-9]+)?)+|[\p{L}]+\^?[0-9]+)\b").unwrap());
+    // Recognise common physical units even when none of the evidence uses them. Otherwise
+    // a currency prefix could incorrectly turn the unknown suffix in "$3 to 5 kg" into money.
+    let standard_units: Vec<_> = ["kg", "g", "mg", "t", "lb", "lbs", "oz", "l", "ml", "m", "km", "cm", "mm", "h", "hr", "hrs", "days", "hours"].into_iter().map(ChatUnit::parse).collect();
     let mut out = Vec::new();
     for mut span in chat_spans(text) {
         if out.last().is_some_and(|(r, _): &(std::ops::Range<usize>, Option<ChatNumber>)| span.start < r.end) { continue; }
@@ -533,7 +550,8 @@ fn chat_claims(text: &str, context: &ChatUnit, units: &[ChatUnit]) -> Vec<(std::
         let mut matched = digit_unit.captures(rest).map(|c| {
             (base_end + c.get(0).unwrap().end(), ChatUnit::parse(c.name("unit").unwrap().as_str()))
         });
-        for unit in units {
+        let decorated = ChatNumber::parse(&text[span.clone()], context).is_some_and(|n| matches!(n.unit, ChatUnit::Money(_) | ChatUnit::Percent));
+        for unit in units.iter().chain(&standard_units) {
             let name = match unit { ChatUnit::Other(s) => s.as_str(), ChatUnit::Ratio => "ratio", _ => continue };
             let mut forms = vec![name.to_string(), unit_form(name).into(), format!("{}s", unit_form(name))];
             for alias in ["kg", "kilogram", "kilograms", "g", "gram", "grams", "l", "litre", "litres", "liter", "liters", "m", "metre", "metres", "meter", "meters"] {
@@ -542,23 +560,32 @@ fn chat_claims(text: &str, context: &ChatUnit, units: &[ChatUnit]) -> Vec<(std::
             for form in forms {
                 if rest[gap..].starts_with(&form) {
                     let end = base_end + gap + form.len();
+                    // "$5M" is a money scale, while the separate suffix in "$5 kg" conflicts.
+                    if decorated && end <= span.end { continue; }
                     if text[end..].chars().next().is_some_and(|c| token(c) && c != '.') { continue; }
                     if matched.as_ref().is_none_or(|(old, _)| end > *old) { matched = Some((end, unit.clone())); }
                 }
             }
         }
         let number = if let Some((end, unit)) = matched {
-            let n = ChatNumber::parse(&text[span.start..base_end], &unit);
+            let n = ChatNumber::parse(&text[span.start..base_end], &unit).filter(|n| n.unit.compatible(&unit));
             span.end = end;
             n
         } else { ChatNumber::parse(&text[span.clone()], context) };
         out.push((span, number));
     }
-    // A trailing unit applies to both ends of an explicit range, such as 14 to 15 AUD.
-    // Never turn a typed first value into another unit, or drop a unit from bare prose.
+    // A trailing measure belongs to each bare member of the coordinated group. A typed
+    // member stops propagation of a different unit; punctuation other than a list comma stops it.
     for i in (0..out.len().saturating_sub(1)).rev() {
-        if text[out[i].0.end..out[i + 1].0.start].trim() != "to" { continue; }
+        if !coordinated(&text[out[i].0.end..out[i + 1].0.start]) { continue; }
         let Some(unit) = out[i + 1].1.as_ref().map(|n| n.unit.clone()).filter(|u| *u != ChatUnit::Plain) else { continue; };
+        if let Some(number) = &mut out[i].1 && number.unit == ChatUnit::Plain { number.unit = unit; }
+    }
+    // A currency prefix also applies forwards, including through an already inherited member.
+    for i in 1..out.len() {
+        if !coordinated(&text[out[i - 1].0.end..out[i].0.start]) { continue; }
+        let Some(ChatUnit::Money(code)) = out[i - 1].1.as_ref().map(|n| &n.unit) else { continue; };
+        let unit = ChatUnit::Money(code.clone());
         if let Some(number) = &mut out[i].1 && number.unit == ChatUnit::Plain { number.unit = unit; }
     }
     out
@@ -630,7 +657,7 @@ impl ChatProse {
         let mut start = 0;
         while start < checked.len() {
             let mut end = start;
-            while end + 1 < checked.len() && text[checked[end].0.end..checked[end + 1].0.start].trim() == "to" { end += 1; }
+            while end + 1 < checked.len() && coordinated(&text[checked[end].0.end..checked[end + 1].0.start]) { end += 1; }
             if end > start && checked[start..=end].iter().any(|(_, ok)| !ok) {
                 for (_, ok) in &mut checked[start..=end] { *ok = false; }
             }
@@ -713,6 +740,36 @@ impl ChatProse {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn computed_write_receipts_verify_but_request_only_counts_do_not() {
+        for (tool, result, reply) in [
+            ("document_import_rows", json!({"created":6240,"rows":6241,"bad_count":1,"_request":{"limit":999777}}), "Created 6240 entities from 6241 rows with 1 bad cell"),
+            ("document_upload", json!({"filename":"999777.csv","size_bytes":6240,"chunk_count":3,"revision":1}), "Uploaded 6240 bytes in 3 chunks"),
+            ("ontology_automap", json!({"mode":"profile_only","profiles":[{"records":6240,"fields":[{"distinct_count":3}]}],"_request":{"limit":999777}}), "Profiled 6240 records with 3 distinct values"),
+        ] {
+            let mut prose = ChatProse::default();
+            prose.tool_result(tool, &result);
+            assert!(prose.check(reply).is_ok(), "{tool}: {}", prose.safe(reply));
+            assert!(prose.check("Processed 999777 rows").is_err(), "{tool}");
+        }
+    }
+
+    #[test]
+    fn coordinated_numbers_share_trailing_units_and_leading_currency() {
+        let mut prose = ChatProse::default();
+        prose.result(&json!([{"value":3,"unit":"kg"},{"value":4,"unit":"kg"},{"value":5,"unit":"kg"}]));
+        for raw in ["3 and 5 kg", "3, 4 and 5 kg", "3, 4, and 5 kg", "between 3 and 5 kg", "3 to 5 kg", "from 3 up to 5 kg", "3-5 kg", "3 - 5 kg", "3–5 kg", "3 or 5 kg"] {
+            assert!(prose.check(raw).is_ok(), "{raw}: {}", prose.safe(raw));
+        }
+        for raw in ["between 3 and 999 kg", "3, 999 and 5 kg", "There were 3. And 5 kg", "3; 5 kg", "3 m and 5 kg", "3 kg and 5 m", "3 apples and 5 kg"] {
+            assert!(prose.check(raw).is_err(), "{raw}");
+        }
+        let mut money = ChatProse::default();
+        money.result(&json!([{"value":3,"unit":"AUD"},{"value":5,"unit":"AUD"},{"value":14,"unit":"AUD"},{"value":15.1,"unit":"AUD"}]));
+        for raw in ["$3 to 5", "AUD 14 to 15.10", "$3 and 5", "AUD 14-15.10"] { assert!(money.check(raw).is_ok(), "{raw}: {}", money.safe(raw)); }
+        for raw in ["$3 to 999", "AUD 14. Then 15.10", "$3 to 5 kg", "$3 to 5 USD"] { assert!(money.check(raw).is_err(), "{raw}"); }
+    }
+
     #[test]
     fn argument_digits_do_not_damage_computed_values_or_names() {
         let mut area = ChatProse::default();

@@ -19,8 +19,8 @@ const VIEW: &[&str] = &[
 pub struct Policy { paths: &'static [&'static str], view: bool }
 
 /// Every tool has an explicit policy. Unregistered tools fail closed in the collector.
-/// Mutating tools return request-derived data, so their whole result is excluded. A later read of
-/// those writes is tracked separately as a known limit: Cashara-io/eunomia#215.
+/// Exclude only fields that can echo this request. Independent receipts remain evidence.
+/// Later reads of same-turn writes are tracked separately: Cashara-io/eunomia#215.
 pub fn for_tool(name: &str) -> Option<Policy> {
     let paths: &'static [&'static str] = match name {
         "show_view" => VIEW,
@@ -35,16 +35,37 @@ pub fn for_tool(name: &str) -> Option<Policy> {
         | "vault_invitations" | "vault_get" | "vault_check" | "document_list"
         | "document_get" | "document_download" | "document_export" | "skill_find"
         | "skill_list" | "skill_get" | "changes_since" | "vault_peers" | "secret_request_status" => &[],
-        "memory_write" | "memory_write_batch" | "memory_update" | "memory_delete"
-        | "code_entity_upsert" | "code_relate" | "entity_relate" | "entity_update"
-        | "entity_delete" | "entity_merge" | "entity_set_property" | "consolidate_observations"
-        | "ontology_propose" | "ontology_suggest" | "ontology_automap" | "document_import_rows"
-        | "document_upload" | "document_delete" | "skill_save" | "skill_delete"
-        | "vault_create" | "vault_rename" | "vault_delete" | "vault_invite"
-        | "vault_remove_member" | "vault_leave" | "vault_set_role" | "vault_transfer_ownership"
-        | "vault_accept_invitation" | "vault_decline_invitation" | "vault_clone" | "vault_merge"
-        | "vault_repair" | "vault_share_code" | "vault_join_shared" | "vault_peer_sync"
-        | "secret_request" | "secret_transform" | "http_request" => &["**"],
+        "memory_write" => &["entity/name", "entity/kind", "entity/aliases", "memory/text", "memory/type", "memory/source", "kind_mapped/from"],
+        "memory_write_batch" => &["results/*/error", "results/*/kind_mapped/from"],
+        "memory_update" => &["text", "type"],
+        "code_entity_upsert" => &["name", "kind", "summary"],
+        "entity_update" => &["name", "aliases", "summary"],
+        "code_relate" | "entity_relate" => &["in", "out", "label", "source"],
+        "entity_set_property" => &[ "value/property", "value/value", "value/unit", "value/as_of", "value/source", "property_mapped/from"],
+        "consolidate_observations" => &["errors"],
+        "ontology_propose" => &[
+            "kinds/*/kind", "kinds/*/merge_into", "links/*/from_kind", "links/*/label", "links/*/to_kind",
+            "properties/*/kind", "properties/*/name", "properties/*/datatype", "properties/*/merge_into",
+            "metrics/*/kind", "metrics/*/name", "metrics/*/merge_into",
+        ],
+        // These tools profile stored records and propose with the server's model, not caller values.
+        "ontology_suggest" => &[],
+        "ontology_automap" => &["profiles/*/source", "profiles/*/record_type", "key_matches/*/source", "key_matches/*/record_type", "record_types/*/source", "record_types/*/record_type", "links/*/source", "links/*/record_type"],
+        "document_import_rows" => &["document_id", "kind", "columns/*/column", "columns/*/property"],
+        "document_upload" => &["filename", "media_type"],
+        "skill_save" => &["name"],
+        "vault_create" | "vault_clone" | "vault_merge" => &["name", "kind"],
+        "vault_rename" => &["name"],
+        "vault_invite" => &["vault_id", "user_email", "role"],
+        "vault_set_role" => &["email", "role"],
+        "vault_transfer_ownership" => &["email"],
+        "vault_share_code" => &["role"],
+        "vault_join_shared" => &["name"],
+        "secret_transform" => &["name", "op", "lineage", "allowed_hosts", "placements", "allowed_tools"],
+        "memory_delete" | "entity_delete" | "entity_merge" | "document_delete" | "skill_delete"
+        | "vault_delete" | "vault_remove_member" | "vault_leave" | "vault_accept_invitation"
+        | "vault_decline_invitation" | "vault_repair" | "vault_peer_sync"
+        | "secret_request" | "http_request" => &[],
         _ => return None,
     };
     Some(Policy { paths, view: name == "show_view" })
