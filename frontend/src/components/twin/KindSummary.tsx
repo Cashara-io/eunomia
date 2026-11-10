@@ -6,8 +6,8 @@ import {
   useId,
   useRef,
   useState,
-  type CSSProperties,
   type KeyboardEvent,
+  type CSSProperties,
 } from "react";
 import Link from "next/link";
 import { Bar } from "@visx/shape";
@@ -19,7 +19,6 @@ import {
   XIcon,
 } from "@phosphor-icons/react";
 import type { OntologyOut } from "@/lib/queries/ontology";
-import { useKindColor } from "@/lib/kindColors";
 import { twinHref } from "./model";
 import { businessSummary } from "./overview-model";
 import { humanLabel, plural, linkSentence } from "./overview-format";
@@ -29,24 +28,7 @@ import LandscapePlane from "./LandscapePlane";
 import styles from "./overview.module.css";
 import { useSetOverviewHighlight } from "./OverviewHighlight";
 
-// Seven familiar palette families connect the plane, icons and linked panels.
-const families: Record<string, string> = {
-  customer: "person",
-  employee: "person",
-  supplier: "person",
-  product: "repository",
-  stock_item: "repository",
-  order: "company",
-  purchase_order: "company",
-  sale: "company",
-  invoice: "file",
-  payment: "file",
-  contract: "symbol",
-  delivery: "organisation",
-  shipment: "organisation",
-  delivery_route: "organisation",
-  warehouse: "location",
-};
+import { useLandscapeTint } from "./landscape-shared";
 export type LandscapePin = {
   kind: string;
   label: string;
@@ -146,18 +128,7 @@ export default function KindSummary({
     if (pinGroup) pinIssuesRef.current?.focus();
   }, [pinGroup]);
   const nodeRefs = useRef(new Map<string, HTMLButtonElement>());
-  const color = useKindColor();
-  const hue = useCallback(
-    (kind: string) =>
-      families[kind] === "company"
-        ? "var(--vault-company)"
-        : color(families[kind] ?? kind),
-    [color],
-  );
-  const tint = useCallback(
-    (kind: string) => ({ "--kind-hue": hue(kind) }) as CSSProperties,
-    [hue],
-  );
+  const { hue, tint } = useLandscapeTint();
   const id = useId().replaceAll(":", "");
   const focusKind =
     selected?.type === "kind"
@@ -745,7 +716,8 @@ export default function KindSummary({
                 </div>
                 <Link
                   className={`btn btn-primary btn-sm ${styles.inspectorAction}`}
-                  href={twinHref("/ontology/objects", space, {
+                  href={twinHref("/ontology/connections", space, {
+                    relation: focusLink?.label ?? "",
                     kind: focusKind?.kind ?? focusLink?.from_kind ?? "",
                   })}
                 >

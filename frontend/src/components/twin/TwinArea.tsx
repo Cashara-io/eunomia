@@ -12,7 +12,7 @@ import ReadState from "./ReadState";
 import { returnKey } from "./overview-model";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useVaults } from "@/lib/queries/vaults";
@@ -28,10 +28,13 @@ import Structure from "./Structure";
 import KindDetail from "./KindDetail";
 import Review from "./Review";
 import Objects from "./Objects";
+import Connections from "./Connections";
+import ConnectionAccess, { ConnectionContent } from "./ConnectionAccess";
 import ObjectProfile from "./ObjectProfile";
 
 const views = [
   { path: "/ontology", label: "Overview" },
+  { path: "/ontology/connections", label: "Connections" },
   { path: "/ontology/objects", label: "Objects" },
   { path: "/ontology/review", label: "Review" },
 ];
@@ -45,6 +48,7 @@ export default function TwinArea({
   kind,
 }: {
   view:
+    | "connections"
     | "overview"
     | "structure"
     | "review"
@@ -58,6 +62,20 @@ export default function TwinArea({
   const params = useSearchParams();
   const space = params.get("space");
   const vault = query.data?.find((v) => v.id === space);
+  const cache = useQueryClient();
+  const previousConnectionSpace = useRef<string | undefined>(undefined);
+  const connectionSpace = view === "connections" ? vault?.id : undefined;
+  useEffect(() => {
+    const previous = previousConnectionSpace.current;
+    previousConnectionSpace.current = connectionSpace;
+    if (!previous || previous === connectionSpace) return;
+    if (view === "connections" && !connectionSpace && new URLSearchParams(window.location.search).get("space") === previous) {
+      window.history.replaceState(null, "", `${window.location.pathname}?${new URLSearchParams({ space: previous })}`);
+    }
+    const scoped = { predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey.includes(previous) };
+    void cache.cancelQueries(scoped);
+    cache.removeQueries(scoped);
+  }, [cache, connectionSpace, view]);
   return (
     <div className={styles.area}>
       {query.isError ? (
@@ -69,7 +87,11 @@ export default function TwinArea({
       ) : !query.data ? (
         <LoadingSkeleton label="Loading memory spaces" />
       ) : vault ? (
-        <SelectedSpace key={vault.id} vault={vault} view={view} kind={kind} />
+        view === "connections" ? (
+          <ConnectionAccess key={vault.id} space={vault.id}>
+            <SelectedSpace vault={vault} view={view} kind={kind} />
+          </ConnectionAccess>
+        ) : <SelectedSpace key={vault.id} vault={vault} view={view} kind={kind} />
       ) : (
         <>
           <h1 className="page-title">Ontology</h1>
@@ -84,15 +106,17 @@ export default function TwinArea({
               <Link
                 key={v.id}
                 href={twinHref(
-                  view === "activity"
-                    ? "/ontology/activity"
-                    : view === "review"
-                      ? "/ontology/review"
-                      : view === "objects" || view === "object"
-                        ? "/ontology/objects"
-                        : view === "structure"
-                          ? "/ontology/schema"
-                          : "/ontology",
+                  view === "connections"
+                    ? "/ontology/connections"
+                    : view === "activity"
+                      ? "/ontology/activity"
+                      : view === "review"
+                        ? "/ontology/review"
+                        : view === "objects" || view === "object"
+                          ? "/ontology/objects"
+                          : view === "structure"
+                            ? "/ontology/schema"
+                            : "/ontology",
                   v.id,
                 )}
                 className="flex items-center justify-between gap-3 p-4 hover:bg-[var(--surface-raised)]"
@@ -122,6 +146,7 @@ function SelectedSpace({
 }: {
   vault: Vault;
   view:
+    | "connections"
     | "overview"
     | "structure"
     | "review"
@@ -161,6 +186,7 @@ function SelectedSpace({
         : pathname;
   return (
     <>
+      <ConnectionContent>
       <header className={styles.context}>
         <div className={styles.identity}>
           <Link href="/ontology" className={styles.areaName}>
@@ -189,6 +215,8 @@ function SelectedSpace({
                 "object-kinds",
                 "objects",
                 "object-profile",
+                "connections",
+                "connection-search",
                 "ontology-activity",
               ])
                 void cache.invalidateQueries({ queryKey: [key, vault.id] });
@@ -276,13 +304,16 @@ function SelectedSpace({
           </Link>
         </section>
       )}
+      </ConnectionContent>
       {view !== "overview" && (
         <h1 className="sr-only">
           Ontology:{" "}
           {view === "kind" ? kind : view === "object" ? "Object" : view}
         </h1>
       )}
-      {view === "activity" ? (
+      {view === "connections" ? (
+        <Connections space={vault.id} />
+      ) : view === "activity" ? (
         <Activity space={vault.id} />
       ) : view === "objects" ? (
         <Objects space={vault.id} />
