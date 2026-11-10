@@ -52,4 +52,3 @@ The final production measurement uses Chrome 156.0.8078.48 on macOS arm64. Inter
 | Closed-heap growth across three cycles | 1.16% |
 
 The frame distribution sits at the 60 Hz refresh interval. It is not evidence of every frame being strictly below 16.7 ms. Raw results are committed beside the screenshot samples as `performance.json`. Earlier measurement JSON remains in the temporary evidence folder.
-
