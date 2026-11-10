@@ -6,7 +6,7 @@
     "dev": "bun scripts/server.mjs --dev",
     "build": "next build",
     "start": "bun scripts/server.mjs",
-    "lint": "eslint && bun test scripts/chat-ui-values.test.jsx scripts/object-numbers.test.jsx scripts/import-progress.test.jsx scripts/upload-budget.test.jsx scripts/backend-stream.test.jsx scripts/ontology-review.test.jsx scripts/ontology-overview.test.jsx src/components/twin/overview-regressions.test.jsx",
+    "lint": "eslint && bun test scripts/chat-ui-values.test.jsx scripts/object-numbers.test.jsx scripts/object-receipts.test.jsx scripts/import-progress.test.jsx scripts/upload-budget.test.jsx scripts/backend-stream.test.jsx scripts/ontology-review.test.jsx scripts/ontology-overview.test.jsx src/components/twin/overview-regressions.test.jsx",
     "gen:api": "openapi-ts",
     "test": "playwright test",
     "test:proxy": "bun test scripts/upload-budget.test.jsx scripts/backend-stream.test.jsx && playwright test --config scripts/proxy-path.config.ts"

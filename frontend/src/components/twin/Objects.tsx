@@ -1,4 +1,6 @@
 "use client";
+import ReceiptAccess from "./ReceiptAccess";
+import { rememberObjects, useObjectReturn } from "./use-object-return";
 import { useState } from "react";
 import Link from "next/link";
 import Select from "@/components/Select";
@@ -14,6 +16,9 @@ const words = (value: string) => {
 };
 
 export default function Objects({ space }: { space: string }) {
+  return <ReceiptAccess space={space}><ObjectsContent space={space} /></ReceiptAccess>;
+}
+function ObjectsContent({ space }: { space: string }) {
   const { params, update } = useTwinParams();
   const kinds = useObjectKinds(space);
   const kind =
@@ -29,6 +34,8 @@ export default function Objects({ space }: { space: string }) {
   const [hidden, setHidden] = useState<string[] | null>(null);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const data = query.data;
+  useObjectReturn(!!data);
+  const back = `/ontology/objects?${params.toString()}`;
   const page = Math.max(1, Number(params.get("page")) || 1);
   const selected = params.get("selected");
   const hiddenColumns =
@@ -276,7 +283,8 @@ export default function Objects({ space }: { space: string }) {
                         <Link
                           className="link inline-block max-w-44 truncate align-middle"
                           title={row.name}
-                          href={objectHref(row.id, space)}
+                          href={`${objectHref(row.id, space)}&back=${encodeURIComponent(back)}`}
+                          onClick={rememberObjects}
                         >
                           {row.name}
                         </Link>
@@ -295,7 +303,8 @@ export default function Objects({ space }: { space: string }) {
                       <td className="px-4 font-mono">
                         <Link
                           className="link"
-                          href={`${objectHref(row.id, space)}&section=Sources`}
+                          href={`${objectHref(row.id, space)}&section=Sources&back=${encodeURIComponent(back)}`}
+                          onClick={rememberObjects}
                         >
                           {row.source_count}
                         </Link>

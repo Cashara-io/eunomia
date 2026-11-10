@@ -1,15 +1,19 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { UserIcon, RobotIcon, GearIcon } from "@phosphor-icons/react";
 import { activityDay, humanLabel, relativeTime } from "./overview-format";
 import styles from "./overview.module.css";
+import receipts from "./receipts.module.css";
 import { useOverviewHighlight } from "./OverviewHighlight";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import Link from "next/link";
 import { API_URL, ApiError } from "@/lib/api";
 import { useLiveStatus } from "@/lib/queries/live";
+import ReceiptAccess from "./ReceiptAccess";
+import ActivitySubject from "./ActivitySubject";
+import { useTwinParams } from "./controls";
 import ReadState from "./ReadState";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import { words } from "./DefinitionRows";
@@ -46,7 +50,10 @@ const pageSchema = z.object({
   more: z.boolean(),
 });
 
-export default function Activity({
+export default function Activity(props: { space: string; compact?: boolean; definition?: { type: string; kind: string; name: string } }) {
+  return <ReceiptAccess space={props.space}><ActivityContent {...props} /></ReceiptAccess>;
+}
+function ActivityContent({
   space,
   compact = false,
   definition,
@@ -55,6 +62,14 @@ export default function Activity({
   compact?: boolean;
   definition?: { type: string; kind: string; name: string };
 }) {
+  const { params: routeParams, update } = useTwinParams();
+  const selectedSubject = routeParams.get("subject");
+  const trigger = useRef<HTMLAnchorElement | null>(null);
+  const rowRegion = useRef<HTMLDivElement>(null);
+  const scrollPosition = useRef(Number(routeParams.get("activityScroll")) || 0);
+  useLayoutEffect(() => {
+    if (!selectedSubject && rowRegion.current) rowRegion.current.scrollTop = scrollPosition.current;
+  }, [selectedSubject]);
   const live = useLiveStatus();
   const highlightedKinds = useOverviewHighlight();
   const [now, setNow] = useState<number | null>(null);
@@ -69,10 +84,11 @@ export default function Activity({
   const [type, setType] = useState("");
   const [kind, setKind] = useState("");
   const [cursor, setCursor] = useState<number[]>([]);
-  const [seen, setSeen] = useState<number | null>(null);
-  const [paused, setPaused] = useState(false);
+  const [seen, setSeen] = useState<number | null>(() => routeParams.has("activityPaused") ? Number(routeParams.get("activityPaused")) : null);
+  const [paused, setPaused] = useState(() => routeParams.has("activityPaused"));
   const before = cursor.at(-1);
   const query = useQuery({
+    retryOnMount: false,
     queryKey: [
       "ontology-activity",
       space,
@@ -98,12 +114,10 @@ export default function Activity({
         `${API_URL}/api/vaults/${encodeURIComponent(space)}/ontology/activity?${params}`,
         { credentials: "include", signal },
       );
-      if (!response.ok)
-        throw new ApiError(
-          response.status,
-          `http.${response.status}`,
-          "Could not load activity.",
-        );
+      if (!response.ok) {
+        const problem = z.object({ code: z.string().optional() }).safeParse(await response.json());
+        throw new ApiError(response.status, problem.success ? problem.data.code ?? "http.error" : "http.error", "Could not load activity.");
+      }
       return pageSchema.parse(await response.json());
     },
     refetchInterval: live === "live" || paused ? false : 12000,
@@ -115,9 +129,10 @@ export default function Activity({
     events: z.infer<typeof eventSchema>[];
   } | null>(null);
   const key = JSON.stringify({ actor, action, type, kind, before, definition });
-  const shown = anchor?.key === key ? anchor.events : events;
+  const shown = anchor?.key === key ? anchor.events : paused && seen !== null ? events.filter(event => event.seq <= seen) : events;
   const unseen = seen === null ? 0 : events.filter((e) => e.seq > seen).length;
   function browse() {
+    update({ activityPaused: "", activityScroll: "", subject: "" }, true);
     setCursor([]);
     setAnchor(null);
     setSeen(null);
@@ -127,6 +142,7 @@ export default function Activity({
     setAnchor({ key, events: shown });
     setSeen(events[0]?.seq ?? 0);
     setPaused(true);
+    update({ activityPaused: String(events[0]?.seq ?? 0), activityScroll: String(scrollPosition.current) }, true);
   }
   return (
     <section
@@ -152,6 +168,7 @@ export default function Activity({
                 setPaused(false);
                 setAnchor(null);
                 setSeen(null);
+                update({ activityPaused: "", activityScroll: "" }, true);
               } else pause();
             }}
           >
@@ -254,8 +271,11 @@ export default function Activity({
       ) : (
         <>
           <div
-            className={styles.activityRows}
+            className={`${styles.activityRows} ${receipts.activityViewport}`}
+            ref={rowRegion}
             onScroll={(e) => {
+              scrollPosition.current = e.currentTarget.scrollTop;
+              if (paused) update({ activityScroll: String(scrollPosition.current) }, true);
               if (!paused && e.currentTarget.scrollTop > 16) pause();
             }}
           >
@@ -330,7 +350,13 @@ export default function Activity({
                             <strong className="font-medium">
                               {humanLabel(event.action).toLowerCase()}
                             </strong>{" "}
-                            <Link href={subject}>{humanLabel(event.name)}</Link>{" "}
+                            <Link href={subject} onClick={e => {
+                              if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                              e.preventDefault();
+                              trigger.current = e.currentTarget;
+                              if (!paused) pause();
+                              update({ subject: String(event.seq) });
+                            }}>{humanLabel(event.name)}</Link>{" "}
                             <span className="label">
                               {humanLabel(event.definition_type)}
                               {event.kind &&
@@ -368,6 +394,13 @@ export default function Activity({
               )}
             </ol>
           </div>
+          {shown.find(event => String(event.seq) === selectedSubject) && (() => {
+            const event = shown.find(event => String(event.seq) === selectedSubject);
+            return event ? <ActivitySubject event={event} space={space} close={() => {
+              if (trigger.current) window.history.back();
+              else update({ subject: "" }, true);
+            }} restore={() => trigger.current?.focus({ preventScroll: true })} /> : null;
+          })()}
           {unseen > 0 && (
             <button
               className="btn btn-sm self-start"
@@ -375,6 +408,7 @@ export default function Activity({
                 setAnchor(null);
                 setSeen(null);
                 setPaused(false);
+                update({ activityPaused: "", activityScroll: "" }, true);
               }}
             >
               {unseen} new events

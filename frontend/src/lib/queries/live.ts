@@ -98,6 +98,16 @@ export function useLiveUpdates() {
     };
 
     const onMessage = (m: Message) => {
+      // Hide receipt content immediately while membership is reconfirmed.
+      if (["vault", "vaults", "resync"].includes(m.type) || (m.type === "hello" && everConnected)) {
+        void qc.invalidateQueries({ queryKey: ["receipt-access"] });
+        if (m.type === "vault" && ["member_removed", "left", "deleted"].includes(m.op)) {
+          const scoped = { predicate: (q: { queryKey: readonly unknown[] }) =>
+            ["object-profile", "objects", "object-kinds", "ontology-activity"].includes(String(q.queryKey[0])) && q.queryKey[1] === m.vault };
+          void qc.cancelQueries(scoped);
+          qc.removeQueries(scoped);
+        }
+      }
       switch (m.type) {
         case "hello": {
           setLiveStatus("live");
