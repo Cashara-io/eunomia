@@ -92,7 +92,7 @@ async fn an_invitee_hears_the_invitation_and_a_removed_member_hears_the_removal(
     let app = TestApp::new().await;
     let base = serve(&app).await;
     let bob = common::register(&app.state, "bob@example.com").await;
-    let bob_token = models_user::create_api_token(app.control(), &bob.id, "bob").await.unwrap().token;
+    let bob_token = models_user::create_api_token_with(app.control(), &bob.id, "bob", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     let team = app.tool("vault_create", json!({"name": "Team"})).await["id"].as_str().unwrap().to_string();
 
     let mut ws = connect(&base, &bob_token).await;
@@ -155,7 +155,7 @@ async fn ontology_membership_is_checked_on_subscribe_and_again_before_delivery()
     let base = serve(&app).await;
     let vault = app.tool("ontology_get", json!({})).await["vault"].as_str().unwrap().to_string();
     let bob = common::register(&app.state, "activity-outsider@example.com").await;
-    let token = models_user::create_api_token(app.control(), &bob.id, "Outsider").await.unwrap().token;
+    let token = models_user::create_api_token_with(app.control(), &bob.id, "Outsider", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     let mut ws = connect(&base, &token).await;
     assert!(next(&mut ws).await["ontology"].get(&vault).is_none());
     app.tool("ontology_propose", json!({"vault_id":vault,"kinds":[{"kind":"shop"}]})).await;

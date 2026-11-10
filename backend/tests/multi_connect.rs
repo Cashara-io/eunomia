@@ -197,7 +197,7 @@ async fn another_user_cannot_see_or_use_a_connection() {
     let owner = app.user.id.clone();
     let mine = service::create_connection(&org.db, &owner, "github", "private").await.unwrap();
     let other = common::register(&app.state, "other@example.com").await;
-    let token = models_user::create_api_token(&app.state.control, &other.id, "t").await.unwrap().token;
+    let token = models_user::create_api_token_with(&app.state.control, &other.id, "t", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     let call = |method: &'static str, path: String, body: Option<Value>| {
         let (router, token) = (app.router.clone(), token.clone());
         async move { common::http(&router, method, &path, body, Some(&token), None).await.0 }

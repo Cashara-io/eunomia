@@ -92,7 +92,7 @@ async fn admin_sees_space_events_and_people() {
     assert!(people["signup"]["summary"].is_string());
 
     // a member is refused both
-    let bob_token = models_user::create_api_token(&app.state.control, &bob.id, "t").await.unwrap().token;
+    let bob_token = models_user::create_api_token_with(&app.state.control, &bob.id, "t", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     for path in ["/api/admin/audit", "/api/admin/people"] {
         let ((status, _), _) = common::http(&app.router, "GET", path, None, Some(&bob_token), None).await;
         assert_eq!(status, StatusCode::FORBIDDEN, "{path}");

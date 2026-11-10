@@ -14,7 +14,7 @@ async fn app_with_status_dir() -> (TestApp, std::path::PathBuf, String) {
     settings.update_status_dir = dir.to_string_lossy().into_owned();
     let app = TestApp::with_settings(settings).await; // the first user is the admin
     let member = common::register(&app.state, "member@example.com").await;
-    let member_token = eunomia_backend::models_user::create_api_token(&app.state.control, &member.id, "m").await.unwrap().token;
+    let member_token = eunomia_backend::models_user::create_api_token_with(&app.state.control, &member.id, "m", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     (app, dir, member_token)
 }
 

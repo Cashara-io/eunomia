@@ -107,7 +107,7 @@ async fn a_vault_restricted_token_reads_its_own_vault_only() {
 
     // another user is not a member of the vault
     let other = common::register(&app.state, "other@example.com").await;
-    let other_token = eunomia_backend::models_user::create_api_token(app.control(), &other.id, "o").await.unwrap().token;
+    let other_token = eunomia_backend::models_user::create_api_token_with(app.control(), &other.id, "o", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     let ((status, _), _) = common::http(&app.router, "GET", &format!("/api/vaults/{team}/changes"), None, Some(&other_token), None).await;
     assert_eq!(status, 403);
 }

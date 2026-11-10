@@ -73,7 +73,7 @@ async fn aggregates_refuse_non_members_and_restricted_credentials() {
     let app=TestApp::new().await;
     let (vault,ids)=fixture(&app).await;
     let other=common::register(&app.state,"outsider@example.com").await;
-    let token=eunomia_backend::models_user::create_api_token(&app.state.control,&other.id,"outsider").await.unwrap().token;
+    let token=eunomia_backend::models_user::create_api_token_with(&app.state.control,&other.id,"outsider",&eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(),None,None).await.unwrap().token;
     for suffix in ["".to_string(),"?kind=product".to_string(),format!("/{}",ids[0])] {
         let (status,out)=common::http(&app.router,"GET",&format!("/api/vaults/{vault}/ontology/objects{suffix}"),None,Some(&token),None).await.0;
         assert_eq!(status,403,"{out}");

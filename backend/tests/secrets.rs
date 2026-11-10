@@ -405,12 +405,12 @@ async fn org_a_references_never_resolve_for_org_b_and_settings_are_owner_only() 
 
     // org B's owner sees an empty broker; a member of org A who is not an org owner sees only the
     // references of the vaults they own (none here: org A's are in the owner's vaults) and no provider
-    let b_token = eunomia_backend::models_user::create_api_token(&w.app.state.control, &b.id, "b").await.unwrap().token;
+    let b_token = eunomia_backend::models_user::create_api_token_with(&w.app.state.control, &b.id, "b", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     let ((status, refs), _) = common::http(&w.app.router, "GET", "/api/secrets/refs", None, Some(&b_token), None).await;
     assert_eq!((status.as_u16(), refs), (200, json!([])));
     let member = common::register(&w.app.state, "member@example.com").await;
     assert_eq!(member.org, w.app.user.org, "a second signup joins the install's org");
-    let m_token = eunomia_backend::models_user::create_api_token(&w.app.state.control, &member.id, "m").await.unwrap().token;
+    let m_token = eunomia_backend::models_user::create_api_token_with(&w.app.state.control, &member.id, "m", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     let ((status, body), _) = common::http(&w.app.router, "GET", "/api/secrets/refs", None, Some(&m_token), None).await;
     assert_eq!((status.as_u16(), body), (200, json!([])));
     let ((status, body), _) =
@@ -660,7 +660,7 @@ async fn vault_owners_manage_their_own_vaults_references() {
         assert_eq!((status.as_u16(), out["code"].clone()), (403, json!("auth.scope")), "{method} {path}: {out}");
     }
     // his unrestricted token works like his session
-    let unrestricted = eunomia_backend::models_user::create_api_token(&st.control, &bob.id, "u").await.unwrap().token;
+    let unrestricted = eunomia_backend::models_user::create_api_token_with(&st.control, &bob.id, "u", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     let ((status, list), _) = common::http(&w.app.router, "GET", "/api/secrets/refs", None, Some(&unrestricted), None).await;
     assert_eq!((status.as_u16(), list.as_array().map(Vec::len)), (200, Some(1)), "{list}");
 
@@ -676,7 +676,7 @@ async fn vault_owners_manage_their_own_vaults_references() {
 
     // org B's owner: none of org A's references or log
     let b = common::register_personal(st, "orgb-owner@example.com").await;
-    let b_token = eunomia_backend::models_user::create_api_token(&st.control, &b.id, "b").await.unwrap().token;
+    let b_token = eunomia_backend::models_user::create_api_token_with(&st.control, &b.id, "b", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     let ((status, _), _) = common::http(&w.app.router, "DELETE", &format!("/api/secrets/refs/{mine_id}"), None, Some(&b_token), None).await;
     assert_eq!(status, 404);
     let ((_, log), _) = common::http(&w.app.router, "GET", "/api/secrets/log", None, Some(&b_token), None).await;

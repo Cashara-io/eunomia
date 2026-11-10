@@ -33,7 +33,7 @@ async fn an_authorization_check_without_a_caller_fails_closed() {
 async fn only_an_instance_admin_can_trigger_the_updater() {
     let app = TestApp::new().await; // the first user is the admin
     let member = common::register(&app.state, "member@example.com").await;
-    let member_token = eunomia_backend::models_user::create_api_token(&app.state.control, &member.id, "m").await.unwrap().token;
+    let member_token = eunomia_backend::models_user::create_api_token_with(&app.state.control, &member.id, "m", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     for path in ["/api/update/request", "/api/update/check"] {
         let (status, body) = http(&app.router, "POST", path, None, Some(&member_token), None).await.0;
         assert_eq!((status, body["code"].as_str()), (StatusCode::FORBIDDEN, Some("auth.forbidden")), "{path} {body}");

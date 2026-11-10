@@ -102,7 +102,7 @@ impl W {
 }
 
 async fn person(app: &TestApp, user: User) -> P {
-    let token = models_user::create_api_token(&app.state.control, &user.id, "t").await.unwrap().token;
+    let token = models_user::create_api_token_with(&app.state.control, &user.id, "t", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     P { user, token }
 }
 
