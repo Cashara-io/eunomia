@@ -263,7 +263,7 @@ fn stopping_keeps_both_copies() {
 }
 
 #[test]
-fn review209_owner_merge_redirects_sync_to_existing_and_new_peer() {
+fn review209_local_merge_data_converges_without_sending_redirects() {
     run(|| async {
         let (a, b, c) = (Node::new("merge-a").await, Node::new("merge-b").await, Node::new("merge-c").await);
         let va = a.vault("Stores").await;
@@ -285,11 +285,34 @@ fn review209_owner_merge_redirects_sync_to_existing_and_new_peer() {
             assert!(!got.to_string().contains("@eunomia/merged/"), "{got}");
             assert_eq!(names(&got), vec!["North"]);
         }
-        // Also exercise a guest-to-host update carrying the redirect back.
+        // Redirects never enter outgoing content, including full snapshots and merge replay.
+        let st = a.org().await;
+        let row = a.link(&link).await;
+        let ctx = sync::Ctx { state: &st, link: &row, key: link.clone(), me: peers::instance_id(&st.db).await.unwrap() };
+        let snapshot = sys(sync::host_exchange(&ctx, sync::ExchangeRequest { after: 0, ..Default::default() })).await.unwrap();
+        assert!(!snapshot.to_string().contains("@eunomia/merged/"), "{snapshot}");
+        // Exercise a guest-to-host update after the local merge.
         let entity = b.find(&vb, "North").await["results"][0]["id"].clone();
         b.app.tool("entity_update", json!({"entity_id":entity,"summary":"Fresh summary"})).await;
         assert_eq!(b.sync(&link).await.failed, 0);
         assert_eq!(a.digest(&va).await, b.digest(&vb).await);
+        // Extraction follows only the local owner's merge, including after merge replay.
+        use eunomia_backend::sources::mock::{serve, route};
+        let answer = json!({"organisations":[{"name":"North Co","facts":["North Co has new stock"]}]});
+        let mock = serve(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]).await;
+        let addr: std::net::SocketAddr = mock.base.trim_start_matches("http://").parse().unwrap();
+        assert_eq!(addr.ip(), std::net::Ipv4Addr::LOCALHOST);
+        assert!(![3000,8000,8001,3600,8600,3700,18470,18471,18472,18473].contains(&addr.port()));
+        for (node, vault, local_merge) in [(&a, &va, true), (&b, &vb, false), (&c, &vc, false)] {
+            let settings = eunomia_backend::config::Settings { openai_base_url:mock.base.clone(),openai_api_key:Some("sk-test".into()),openai_chat_model:"test".into(),..node.app.state.settings.clone() };
+            let record = eunomia_backend::entities::extract::ExtractRecord { id:"notes:stock".into(),title:"Stock".into(),body_text:"North Co has new stock available for customers today.".into(),occurred_at:None,vault:Some(vault.clone()),source:"notes".into(),payload:Value::Null,owner_name:None };
+            sys(eunomia_backend::entities::extract::extract_entities(&node.app.db().await, &settings, &node.app.user.id, &record)).await.unwrap();
+            let found = node.find(vault, "North").await;
+            let store = found["results"].as_array().unwrap().iter().find(|e| e["kind"] == "store").unwrap();
+            let got = node.app.tool("entities_get", json!({"id":store["id"]})).await;
+            assert_eq!(got.to_string().contains("North Co has new stock"), local_merge, "{got}");
+            assert_eq!(found["results"].as_array().unwrap().iter().any(|e| e["kind"] == "organisation"), !local_merge, "{found}");
+        }
     });
 }
 
@@ -342,5 +365,44 @@ fn review209_failed_guest_write_does_not_advance_cursor() {
         let after = b.link(&key).await;
         assert_eq!(after.in_cursor, row.in_cursor, "failed guest page was skipped");
         assert_eq!(after.status, peers::status::UNREACHABLE);
+    });
+}
+
+#[test]
+fn review209_peer_redirect_is_stripped_and_host_extraction_keeps_jordan_separate() {
+    run(|| async {
+        use eunomia_backend::sources::mock::{serve, route};
+        let answer = json!({"people":[{"name":"Jordan","facts":["Jordan enjoys cycling"]}]});
+        let mock = serve(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]).await;
+        let addr: std::net::SocketAddr = mock.base.trim_start_matches("http://").parse().unwrap();
+        assert_eq!(addr.ip(), std::net::Ipv4Addr::LOCALHOST);
+        assert!(![3000,8000,8001,3600,8600,3700,18470,18471,18472,18473].contains(&addr.port()));
+        let app = TestApp::with_settings(eunomia_backend::config::Settings { openai_base_url:mock.base.clone(), openai_api_key:Some("sk-test".into()), openai_chat_model:"test".into(), ..common::test_settings() }).await;
+        let a = Node { app, base:"http://forged-host.test:18195".into() };
+        peers::net::test_route(&a.base, a.app.router.clone());
+        let b = Node::new("forged-guest").await;
+        let va = a.vault("Host stores").await;
+        a.app.tool("ontology_propose", json!({"vault_id":va.to_string(),"kinds":[{"kind":"store","description":"A shop"}]})).await;
+        assert_eq!(a.app.http_session("POST", &format!("/api/vaults/{}/ontology/kinds/decide", va.to_string()), Some(json!({"kind":"store","decision":{"action":"approve"}}))).await.0, 200);
+        let (_, key) = b.join(&a.code(&va, "edit").await).await;
+        // Send correctly hashed hostile wire JSON, bypassing the honest sender's filter.
+        for summary in ["Created by peer", "Updated by peer"] {
+            let st = a.org().await;
+            let row = a.link(&key).await;
+            let ctx = sync::Ctx { state:&st, link:&row, key:key.clone(), me:peers::instance_id(&st.db).await.unwrap() };
+            let data = json!({"kind":"store","name":"North","aliases":if summary == "Created by peer" { json!(["Shop","@eunomia/merged/person:jordan"]) } else { json!(["Shop","@eunomia/merged/person:jordan"," @EUNOMIA/MERGED/invalid"]) },"summary":summary});
+            let item = sync::Item { kind:"entity".into(),id:"custom_entity:forged".into(),peer_id:None,origin:"guest:forged".into(),op:"upsert".into(),hash:sync::item_hash("entity", &data),data,refs:Default::default(),updated_at:None,into:None };
+            let response = sys(sync::host_exchange(&ctx, sync::ExchangeRequest { changes:vec![item], ..Default::default() })).await.unwrap();
+            assert_eq!(response["report"]["failed"], 0, "{response}");
+            let found = a.find(&va, "North").await;
+            let id = found["results"][0]["id"].clone();
+            let got = a.app.tool("entities_get", json!({"id":id})).await;
+            assert!(got.to_string().contains(summary) && got.to_string().contains("Shop"), "{got}");
+            let record = eunomia_backend::entities::extract::ExtractRecord { id:"notes:jordan".into(),title:"Jordan".into(),body_text:"Jordan enjoys cycling with friends every Sunday morning.".into(),occurred_at:None,vault:Some(va.clone()),source:"notes".into(),payload:Value::Null,owner_name:None };
+            sys(eunomia_backend::entities::extract::extract_entities(&a.app.db().await, &a.app.state.settings, &a.app.user.id, &record)).await.unwrap();
+            let store = a.app.tool("entities_get", json!({"id":id})).await;
+            assert!(!store.to_string().contains("Jordan enjoys cycling"), "{store}");
+            assert_eq!(names(&a.find(&va, "Jordan").await), vec!["Jordan"]);
+        }
     });
 }
