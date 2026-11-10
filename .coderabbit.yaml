@@ -1,0 +1,14 @@
+# CodeRabbit review settings. Reviews run once the CodeRabbit GitHub app is installed on this repo.
+language: en-AU
+reviews:
+  profile: chill
+  path_filters:
+    - "!frontend/src/lib/gen/**"
+    - "!backend/openapi.json"
+    - "!**/*.generated.json"
+    - "!backend/Cargo.lock"
+    - "!frontend/bun.lock"
+    - "!**/*.svg"
+  auto_review:
+    enabled: true
+    drafts: false

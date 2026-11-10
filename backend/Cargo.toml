@@ -63,6 +63,7 @@ rust_decimal = "1"
 jsonschema = { version = "0.58.6", default-features = false }
 
 [dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
 tokio-test = "0.4"
 insta = { version = "1", features = ["json", "redactions"] }
 tokio-tungstenite = "0.29"

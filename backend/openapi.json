@@ -10194,7 +10194,7 @@
               "string",
               "null"
             ],
-            "description": "The approved link type whose targets it names (\"supplied_by supplier\"), when no property takes it."
+            "description": "The approved link type whose targets it names (\"supplied_by supplier\"), alongside any property."
           },
           "property": {
             "type": [

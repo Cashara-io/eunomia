@@ -33,7 +33,7 @@ struct Node {
 impl Node {
     async fn new(name: &str) -> Node {
         let app = TestApp::new().await;
-        let base = format!("http://{name}.test:3000");
+        let base = format!("http://{name}.test:18195");
         peers::net::test_route(&base, app.router.clone());
         Node { app, base }
     }
@@ -259,5 +259,150 @@ fn stopping_keeps_both_copies() {
         assert_eq!(b.link(&link).await.status, peers::status::REVOKED);
         assert!(names(&b.find(&vb, "Pat").await).contains(&"Pat".to_string()));
         assert!(names(&a.find(&va, "Pat").await).contains(&"Pat".to_string()));
+    });
+}
+
+#[test]
+fn review209_local_merge_data_converges_without_sending_redirects() {
+    run(|| async {
+        let (a, b, c) = (Node::new("merge-a").await, Node::new("merge-b").await, Node::new("merge-c").await);
+        let va = a.vault("Stores").await;
+        a.app.tool("ontology_propose", json!({"vault_id":va.to_string(),"kinds":[{"kind":"store","description":"A shop"}]})).await;
+        let (status, decided) = a.app.http_session("POST", &format!("/api/vaults/{}/ontology/kinds/decide", va.to_string()), Some(json!({"kind":"store","decision":{"action":"approve"}}))).await;
+        assert_eq!(status, 200, "{decided}");
+        let winner = a.app.tool("memory_write", json!({"subject_kind":"store","subject_name":"North","text":"North opens daily","vault_id":va.to_string()})).await;
+        let loser = a.app.tool("memory_write", json!({"subject_kind":"organisation","subject_name":"North Co","text":"North Co sells food","vault_id":va.to_string()})).await;
+        let (vb, link) = b.join(&a.code(&va, "edit").await).await;
+        let merged = a.app.tool("entity_merge", json!({"winner_id":winner["entity"]["id"],"loser_id":loser["entity"]["id"]})).await;
+        assert!(merged.get("error").is_none(), "{merged}");
+        let r = b.sync(&link).await;
+        assert_eq!(r.failed, 0, "{r:?}");
+        assert_eq!(a.digest(&va).await, b.digest(&vb).await);
+        let (vc, _) = c.join(&a.code(&va, "edit").await).await;
+        assert_eq!(a.digest(&va).await, c.digest(&vc).await);
+        for (node, vault) in [(&a, &va), (&b, &vb), (&c, &vc)] {
+            let got = node.find(vault, "North").await;
+            assert!(!got.to_string().contains("@eunomia/merged/"), "{got}");
+            assert_eq!(names(&got), vec!["North"]);
+        }
+        // Redirects never enter outgoing content, including full snapshots and merge replay.
+        let st = a.org().await;
+        let row = a.link(&link).await;
+        let ctx = sync::Ctx { state: &st, link: &row, key: link.clone(), me: peers::instance_id(&st.db).await.unwrap() };
+        let snapshot = sys(sync::host_exchange(&ctx, sync::ExchangeRequest { after: 0, ..Default::default() })).await.unwrap();
+        assert!(!snapshot.to_string().contains("@eunomia/merged/"), "{snapshot}");
+        // Exercise a guest-to-host update after the local merge.
+        let entity = b.find(&vb, "North").await["results"][0]["id"].clone();
+        b.app.tool("entity_update", json!({"entity_id":entity,"summary":"Fresh summary"})).await;
+        assert_eq!(b.sync(&link).await.failed, 0);
+        assert_eq!(a.digest(&va).await, b.digest(&vb).await);
+        // Extraction follows only the local owner's merge, including after merge replay.
+        use eunomia_backend::sources::mock::{serve, route};
+        let answer = json!({"organisations":[{"name":"North Co","facts":["North Co has new stock"]}]});
+        let mock = serve(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]).await;
+        let addr: std::net::SocketAddr = mock.base.trim_start_matches("http://").parse().unwrap();
+        assert_eq!(addr.ip(), std::net::Ipv4Addr::LOCALHOST);
+        assert!(![3000,8000,8001,3600,8600,3700,18470,18471,18472,18473].contains(&addr.port()));
+        for (node, vault, local_merge) in [(&a, &va, true), (&b, &vb, false), (&c, &vc, false)] {
+            let settings = eunomia_backend::config::Settings { openai_base_url:mock.base.clone(),openai_api_key:Some("sk-test".into()),openai_chat_model:"test".into(),..node.app.state.settings.clone() };
+            let record = eunomia_backend::entities::extract::ExtractRecord { id:"notes:stock".into(),title:"Stock".into(),body_text:"North Co has new stock available for customers today.".into(),occurred_at:None,vault:Some(vault.clone()),source:"notes".into(),payload:Value::Null,owner_name:None };
+            sys(eunomia_backend::entities::extract::extract_entities(&node.app.db().await, &settings, &node.app.user.id, &record)).await.unwrap();
+            let found = node.find(vault, "North").await;
+            let store = found["results"].as_array().unwrap().iter().find(|e| e["kind"] == "store").unwrap();
+            let got = node.app.tool("entities_get", json!({"id":store["id"]})).await;
+            assert_eq!(got.to_string().contains("North Co has new stock"), local_merge, "{got}");
+            assert_eq!(found["results"].as_array().unwrap().iter().any(|e| e["kind"] == "organisation"), !local_merge, "{found}");
+        }
+    });
+}
+
+#[test]
+fn review209_failed_host_write_does_not_advance_cursor() {
+    run(|| async {
+        let (a, b) = (Node::new("failed-a").await, Node::new("failed-b").await);
+        let va = a.vault("Failures").await;
+        let (_, key) = b.join(&a.code(&va, "edit").await).await;
+        let st = a.org().await;
+        let row = a.link(&key).await;
+        let ctx = sync::Ctx { state: &st, link: &row, key: key.clone(), me: peers::instance_id(&st.db).await.unwrap() };
+        let data = sync::entity_content("person", "", &[], "");
+        let item = sync::Item { kind:"entity".into(), id:"person:invalid".into(), peer_id:None, origin:"failed:person:invalid".into(), op:"upsert".into(), hash:sync::item_hash("entity", &data), data, refs:Default::default(), updated_at:None, into:None };
+        let response = sys(sync::host_exchange(&ctx, sync::ExchangeRequest { changes:vec![item], upto:row.in_cursor + 10, ..Default::default() })).await;
+        assert!(response.is_err(), "a failed page must not be acknowledged: {response:?}");
+        assert_eq!(a.link(&key).await.in_cursor, row.in_cursor);
+    });
+}
+
+#[test]
+fn review209_failed_guest_write_does_not_advance_cursor() {
+    run(|| async {
+        use axum::{Json, Router, routing::post};
+        use eunomia_backend::peers::crypto;
+        let (a, b) = (Node::new("failed-guest-a").await, Node::new("failed-guest-b").await);
+        let va = a.vault("Guest failures").await;
+        let (_, key) = b.join(&a.code(&va, "edit").await).await;
+        let row = b.link(&key).await;
+        let secret = peers::link_secret(&b.app.state.settings, &row).unwrap();
+        let next = row.in_cursor + 10;
+        let route_key = key.clone();
+        // This authenticated in-process host sends a valid hash with a name the write rejects.
+        let router = Router::new().route("/api/peer/v1/{org}/links/{key}", post(move |Json(env): Json<Value>| {
+            let key = route_key.clone();
+            async move {
+                let data = sync::entity_content("person", "", &[], "");
+                let item = sync::Item { kind:"entity".into(), id:"person:invalid".into(), peer_id:None, origin:"failed:person:invalid".into(), op:"upsert".into(), hash:sync::item_hash("entity", &data), data, refs:Default::default(), updated_at:None, into:None };
+                let response = sync::ExchangeResponse { changes:vec![item], next, ..Default::default() };
+                let ts = chrono::Utc::now().timestamp();
+                let nonce = crypto::random_id();
+                let aad = crypto::response_aad(&key, env["nonce"].as_str().unwrap(), ts, &nonce);
+                let data = crypto::seal(&secret, &aad, &serde_json::to_vec(&response).unwrap());
+                Json(json!({"ts":ts,"nonce":nonce,"data":data}))
+            }
+        }));
+        peers::net::test_route(&a.base, router);
+        let report = b.sync(&key).await;
+        assert_eq!(report.failed, 1);
+        let after = b.link(&key).await;
+        assert_eq!(after.in_cursor, row.in_cursor, "failed guest page was skipped");
+        assert_eq!(after.status, peers::status::UNREACHABLE);
+    });
+}
+
+#[test]
+fn review209_peer_redirect_is_stripped_and_host_extraction_keeps_jordan_separate() {
+    run(|| async {
+        use eunomia_backend::sources::mock::{serve, route};
+        let answer = json!({"people":[{"name":"Jordan","facts":["Jordan enjoys cycling"]}]});
+        let mock = serve(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]).await;
+        let addr: std::net::SocketAddr = mock.base.trim_start_matches("http://").parse().unwrap();
+        assert_eq!(addr.ip(), std::net::Ipv4Addr::LOCALHOST);
+        assert!(![3000,8000,8001,3600,8600,3700,18470,18471,18472,18473].contains(&addr.port()));
+        let app = TestApp::with_settings(eunomia_backend::config::Settings { openai_base_url:mock.base.clone(), openai_api_key:Some("sk-test".into()), openai_chat_model:"test".into(), ..common::test_settings() }).await;
+        let a = Node { app, base:"http://forged-host.test:18195".into() };
+        peers::net::test_route(&a.base, a.app.router.clone());
+        let b = Node::new("forged-guest").await;
+        let va = a.vault("Host stores").await;
+        a.app.tool("ontology_propose", json!({"vault_id":va.to_string(),"kinds":[{"kind":"store","description":"A shop"}]})).await;
+        assert_eq!(a.app.http_session("POST", &format!("/api/vaults/{}/ontology/kinds/decide", va.to_string()), Some(json!({"kind":"store","decision":{"action":"approve"}}))).await.0, 200);
+        let (_, key) = b.join(&a.code(&va, "edit").await).await;
+        // Send correctly hashed hostile wire JSON, bypassing the honest sender's filter.
+        for summary in ["Created by peer", "Updated by peer"] {
+            let st = a.org().await;
+            let row = a.link(&key).await;
+            let ctx = sync::Ctx { state:&st, link:&row, key:key.clone(), me:peers::instance_id(&st.db).await.unwrap() };
+            let data = json!({"kind":"store","name":"North","aliases":if summary == "Created by peer" { json!(["Shop","@eunomia/merged/person:jordan"]) } else { json!(["Shop","@eunomia/merged/person:jordan"," @EUNOMIA/MERGED/invalid"]) },"summary":summary});
+            let item = sync::Item { kind:"entity".into(),id:"custom_entity:forged".into(),peer_id:None,origin:"guest:forged".into(),op:"upsert".into(),hash:sync::item_hash("entity", &data),data,refs:Default::default(),updated_at:None,into:None };
+            let response = sys(sync::host_exchange(&ctx, sync::ExchangeRequest { changes:vec![item], ..Default::default() })).await.unwrap();
+            assert_eq!(response["report"]["failed"], 0, "{response}");
+            let found = a.find(&va, "North").await;
+            let id = found["results"][0]["id"].clone();
+            let got = a.app.tool("entities_get", json!({"id":id})).await;
+            assert!(got.to_string().contains(summary) && got.to_string().contains("Shop"), "{got}");
+            let record = eunomia_backend::entities::extract::ExtractRecord { id:"notes:jordan".into(),title:"Jordan".into(),body_text:"Jordan enjoys cycling with friends every Sunday morning.".into(),occurred_at:None,vault:Some(va.clone()),source:"notes".into(),payload:Value::Null,owner_name:None };
+            sys(eunomia_backend::entities::extract::extract_entities(&a.app.db().await, &a.app.state.settings, &a.app.user.id, &record)).await.unwrap();
+            let store = a.app.tool("entities_get", json!({"id":id})).await;
+            assert!(!store.to_string().contains("Jordan enjoys cycling"), "{store}");
+            assert_eq!(names(&a.find(&va, "Jordan").await), vec!["Jordan"]);
+        }
     });
 }

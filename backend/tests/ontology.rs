@@ -2133,14 +2133,8 @@ async fn a_column_two_properties_claim_is_skipped_until_the_owner_picks() {
 }
 
 #[tokio::test]
-async fn an_import_holds_the_row_and_column_caps() {
+async fn an_import_holds_the_column_cap() {
     let app = TestApp::new().await;
-    let rows = format!("product,price AUD\n{}", (0..=eunomia_backend::ontology::tabular::MAX_ROWS).map(|i| format!("p{i},1\n")).collect::<String>());
-    let doc = upload_csv(&app, "long.csv", &rows).await;
-    let vault = approved_price_list(&app, &doc).await;
-    approve_price_list(&app, &vault).await;
-    assert!(err(&import(&app, &doc).await).contains("more than 5000 rows"));
-    assert!(supply_items(&app).await.is_empty(), "nothing is half imported");
     let header = (0..=eunomia_backend::ontology::tabular::MAX_COLUMNS).map(|i| format!("c{i}")).collect::<Vec<_>>().join(",");
     let wide = upload_csv(&app, "wide.csv", &format!("{header}\n")).await;
     let refused = app.tool("ontology_automap", json!({"document_id": wide})).await;
@@ -3915,9 +3909,12 @@ async fn preview_column_precedence_matches_import_for_competing_properties_and_l
     }
     let (_, profile) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
     let planned = &profile["import"]["columns"][1];
-    assert!(planned["property"].is_null() && planned["link"].is_null());
+    assert!(planned["property"].is_null());
+    assert_eq!(planned["link"], "supplied_by supplier");
     let out = ok(app.tool("document_import_rows", args).await);
-    assert!(out["columns"][0]["property"].is_null() && out["columns"][0]["link"].is_null());
+    assert_eq!(out["columns"].as_array().unwrap().len(), 2, "one report per column: {out}");
+    assert!(out["columns"][0]["property"].is_null());
+    assert_eq!(out["columns"][0]["link"], "supplied_by supplier");
     assert!(out["columns"][0]["skipped"].as_str().unwrap().contains("column_map"));
 }
 
@@ -4014,4 +4011,250 @@ async fn gate3_mcp_scenario_text_and_structured_content_keep_raw_small_moves() {
     assert_eq!(app.http("PATCH", "/api/settings", Some(json!({"openai_base_url": mock.base})), true).await.0, 200);
     let (_, events) = chat(&app, "What if the score changes?").await;
     assert_eq!(events.iter().find(|e| e["type"] == "done").unwrap()["reply"], "Exact delta received.", "{events:?}");
+}
+
+#[tokio::test]
+async fn import_196_large_csv_samples_automap_and_imports_all_rows_on_retry() {
+    let mock = serve(vec![]).await;
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..model_app_settings(&mock) }).await;
+    let csv = format!("product,price AUD,lead_time_days,status\n{}", (0..12000).map(|i| format!("Item {i},2,3,Active\n")).collect::<String>());
+    let doc = upload_csv(&app, "large.csv", &csv).await;
+    mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":automap_answer(&doc).to_string()}}]}))]);
+    let auto = ok(app.tool("ontology_automap", json!({"document_id":doc})).await);
+    assert_eq!(auto["mode"], "model", "{auto}");
+    let vault = personal(&app).await;
+    approve_price_list(&app, &vault).await;
+    let first = ok(import(&app, &doc).await);
+    assert_eq!((first["rows"].as_u64(), first["created"].as_u64(), first["values"].as_u64()), (Some(12000), Some(12000), Some(36000)), "{first}");
+    let again = ok(import(&app, &doc).await);
+    assert_eq!((again["created"].as_u64(), again["updated"].as_u64()), (Some(0), Some(12000)), "{again}");
+    let counts: Vec<Value> = app.db().await.test_raw().query("RETURN {entities: count(SELECT id FROM entity WHERE kind = 'supply_item'), values: count(SELECT id FROM entity_property)}").await.unwrap().take(0).unwrap();
+    assert_eq!(counts, vec![json!({"entities":12000,"values":36000})]);
+    let checkpoints: Vec<Value> = app.db().await.test_raw().query("SELECT after FROM ontology_event WHERE action = 'import_progress' ORDER BY seq").await.unwrap().take(0).unwrap();
+    assert_eq!(checkpoints.len(), 48);
+    for (i, checkpoint) in checkpoints.iter().enumerate() {
+        assert_eq!(checkpoint["after"]["processed"], ((i % 24 + 1) * 500) as u64);
+        assert_eq!(checkpoint["after"]["total"], 12000);
+    }
+}
+
+async fn approved_route_fixture(app: &TestApp, doc: &str, typed: bool) -> String {
+    let vault = personal(app).await;
+    let source = |path: &str| json!([{"source":"document","record_type":doc,"path":path}]);
+    let mut props = vec![json!({"kind":"route","name":"distance","datatype":"number","source_map":source("distance")})];
+    if typed { props.push(json!({"kind":"route","name":"store","datatype":"text","source_map":source("store")})); }
+    ok(app.tool("ontology_propose", json!({"kinds":[{"kind":"route"},{"kind":"store"}], "properties":props, "links":[{"from_kind":"route","label":"visits","to_kind":"store","source_map":source("store")}]})).await);
+    for k in ["route", "store"] { assert_eq!(decide_kind(app, &vault, k, json!({"action":"approve"})).await.0, 200); }
+    for p in if typed { vec!["distance", "store"] } else { vec!["distance"] } { assert_eq!(decide_property(app, &vault, "route", p, json!({"action":"approve"})).await.0, 200); }
+    assert_eq!(decide_link(app, &vault, "route", "visits", "store").await, 200);
+    vault
+}
+
+#[tokio::test]
+async fn import_196_route_import_prefers_approved_target_kind() {
+    let app = TestApp::new().await;
+    let doc = upload_csv(&app, "routes.csv", "route,store,distance\nRound,North,5\n").await;
+    approved_route_fixture(&app, &doc, false).await;
+    write(&app, "North", "organisation").await;
+    let store = write(&app, "North", "store").await;
+    let (_, preview) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    assert_eq!(preview["import"]["ambiguous"], json!([]), "{preview}");
+    let out = ok(app.tool("document_import_rows", json!({"document_id":doc,"kind":"route","name_column":"route"})).await);
+    assert_eq!(out["linked"], 1, "{out}");
+    assert_eq!(out["ambiguous"], json!([]));
+    let got = ok(app.tool("entities_get", json!({"id":store["entity"]["id"]})).await);
+    assert!(got.to_string().contains("visits"), "{got}");
+}
+
+#[tokio::test]
+async fn import_196_relation_mapping_writes_link_even_when_column_has_an_approved_property() {
+    let app = TestApp::new().await;
+    let doc = upload_csv(&app, "routes.csv", "route,store,distance\nRound,North,5\n").await;
+    approved_route_fixture(&app, &doc, true).await;
+    let (_, preview) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    assert_eq!(preview["import"]["columns"][1]["link"], "visits store", "{preview}");
+    let out = ok(app.tool("document_import_rows", json!({"document_id":doc,"kind":"route","name_column":"route"})).await);
+    assert_eq!(out["linked"], 1, "{out}");
+    assert_eq!(out["values"], 2, "{out}");
+}
+
+#[tokio::test]
+async fn import_196_extraction_reuses_approved_custom_entity() { extraction_and_merge(false).await; }
+
+#[tokio::test]
+async fn import_196_builtin_to_custom_merge_preserves_facts_and_links() { extraction_and_merge(true).await; }
+
+async fn extraction_and_merge(merge: bool) {
+    let extracted_kind = if merge { "organisation" } else { "store" };
+    let mut answer = json!({"relations":[{"from":"North","from_kind":extracted_kind,"to":"N","to_kind":extracted_kind,"label":"near"}]});
+    if merge {
+        answer["organisations"] = json!([{"name":"North","facts":["North opens daily"]}, {"name":"N","facts":["N has parking"]}]);
+        answer["people"] = json!([{"name":"North","facts":["North enjoys cycling"]}]);
+    } else {
+        answer["other"] = json!([{"kind":"store","name":"North","facts":["North opens daily"]}, {"kind":"store","name":"N","facts":["N has parking"]}]);
+    }
+    let mock = serve(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    let doc = upload_csv(&app, "routes.csv", "route,store,distance\nRound,North,5\n").await;
+    approved_route_fixture(&app, &doc, false).await;
+    let custom = ok(app.tool("memory_write", json!({"subject_kind":"store","subject_name":"North","text":"North is a store"})).await);
+    ok(app.tool("entity_update", json!({"entity_id":custom["entity"]["id"], "aliases":["N"]})).await);
+    if merge {
+    let builtin = write(&app, "North", "organisation").await;
+    ok(app.tool("entity_update", json!({"entity_id":builtin["entity"]["id"], "aliases":["N"]})).await);
+    let person = write(&app, "Ada", "person").await;
+    ok(app.tool("code_relate", json!({"from_id":person["entity"]["id"],"to_id":builtin["entity"]["id"],"label":"visits"})).await);
+    let merged = ok(app.tool("entity_merge", json!({"winner_id":custom["entity"]["id"],"loser_id":builtin["entity"]["id"]})).await);
+    assert_eq!(merged["kind"], "store");
+    let got = ok(app.tool("entities_get", json!({"id":custom["entity"]["id"]})).await);
+    assert!(got.to_string().contains("North is a organisation") && got.to_string().contains("visits"), "{got}");
+    assert!(!got.to_string().contains("@eunomia/merged/"), "internal redirects are not public aliases: {got}");
+    // Replacing visible aliases must not erase the owner's merge decision.
+    ok(app.tool("entity_update", json!({"entity_id":custom["entity"]["id"], "aliases":["N"]})).await);
+    }
+    let record = eunomia_backend::entities::extract::ExtractRecord { id:"notes:1".into(),title:"North".into(),body_text:"North opens daily and has parking for visitors near the entrance.".into(),occurred_at:None,vault:None,source:"notes".into(),payload:Value::Null,owner_name:None };
+    for _ in 0..2 { common::sys(eunomia_backend::entities::extract::extract_entities(&app.db().await, &app.state.settings, &app.user.id, &record)).await.unwrap(); }
+    let o = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!(kind(&o, "organisation")["entities"], 0, "{o}");
+    assert_eq!(kind(&o, "location")["entities"], 0, "{o}");
+    assert_eq!(kind(&o, "store")["entities"], 1, "{o}");
+    let got = ok(app.tool("entities_get", json!({"id":custom["entity"]["id"]})).await);
+    assert!(got.to_string().contains("North opens daily") && got.to_string().contains("N has parking"), "{got}");
+    assert!(!got.to_string().contains("North enjoys cycling"), "a merged organisation must not redirect a person: {got}");
+}
+
+#[tokio::test]
+async fn import_196_second_csv_part_reuses_equivalent_metric_in_proposed_and_approved_states() {
+    let mock = serve(vec![]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    for (i, metric_name) in ["total_price", "stock_value", "inventory_value"].iter().enumerate() {
+        let doc = upload_csv(&app, "part.csv", PRICE_LIST).await;
+        let mut answer = automap_answer(&doc);
+        answer["record_types"][0]["metrics"] = json!([{"name":metric_name,"expr":{"agg":"sum","property":"price"},"unit":"AUD"}]);
+        mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]);
+        let out = ok(app.tool("ontology_automap", json!({"document_id":doc})).await);
+        assert_eq!(kind(&out["ontology"], "supply_item")["metrics"].as_array().unwrap().len(), 1, "{out}");
+        assert_eq!(kind(&out["ontology"], "supply_item")["metrics"][0]["name"], "total_price");
+        assert_eq!(out["proposed"]["metrics"][0]["name"], "total_price", "reuse is explicit in the result: {out}");
+        if i == 1 {
+            let vault = personal(&app).await;
+            approve_price_list(&app, &vault).await;
+            assert_eq!(decide_metric(&app, &vault, "supply_item", "total_price", json!({"action":"approve"})).await.0, 200);
+        }
+    }
+}
+
+#[tokio::test]
+async fn review209_extraction_keeps_person_and_store_jordan_separate() {
+    let answer = json!({"people":[{"name":"Jordan","facts":["Jordan enjoys cycling"]}],"other":[{"kind":"store","name":"Jordan","facts":["Jordan sells groceries"]}]});
+    let mock = serve(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    let vault = personal(&app).await;
+    ok(app.tool("ontology_propose", json!({"kinds":[{"kind":"store"}]})).await);
+    assert_eq!(decide_kind(&app, &vault, "store", json!({"action":"approve"})).await.0, 200);
+    let store = write(&app, "Jordan", "store").await["entity"]["id"].clone();
+    let person = write(&app, "Jordan", "person").await["entity"]["id"].clone();
+    let record = eunomia_backend::entities::extract::ExtractRecord { id:"notes:jordan".into(),title:"Jordan".into(),body_text:"Jordan enjoys cycling. The Jordan store sells groceries every day.".into(),occurred_at:None,vault:None,source:"notes".into(),payload:Value::Null,owner_name:None };
+    common::sys(eunomia_backend::entities::extract::extract_entities(&app.db().await, &app.state.settings, &app.user.id, &record)).await.unwrap();
+    let got = ok(app.tool("entities_get", json!({"id":store})).await);
+    assert!(!got.to_string().contains("Jordan enjoys cycling"), "{got}");
+    assert!(got.to_string().contains("Jordan sells groceries"), "{got}");
+    let got = ok(app.tool("entities_get", json!({"id":person})).await);
+    assert!(got.to_string().contains("Jordan enjoys cycling"), "{got}");
+}
+
+#[tokio::test]
+async fn review209_only_owner_merges_create_kind_qualified_aliases() {
+    let app = TestApp::new().await;
+    let entity = write(&app, "North", "organisation").await["entity"]["id"].clone();
+    let reserved = "@eunomia/merged/person:jordan";
+    for args in [json!({"entity_id":entity,"aliases":[reserved]}), json!({"entity_id":entity,"name":reserved})] {
+        let out = app.tool("entity_update", args).await;
+        assert!(out.to_string().contains("reserved merge namespace"), "{out}");
+    }
+    let db = app.db().await;
+    let result = common::sys(eunomia_backend::entities::service::upsert_entity(&db, &app.user.id, "organisation", "South", Some(vec![reserved.into()]), None)).await;
+    assert!(result.is_err(), "a caller cannot manufacture an owner merge redirect");
+}
+
+#[tokio::test]
+async fn review209_cross_kind_merge_maps_typed_values_or_refuses_without_changes() {
+    for target in [Some(("money", "AUD")), None, Some(("number", "AUD")), Some(("money", "USD"))] {
+        let app = TestApp::new().await;
+        let vault = personal(&app).await;
+        let mut properties = vec![json!({"kind":"organisation","name":"turnover","datatype":"money","unit":"AUD"})];
+        if let Some((datatype, unit)) = target { properties.push(json!({"kind":"store","name":"turnover","datatype":datatype,"unit":unit})); }
+        ok(app.tool("ontology_propose", json!({"kinds":[{"kind":"store"}],"properties":properties,"metrics": if target.is_some() { json!([{ "kind":"store","name":"total_turnover","expr":{"agg":"sum","property":"turnover"},"unit":"AUD"}]) } else { json!([]) }})).await);
+        assert_eq!(decide_kind(&app, &vault, "store", json!({"action":"approve"})).await.0, 200);
+        assert_eq!(decide_property(&app, &vault, "organisation", "turnover", json!({"action":"approve"})).await.0, 200);
+        if target.is_some() { assert_eq!(decide_property(&app, &vault, "store", "turnover", json!({"action":"approve"})).await.0, 200); }
+        let store = write(&app, "Jordan", "store").await["entity"]["id"].clone();
+        let org = write(&app, "Jordan old", "organisation").await["entity"]["id"].clone();
+        ok(app.tool("entity_set_property", json!({"entity_id":org,"property":"turnover","value":1250})).await);
+        let merged = app.tool("entity_merge", json!({"winner_id":store,"loser_id":org})).await;
+        if target != Some(("money", "AUD")) {
+            assert!(merged.to_string().contains("unmappable") && merged.to_string().contains("turnover"), "{merged}");
+            let got = ok(app.tool("entities_get", json!({"id":org})).await);
+            assert_eq!(got["properties"][0]["value"], 1250.0);
+        } else {
+            ok(merged);
+            assert_eq!(decide_metric(&app, &vault, "store", "total_turnover", json!({"action":"approve"})).await.0, 200);
+            let got = ok(app.tool("metric_eval", json!({"metric":"total_turnover"})).await);
+            assert_eq!(got["value"], 1250.0, "{got}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn review209_metric_equivalence_requires_exact_units() {
+    let mock = serve(vec![]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    let doc = upload_csv(&app, "part.csv", PRICE_LIST).await;
+    let mut answer = automap_answer(&doc);
+    answer["record_types"][0]["metrics"] = json!([
+        {"name":"amount","expr":{"agg":"sum","property":"price"}},
+        {"name":"amount_aud","expr":{"agg":"sum","property":"price"},"unit":"AUD"}]);
+    mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]);
+    let out = ok(app.tool("ontology_automap", json!({"document_id":doc})).await);
+    assert_eq!(kind(&out["ontology"], "supply_item")["metrics"].as_array().unwrap().len(), 2, "{out}");
+    answer["record_types"][0]["metrics"] = json!([{ "name":"another_amount_aud","expr":{"agg":"sum","property":"price"},"unit":"AUD"}]);
+    mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]);
+    let out = ok(app.tool("ontology_automap", json!({"document_id":doc})).await);
+    assert_eq!(out["proposed"]["metrics"][0]["name"], "amount_aud", "{out}");
+}
+
+#[tokio::test]
+async fn review209_csv_profiles_dates_beyond_blank_head() {
+    let app = TestApp::new().await;
+    let csv = format!("item,day\n{}{}", (0..1500).map(|i| format!("Item {i},\n")).collect::<String>(), (1500..3000).map(|i| format!("Item {i},2026-11-10\n")).collect::<String>());
+    let doc = upload_csv(&app, "dates.csv", &csv).await;
+    let (status, out) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    assert_eq!(status, 200, "{out}");
+    let day = out["profile"]["fields"].as_array().unwrap().iter().find(|f| f["path"] == "day").unwrap();
+    assert_eq!(day["inferred_type"], "date", "{out}");
+    assert!(day["null_rate"].as_f64().unwrap() > 0.0, "profile uses the non-empty values even in a sparse column");
+}
+
+#[tokio::test]
+async fn review209_ambiguous_custom_alias_creates_an_entity_for_review() {
+    let answer = json!({"other":[{"kind":"store","name":"Jordan","facts":["Jordan sells groceries"]}]});
+    let mock = serve(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    let vault = personal(&app).await;
+    ok(app.tool("ontology_propose", json!({"kinds":[{"kind":"store"}]})).await);
+    assert_eq!(decide_kind(&app, &vault, "store", json!({"action":"approve"})).await.0, 200);
+    let mut ids = Vec::new();
+    for name in ["North", "South"] {
+        let id = write(&app, name, "store").await["entity"]["id"].clone();
+        ok(app.tool("entity_update", json!({"entity_id":id,"aliases":["Jordan"]})).await);
+        ids.push(id);
+    }
+    let record = eunomia_backend::entities::extract::ExtractRecord { id:"notes:ambiguous".into(),title:"Jordan".into(),body_text:"Jordan sells groceries every day and is open until late.".into(),occurred_at:None,vault:None,source:"notes".into(),payload:Value::Null,owner_name:None };
+    common::sys(eunomia_backend::entities::extract::extract_entities(&app.db().await, &app.state.settings, &app.user.id, &record)).await.unwrap();
+    for id in ids {
+        let got = ok(app.tool("entities_get", json!({"id":id})).await);
+        assert!(!got.to_string().contains("Jordan sells groceries"), "{got}");
+    }
+    let out = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!(kind(&out, "store")["entities"], 3, "{out}");
 }
