@@ -32,8 +32,8 @@ const FLUSH_MS = 400;
 const STALE_MS = 35_000;
 const MAX_BACKOFF_MS = 30_000;
 
-type Pending = { all: boolean; vaults: boolean; entities: boolean; documents: boolean; members: Set<string>; lost: Set<string>; ontology: Set<string> };
-const fresh = (): Pending => ({ all: false, vaults: false, entities: false, documents: false, members: new Set(), lost: new Set(), ontology: new Set() });
+type Pending = { all: boolean; vaults: boolean; entities: boolean; documents: boolean; members: Set<string>; lost: Set<string>; ontology: Set<string>; connections: Set<string> };
+const fresh = (): Pending => ({ all: false, vaults: false, entities: false, documents: false, members: new Set(), lost: new Set(), ontology: new Set(), connections: new Set() });
 
 /** Applies a batch of invalidations: vault list first, so members are refetched only for vaults the user still has. */
 async function flush(qc: QueryClient, p: Pending) {
@@ -63,6 +63,14 @@ async function flush(qc: QueryClient, p: Pending) {
     await Promise.all(keys.map(queryKey => qc.cancelQueries({ queryKey })));
     await Promise.all(keys.map(queryKey => qc.invalidateQueries({ queryKey })));
   }
+  // Connection reads belong to one space. A memory write or activity in a
+  // different space must not refetch the mounted neighbourhood.
+  const spaces = new Set([...p.ontology, ...p.connections]);
+  const connectionKeys = p.all
+    ? [["connections"], ["connection-search"]]
+    : [...spaces].flatMap(space => [["connections", space], ["connection-search", space]]);
+  await Promise.all(connectionKeys.map(queryKey => qc.cancelQueries({ queryKey })));
+  await Promise.all(connectionKeys.map(queryKey => qc.invalidateQueries({ queryKey })));
   if (p.all || p.entities || p.documents || p.vaults) void qc.invalidateQueries({ queryKey: ontologyKeys.all });
   if (p.all || p.entities) {
     void qc.invalidateQueries({ queryKey: entityKeys.all });
@@ -117,7 +125,10 @@ export function useLiveUpdates() {
             pending.vaults = true;
             for (const [vault, seq] of Object.entries(m.vaults)) {
               const known = cursors.get(vault);
-              if (known === undefined || seq > known) pending.entities = pending.documents = true;
+              if (known === undefined || seq > known) {
+                pending.entities = pending.documents = true;
+                pending.connections.add(vault);
+              }
             }
           }
           const available = new Set(Object.keys(m.vaults));
@@ -142,10 +153,12 @@ export function useLiveUpdates() {
           break;
         case "change":
           cursors.set(m.vault, Math.max(cursors.get(m.vault) ?? 0, m.seq));
+          if (m.kind === "entity" || m.kind === "relation") pending.connections.add(m.vault);
           if (m.kind === "document") pending.documents = true;
           else if (m.kind === "memory" || m.kind === "entity" || m.kind === "relation") pending.entities = true;
           break;
         case "seq":
+          pending.connections.add(m.vault);
           cursors.set(m.vault, m.seq);
           pending.entities = pending.documents = true;
           break;
@@ -153,7 +166,10 @@ export function useLiveUpdates() {
           pending.vaults = true;
           pending.members.add(m.vault);
           if (m.op === "deleted") pending.lost.add(m.vault);
-          if (SCOPE_OPS.has(m.op)) pending.entities = pending.documents = true;
+          if (SCOPE_OPS.has(m.op)) {
+            pending.entities = pending.documents = true;
+            pending.connections.add(m.vault);
+          }
           break;
         case "vaults":
           pending.vaults = pending.entities = pending.documents = true;

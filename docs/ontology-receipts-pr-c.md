@@ -36,4 +36,8 @@ Visual review also found that clipped activity rows contributed invisible page o
 
 ![Unavailable historical definition](assets/ontology-receipts/activity-history-dark.png)
 
-Final local checks: lint with all 67 unit tests, TypeScript and production build passed. The final production build passed 41 receipt behaviour and visual tests. The broader mocked regression run passed 165 tests with 96 optional pre-existing figure cases skipped. A subsequent complete state sweep and receipt capture run passed 74 tests. Both real-backend specs are updated for CI; they were not run against a local backend.
+Final local checks: lint with all 70 unit tests, TypeScript and production build passed. The final production build passed 41 receipt behaviour and visual tests. The broader mocked regression run passed 165 tests with 96 optional pre-existing figure cases skipped. A subsequent complete state sweep and receipt capture run passed 74 tests. Both real-backend specs are updated for CI; they were not run against a local backend.
+
+The branch was updated after PR #221 merged into main. The lint list retains both receipt and Connections unit tests. The combined frontend passes all 70 unit tests, typecheck and production build. Connections source and navigation were taken unchanged from main.
+
+After updating to current main, 111 production-browser tests passed across receipt behaviour and visual states, Overview, Connections UI and Connections access. The paired captures were refreshed against that combined build.

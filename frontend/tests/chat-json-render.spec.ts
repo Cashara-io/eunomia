@@ -1,5 +1,5 @@
 import type { Spec } from "@json-render/core";
-import { test, expect, type Locator, type Page } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
 import { registerAndOnboard, uniqueEmail } from "./helpers";
 import { catalog, chartNames } from "../src/components/chat/ui/catalog";
 import { readFileSync } from "node:fs";
@@ -240,9 +240,8 @@ function history(views: object[]) {
     },
   ]);
 }
-async function hoverMark(page: Page, mark: Locator) {
+async function hoverMark(mark: Locator) {
   const shape = mark.locator("circle,rect,path,line").first();
-  await shape.scrollIntoViewIfNeeded();
   const point = await shape.evaluate((el) => {
     if (!(el instanceof SVGGeometryElement))
       throw new Error("Expected a chart mark");
@@ -258,12 +257,18 @@ async function hoverMark(page: Page, mark: Locator) {
           matrix
         ) {
           const screen = p.matrixTransform(matrix);
-          return { x: screen.x, y: screen.y };
+          const svg = el.closest("svg");
+          if (!svg) throw new Error("Expected a chart SVG");
+          const bounds = svg.getBoundingClientRect();
+          return { x: screen.x - bounds.left, y: screen.y - bounds.top };
         }
       }
     throw new Error("No hover target in chart mark");
   });
-  await page.mouse.move(point.x, point.y);
+  // SVGs have an area even when a mark is a horizontal or vertical line.
+  // Hover with an SVG-relative point so Playwright can wait for stable layout,
+  // scroll it into view and hit-test it before moving the pointer.
+  await mark.locator("xpath=ancestor::*[local-name()='svg']").hover({ position: point });
 }
 for (const theme of ["light", "dark"])
   for (const width of [1280, 390]) {
@@ -327,7 +332,7 @@ for (const theme of ["light", "dark"])
           accessibleValue || "",
         );
         await mark.blur();
-        await hoverMark(page, mark);
+        await hoverMark(mark);
         await expect(page.getByRole("tooltip")).toHaveText(
           accessibleValue || "",
         );
@@ -340,7 +345,7 @@ for (const theme of ["light", "dark"])
       const hoveredMark = page.locator('svg[data-chart="Line"] [data-chart-mark]').first();
       await focusedMark.focus();
       await expect(page.getByRole("tooltip")).toHaveCount(1);
-      await hoverMark(page, hoveredMark);
+      await hoverMark(hoveredMark);
       await expect(page.getByRole("tooltip")).toHaveCount(1);
       await expect(page.getByRole("tooltip")).toHaveText(await hoveredMark.getAttribute("aria-label") || "");
       // A late blur from the old owner must not close the new owner's tooltip.
@@ -352,7 +357,7 @@ for (const theme of ["light", "dark"])
         const mark = page
           .locator(`svg[data-chart="${name}"] [data-chart-mark]`)
           .first();
-        await hoverMark(page, mark);
+        await hoverMark(mark);
         await expect(page.getByRole("tooltip")).toContainText("A$120.25");
         await page.mouse.move(0, 0);
       }
