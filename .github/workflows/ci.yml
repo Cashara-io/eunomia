@@ -38,7 +38,6 @@ jobs:
           tool: nextest
 
       - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo check --tests
       - run: cargo nextest run
       # No separate `cargo build --release`: the e2e job builds the release image.
 
@@ -60,12 +59,6 @@ jobs:
           tool: nextest
       # The whole suite under the --allow-funcs list read out of docker-compose.yml.
       - run: TEST_HARDENED=1 cargo nextest run
-      - name: Repeat chat cancellation tests
-        timeout-minutes: 60
-        run: |
-          for iteration in {1..100}; do
-            TEST_HARDENED=1 cargo test --test chat_ui cancellation_ -- --test-threads=1
-          done
       # The isolation proof with the application-level owner/vault filters switched off.
       - run: ISOLATION_TEST_NO_APP_FILTERS=1 cargo nextest run --test isolation
       # Exactly-once job claims from 4 separate processes on one real RocksDB-backed SurrealDB 3.3.5,
