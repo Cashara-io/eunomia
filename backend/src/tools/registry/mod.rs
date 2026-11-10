@@ -603,14 +603,45 @@ async fn record_failure(state: &OrgState, owner: &RecordId, name: &str, args: Va
     crate::capsules::record(&state.control, failure).await;
 }
 
+fn check_vault_selectors(name: &str, spec: &ToolSpec, args: &Value) -> AppResult<()> {
+    // Check an explicit selector before a handler can resolve a global object id or
+    // ignore a selector unused by its chosen operation (for example a subgraph view).
+    // Batches retain their per-item checks: an item's selector overrides the batch's.
+    if name != "memory_write_batch" {
+        for key in VAULT_ARGS {
+            if spec.schema["properties"].get(*key).is_some()
+                && let Some(given) = args.get(*key).and_then(Value::as_str)
+                && let Ok(vault) = crate::rid::parse(given)
+            {
+                authz::check_vault(&vault)?;
+            }
+        }
+        for key in VAULT_LIST_ARGS {
+            if spec.schema["properties"].get(*key).is_some()
+                && let Some(vaults) = args.get(*key).and_then(Value::as_array)
+            {
+                for given in vaults.iter().filter_map(Value::as_str) {
+                    if let Ok(vault) = crate::rid::parse(given) {
+                        authz::check_vault(&vault)?;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Runs the tool with `args` (secret values in, when the call had references) and audits it with
 /// `audited` (the references, never the values).
 async fn run_tool(state: &OrgState, owner: &RecordId, name: &str, spec: &ToolSpec, args: Value, audited: &Value) -> AppResult<Value> {
+    let result = match check_vault_selectors(name, spec, &args) {
+        Ok(()) => (spec.handler)(state, owner, args).await,
+        Err(e) => Err(e),
+    };
     if is_read_only(name) && !DISCLOSURE_TOOLS.contains(&name) {
-        return (spec.handler)(state, owner, args).await;
+        return result;
     }
 
-    let result = (spec.handler)(state, owner, args).await;
     let (outcome, code) = match &result {
         Ok(v) if v.get("error").is_some() => ("error", v.get("code").and_then(Value::as_str).unwrap_or("error")),
         Ok(_) => ("ok", "ok"),

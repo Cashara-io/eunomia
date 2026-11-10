@@ -82,6 +82,43 @@ async fn unqualified_record_tools_scope_to_personal_or_the_explicitly_bound_team
     assert!(ok(&app,&token,"get",json!({"id":"fixture:note:neighbour"})).await.to_string().contains("PERSONAL_NEIGHBOUR"));
 }
 
+#[tokio::test]
+async fn foreign_linked_neighbourhood_is_unreadable_with_or_without_selector() {
+    let app = TestApp::new().await;
+    let foreign = app.tool("vault_create",json!({"name":"Foreign graph","kind":"org"})).await["id"].clone();
+    let a = app.tool("memory_write",json!({"vault_id":foreign,"subject_name":"FOREIGN node","subject_kind":"person","text":"FOREIGN fact"})).await["entity"]["id"].clone();
+    let b = app.tool("memory_write",json!({"vault_id":foreign,"subject_name":"FOREIGN neighbour","subject_kind":"person","text":"FOREIGN neighbour fact"})).await["entity"]["id"].clone();
+    app.tool("entity_relate",json!({"from_id":a,"to_id":b,"label":"knows"})).await;
+    let graph = app.tool("entities_neighbourhood",json!({"vault_id":foreign,"entity_id":a})).await;
+    assert_eq!(graph["nodes"].as_array().unwrap().len(),2);
+    assert_eq!(graph["edges"].as_array().unwrap().len(),1);
+    // Exercise the unchanged service too, bypassing the new dispatcher preflight.
+    // This distinguishes the old safe mismatch response from a foreign-vault read bypass.
+    let bound = app.tool("ontology_get",json!({})).await["vault"].as_str().unwrap().to_string();
+    let own = app.tool("memory_write",json!({"subject_name":"Own node","subject_kind":"person","text":"Own fact"})).await["entity"]["id"].clone();
+    let caller = eunomia_backend::authz::Caller {
+        actor:eunomia_backend::authz::Actor {kind:"token",id:"fixture".into()},
+        scopes:vec!["memory:read".into()],vault:Some(rid::parse(&bound).unwrap()),expires_at:None,
+    };
+    let db = app.db().await;
+    let foreign_vault = rid::parse(foreign.as_str().unwrap()).unwrap();
+    let foreign_entity = rid::parse(a.as_str().unwrap()).unwrap();
+    for selector in [None,Some(&foreign_vault)] {
+        let error = eunomia_backend::authz::with_caller(caller.clone(),eunomia_backend::entities::neighbourhood::neighbourhood(&db,&app.user.id,&foreign_entity,None,selector)).await.unwrap_err();
+        assert_eq!(error.code,eunomia_backend::error::ErrorCode::AuthScope);
+    }
+    let own_entity = rid::parse(own.as_str().unwrap()).unwrap();
+    let mismatch = eunomia_backend::authz::with_caller(caller,eunomia_backend::entities::neighbourhood::neighbourhood(&db,&app.user.id,&own_entity,None,Some(&foreign_vault))).await.unwrap_err();
+    assert_eq!(mismatch.code,eunomia_backend::error::ErrorCode::EntityNotFound);
+    let token = mint(&app,None).await;
+    for args in [json!({"entity_id":a}),json!({"entity_id":a,"vault_id":foreign})] {
+        let result = call(&app,&token,"entities_neighbourhood",args).await;
+        assert_eq!(result["code"],"auth.scope","{result}");
+        assert!(result.get("nodes").is_none() && result.get("edges").is_none());
+        assert!(!result.to_string().contains("FOREIGN"));
+    }
+}
+
 #[tokio::test(flavor="multi_thread", worker_threads=2)]
 async fn default_personal_token_uploads_searches_and_resolves_its_document() {
     use eunomia_backend::jobs::{WorkerConfig, handlers, worker};
@@ -155,8 +192,21 @@ async fn walk_bound_token(team_bound: bool, admin: bool) {
     }
     let get = tools.iter().find(|t|t["name"]=="get").unwrap();
     assert!(get["inputSchema"]["required"].as_array().unwrap().contains(&json!("id")),"ordinary required arguments stay required");
-    app.tool("memory_write", json!({"vault_id":team,"subject_name":"OUTSIDE_SPACE_CANARY needle","subject_kind":"outside_only_canary","text":"OUTSIDE_SPACE_CANARY"})).await;
-    let team_cursor = app.tool("changes_since", json!({"vault_id":team})).await["next"].clone();
+    // Use existing, linked foreign objects. A bound-vault id plus a foreign selector alone
+    // cannot distinguish a scope guard from a lookup in the wrong vault.
+    let outside = app.tool("memory_write", json!({"vault_id":team,"subject_name":"OUTSIDE_SPACE_CANARY needle","subject_kind":"outside_only_canary","text":"OUTSIDE_SPACE_CANARY"})).await;
+    let neighbour = app.tool("memory_write", json!({"vault_id":team,"subject_name":"OUTSIDE_NEIGHBOUR","subject_kind":"person","text":"OUTSIDE_NEIGHBOUR fact"})).await;
+    let edge = app.tool("entity_relate", json!({"from_id":outside["entity"]["id"],"to_id":neighbour["entity"]["id"],"label":"knows"})).await;
+    let foreign_record = Envelope {id:"fixture:note:foreign".into(),source:"fixture".into(),type_:"fixture.note".into(),external_id:"foreign".into(),title:"OUTSIDE_SPACE_CANARY".into(),body_text:"OUTSIDE_SPACE_CANARY".into(),placement:Some(Placement { vault:Some(rid::parse(&team).unwrap()), writable:Arc::new(vec![rid::parse(&team).unwrap()]), ..Default::default() }),links:vec![LinkSpec {target:"fixture:note:foreign-neighbour".into(),rel:"related".into()}],..Default::default()};
+    let mut foreign_neighbour = foreign_record.clone();
+    foreign_neighbour.id = "fixture:note:foreign-neighbour".into();
+    foreign_neighbour.external_id = "foreign-neighbour".into();
+    foreign_neighbour.links.clear();
+    for record in [&foreign_neighbour, &foreign_record] {
+        common::sys(cache::upsert(&app.db().await,&app.user.id,record)).await.unwrap();
+    }
+    let foreign_skill = app.tool("skill_save",json!({"vault_id":team,"name":"outside-skill","description":"OUTSIDE_SPACE_CANARY","body":"OUTSIDE_SPACE_CANARY"})).await;
+    let foreign_request = app.tool("secret_request",json!({"vault_id":team,"name":"outside_pending","description":"OUTSIDE_SPACE_CANARY","target":{"hosts":["api.example.test"]}})).await;
     let first = ok(&app,&token,"memory_write",json!({"subject_name":"Personal One needle","subject_kind":"person","text":"PERSONAL needle"})).await;
     let second = ok(&app,&token,"memory_write",json!({"subject_name":"Personal Two needle","subject_kind":"person","text":"PERSONAL neighbour"})).await;
     let a = &first["entity"]["id"]; let b = &second["entity"]["id"]; let fact = &first["memory"]["id"];
@@ -170,6 +220,26 @@ async fn walk_bound_token(team_bound: bool, admin: bool) {
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         }
     }).await.unwrap();
+    let foreign_doc = app.tool("document_upload",json!({"vault_id":team,"filename":"outside.csv","text":"product,price\nOUTSIDE_SPACE_CANARY,999\n"})).await;
+    tokio::time::timeout(std::time::Duration::from_secs(15),async {
+        while app.tool("document_get",json!({"id":foreign_doc["id"]})).await["document"]["status"] != "ready" {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    }).await.unwrap();
+    let foreign_chunk = app.tool("document_get",json!({"id":foreign_doc["id"]})).await["chunks"][0]["chunk_id"].clone();
+    // Prove the foreign fixtures are readable by the owner and contain a real graph.
+    let graph = app.tool("entities_neighbourhood",json!({"entity_id":outside["entity"]["id"],"vault_id":team})).await;
+    assert_eq!(graph["nodes"].as_array().unwrap().len(),2);
+    assert_eq!(graph["edges"].as_array().unwrap().len(),1);
+    assert!(app.tool("get",json!({"id":"fixture:note:foreign"})).await.to_string().contains("OUTSIDE_SPACE_CANARY"));
+    assert_eq!(app.tool("links",json!({"id":"fixture:note:foreign"})).await["links"].as_array().unwrap().len(),1);
+    let foreign_link = "11111111111111111111111111111111";
+    // A host link never opens a connection during sync_now. Keep the fixture in memory.
+    app.db().await.test_raw().query("CREATE $id SET vault = $vault, direction = 'host', role = 'read', key_enc = 'unused-fixture-key', user = $user, peer_instance = 'outside-fixture'")
+        .bind(("id",rid::parse(&format!("peer_link:{foreign_link}")).unwrap())).bind(("vault",rid::parse(&team).unwrap())).bind(("user",app.user.id.clone()))
+        .await.unwrap().check().unwrap();
+    assert!(app.tool("vault_peer_sync",json!({"link_id":foreign_link})).await.get("error").is_none());
+    let team_cursor = app.tool("changes_since",json!({"vault_id":team})).await["next"].clone();
     app.tool("ontology_propose",json!({"vault_id":bound,"kinds":[{"kind":"product"}],"properties":[{"kind":"product","name":"price","datatype":"money","unit":"AUD","source_map":[{"source":"document","record_type":doc["id"],"path":"price"}]}],"metrics":[{"kind":"product","name":"total_price","expr":{"agg":"sum","property":"price"}}]})).await;
     for (route,body) in [("kinds",json!({"kind":"product","decision":{"action":"approve"}})),("properties",json!({"kind":"product","name":"price","decision":{"action":"approve"}})),("metrics",json!({"kind":"product","name":"total_price","decision":{"action":"approve"}}))] {
         assert_eq!(app.http_session("POST",&format!("/api/vaults/{bound}/ontology/{route}/decide"),Some(body)).await.0,200);
@@ -178,6 +248,124 @@ async fn walk_bound_token(team_bound: bool, admin: bool) {
     let skill = ok(&app,&token,"skill_save",json!({"name":"personal-fixture","description":"PERSONAL","body":"PERSONAL needle"})).await;
     let asked = ok(&app,&token,"secret_request",json!({"name":"pending_fixture","description":"Fixture request","target":{"hosts":["api.example.test"]}})).await;
     let pending = &asked["handle"]["$secret"];
+    let x = &outside["entity"]["id"];
+    let y = &neighbour["entity"]["id"];
+    // Without a model the tool returns an empty no-op before it looks up any subject.
+    // Also exercise the service used when a model exists: it checks the vault before
+    // loading facts or calling the model, and must reject this real foreign subject.
+    let consolidation_caller = eunomia_backend::authz::Caller {
+        actor:eunomia_backend::authz::Actor {kind:"token",id:"fixture".into()},
+        scopes:vec!["memory:write".into()],vault:Some(rid::parse(bound).unwrap()),expires_at:None,
+    };
+    let denied = eunomia_backend::authz::with_caller(consolidation_caller,eunomia_backend::entities::consolidate::consolidate_subject(&app.db().await,&app.state.settings,&app.user.id,&rid::parse(x.as_str().unwrap()).unwrap(),None)).await.unwrap_err();
+    assert_eq!(denied.code,eunomia_backend::error::ErrorCode::AuthScope);
+    let foreign_cases = vec![
+        ("get",json!({"id":"fixture:note:foreign"}),"record"),
+        ("get",json!({"id":foreign_chunk}),"record"),
+        ("links",json!({"id":"fixture:note:foreign"}),"links"),
+        ("list",json!({"filters":{"id":"fixture:note:foreign"}}),"list"),
+        ("entities_get",json!({"id":x}),"scope"),
+        ("entities_neighbourhood",json!({"entity_id":x}),"scope"),
+        ("entity_update",json!({"entity_id":x,"summary":"must not change"}),"scope"),
+        ("entity_delete",json!({"entity_id":x}),"scope"),
+        ("entity_set_property",json!({"entity_id":x,"property":"price","value":1}),"scope"),
+        ("memory_update",json!({"memory_id":outside["memory"]["id"],"text":"must not change"}),"scope"),
+        ("memory_delete",json!({"memory_id":outside["memory"]["id"]}),"scope"),
+        ("consolidate_observations",json!({"subject_id":x}),"no_model"),
+        ("code_entity_upsert",json!({"kind":"file","name":"foreign-parent","parent_id":x}),"scope"),
+        ("code_relate",json!({"from_id":x,"to_id":y,"label":"knows"}),"scope"),
+        ("code_relate",json!({"from_id":a,"to_id":y,"label":"knows"}),"scope"),
+        ("entity_relate",json!({"from_id":x,"to_id":b,"label":"knows"}),"scope"),
+        ("entity_relate",json!({"from_id":a,"to_id":y,"label":"knows"}),"scope"),
+        ("entity_merge",json!({"winner_id":x,"loser_id":b}),"scope"),
+        ("entity_merge",json!({"winner_id":a,"loser_id":y}),"scope"),
+        ("metric_eval",json!({"metric":"total_price","related_to":{"entity_id":x}}),"unknown"),
+        ("scenario_run",json!({"changes":[{"set":{"entity_id":x,"property":"price","value":1}}]}),"unknown"),
+        ("scenario_run",json!({"changes":[{"remove":{"entity_id":x}}]}),"unknown"),
+        ("scenario_run",json!({"changes":[{"scale":{"kind":"product","property":"price","factor":2,"entity_ids":[x]}}]}),"unknown"),
+        ("scenario_run",json!({"changes":[{"shift":{"kind":"product","property":"price","delta":2,"related_to":{"entity_id":x}}}]}),"unknown"),
+        ("scenario_run",json!({"changes":[{"scale":{"kind":"product","property":"price","factor":2}}],"impact_from":[x]}),"unknown"),
+        ("show_view",json!({"view":"subgraph","title":"Test","entity_ids":[x]}),"scope"),
+        ("show_view",json!({"view":"subgraph","title":"Test","entity_ids":[],"relation_ids":[edge["id"]]}),"scope"),
+        ("show_view",json!({"view":"impact","start_id":x,"headline":"Test","affected":[]}),"scope"),
+        ("show_view",json!({"view":"metric","metric":"total_price","related_to":{"entity_id":x}}),"unknown"),
+        ("show_view",json!({"view":"scenario","headline":"Test","scenario":{"changes":[{"remove":{"entity_id":x}}]}}),"unknown"),
+        ("document_get",json!({"id":foreign_doc["id"]}),"scope"),
+        ("document_download",json!({"id":foreign_doc["id"]}),"scope"),
+        ("document_export",json!({"id":foreign_doc["id"]}),"scope"),
+        ("document_delete",json!({"id":foreign_doc["id"]}),"scope"),
+        ("document_upload",json!({"document_id":foreign_doc["id"],"filename":"overwrite.csv","text":"must not change"}),"scope"),
+        ("ontology_automap",json!({"document_id":foreign_doc["id"]}),"scope"),
+        ("document_import_rows",json!({"document_id":foreign_doc["id"],"kind":"product","name_column":"product"}),"scope"),
+        ("skill_get",json!({"id":foreign_skill["id"]}),"absent"),
+        ("skill_delete",json!({"id":foreign_skill["id"]}),"absent"),
+        ("secret_request_status",json!({"request_id":foreign_request["request_id"]}),"request"),
+        ("vault_peer_sync",json!({"link_id":foreign_link}),"scope"),
+        ("secret_transform",json!({"op":"base64","inputs":{"value":foreign_request["handle"]}}),"unavailable"),
+        ("http_request",json!({"url":"https://api.example.test/","headers":{"Authorization":foreign_request["handle"]}}),"unavailable"),
+    ];
+    let mut id_walked = BTreeSet::new();
+    for (name,args,behaviour) in foreign_cases {
+        id_walked.insert(name);
+        // The id-only call is essential: entity, memory and document ids are global.
+        // Repeat with an explicit foreign selector wherever the tool accepts one.
+        let mut variants = vec![args.clone()];
+        if registry::all_tools()[name].schema["properties"].get("vault_id").is_some() {
+            let mut explicit = args;
+            explicit["vault_id"] = team.clone().into();
+            variants.push(explicit);
+        }
+        for (i,args) in variants.into_iter().enumerate() {
+            let v = call(&app,&token,name,args).await;
+            match if i == 1 { "scope" } else { behaviour } {
+                "scope" => assert_eq!(v["code"],"auth.scope","foreign id {name}: {v}"),
+                // Cache queries include the bound vault in the WHERE clause. Foreign ids
+                // therefore behave exactly like missing ids, including empty link lists.
+                "record" => {
+                    // The registry adds its standard error code and trace id, but no data.
+                    assert_eq!(v["error"],"not found","{name}: {v}");
+                    assert_eq!(v["code"],"validation.invalid","{name}: {v}");
+                    assert!(v["trace_id"].as_str().is_some_and(|s| !s.is_empty()));
+                    assert_eq!(v.as_object().unwrap().len(),3);
+                }
+                "links" => assert_eq!(v,json!({"links":[]}),"{name}"),
+                "list" => { assert_eq!(v["results"],json!([])); assert_eq!(v["total"],0); }
+                // Scenario/metric Named::load retains only entities in the authorised
+                // default vault. Its unknown-entity error contains only the supplied id.
+                "unknown" => {
+                    assert_eq!(v["code"],"entity.not_found","{name}: {v}");
+                    assert!(v["error"].as_str().unwrap().contains("unknown entity"),"{name}: {v}");
+                }
+                // Skills deliberately hide existence from callers outside the vault.
+                "absent" => assert_eq!(v["error"],format!("no skill {}",foreign_skill["id"].as_str().unwrap()),"{name}: {v}"),
+                // Request queries filter both the bound vault and the requesting person.
+                "request" => assert_eq!(v["error"],"No such secret request of yours.","{name}: {v}"),
+                // No model means no subject lookup or write. The direct service check
+                // above proves the guarded model-enabled path too.
+                "no_model" => {
+                    for key in ["consolidated","skipped","errors"] { assert_eq!(v[key],json!([]),"{name}: {v}"); }
+                    assert!(v["note"].as_str().unwrap().starts_with("Eunomia has no model configured"));
+                    assert_eq!(v.as_object().unwrap().len(),4);
+                }
+                "unavailable" => assert_eq!(v["code"],"secret.unavailable","{name}: {v}"),
+                _ => unreachable!(),
+            }
+            eprintln!("TOKEN_WALK foreign_id {name} explicit={i}: {}",if i == 1 { "scope" } else { behaviour });
+            assert!(!v.to_string().contains("OUTSIDE_SPACE_CANARY") && !v.to_string().contains("OUTSIDE_NEIGHBOUR"),"{name} disclosed a foreign object");
+        }
+    }
+    // source_record_id is a provenance label, never a lookup or mutation target.
+    // Existing-entity targets are covered above; memory_write creates/finds by name.
+    // Keep new id-bearing tools from silently escaping the foreign-object walk.
+    for (name,spec) in registry::all_tools() {
+        let properties = spec.schema["properties"].as_object().unwrap();
+        let object_id = properties.keys().any(|k| matches!(k.as_str(),"id"|"entity_id"|"subject_id"|"memory_id"|"parent_id"|"from_id"|"to_id"|"winner_id"|"loser_id"|"document_id"|"request_id"|"link_id"|"entity_ids"|"related_to"|"impact_from"));
+        assert!(!object_id || id_walked.contains(name),"{name} needs a foreign-object case");
+    }
+    // The batch-level default must not hide an item's attempted vault override.
+    let batch = call(&app,&token,"memory_write_batch",json!({"items":[{"vault_id":team,"subject_name":"Escape item","subject_kind":"person","text":"must not write"}]})).await;
+    assert_eq!(batch["written"],0);
+    assert_eq!(batch["results"][0]["code"],"auth.scope","{batch}");
     let cases = vec![
         ("docs",json!({})), ("list",json!({})), ("search",json!({"query":"needle","mode":"keyword"})),
         ("get",json!({"id":"fixture:note:personal"})), ("links",json!({"id":"fixture:note:personal"})),
@@ -224,10 +412,17 @@ async fn walk_bound_token(team_bound: bool, admin: bool) {
             // A batch tool reports the refusal per item: nothing written, every item refused.
             if let Some(results) = refused["results"].as_array() {
                 assert_eq!(refused["written"], 0, "foreign {name}: {refused}");
+                eprintln!("TOKEN_WALK selector {name}: per_item");
                 assert!(!results.is_empty() && results.iter().all(|r| r["code"] == "auth.scope"), "foreign {name}: {refused}");
             } else {
                 assert_eq!(refused["code"], "auth.scope", "foreign {name}: {refused}");
+                eprintln!("TOKEN_WALK selector {name}: auth.scope");
             }
+        }
+        if registry::all_tools()[name].schema["properties"].get("vault_ids").is_some() {
+            let mut mixed = args.clone();
+            mixed["vault_ids"] = json!([bound,team]);
+            assert_eq!(call(&app,&token,name,mixed).await["code"],"auth.scope","mixed vaults {name}");
         }
         let value = call(&app,&token,name,args).await;
         if matches!(name,"secret_transform"|"http_request") {
@@ -269,6 +464,7 @@ async fn walk_bound_token(team_bound: bool, admin: bool) {
             let mut foreign = args.clone();
             foreign["vault_id"] = team.clone().into();
             assert_eq!(call(&app,&token,name,foreign).await["code"], "auth.scope", "foreign {name}");
+            eprintln!("TOKEN_WALK selector {name}: auth.scope");
         }
         let v = call(&app,&token,name,args).await;
         if !admin || expected == Some("bound") {

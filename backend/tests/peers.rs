@@ -549,3 +549,38 @@ fn mcp_share_codes_default_to_read_and_allow_explicit_edit() {
         assert_eq!(edit["role"], "edit");
     });
 }
+
+#[test]
+fn sender_truncates_addresses_before_signing_the_join_request() {
+    run(|| async {
+        let (host, guest) = (Node::new("bounded-host").await, Node::new("bounded-guest").await);
+        let sent = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let capture = sent.clone();
+        let router = host.app.router.clone().layer(axum::middleware::from_fn(move |req: Request<Body>, next: axum::middleware::Next| {
+            let capture = capture.clone();
+            async move {
+                let req = if req.uri().path().ends_with("/join") {
+                    let (parts, body) = req.into_parts();
+                    let bytes = body.collect().await.unwrap().to_bytes();
+                    let value: Value = serde_json::from_slice(&bytes).unwrap();
+                    *capture.lock().unwrap() = serde_json::from_value(value["guest_addrs"].clone()).unwrap();
+                    Request::from_parts(parts, Body::from(bytes))
+                } else { req };
+                next.run(req).await
+            }
+        }));
+        peers::net::test_route(&host.base, router);
+        let vault = host.vault("Bounded addresses").await;
+        let code = host.code(&vault, "read").await;
+        let addrs: Vec<String> = (0..peers::MAX_JOIN_ADDRS + 8).map(|i| format!("https://guest-{i}.example.test")).collect();
+        let st = guest.org().await;
+        // The real host verifies the MAC over the received addresses. A successful join
+        // proves truncation occurred before signing, rather than just before sending.
+        let joined = sys(peers::join(&st, &guest.app.user.id, &code, addrs.clone(), "Guest")).await.unwrap();
+        let received = host.link(&joined.link.id).await;
+        assert_eq!(*sent.lock().unwrap(), addrs[..peers::MAX_JOIN_ADDRS]);
+        // Storage applies a separate address cap after validating the signed request.
+        assert_eq!(received.peer_addrs, peers::addrs::sanitize(&addrs[..peers::MAX_JOIN_ADDRS]));
+        assert_eq!(guest.link(&joined.link.id).await.role, "read");
+    });
+}
