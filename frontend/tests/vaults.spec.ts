@@ -82,6 +82,7 @@ test.describe("Ontology summary", () => {
     await expect(page.getByRole("link", { name: "Open Ontology" })).toBeVisible();
     await page.getByRole("link", { name: "Open Ontology" }).click();
     await expect(page).toHaveURL(/\/ontology\?space=/);
-    await expect(page.getByRole("heading", { name: /Overview/ })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Ontology views" }).getByRole("link", { name: "Overview", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("heading", { name: "Start with the things your business knows." })).toBeVisible();
   });
 });
