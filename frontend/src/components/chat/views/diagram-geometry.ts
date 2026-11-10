@@ -40,40 +40,37 @@ export function diagramGeometry(d: Diagram, phone: boolean) {
       height,
       scale: 0.8,
       plateHeight,
+      collisionBoxes: [
+        { x: x - 80, y: y - height - plateHeight - 32, w: 160, h: plateHeight },
+        { x: x - 52, y: y - height - 20, w: 104, h: height + 34 },
+      ],
       box: {
         x: x - 86,
         y: y - height - plateHeight - 38,
         w: 172,
-        h: height + plateHeight + 72,
+        h: height + plateHeight + 50,
       },
     };
   });
-  const bands =
-    d.diagram_type === "impact"
-      ? [...new Set(d.nodes.map((n) => n.x))]
-          .sort((a, b) => a - b)
-          .map((x, i) => {
-            const bandNodes = nodes.filter((n) =>
-              vertical ? n.y === x : n.x === x,
-            );
-            const count = bandNodes.length;
-            return {
-              text:
-                i === 0
-                  ? "Source"
-                  : `${i} ${i === 1 ? "hop" : "hops"} · ${count} shown`,
-              x: vertical ? Math.min(...bandNodes.map((n) => n.box.x)) : x - 86,
-              y: Math.min(...bandNodes.map((n) => n.box.y)) - 34,
-              w: 172,
-              h: 26,
-            };
-          })
-      : [];
-  const occupied: Box[] = [...nodes.map((n) => n.box), ...bands];
+  const bands = d.diagram_type === "impact"
+    ? d.bands.map((band) => {
+        const bandNodes = nodes.filter((n) => n.distance === band.distance);
+        return {
+          text: bandLabel(band),
+          x: vertical ? Math.min(...nodes.map((n) => n.box.x)) : band.x - 86,
+          y: vertical
+            ? band.x - 190
+            : Math.min(...(bandNodes.length ? bandNodes : nodes).map((n) => n.box.y)) - 34,
+          w: 230,
+          h: 26,
+        };
+      })
+    : [];
+  const occupied: Box[] = [...nodes.flatMap((n) => n.collisionBoxes), ...bands];
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const edges = [...d.edges]
     .sort((a, b) => a.id.localeCompare(b.id))
-    .flatMap((e, i) => {
+    .flatMap((e) => {
       const a = byId.get(e.from),
         b = byId.get(e.to);
       if (!a || !b) return [];
@@ -86,47 +83,41 @@ export function diagramGeometry(d: Diagram, phone: boolean) {
         (sum, c) => sum + (/[MW@\u0080-\uffff]/.test(c) ? 2 : 1),
         0,
       );
-      const w = Math.min(176, Math.max(80, label.length * 9 + 24));
+      const w = Math.min(e.count === undefined ? 176 : 120, Math.max(80, label.length * 8 + 16));
       const h = units > 16 ? Math.ceil(units / 14) * 24 + 12 : 38;
-      let box: Box | undefined;
-      const dx = to.x - from.x,
-        dy = to.y - from.y,
-        len = Math.hypot(dx, dy) || 1;
-      for (const offset of [
-        0, 48, -48, 96, -96, 160, -160, 240, -240, 340, -340,
-      ]) {
-        for (const t of [0.5, 0.35, 0.65, 0.2, 0.8]) {
-          const candidate = {
-            x: from.x + dx * t - (dy / len) * offset - w / 2,
-            y: from.y + dy * t + (dx / len) * offset - h / 2,
-            w,
-            h,
-          };
-          if (!occupied.some((r) => boxesIntersect(candidate, r))) {
-            box = candidate;
-            break;
-          }
-        }
-        if (box) break;
-      }
-      // Reserve a separate outside lane if the middle is full. Every verb stays visible.
-      box ??= {
-        x: Math.min(...nodes.map((n) => n.box.x)),
-        y: Math.max(...occupied.map((r) => r.y + r.h)) + 20,
-        w,
-        h,
-      };
-      occupied.push({ x: box.x - 5, y: box.y - 5, w: w + 10, h: h + 10 });
-      const centre = { x: box.x + w / 2, y: box.y + h / 2 };
       const self = a.id === b.id;
-      const start = formPort(
-        a,
-        self ? { x: from.x + 100, y: from.y - 30 } : centre,
-      );
-      const end = formPort(b, self ? { x: to.x + 100, y: to.y + 30 } : centre);
-      // Two curves meet at the label centre, so the plate is always on its own edge.
-      const lane = ((i % 5) - 2) * 5;
-      const path = `M${start.x},${start.y} Q${(start.x + centre.x) / 2 + lane},${(start.y + centre.y) / 2 - lane} ${centre.x},${centre.y} Q${(end.x + centre.x) / 2 - lane},${(end.y + centre.y) / 2 + lane} ${end.x},${end.y}`;
+      const start = formPort(a, self ? { x: from.x + 100, y: from.y - 30 } : to);
+      const end = formPort(b, self ? { x: to.x + 100, y: to.y + 30 } : from);
+      const dx = end.x - start.x, dy = end.y - start.y;
+      const len = Math.hypot(dx, dy) || 1;
+      let box: Box | undefined;
+      let midpoint = { x: 0, y: 0 };
+      // A single quadratic has a continuous tangent through its midpoint.
+      // Try small perpendicular offsets first, keeping ordinary links close to the forms.
+      placement: for (const offset of [0, 32, -32, 48, -48, 64, -64, 72, -72, 96, -96, 160, -160, 240, -240, 340, -340, 480, -480, 680, -680]) {
+        for (const along of [0, 16, -16, 24, -24, 48, -48]) {
+          midpoint = self
+            ? { x: from.x + 140 + Math.abs(offset), y: from.y }
+            : { x: (start.x + end.x) / 2 - dy / len * offset + dx / len * along,
+                y: (start.y + end.y) / 2 + dx / len * offset + dy / len * along };
+          const candidate = { x: midpoint.x - w / 2, y: midpoint.y - h / 2, w, h };
+          box = candidate;
+          if (!occupied.some((r) => boxesIntersect(candidate, r))) break placement;
+        }
+      }
+      // Dense parallel links may fill every nearby slot. Reserve a clear outer midpoint
+      // for those labels, while keeping the same continuous curve and stored direction.
+      if (!box || occupied.some((r) => box && boxesIntersect(box, r))) {
+        midpoint = {
+          x: Math.max(...occupied.map((r) => r.x + r.w)) + w / 2 + 20,
+          y: (start.y + end.y) / 2,
+        };
+        box = { x: midpoint.x - w / 2, y: midpoint.y - h / 2, w, h };
+      }
+      occupied.push({ x: box.x - 5, y: box.y - 5, w: w + 10, h: h + 10 });
+      const control = { x: 2 * midpoint.x - (start.x + end.x) / 2,
+                  y: 2 * midpoint.y - (start.y + end.y) / 2 };
+      const path = `M${start.x},${start.y} Q${control.x},${control.y} ${end.x},${end.y}`;
       return [{ ...e, label, box, path }];
     });
   const left = Math.min(...occupied.map((r) => r.x)) - 20;
@@ -134,4 +125,13 @@ export function diagramGeometry(d: Diagram, phone: boolean) {
   const width = Math.max(...occupied.map((r) => r.x + r.w)) - left + 20;
   const height = Math.max(...occupied.map((r) => r.y + r.h)) - top + 24;
   return { nodes, edges, bands, left, top, width, height };
+}
+
+export function bandLabel(b: Diagram["bands"][number]) {
+  if (b.distance === 0) return "Source";
+  const counts = [
+    b.shown ? `${b.shown} shown` : "",
+    b.omitted ? `${b.omitted} not shown` : "",
+  ].filter(Boolean).join(", ");
+  return `${b.distance} ${b.distance === 1 ? "hop" : "hops"}: ${counts}`;
 }

@@ -456,7 +456,8 @@ for (const theme of ["light", "dark"])
 for (const width of [1280, 390])
   test(`dense networks and nested cards at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await registerAndOnboard(page, uniqueEmail("ui-layout"));
+    if (process.env.E2E_MOCK_API === "1") await mockOntology(page);
+    else await registerAndOnboard(page, uniqueEmail("ui-layout"));
     const views = [10, 30].map((count) => {
       const view = fixture("Network");
       return {
@@ -593,7 +594,8 @@ for (const width of [1280, 390])
   });
 
 test("typed money keeps its currency and missing values are unavailable", async ({ page }) => {
-  await registerAndOnboard(page, uniqueEmail("typed-values"));
+  if (process.env.E2E_MOCK_API === "1") await mockOntology(page);
+  else await registerAndOnboard(page, uniqueEmail("typed-values"));
   const bad = fixture("Bar");
   bad.spec.elements.a.props.y = "name";
   const usd = fixture("Stat");

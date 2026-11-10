@@ -32,12 +32,12 @@ for (const type of ["path", "neighbourhood", "impact", "kinds"]) {
       expect(g.edges).toHaveLength(d.edges.length);
       for (const [i, edge] of g.edges.entries()) {
         for (const n of g.nodes)
-          expect(boxesIntersect(edge.box, n.box)).toBe(false);
+          for (const box of n.collisionBoxes) expect(boxesIntersect(edge.box, box)).toBe(false);
         for (const other of g.edges.slice(i + 1))
           expect(boxesIntersect(edge.box, other.box)).toBe(false);
-        expect(edge.path).toContain(
-          `${edge.box.x + edge.box.w / 2},${edge.box.y + edge.box.h / 2}`,
-        );
+        const [sx, sy, cx, cy, ex, ey] = edge.path.match(/-?[\d.]+/g).map(Number);
+        expect(edge.box.x + edge.box.w / 2).toBeCloseTo((sx + 2 * cx + ex) / 4);
+        expect(edge.box.y + edge.box.h / 2).toBeCloseTo((sy + 2 * cy + ey) / 4);
       }
       expect(diagramGeometry(d, width === 390)).toEqual(g);
     });
@@ -62,4 +62,50 @@ test("an empty selection has finite drawing bounds", () => {
   d.nodes = [];
   d.edges = [];
   expect(diagramGeometry(d, true)).toMatchObject({ width: 320, height: 100 });
+});
+
+test("capped impact keeps true distances and an entirely omitted band", () => {
+  const d = diagramFixture("impact").diagram;
+  d.nodes = d.nodes.filter((_, i) => i === 0 || i === 2);
+  d.bands = [
+    { distance: 0, shown: 1, omitted: 0, x: 150 },
+    { distance: 1, shown: 0, omitted: 14, x: 410 },
+    { distance: 2, shown: 1, omitted: 0, x: 670 },
+  ];
+  for (const phone of [false, true]) {
+    expect(diagramGeometry(d, phone).bands.map((b) => b.text)).toEqual([
+      "Source", "1 hop: 14 not shown", "2 hops: 1 shown",
+    ]);
+  }
+});
+
+test("ordinary path edges take one gentle curve between the forms", () => {
+  const g = diagramGeometry(diagramFixture("path").diagram, false);
+  for (const e of g.edges) {
+    expect(e.path.match(/Q/g)).toHaveLength(1);
+    const numbers = e.path.match(/-?[\d.]+/g).map(Number);
+    const [sx, sy, cx, cy, ex, ey] = numbers;
+    expect(Math.abs(cy - (sy + ey) / 2)).toBeLessThanOrEqual(160);
+    expect(e.box.x + e.box.w / 2).toBeCloseTo((sx + 2 * cx + ex) / 4);
+    expect(e.box.y + e.box.h / 2).toBeCloseTo((sy + 2 * cy + ey) / 4);
+  }
+});
+
+test("kind links fit their labels between the forms without a deep detour", () => {
+  const g = diagramGeometry(diagramFixture("kinds").diagram, false);
+  for (const e of g.edges) {
+    const [sx, sy, cx, cy, ex, ey] = e.path.match(/-?[\d.]+/g).map(Number);
+    expect(Math.hypot(cx - (sx + ex) / 2, cy - (sy + ey) / 2)).toBeLessThanOrEqual(128);
+  }
+});
+
+test("the full edge cap keeps every parallel label clear", () => {
+  const d = diagramFixture("path").diagram;
+  d.edges = Array.from({ length: 24 }, (_, i) => ({
+    id: `parallel-${i}`, from: d.nodes[0].id, to: d.nodes[1].id, label: "supplied_by",
+  }));
+  const g = diagramGeometry(d, false);
+  for (const [i, e] of g.edges.entries())
+    for (const other of g.edges.slice(i + 1))
+      expect(boxesIntersect(e.box, other.box)).toBe(false);
 });

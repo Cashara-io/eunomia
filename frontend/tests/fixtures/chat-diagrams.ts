@@ -22,6 +22,7 @@ export function diagramFixture(
         ? i === 1
         : i === 0 || (type === "path" && i === 3),
     emphasis: i === 3,
+    distance: i,
     x: type === "neighbourhood" ? [460, 460, 730, 190][i] : 150 + i * 260,
     y:
       type === "neighbourhood"
@@ -66,6 +67,7 @@ export function diagramFixture(
       }[type],
       nodes,
       edges,
+      bands: type === "impact" ? nodes.map((n) => ({ distance: n.distance, shown: 1, omitted: 0, x: n.x })) : [],
       groups: [],
       total_nodes: 4,
       total_edges: 3,

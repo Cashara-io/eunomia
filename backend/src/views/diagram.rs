@@ -91,6 +91,8 @@ pub struct Node {
     pub kind: String,
     pub focus: bool,
     pub emphasis: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub distance: Option<u8>,
     pub x: usize,
     pub y: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -112,6 +114,22 @@ pub struct Group {
     pub count: usize,
 }
 #[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct Band {
+    pub distance: u8,
+    pub shown: usize,
+    pub omitted: usize,
+    pub x: usize,
+}
+impl Band {
+    fn text(&self) -> String {
+        if self.distance == 0 { return "Source".into(); }
+        let mut counts = Vec::new();
+        if self.shown > 0 { counts.push(format!("{} shown", self.shown)); }
+        if self.omitted > 0 { counts.push(format!("{} not shown", self.omitted)); }
+        format!("{} {}: {}", self.distance, if self.distance == 1 { "hop" } else { "hops" }, counts.join(", "))
+    }
+}
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct Diagram {
     pub diagram_type: String,
     pub vault: String,
@@ -119,6 +137,7 @@ pub struct Diagram {
     pub nodes: Vec<Node>,
     pub edges: Vec<Edge>,
     pub groups: Vec<Group>,
+    pub bands: Vec<Band>,
     pub total_nodes: usize,
     pub total_edges: usize,
     pub omitted_edges: usize,
@@ -137,6 +156,7 @@ fn node(e: EntityRef, focus: bool) -> Node {
         kind: e.kind,
         focus,
         emphasis: false,
+        distance: None,
         x: 0,
         y: 0,
         count: None,
@@ -190,6 +210,7 @@ async fn resolve_with_deadline(db: &OrgDb, owner: &RecordId, request: Request, b
                     kind: n.kind,
                     count: Some(n.entities),
                     emphasis: false,
+                    distance: None,
                     x: 0,
                     y: 0,
                     metrics: vec![],
@@ -240,7 +261,8 @@ async fn resolve_with_deadline(db: &OrgDb, owner: &RecordId, request: Request, b
                         },
                         n.id.to_string() == start.id,
                     );
-                    item.x = usize::from(*walk.hops.get(&n.id.to_string()).unwrap_or(&0));
+                    item.distance = walk.hops.get(&n.id.to_string()).copied();
+                    item.x = usize::from(item.distance.unwrap_or(0));
                     item
                 })
                 .collect();
@@ -297,20 +319,14 @@ async fn resolve_with_deadline(db: &OrgDb, owner: &RecordId, request: Request, b
             if target.as_ref().is_some_and(|e| e.vault != start.vault) {
                 return Err(bad("diagram references must share one vault"));
             }
-            let id = crate::rid::parse(&start.id).map_err(|_| bad("invalid focus reference"))?;
-            // Bound the entire graph fetch, including node/fact hydration. The bounded walk
-            // already caps rows per hub and in total; a deadline also bounds slow queries.
-            let search = neighbourhood::neighbourhood(db, owner, &id, Some(hops.depth().into()), None);
-            let (g, timed_out) = match tokio::time::timeout(budget, search).await {
-                Ok(result) => (result?, false),
-                Err(_) => (neighbourhood::Neighbourhood {
-                    vault: start.vault.clone(), depth: hops.depth(),
-                    nodes: vec![neighbourhood::Node {
-                        id: start.id.clone(), name: start.name.clone(), kind: start.kind.clone(),
-                        summary: None, facts: vec![], properties: vec![],
-                    }], edges: vec![], link_types: vec![], truncated: true,
-                }, true),
-            };
+            let vault = crate::rid::parse(&start.vault).map_err(|_| bad("invalid vault reference"))?;
+            let deadline = tokio::time::Instant::now() + budget;
+            #[cfg(feature = "test-support")]
+            let _ = crate::store::DEADLINE_PROBE.try_with(|p| p.borrow_mut().deadline = Some(deadline));
+            let (g, timed_out) = neighbourhood::diagram_search(db, &vault, neighbourhood::Node {
+                id: start.id.clone(), name: start.name.clone(), kind: start.kind.clone(),
+                summary: None, facts: vec![], properties: vec![],
+            }, hops.depth(), deadline).await?;
             let (dist, predecessors) = shortest(&start.id, &g.edges, direction, hops.depth());
             let mut ids: HashSet<_> = dist.keys().cloned().collect();
             let mut path_edges = HashSet::new();
@@ -356,6 +372,7 @@ async fn resolve_with_deadline(db: &OrgDb, owner: &RecordId, request: Request, b
                         },
                         false,
                     );
+                    item.distance = dist.get(&item.id).copied();
                     item.x = distance;
                     item
                 })
@@ -497,6 +514,7 @@ impl Diagram {
             nodes,
             edges,
             groups: vec![],
+            bands: vec![],
             omitted_edges: 0,
             partial,
             total_partial: partial,
@@ -505,6 +523,12 @@ impl Diagram {
         }
     }
     fn finish(&mut self) {
+        let mut totals = BTreeMap::<u8, usize>::new();
+        if self.diagram_type == "impact" {
+            for n in &self.nodes {
+                if let Some(distance) = n.distance { *totals.entry(distance).or_default() += 1; }
+            }
+        }
         self.nodes.sort_by(|a, b| {
             (!a.focus, !a.emphasis, &a.kind, &a.name, &a.id).cmp(&(
                 !b.focus,
@@ -524,6 +548,10 @@ impl Diagram {
             .map(|(kind, count)| Group { kind, count })
             .collect();
         self.nodes.truncate(MAX_NODES);
+        self.bands = totals.into_iter().map(|(distance, total)| {
+            let shown = self.nodes.iter().filter(|n| n.distance == Some(distance)).count();
+            Band { distance, shown, omitted: total - shown, x: 150 + usize::from(distance) * 260 }
+        }).collect();
         let ids: HashSet<_> = self.nodes.iter().map(|n| n.id.as_str()).collect();
         self.edges.sort_by(|a, b| {
             (&a.from, &a.to, &a.label, &a.id).cmp(&(&b.from, &b.to, &b.label, &b.id))
@@ -588,8 +616,12 @@ impl Diagram {
             text.push_str(n);
             text.push('\n');
         }
+        for b in &self.bands { text.push_str(&format!("{}\n", b.text())); }
         for n in &self.nodes {
             text.push_str(&format!("- {} ({})", n.name, n.kind.replace('_', " ")));
+            if self.diagram_type == "impact" && let Some(distance) = n.distance {
+                text.push_str(&format!("; {distance} {}", if distance == 1 { "hop" } else { "hops" }));
+            }
             if let Some(c) = n.count {
                 text.push_str(&format!(": {c} objects"));
             }
@@ -651,4 +683,33 @@ pub fn schema() -> serde_json::Value {
 #[cfg(feature = "test-support")]
 pub async fn resolve_search_deadline_for_test(db: &OrgDb, owner: &RecordId, request: Request, budget: std::time::Duration) -> AppResult<Diagram> {
     resolve_with_deadline(db, owner, request, budget).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn capped_impact_preserves_true_distance_and_entirely_omitted_band() {
+        let mut nodes = vec![node(EntityRef { id: "person:focus".into(), name: "Focus".into(), kind: "person".into(), vault: "vault:test".into() }, true)];
+        nodes[0].distance = Some(0);
+        for (kind, count, distance) in [("supplier", 14, 1), ("order", 11, 2)] {
+            for i in 0..count {
+                let mut n = node(EntityRef { id: format!("entity:{kind}{i}"), name: format!("{kind} {i}"), kind: kind.into(), vault: "vault:test".into() }, false);
+                n.distance = Some(distance as u8);
+                n.x = distance;
+                nodes.push(n);
+            }
+        }
+        let mut d = Diagram::new("impact", "vault:test".into(), "Capped impact".into(), nodes, vec![], false);
+        d.finish();
+        let value = serde_json::to_value(&d).unwrap();
+        assert_eq!(value["bands"], serde_json::json!([
+            {"distance":0,"shown":1,"omitted":0,"x":150},
+            {"distance":1,"shown":0,"omitted":14,"x":410},
+            {"distance":2,"shown":11,"omitted":0,"x":670}
+        ]));
+        assert!(value["nodes"].as_array().unwrap().iter().filter(|n| n["focus"] == false).all(|n| n["distance"] == 2));
+        assert!(d.text().contains("1 hop: 14 not shown"));
+        assert!(d.text().contains("2 hops: 11 shown"));
+    }
 }

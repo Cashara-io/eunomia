@@ -78,7 +78,7 @@ for (const theme of ["light", "dark"])
               return { x: r.x, y: r.y, w: r.width, h: r.height };
             });
           const labels = boxes("[data-label-box]"),
-            nodes = boxes("[data-node-box]");
+            nodes = boxes("[data-solid-box], [data-node-box] .plate");
           const intersects = (
             a: (typeof labels)[number],
             b: (typeof labels)[number],
@@ -106,6 +106,21 @@ for (const theme of ["light", "dark"])
         });
         expect(geometry.collision).toBe(false);
         expect(geometry.minimum).toBeGreaterThanOrEqual(11.9);
+        const marker = picture.locator("marker");
+        expect(Number(await marker.getAttribute("markerWidth"))).toBeGreaterThanOrEqual(16);
+        await card.getByRole("region").evaluate((el) => el.scrollIntoView({ block: "end" }));
+        const frame = await card.getByRole("region").boundingBox();
+        const composer = await page.getByRole("textbox", { name: "Message", exact: true }).boundingBox();
+        if (width === 390) {
+          await page.setViewportSize({ width, height: 700 });
+          await card.getByRole("region").evaluate((el) => el.scrollIntoView({ block: "end" }));
+          const shortFrame = await card.getByRole("region").boundingBox();
+          const shortComposer = await page.getByRole("textbox", { name: "Message", exact: true }).boundingBox();
+          expect(shortFrame?.height).toBeLessThanOrEqual(340);
+          expect(shortFrame && shortComposer && shortFrame.y + shortFrame.height <= shortComposer.y).toBe(true);
+          await page.setViewportSize({ width, height: 1100 });
+        }
+        expect(frame && composer && frame.y + frame.height <= composer.y).toBe(true);
         const layout = await card.locator("svg").first().innerHTML();
         await card.getByRole("button", { name: "Table", exact: true }).click();
         await expect(card.getByRole("table")).toHaveCount(2);
@@ -119,7 +134,7 @@ for (const theme of ["light", "dark"])
         await expect(card).toBeVisible();
         expect(await card.locator("svg").first().innerHTML()).toBe(layout);
         await mkdir(output, { recursive: true });
-        await card.evaluate((el) => el.scrollIntoView({ block: "start" }));
+        await card.evaluate((el) => el.scrollIntoView({ block: "end" }));
         await page.screenshot({
           path: `${output}/${type}-${width}-${theme}.png`,
           fullPage: true,
@@ -150,6 +165,14 @@ test("diagram catalogue source and bounded partial view keep text and values", a
   await page.setViewportSize({ width: 390, height: 1100 });
   await mockOntology(page);
   const view = diagramFixture("impact");
+  view.diagram.nodes = view.diagram.nodes.filter((n) => n.distance !== 1);
+  view.diagram.bands = [
+    { distance: 0, shown: 1, omitted: 0, x: 150 },
+    { distance: 1, shown: 0, omitted: 14, x: 410 },
+    { distance: 2, shown: 1, omitted: 0, x: 670 },
+    { distance: 3, shown: 1, omitted: 0, x: 930 },
+  ];
+  view.diagram.edges = view.diagram.edges.filter((e) => e.from !== "entity:item1" && e.to !== "entity:item1");
   view.diagram.edges[0].label =
     "has_a_particularly_long_relationship_with_this_delivery";
   view.diagram.partial = true;
@@ -236,8 +259,12 @@ test("diagram catalogue source and bounded partial view keep text and values", a
     card.getByRole("heading", { name: "Connections", exact: true }),
   ).toBeVisible();
   await expect(card.getByRole("img")).toHaveAccessibleName("Connections");
+  await expect(card.getByRole("img")).toContainText("1 hop: 14 not shown");
+  await expect(card.getByRole("img")).toContainText("2 hops: 1 shown");
   await expect(card).toContainText("At least 150 objects");
   await expect(card).toContainText("146 more order");
   await card.getByRole("button", { name: "Table", exact: true }).click();
   await expect(card.getByRole("table").first()).toContainText("42 orders");
+  await expect(card.getByRole("table").first()).toContainText("2 hops");
+  await expect(card).toContainText("1 hop: 14 not shown");
 });

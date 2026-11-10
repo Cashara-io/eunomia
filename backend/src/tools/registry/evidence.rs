@@ -13,6 +13,7 @@ const SCENARIO: &[&str] = &["changes", "changed/*/after", "baseline/*/expr_words
 const VIEW: &[&str] = &[
     "text", "headline", "title", "affected/*/why", "spec", "evidence", "pagination/reach",
     "bucket_column", "applied_dates", "diagram/height", "diagram/nodes/*/x", "diagram/nodes/*/y",
+    "diagram/nodes/*/distance", "diagram/bands/*/distance", "diagram/bands/*/x",
 ];
 
 #[derive(Clone, Copy)]

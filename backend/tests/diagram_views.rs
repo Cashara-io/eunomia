@@ -387,7 +387,12 @@ async fn traversal_budget_keeps_totals_as_lower_bounds() {
         .await);
     let mut arg = request("neighbourhood", &a);
     arg["diagram"]["selection"]["hops"] = json!("one");
-    let out = ok(app.tool("show_view", arg).await);
+    use eunomia_backend::entities::neighbourhood::LARGEST_DIAGRAM_QUERY;
+    let (out, max_rows) = LARGEST_DIAGRAM_QUERY.scope(Default::default(), async {
+        let out = ok(app.tool("show_view", arg).await);
+        (out, LARGEST_DIAGRAM_QUERY.with(|n| n.get()))
+    }).await;
+    assert_eq!(max_rows, 33, "a high-degree hub must be paged as 32 rows plus one lookahead");
     assert_eq!(source["truncated"], true);
     assert_eq!(out["diagram"]["total_partial"], true);
     assert_eq!(out["diagram"]["partial"], true);
@@ -416,14 +421,46 @@ async fn dense_hubs_return_an_honest_partial_result_at_the_deadline() {
     let request = || serde_json::from_value::<Request>(json!({"selection":{"type":"path","from_id":a,"to_id":b,"hops":"three"}})).unwrap();
     let db = app.db().await;
     let started = Instant::now();
-    let partial = common::sys(resolve_search_deadline_for_test(&db, &app.user.id, request(), Duration::ZERO)).await.unwrap();
+    let (partial, issued, late) = eunomia_backend::store::DEADLINE_PROBE.scope(Default::default(), async {
+        let partial = common::sys(resolve_search_deadline_for_test(&db, &app.user.id, request(), Duration::ZERO)).await.unwrap();
+        let (issued, late) = eunomia_backend::store::DEADLINE_PROBE.with(|p| (p.borrow().issued, p.borrow().after_deadline));
+        (partial, issued, late)
+    }).await;
+    assert_eq!(late, 0, "no query may be submitted after the search deadline");
+    assert_eq!(issued, 0, "an expired search must not submit even its first query");
     assert!(started.elapsed() < Duration::from_secs(3));
     assert!(partial.partial && partial.total_partial);
     assert!(partial.notice.as_deref().unwrap().contains("No path found within the search limits"));
     assert_eq!(partial.nodes.len(), 2);
     assert!(partial.edges.is_empty());
     let started = Instant::now();
-    let normal = common::sys(eunomia_backend::views::diagram::resolve(&db, &app.user.id, request())).await.unwrap();
+    use eunomia_backend::entities::neighbourhood::{FETCHED_EDGE_ROWS, LARGEST_DIAGRAM_QUERY};
+    let (normal, max_rows, fetched, late) = LARGEST_DIAGRAM_QUERY.scope(Default::default(), FETCHED_EDGE_ROWS.scope(Default::default(), eunomia_backend::store::DEADLINE_PROBE.scope(Default::default(), async {
+        let normal = common::sys(eunomia_backend::views::diagram::resolve(&db, &app.user.id, request())).await.unwrap();
+        (normal, LARGEST_DIAGRAM_QUERY.with(|n| n.get()), FETCHED_EDGE_ROWS.with(|n| n.get()), eunomia_backend::store::DEADLINE_PROBE.with(|p| p.borrow().after_deadline))
+    }))).await;
+    assert!(max_rows > 0 && max_rows <= 33, "at most 32 edge rows plus one lookahead, or 32 node rows per query: {max_rows}");
+    assert!(fetched <= 2401, "total fetched-row budget plus one lookahead: {fetched}");
+    assert_eq!(late, 0);
     assert!(started.elapsed() < Duration::from_secs(4));
     assert!(normal.nodes.len() <= 12 && normal.edges.len() <= 24);
+}
+
+#[cfg(feature = "test-support")]
+#[tokio::test]
+async fn database_submission_fence_does_not_send_an_expired_query() {
+    let app = TestApp::new().await;
+    let db = app.db().await;
+    let deadline = tokio::time::Instant::now();
+    eunomia_backend::store::DEADLINE_PROBE.scope(std::cell::RefCell::new(eunomia_backend::store::DeadlineProbe {
+        deadline: Some(deadline), ..Default::default()
+    }), async {
+        let result = eunomia_backend::store::entities::DIAGRAM_EDGES.on(&db).until(deadline)
+            .bind(("id", app.user.id.clone())).bind(("outgoing", true)).bind(("limit", 33usize)).bind(("start", 0usize)).await;
+        assert!(result.is_err());
+        eunomia_backend::store::DEADLINE_PROBE.with(|p| {
+            assert_eq!(p.borrow().issued, 0);
+            assert_eq!(p.borrow().after_deadline, 0);
+        });
+    }).await;
 }

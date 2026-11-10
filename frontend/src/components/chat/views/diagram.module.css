@@ -140,7 +140,7 @@
 }
 @media (max-width: 480px) {
   .viewport {
-    max-height: 480px;
+    max-height: min(480px, max(160px, calc(100dvh - 360px)));
   }
   .desktop {
     display: none;

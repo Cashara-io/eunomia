@@ -5,7 +5,7 @@ import { useLandscapeTint } from "../../twin/landscape-shared";
 import LandscapeSolid from "../../twin/LandscapeSolid";
 import ConnectionKindIcon from "../../twin/ConnectionKindIcon";
 import { humanLabel, plural } from "../../twin/overview-format";
-import { diagramGeometry } from "./diagram-geometry";
+import { bandLabel, diagramGeometry } from "./diagram-geometry";
 import { words, withUnit } from "./bits";
 import type { DiagramView as Diagram } from "./diagram-schema";
 import shared from "../../twin/overview.module.css";
@@ -60,12 +60,14 @@ export default function DiagramView({
       <div id={`${id}-content`}>
         {table ? (
           <div className={styles.tableWrap}>
+            {d.bands.map((b) => <p key={b.distance}>{bandLabel(b)}</p>)}
             <table>
               <caption>Objects and annotations</caption>
               <thead>
                 <tr>
                   <th>Name</th>
                   <th>Kind</th>
+                  {d.diagram_type === "impact" && <th>Distance</th>}
                   <th>Values</th>
                 </tr>
               </thead>
@@ -74,6 +76,7 @@ export default function DiagramView({
                   <tr key={n.id}>
                     <td>{n.name}</td>
                     <td>{words(n.kind)}</td>
+                    {d.diagram_type === "impact" && <td>{n.distance === undefined ? "Unavailable" : n.distance === 0 ? "Source" : `${n.distance} ${n.distance === 1 ? "hop" : "hops"}`}</td>}
                     <td>
                       {n.count !== undefined && `${n.count} objects`}
                       {n.metrics.map((m) => (
@@ -204,13 +207,14 @@ function DiagramPicture({
           <defs>
             <marker
               id={`${id}-arrow`}
-              markerWidth="8"
-              markerHeight="8"
-              refX="7"
-              refY="4"
+              markerWidth="16"
+              markerHeight="16"
+              refX="14"
+              refY="8"
+              markerUnits="userSpaceOnUse"
               orient="auto"
             >
-              <path d="M0 0 8 4 0 8Z" fill="var(--ink)" />
+              <path d="M0 1 15 8 0 15 3 8Z" fill="var(--ink)" />
             </marker>
             <pattern
               id={`${id}-grid`}
@@ -275,10 +279,11 @@ function DiagramPicture({
                 {n.name} ({humanLabel(n.kind)})
               </title>
               <rect
-                x={n.box.x}
-                y={n.box.y}
-                width={n.box.w}
-                height={n.box.h}
+                data-solid-box={n.id}
+                x={n.x - 52}
+                y={n.y - n.height - 20}
+                width={104}
+                height={n.height + 34}
                 fill="transparent"
                 pointerEvents="none"
               />

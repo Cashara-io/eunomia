@@ -268,7 +268,7 @@ async fn seeded_success_contract_covers_every_registered_tool() {
 
 #[test]
 fn diagram_layout_does_not_authorise_business_numbers() {
- let out=json!({"view":"diagram","diagram":{"height":999777,"nodes":[{"x":999777,"y":999777,"count":42}],"total_nodes":2,"total_edges":1}});
+ let out=json!({"view":"diagram","diagram":{"height":999777,"bands":[{"distance":999777,"shown":42,"omitted":1,"x":999777}],"nodes":[{"x":999777,"y":999777,"distance":999777,"count":42}],"total_nodes":2,"total_edges":1}});
  let computed=evidence::for_tool("show_view").unwrap().computed(&out);
- assert!(!has_canary(&computed));assert_eq!(computed["diagram"]["nodes"][0]["count"],42);assert_eq!(computed["diagram"]["total_nodes"],2);
+ assert!(!has_canary(&computed));assert_eq!(computed["diagram"]["nodes"][0]["count"],42);assert_eq!(computed["diagram"]["total_nodes"],2);assert_eq!(computed["diagram"]["bands"][0]["shown"],42);
 }

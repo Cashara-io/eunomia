@@ -21,6 +21,7 @@ export const diagramViewSchema = z.object({
           kind: z.string(),
           focus: z.boolean(),
           emphasis: z.boolean(),
+          distance: z.number().int().nonnegative().optional(),
           x: z.number(),
           y: z.number(),
           count: z.number().optional(),
@@ -46,6 +47,12 @@ export const diagramViewSchema = z.object({
         }),
       )
       .max(24),
+    bands: z.array(z.object({
+      distance: z.number().int().nonnegative(),
+      shown: z.number().int().nonnegative(),
+      omitted: z.number().int().nonnegative(),
+      x: z.number(),
+    })).default([]),
     groups: z.array(
       z.object({ kind: z.string(), count: z.number().int().nonnegative() }),
     ),
