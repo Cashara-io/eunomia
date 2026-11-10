@@ -11,6 +11,8 @@ use crate::authz::Actor;
 use crate::pool::ControlDb;
 use crate::store;
 
+pub(crate) mod scope_refusals;
+
 pub struct Event<'a> {
     pub user: Option<&'a RecordId>,
     pub actor: &'a Actor,
@@ -27,6 +29,12 @@ pub fn anonymous() -> Actor {
 
 pub async fn record(db: &ControlDb, e: Event<'_>) {
     let detail: String = e.detail.chars().take(500).collect();
+    record_structured(db, Event { detail: &detail, ..e }).await;
+}
+
+/// Structured callers bound each field before JSON serialisation. Cutting the
+/// resulting JSON string would corrupt it and could erase suppression counts.
+pub(crate) async fn record_structured(db: &ControlDb, e: Event<'_>) {
     let res = store::control::AUDIT_EVENT_CREATE
         .on(db)
         .bind(("user", e.user.cloned()))
@@ -36,7 +44,7 @@ pub async fn record(db: &ControlDb, e: Event<'_>) {
         .bind(("target", e.target.to_string()))
         .bind(("outcome", e.outcome.to_string()))
         .bind(("trace_id", crate::telemetry::current_trace_id()))
-        .bind(("detail", detail))
+        .bind(("detail", e.detail.to_string()))
         .await;
     let failure = match res {
         Ok(r) => r.check().err(),

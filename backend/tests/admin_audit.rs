@@ -226,26 +226,162 @@ async fn preflight_generic_refusals_are_visible_for_reads_and_writes() {
     }
 }
 
-#[tokio::test]
-async fn preflight_refusal_volume_is_bounded_across_tools_tokens_and_targets() {
-    let app = common::TestApp::new().await;
-    let mut caller = restricted_caller(&app).await;
-    let started = std::time::Instant::now();
-    for i in 0..60 {
-        caller.actor.id = format!("api_token:flood-{i}");
-        let tool = if i % 2 == 0 { "vault_invite" } else { "vault_peers" };
-        // Different targets must not create fresh audit budgets.
-        let error = eunomia_backend::authz::with_caller(caller.clone(), eunomia_backend::tools::registry::call(&app.state, &app.user, tool,
-            serde_json::json!({"vault_id":format!("vault:foreign-{i}"),"email":"private@example.test"}))).await.unwrap_err();
-        assert_eq!(error.code, eunomia_backend::error::ErrorCode::AuthScope);
+// Keep database I/O from automatically advancing Tokio's paused clock.
+struct RefusalClock(tokio::task::JoinHandle<()>);
+impl RefusalClock {
+    fn freeze() -> Self {
+        tokio::time::pause();
+        Self(tokio::spawn(async { loop { tokio::task::yield_now().await; } }))
     }
-    let page = ledger(&app, "all").await;
-    let refusals = page["results"].as_array().unwrap().iter().filter(|r| r["action"] == "vault.invite" || r["action"] == "auth.scope_refused").count();
-    // Account for refill if a loaded machine takes more than two seconds.
-    let budget = 30 + (started.elapsed().as_secs() / 2) as usize;
-    assert!((1..=budget).contains(&refusals), "{refusals} security rows exceeded budget {budget}");
+}
+impl Drop for RefusalClock {
+    fn drop(&mut self) { self.0.abort(); }
 }
 
+#[tokio::test]
+async fn preflight_domain_refusals_survive_another_tokens_exhausted_budget() {
+    let app = common::TestApp::new().await;
+    let admin = restricted_caller(&app).await;
+    let mut reader = admin.clone();
+    reader.actor.id = "api_token:reader".into();
+    reader.scopes = vec![eunomia_backend::scopes::MEMORY_READ.into()];
+    let _clock = RefusalClock::freeze();
+    for _ in 0..30 { refuse_selector(&app, &reader, "vault_peers").await; }
+    // Exhaust this token too, so a per-token budget cannot hide domain events.
+    for _ in 0..30 { refuse_selector(&app, &admin, "vault_peers").await; }
+    refuse_selector(&app, &admin, "vault_delete").await;
+    assert_safe_refusal(&app, &admin, "vault_delete", "vault.delete", "vault:nonexistent-foreign").await;
+    // The other nine old domain events survive too.
+    for &(tool, action) in DOMAIN_REFUSALS.iter().filter(|(tool, _)| *tool != "vault_delete") {
+        refuse_selector(&app, &admin, tool).await;
+        assert_safe_refusal(&app, &admin, tool, action, "vault:nonexistent-foreign").await;
+    }
+}
+
+#[tokio::test]
+async fn preflight_generic_budget_is_per_token_across_tools_and_targets() {
+    let app = common::TestApp::new().await;
+    let mut caller = restricted_caller(&app).await;
+    let _clock = RefusalClock::freeze();
+    for i in 0..40 {
+        let tool = if i % 2 == 0 { "vault_peers" } else { "ontology_get" };
+        let error = eunomia_backend::authz::with_caller(caller.clone(), eunomia_backend::tools::registry::call(&app.state, &app.user, tool,
+            serde_json::json!({"vault_id":format!("vault:foreign-{i}")}))).await.unwrap_err();
+        assert_eq!(error.code, eunomia_backend::error::ErrorCode::AuthScope);
+    }
+    assert_eq!(refusal_details(&app, "auth.scope_refused").await.len(), 30);
+    caller.actor.id = "api_token:another-token".into();
+    refuse_selector(&app, &caller, "vault_peers").await;
+    assert_eq!(refusal_details(&app, "auth.scope_refused").await.len(), 31);
+}
+
+async fn refusal_details(app: &common::TestApp, action: &str) -> Vec<serde_json::Value> {
+    #[derive(serde::Deserialize, surrealdb::types::SurrealValue)]
+    struct Row { detail: String }
+    let mut res = app.control().test_raw().query("SELECT detail FROM audit_event WHERE action = $action")
+        .bind(("action", action.to_string())).await.unwrap();
+    let rows: Vec<Row> = res.take(0).unwrap();
+    rows.into_iter().map(|r| serde_json::from_str(&r.detail).expect("complete JSON detail")).collect()
+}
+
+async fn suppressed_refusals(app: &common::TestApp, caller: &eunomia_backend::authz::Caller) {
+    for _ in 0..30 { refuse_selector(app, caller, "vault_peers").await; }
+    for tool in ["vault_peers", "ontology_get", "vault_peers", "ontology_get", "vault_peers"] {
+        refuse_selector(app, caller, tool).await;
+    }
+    assert!(refusal_details(app, "auth.scope_refused_suppressed").await.is_empty());
+}
+
+async fn assert_suppression_summary(app: &common::TestApp) {
+    let rows = refusal_details(app, "auth.scope_refused_suppressed").await;
+    assert_eq!(rows.len(), 1, "one summary for the suppression window");
+    let detail = &rows[0];
+    assert_eq!(detail["count"], 5);
+    assert_eq!(detail["tools"], serde_json::json!(["ontology_get", "vault_peers"]));
+    let start = chrono::DateTime::parse_from_rfc3339(detail["window_start"].as_str().unwrap()).unwrap();
+    let end = chrono::DateTime::parse_from_rfc3339(detail["window_end"].as_str().unwrap()).unwrap();
+    assert!(end >= start);
+    let keys: std::collections::BTreeSet<_> = detail.as_object().unwrap().keys().map(String::as_str).collect();
+    assert_eq!(keys, ["count", "tools", "window_start", "window_end"].into_iter().collect());
+    assert_no_private_input(app, "suppression summary").await;
+    let page = ledger(app, "all").await;
+    let row = page["results"].as_array().unwrap().iter().find(|r| r["action"] == "auth.scope_refused_suppressed").expect("ledger-visible summary");
+    assert!(row["summary"].as_str().unwrap().contains("5"), "{row}");
+    assert_eq!(row["ok"], false);
+}
+
+#[tokio::test]
+async fn preflight_suppression_is_coalesced_when_the_next_event_is_allowed() {
+    let app = common::TestApp::new().await;
+    let caller = restricted_caller(&app).await;
+    let _clock = RefusalClock::freeze();
+    suppressed_refusals(&app, &caller).await;
+    tokio::time::advance(std::time::Duration::from_secs(2)).await;
+    refuse_selector(&app, &caller, "vault_peers").await;
+    assert_suppression_summary(&app).await;
+    assert_eq!(refusal_details(&app, "auth.scope_refused").await.len(), 31);
+    tokio::time::advance(std::time::Duration::from_secs(60)).await;
+    for _ in 0..20 { tokio::task::yield_now().await; }
+    assert_suppression_summary(&app).await;
+}
+
+#[tokio::test]
+async fn preflight_suppression_flushes_for_a_quiet_user_without_another_request() {
+    let app = common::TestApp::new().await;
+    let caller = restricted_caller(&app).await;
+    let _clock = RefusalClock::freeze();
+    suppressed_refusals(&app, &caller).await;
+    tokio::time::advance(std::time::Duration::from_secs(3)).await;
+    // Allow for Tokio's millisecond timer rounding, then poll the database only.
+    // No registry call or user request can flush the pending count here.
+    for _ in 0..500 {
+        if !refusal_details(&app, "auth.scope_refused_suppressed").await.is_empty() { break; }
+        tokio::task::yield_now().await;
+    }
+    assert_suppression_summary(&app).await;
+    assert_eq!(refusal_details(&app, "auth.scope_refused").await.len(), 30);
+}
+
+#[tokio::test]
+async fn preflight_suppression_preserves_the_complete_distinct_tool_set() {
+    let app = common::TestApp::new().await;
+    let caller = restricted_caller(&app).await;
+    let _clock = RefusalClock::freeze();
+    for _ in 0..30 { refuse_selector(&app, &caller, "vault_peers").await; }
+    let mut tools: Vec<_> = eunomia_backend::tools::registry::all_tools().iter()
+        .filter(|(name, spec)| spec.schema["properties"].get("vault_id").is_some()
+            && **name != "memory_write_batch" && !DOMAIN_REFUSALS.iter().any(|(tool, _)| tool == *name))
+        .map(|(&name, _)| name).collect();
+    tools.sort_unstable();
+    let minimum_detail = serde_json::json!({"count":tools.len(), "tools":tools,
+        "window_start":"2000-01-01T00:00:00Z", "window_end":"2000-01-01T00:00:02Z"});
+    assert!(minimum_detail.to_string().len() > 500, "exercise a summary longer than the free-text audit cap");
+    for tool in &tools { refuse_selector(&app, &caller, tool).await; }
+    tokio::time::advance(std::time::Duration::from_secs(3)).await;
+    for _ in 0..500 {
+        if !refusal_details(&app, "auth.scope_refused_suppressed").await.is_empty() { break; }
+        tokio::task::yield_now().await;
+    }
+    let rows = refusal_details(&app, "auth.scope_refused_suppressed").await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["count"], tools.len());
+    assert_eq!(rows[0]["tools"], serde_json::json!(tools));
+    assert_no_private_input(&app, "complete summary").await;
+}
+
+#[tokio::test]
+async fn preflight_long_selectors_keep_complete_json_detail() {
+    let app = common::TestApp::new().await;
+    let caller = restricted_caller(&app).await;
+    let requested = format!("vault:{}", "long-selector".repeat(500));
+    let error = eunomia_backend::authz::with_caller(caller, eunomia_backend::tools::registry::call(&app.state, &app.user, "vault_peers",
+        serde_json::json!({"vault_id":requested}))).await.unwrap_err();
+    assert_eq!(error.code, eunomia_backend::error::ErrorCode::AuthScope);
+    let rows = refusal_details(&app, "auth.scope_refused").await;
+    assert_eq!(rows.len(), 1);
+    assert!(rows[0]["requested_vault"].as_str().unwrap().len() < 300);
+    assert_eq!(rows[0]["reason"], "vault_binding_mismatch");
+}
 
 #[tokio::test]
 async fn preflight_refusals_store_no_argument_values() {

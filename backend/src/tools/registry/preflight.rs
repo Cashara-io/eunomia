@@ -64,30 +64,30 @@ fn refusal_action(tool: &str) -> &'static str {
     }
 }
 
-/// The existing token bucket implementation, with a non-configurable audit budget:
-/// burst 30, refill 30/minute per user per process, shared across tools and tokens.
-/// Neither target changes nor disabling HTTP limits can bypass it. Excess attempts
-/// are still refused but leave no additional security rows until the bucket refills.
-/// Keep the hidden target used by domain refusals: ledger rendering must not look
-/// up a guessed foreign vault's name. Only the supplied selector goes in detail.
+/// Existing domain refusals are never budgeted. Only new generic refusal rows
+/// use the per-credential budget, whose suppressed counts are flushed by a timer.
+/// Keep the hidden target so ledger rendering never looks up a foreign vault.
 pub(super) async fn record(state: &OrgState, owner: &RecordId, tool: &str, refusal: &Refusal, requested: &str) {
     if refusal.error.code != ErrorCode::AuthScope {
         return;
     }
     let Some(caller) = authz::current() else { return };
     let Some(bound) = caller.vault else { return };
-    if state.scope_refusal_audit.check(&owner.to_string(), 30).is_err() {
+    let action = refusal_action(tool);
+    if action == "auth.scope_refused" && !state.scope_refusal_audit.allow(owner, &caller.actor, tool).await {
         return;
     }
+    let requested: String = requested.chars().take(120).collect();
+    let bound: String = bound.to_string().chars().take(120).collect();
     let detail = json!({
         "tool": tool,
-        "bound_vault": bound.to_string(),
+        "bound_vault": bound,
         "requested_vault": requested,
         "selector": refusal.selector,
         "reason": "vault_binding_mismatch",
     }).to_string();
-    audit::record(&state.control, audit::Event {
-        user: Some(owner), actor: &caller.actor, action: refusal_action(tool),
+    audit::record_structured(&state.control, audit::Event {
+        user: Some(owner), actor: &caller.actor, action,
         target: crate::vaults::service::HIDDEN_SPACE,
         outcome: refusal.error.code.as_str(), detail: &detail,
     }).await;

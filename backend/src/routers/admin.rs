@@ -322,6 +322,14 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "oauth.consent" if ok => format!("Allowed {} to connect", name("an app")),
         "oauth.consent" => return format!("Declined to connect {}", name("an app")),
         "oauth.grant_revoke" => "Disconnected an app".into(),
+        "auth.scope_refused_suppressed" => {
+            let detail = serde_json::from_str::<serde_json::Value>(detail).unwrap_or_default();
+            let count = detail["count"].as_u64().unwrap_or(0);
+            let start = detail["window_start"].as_str().unwrap_or("unknown");
+            let end = detail["window_end"].as_str().unwrap_or("unknown");
+            let tools = detail["tools"].as_array().map(|tools| tools.iter().filter_map(serde_json::Value::as_str).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+            return format!("Refused {count} more tool calls from {start} to {end}: {tools}");
+        },
         "authz.denied" => return "A token was refused (it lacks the permission)".into(),
         "extension.create" => "Added an extension".into(),
         "extension.update" => "Changed an extension".into(),
