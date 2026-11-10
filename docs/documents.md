@@ -70,7 +70,7 @@ A CSV is indexed as text like any document, so `recall` finds its rows. It can a
 
 Importing again (say after uploading a new version of the file) updates each value in place: no entity is made twice and no extra history is kept for that document. A bad cell (`$32.50` in a money column, a status not in the enum, a row with no name or the wrong number of cells) is listed with its line and column, and the rest of the file is still imported. Deleting the document removes the values it imported; the entities stay, like entities extracted from it.
 
-Limits: a CSV is read as a table up to 2 MiB, 60 columns and 5,000 rows; a larger file is refused with a message, never half imported. The first row is the header. Blank header cells become `column_N` and a repeated header gets `_2`. The in-app Chat does not import rows: it is a bulk write from a file, so it stays a button and an agent tool.
+Limits: a CSV follows `EUNOMIA_DOCUMENTS_MAX_BYTES` (default 25 MiB) and permits up to 60 columns, with no row cap. Auto-map profiles the first 1,000 nonblank rows. Import reads 500 rows at a time and records committed row counts in ontology activity. A retry restarts the file and updates the same entities, links and values. If interrupted, committed chunks remain. The first row is the header. Blank header cells become `column_N` and a repeated header gets `_2`. Chat, MCP agents and the import button use the same import service.
 
 ## Setup
 
@@ -140,3 +140,5 @@ A database restored without its files lists the documents and finds their passag
 - Upload goes through the backend, which holds the file in memory while storing it. The default 25 MiB limit keeps that small.
 - Bucket files are not written in the same transaction as the database. A crash between storing the file and writing its record can leave an unreferenced file in the bucket. It is harmless and nothing points at it.
 - Extracted text is untrusted content. Agents should treat it as data, not instructions.
+
+MCP has a separate bounded request ceiling: six times the configured document limit plus 64 KiB, allowing JSON escaping or base64 and the RPC envelope. The general API body limit stays at 1 MiB. The browser sends raw file bytes with upload progress and displays server size errors. Next.js uses the same transport ceiling for its bounded proxy buffer. Set `EUNOMIA_DOCUMENTS_MAX_BYTES` for both backend and frontend when changing the limit, including when building a standalone frontend. Caddy streams requests and sets no smaller limit. `deploy/` contains observability services only, and the import compose overlay changes database startup flags only.

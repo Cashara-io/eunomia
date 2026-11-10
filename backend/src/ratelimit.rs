@@ -475,3 +475,26 @@ mod tests {
         assert!(!Cidr::parse("10.0.0.0/8").unwrap().contains("::1".parse().unwrap()));
     }
 }
+
+/// One potentially large upload body per user and process, shared by HTTP and MCP.
+#[derive(Default)]
+pub struct LargeBodies(Mutex<std::collections::HashSet<String>>);
+
+pub struct LargeBody<'a> {
+    bodies: &'a LargeBodies,
+    user: String,
+}
+
+impl LargeBodies {
+    pub fn acquire(&self, user: String) -> Option<LargeBody<'_>> {
+        let mut users = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        if !users.insert(user.clone()) { return None; }
+        Some(LargeBody { bodies: self, user })
+    }
+}
+
+impl Drop for LargeBody<'_> {
+    fn drop(&mut self) {
+        self.bodies.0.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.user);
+    }
+}

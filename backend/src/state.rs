@@ -17,6 +17,8 @@ pub struct AppStateInner {
     pub provisioner: Option<Provisioner>,
     pub settings: Settings,
     pub composio_publishing: crate::connectors::composio::storage::Publishing,
+    /// In-flight body reads shared by the HTTP and MCP upload routes.
+    pub large_bodies: crate::ratelimit::LargeBodies,
     /// Failed sign-ins per account and per OAuth client (see `ratelimit::FailThrottle`).
     pub fail_throttle: crate::ratelimit::FailThrottle,
     /// Credentials verified in the last few seconds (see `auth::Credentials`).
@@ -74,7 +76,7 @@ impl AppState {
             None => crate::connectors::crypto::rotate_tenant_passwords(settings, &control).await?,
         };
         let pool = Pool::new(templates, control.clone(), settings);
-        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner, settings: settings.clone(), composio_publishing: Default::default(), fail_throttle: Default::default(), credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
+        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner, settings: settings.clone(), composio_publishing: Default::default(), large_bodies: Default::default(), fail_throttle: Default::default(), credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
     }
 
     /// Connect to an install that is already set up, without provisioning or moving anything
@@ -84,7 +86,7 @@ impl AppState {
         let templates = crate::db::connect_all(settings, config).await?;
         let control = crate::pool::connect_control(&templates, settings).await?;
         let pool = Pool::new(templates, control.clone(), settings);
-        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner: None, settings: settings.clone(), composio_publishing: Default::default(), fail_throttle: Default::default(), credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
+        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner: None, settings: settings.clone(), composio_publishing: Default::default(), large_bodies: Default::default(), fail_throttle: Default::default(), credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
     }
 
     /// The org's database, bundled with the app state.

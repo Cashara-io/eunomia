@@ -13,8 +13,14 @@ import { twinHref } from "./model";
 const eventSchema = z.object({
   seq: z.number(), at: z.string(), actor: z.string(), actor_name: z.string(), actor_type: z.string(),
   action: z.string(), definition_type: z.string(), kind: z.string(), name: z.string(),
+  after: z.unknown().optional(),
   target: z.string(), revision: z.number(), reason: z.string().nullable(),
 });
+const progressSchema = z.object({ processed: z.number().int().nonnegative(), total: z.number().int().nonnegative() });
+export function importProgress(value: unknown): string | null {
+  const parsed = progressSchema.safeParse(value);
+  return parsed.success ? `${parsed.data.processed.toLocaleString("en-AU")} of ${parsed.data.total.toLocaleString("en-AU")} rows processed` : null;
+}
 const pageSchema = z.object({ events: z.array(eventSchema), next: z.number(), more: z.boolean() });
 
 export default function Activity({ space, compact = false, definition }: {
@@ -64,7 +70,7 @@ export default function Activity({ space, compact = false, definition }: {
         <option value="">Everyone</option><option value="user">Person</option><option value="token">Agent token</option><option value="oauth">App</option><option value="system">System</option>
       </select></label>
       <label>Change<select aria-label="Activity change" className="field p-2 ml-2" value={action} onChange={e => { setAction(e.target.value); browse(); }}>
-        <option value="">All changes</option>{["proposed", "approved", "rejected", "merged", "described", "imported", "value_written", "strict_changed"].map(a => <option key={a} value={a}>{words(a)}</option>)}
+        <option value="">All changes</option>{["proposed", "approved", "rejected", "merged", "described", "imported", "import_progress", "value_written", "strict_changed"].map(a => <option key={a} value={a}>{words(a)}</option>)}
       </select></label>
       <label>Type<select aria-label="Activity definition type" className="field p-2 ml-2" value={type} onChange={e => { setType(e.target.value); browse(); }}>
         <option value="">All types</option>{["kind", "link", "property", "metric", "import", "policy"].map(t => <option key={t} value={t}>{words(t)}</option>)}
@@ -77,6 +83,7 @@ export default function Activity({ space, compact = false, definition }: {
         {shown.map(event => <li key={event.seq} className="py-3 [overflow-wrap:anywhere]">
           <p><span className="font-medium">{event.actor_name}</span> {words(event.action).toLowerCase()} {words(event.name)} <span className="label">{words(event.definition_type)}{event.kind && event.definition_type !== "kind" && event.definition_type !== "link" ? ` · ${words(event.kind)}` : ""}</span></p>
           <time dateTime={event.at} className="text-[12px]" style={{ color: "var(--ink-dim)" }}>{new Date(event.at).toLocaleString("en-AU")}</time>
+          {event.action === "import_progress" && <p className="mt-1">{importProgress(event.after)}</p>}
           {event.reason && <p className="mt-1">{event.reason}</p>}
         </li>)}
         {shown.length === 0 && <li className="py-3">{query.isPending ? "Loading activity…" : "No activity recorded for these filters."}</li>}

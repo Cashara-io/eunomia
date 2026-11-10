@@ -13,8 +13,10 @@ use common::TestApp;
 use eunomia_backend::config::Settings;
 use eunomia_backend::jobs::{handlers, worker, WorkerConfig};
 use eunomia_backend::models_user;
+use eunomia_backend::rid::RecordIdExt;
 use eunomia_backend::tools::registry;
 use http_body_util::BodyExt;
+use futures::StreamExt;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use surrealdb::types::RecordId;
@@ -561,4 +563,242 @@ async fn the_page_lists_every_readable_space_and_names_each_documents_space() {
     let vid = eunomia_backend::rid::parse(&shop).unwrap();
     let restricted = models_user::create_api_token_with(&app.state.control, &app.user.id, "r", &["memory:read".to_string()], Some(&vid), None).await.unwrap().token;
     assert_eq!(listed("?all_vaults=true", restricted).await, [("parts.csv".to_string(), shop)]);
+}
+
+#[tokio::test]
+async fn import_196_mcp_upload_accepts_two_mib_csv_and_reports_configured_limit() {
+    use base64::Engine;
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 2 << 20, ..common::test_settings() }).await;
+    let csv = format!("name,value\n{}", "item,1\n".repeat((2 << 20) / 7 - 2));
+    for args in [json!({"text": csv}), json!({"content_base64": base64::engine::general_purpose::STANDARD.encode(&csv)})] {
+        let mut args = args;
+        args["filename"] = json!("large.csv");
+        let rpc = json!({"jsonrpc":"2.0", "id":1, "method":"tools/call", "params":{"name":"document_upload","arguments":args}});
+        let (s, _, b) = raw(&app, "POST", "/mcp", serde_json::to_vec(&rpc).unwrap(), Some("application/json"), &app.token).await;
+        assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
+        let answer = json_of(&b);
+        assert_ne!(answer["result"]["isError"], true, "{answer}");
+        assert!(answer.to_string().contains("size_bytes"), "{answer}");
+    }
+    let rpc = json!({"jsonrpc":"2.0", "id":2, "method":"tools/call", "params":{"name":"document_upload","arguments":{"filename":"over.csv","text":"x".repeat((2 << 20) + 1)}}});
+    let (s, _, b) = raw(&app, "POST", "/mcp", serde_json::to_vec(&rpc).unwrap(), Some("application/json"), &app.token).await;
+    assert_eq!(s, 200);
+    assert!(String::from_utf8_lossy(&b).contains("limit is 2097152 bytes"));
+    let (s, _, b) = raw(&app, "POST", "/mcp", vec![b'x'; 14 << 20], Some("application/json"), &app.token).await;
+    assert_eq!(s, 413);
+    assert!(String::from_utf8_lossy(&b).contains("limit"));
+}
+
+#[tokio::test]
+async fn review209_anonymous_large_bodies_are_never_polled() {
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
+    for path in ["/mcp", "/api/documents?filename=anonymous.csv"] {
+        for token in [None, Some("invalid")] {
+            for known_length in [false, true] {
+                let polls = Arc::new(AtomicUsize::new(0));
+                let count = polls.clone();
+                let body = Body::from_stream(futures::stream::once(async move {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    Ok::<_, std::io::Error>(vec![b'x'; 20 << 20])
+                }));
+                let mut req = Request::builder().method("POST").uri(path).header(header::CONTENT_TYPE, "application/json");
+                if let Some(token) = token { req = req.header(header::AUTHORIZATION, format!("Bearer {token}")); }
+                if known_length { req = req.header(header::CONTENT_LENGTH, 20 << 20); }
+                let response = app.router.clone().oneshot(req.body(body).unwrap()).await.unwrap();
+                assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "{path}, {token:?}");
+                assert_eq!(polls.load(Ordering::SeqCst), 0, "body was buffered: {path}, {token:?}");
+            }
+        }
+    }
+    assert_eq!(app.tool("document_list", json!({})).await["total"], 0, "no upload handler ran");
+}
+
+#[tokio::test]
+async fn review209_http_upload_accepts_two_mib() {
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 2 << 20, ..common::test_settings() }).await;
+    let (status, out) = upload_http(&app, "large.csv", Some("text/csv"), &vec![b'x'; 2 << 20]).await;
+    assert_eq!(status, StatusCode::OK, "{out}");
+    assert_eq!(out["size_bytes"], 2 << 20);
+}
+
+#[tokio::test]
+async fn review209_large_non_upload_mcp_is_rejected_before_dispatch() {
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
+    for rpc in [json!({"jsonrpc":"2.0","id":1,"method":"ping","padding":"x".repeat(2 << 20)}),
+        json!([{ "jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"document_upload","arguments":{"filename":"x.csv","text":"x".repeat(2 << 20)}}},
+               { "jsonrpc":"2.0","id":2,"method":"ping"}])] {
+        let (status, _, _) = raw(&app, "POST", "/mcp", serde_json::to_vec(&rpc).unwrap(), Some("application/json"), &app.token).await;
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    }
+    assert_eq!(app.tool("document_list", json!({})).await["total"], 0);
+}
+
+#[tokio::test]
+async fn review209_large_body_slot_is_shared_and_released_on_cancellation() {
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
+    for first_path in ["/mcp", "/api/documents?filename=held.csv"] {
+        let (started, reading) = tokio::sync::oneshot::channel();
+        let prefix = serde_json::to_vec(&json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"document_upload","arguments":{"filename":"held.txt","text":"x".repeat(2 << 20)}}})).unwrap();
+        let body = Body::from_stream(futures::stream::once(async move { Ok::<_, std::io::Error>(prefix) }).chain(futures::stream::once(async move {
+            started.send(()).unwrap();
+            std::future::pending::<Result<Vec<u8>, std::io::Error>>().await
+        })));
+        let req = Request::builder().method("POST").uri(first_path)
+            .header(header::AUTHORIZATION, format!("Bearer {}", app.token))
+            .header(header::CONTENT_TYPE, "application/json").body(body).unwrap();
+        let router = app.router.clone();
+        let held = tokio::spawn(async move { router.oneshot(req).await });
+        tokio::time::timeout(Duration::from_secs(5), reading).await.unwrap().unwrap();
+        let small = json!({"jsonrpc":"2.0","id":2,"method":"ping"});
+        let (status, _, _) = raw(&app, "POST", "/mcp", serde_json::to_vec(&small).unwrap(), Some("application/json"), &app.token).await;
+        assert_eq!(status, StatusCode::OK, "a held upload must not block a small call");
+        let large = json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"document_upload","arguments":{"filename":"blocked.txt","text":"x".repeat(2 << 20)}}});
+        for path in ["/mcp", "/api/documents?filename=blocked.csv"] {
+            let (status, _, _) = raw(&app, "POST", path, serde_json::to_vec(&large).unwrap(), Some("application/json"), &app.token).await;
+            assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "{first_path} should block {path}");
+        }
+        held.abort();
+        assert!(held.await.unwrap_err().is_cancelled());
+        let (status, out) = upload_http(&app, "after-cancellation.csv", Some("text/csv"), &vec![b'x'; 2 << 20]).await;
+        assert_eq!(status, StatusCode::OK, "slot was not released after cancellation: {out}");
+    }
+}
+
+#[tokio::test]
+async fn review209_read_only_large_upload_is_refused_before_body_read() {
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
+    let token = models_user::create_api_token_with(&app.state.control, &app.user.id, "read", &["memory:read".into()], None, None).await.unwrap().token;
+    for path in ["/mcp", "/api/documents?filename=readonly.csv"] {
+        let polls = Arc::new(AtomicUsize::new(0));
+        let count = polls.clone();
+        let body = Body::from_stream(futures::stream::once(async move {
+            count.fetch_add(1, Ordering::SeqCst);
+            Ok::<_, std::io::Error>(vec![b'x'; 20 << 20])
+        }));
+        let req = Request::builder().method("POST").uri(path)
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::CONTENT_LENGTH, 20 << 20).body(body).unwrap();
+        let response = app.router.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{path}");
+        assert_eq!(polls.load(Ordering::SeqCst), 0, "read-only body was polled: {path}");
+    }
+    let _held = app.state.large_bodies.acquire(app.user.id.to_string()).unwrap();
+    for (credential, allowed, limit) in [(&token, "0", eunomia_backend::max_body_bytes()), (&app.token, "1", (25 << 20) * 6 + 64 * 1024)] {
+        let (status, headers, _) = raw(&app, "HEAD", "/mcp", vec![], None, credential).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(headers["x-eunomia-upload-allowed"], allowed);
+        assert_eq!(headers["x-eunomia-body-limit"], limit.to_string());
+    }
+    let (status, _, _) = raw(&app, "POST", "/mcp", br#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#.to_vec(), Some("application/json"), &token).await;
+    assert_eq!(status, StatusCode::OK, "read-only MCP still accepts small calls");
+}
+
+#[tokio::test]
+async fn review209_stalled_upload_times_out_and_releases_shared_slot() {
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
+    for path in ["/mcp", "/api/documents?filename=stalled.csv"] {
+        let (started, reading) = tokio::sync::oneshot::channel();
+        let prefix = serde_json::to_vec(&json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"document_upload","arguments":{"filename":"held.txt","text":"x".repeat(2 << 20)}}})).unwrap();
+        let body = Body::from_stream(futures::stream::once(async move { Ok::<_, std::io::Error>(prefix) }).chain(futures::stream::once(async move {
+            started.send(()).unwrap();
+            std::future::pending::<Result<Vec<u8>, std::io::Error>>().await
+        })));
+        let req = Request::builder().method("POST").uri(path)
+            .header(header::AUTHORIZATION, format!("Bearer {}", app.token)).body(body).unwrap();
+        let router = app.router.clone();
+        let held = tokio::spawn(async move { router.oneshot(req).await.unwrap() });
+        reading.await.unwrap();
+        tokio::time::pause();
+        tokio::time::advance(Duration::from_secs(26)).await;
+        let response = tokio::time::timeout(Duration::from_secs(1), held).await;
+        tokio::time::resume();
+        assert_eq!(response.expect("body deadline did not release the request").unwrap().status(), StatusCode::REQUEST_TIMEOUT, "{path}");
+        let (status, out) = upload_http(&app, "after-timeout.csv", Some("text/csv"), &vec![b'x'; 2 << 20]).await;
+        assert_eq!(status, StatusCode::OK, "shared slot remained held after timeout: {out}");
+    }
+}
+
+#[tokio::test]
+async fn review209_read_only_chunked_body_has_only_the_small_budget() {
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
+    let token = models_user::create_api_token_with(&app.state.control, &app.user.id, "read", &["memory:read".into()], None, None).await.unwrap().token;
+    let polls = Arc::new(AtomicUsize::new(0));
+    let count = polls.clone();
+    let body = Body::from_stream(futures::stream::iter(0..80).map(move |_| {
+        count.fetch_add(1, Ordering::SeqCst);
+        Ok::<_, std::io::Error>(vec![b'x'; 256 << 10])
+    }));
+    let req = Request::builder().method("POST").uri("/mcp").header(header::AUTHORIZATION, format!("Bearer {token}")).body(body).unwrap();
+    let response = app.router.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert!(polls.load(Ordering::SeqCst) <= eunomia_backend::max_body_bytes() / (256 << 10) + 1);
+}
+
+#[tokio::test]
+async fn review209_parallel_small_mcp_calls_succeed_while_large_upload_holds_slot() {
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
+    let _upload = app.state.large_bodies.acquire(app.user.id.to_string()).unwrap();
+    let calls = (0..16).map(|id| {
+        let app = &app;
+        async move {
+            let rpc = if id % 2 == 0 {
+                json!({"jsonrpc":"2.0","id":id,"method":"ping"})
+            } else {
+                json!({"jsonrpc":"2.0","id":id,"method":"tools/call","params":{"name":"document_list","arguments":{}}})
+            };
+            let (status, _, body) = raw(app, "POST", "/mcp", serde_json::to_vec(&rpc).unwrap(), Some("application/json"), &app.token).await;
+            assert_eq!(status, StatusCode::OK, "small call {id}: {}", String::from_utf8_lossy(&body));
+            let answer = json_of(&body);
+            assert!(answer.get("error").is_none(), "{answer}");
+            assert_ne!(answer["result"]["isError"], true, "{answer}");
+        }
+    });
+    futures::future::join_all(calls).await;
+}
+
+#[tokio::test]
+async fn review209_upload_rate_allows_honest_senders_and_cuts_off_trickles() {
+    let app = TestApp::with_settings(Settings { documents_max_bytes:25 << 20, ..common::test_settings() }).await;
+    for path in ["/mcp", "/api/documents?filename=slow.csv"] {
+        for (size, rate) in [(2 << 20, 128 * 1024), (25 << 20, 128 * 1024), (2 << 20, 8 * 1024)] {
+            let payload = if path == "/mcp" {
+                serde_json::to_vec(&json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"document_upload","arguments":{"filename":"slow.csv","text":"x".repeat(size)}}})).unwrap()
+            } else { vec![b'x'; size] };
+            let expected = payload.len();
+            let (tx, rx) = tokio::sync::mpsc::channel::<Result<Vec<u8>, std::io::Error>>(1);
+            let req = Request::builder().method("POST").uri(path).header(header::AUTHORIZATION, format!("Bearer {}", app.token)).body(Body::from_stream(tokio_stream::wrappers::ReceiverStream::new(rx))).unwrap();
+            let router = app.router.clone();
+            let held = tokio::spawn(async move { router.oneshot(req).await.unwrap() });
+            tokio::time::pause();
+            let mut sent = 0;
+            for chunk in payload.chunks(rate) {
+                if tx.send(Ok(chunk.to_vec())).await.is_err() { break; }
+                sent += chunk.len();
+                tokio::time::advance(Duration::from_secs(1)).await;
+                for _ in 0..10 { tokio::task::yield_now().await; }
+            }
+            drop(tx);
+            tokio::time::resume();
+            let response = held.await.unwrap();
+            if rate == 128 * 1024 {
+                assert_eq!(sent, expected);
+                assert_eq!(response.status(), StatusCode::OK);
+                let bytes = response.into_body().collect().await.unwrap().to_bytes();
+                let out: Value = serde_json::from_slice(&bytes).unwrap();
+                let doc = if path == "/mcp" {
+                    assert!(out.get("error").is_none(), "{out}");
+                    assert_ne!(out["result"]["isError"], true, "{out}");
+                    serde_json::from_str::<Value>(out["result"]["content"][0]["text"].as_str().unwrap()).unwrap()
+                } else { out };
+                assert_eq!(doc["size_bytes"], size, "{doc}");
+            } else {
+                assert!(sent <= rate * 26, "trickle ran past the grace period and window: {sent} bytes");
+                assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
+            }
+            assert!(app.state.large_bodies.acquire(app.user.id.to_string()).is_some(), "body slot leaked");
+        }
+    }
 }

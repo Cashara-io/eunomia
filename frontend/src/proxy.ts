@@ -13,5 +13,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/:path*", "/mcp", "/healthz", "/readyz", "/.well-known/:path*", "/oauth/:path*"],
+  // These exact routes have streaming handlers. Matching them here would clone their body
+  // before the handler can authenticate, and would truncate authenticated uploads at 1 MiB.
+  matcher: ["/api/((?!documents/?$).*)", "/healthz", "/readyz", "/.well-known/:path*", "/oauth/:path*"],
 };

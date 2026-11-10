@@ -148,7 +148,7 @@ macro_rules! merge_memories {
 
 pub const MERGE_MEMORIES_SQL: &str = merge_memories!();
 
-/// Moves everything of `$loser` onto `$winner` (same kind and vault, checked by the caller) and
+/// Moves everything of `$loser` onto `$winner` (compatible kinds and same vault, checked) and
 /// deletes `$loser`, in ONE transaction: memories (see [`MERGE_MEMORIES_SQL`]), `relates_to` edges in
 /// both directions (re-created on the winner unless it already has that exact edge; edges between
 /// the two are dropped), and `$aliases` onto the winner. Any failing statement rolls all of it back.
@@ -172,6 +172,20 @@ pub const MERGE_ENTITIES: Stmt = Stmt::new(
     };
     DELETE relates_to WHERE in = $loser OR out = $loser;
     UPDATE $winner SET aliases = array::sort(array::union(aliases, $aliases)), updated_at = time::now();
+    FOR $v IN (SELECT * FROM entity_property WHERE entity = $loser) {
+        IF $target_kind != NONE {
+            LET $p = (SELECT * FROM $v.property)[0];
+            LET $targets = (SELECT id FROM ontology_property WHERE vault = $p.vault AND kind = $target_kind
+                AND name = $p.name AND status = "approved" AND datatype = $p.datatype
+                AND (unit ?? NONE) = ($p.unit ?? NONE)
+                AND ($v.unit = NONE OR unit = $v.unit)
+                AND (datatype != "enum" OR $v.value_text IN enum_values));
+            IF array::len($targets) != 1 { THROW "unmappable property during entity merge"; };
+            UPDATE $v.id SET entity = $winner, property = $targets[0].id;
+        } ELSE {
+            UPDATE $v.id SET entity = $winner;
+        };
+    };
     DELETE $loser;
 "#,
         "COMMIT TRANSACTION;"
@@ -393,6 +407,8 @@ pub fn create_entity<'a>(db: &'a OrgDb, table: &str) -> Q<'a> {
         format!("CREATE {table} SET owner = $owner, vault = $vault{k}, name = $name, aliases = $aliases RETURN AFTER"),
     )
 }
+
+pub const EDIT_VISIBLE_ALIASES: &str = "aliases = array::union($aliases, aliases.filter(|$a| string::starts_with($a, $merge_prefix)))";
 
 /// Entity edit where only the passed fields change (7 combinations).
 pub fn update_entity<'a>(db: &'a OrgDb, set: &str) -> Q<'a> {
