@@ -344,10 +344,13 @@ async fn apply_extraction(
         Some(v) => v.clone(),
         None => crate::vaults::service::personal_vault_id(db, owner).await?,
     };
-    let keys: HashSet<String> = data.people.iter().chain(&data.organisations).chain(&data.locations)
+    let mut keys: HashSet<String> = data.people.iter().chain(&data.organisations).chain(&data.locations)
         .filter_map(|e| e.name.as_ref()).chain(data.other.iter().filter_map(|e| e.entity.name.as_ref()))
         .chain(data.relations.iter().flat_map(|r| [r.from.as_ref(), r.to.as_ref()]).flatten())
         .map(|n| n.trim().to_lowercase()).collect();
+    let redirect_keys: Vec<String> = keys.iter().flat_map(|name| service::KINDS.iter()
+        .map(move |kind| super::merge_alias::encode(kind, name))).collect();
+    keys.extend(redirect_keys);
     #[derive(Deserialize, SurrealValue)]
     struct Existing { id: RecordId, name_key: String, aliases: Vec<String>, kind: String }
     let existing: Vec<Existing> = store::ontology::EXTRACTION_MATCHES.on(db)
@@ -356,7 +359,10 @@ async fn apply_extraction(
     for entity in existing {
         for key in std::iter::once(entity.name_key).chain(entity.aliases.into_iter().map(|a| a.to_lowercase())) {
             if !keys.contains(&key) { continue; }
-            let key = (key, entity.kind.clone());
+            let key = match super::merge_alias::decode(&key) {
+                Some((kind, name)) => (name.to_string(), kind.to_string()),
+                None => (key, entity.kind.clone()),
+            };
             let entry = (entity.id.clone(), entity.kind.clone());
             if entity_ids.get(&key).is_some_and(|old| old.0 != entry.0) { ambiguous.insert(key.clone()); }
             entity_ids.insert(key, entry);

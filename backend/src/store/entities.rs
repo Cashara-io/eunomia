@@ -398,6 +398,8 @@ pub fn create_entity<'a>(db: &'a OrgDb, table: &str) -> Q<'a> {
     )
 }
 
+pub const EDIT_VISIBLE_ALIASES: &str = "aliases = array::union($aliases, aliases.filter(|$a| string::starts_with($a, $merge_prefix)))";
+
 /// Entity edit where only the passed fields change (7 combinations).
 pub fn update_entity<'a>(db: &'a OrgDb, set: &str) -> Q<'a> {
     dynamic(db, "entities.update_entity", format!("UPDATE $id SET {set} RETURN AFTER"))

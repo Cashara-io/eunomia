@@ -4083,7 +4083,14 @@ async fn import_196_extraction_reuses_approved_custom_entity() { extraction_and_
 async fn import_196_builtin_to_custom_merge_preserves_facts_and_links() { extraction_and_merge(true).await; }
 
 async fn extraction_and_merge(merge: bool) {
-    let answer = json!({"other":[{"kind":"store","name":"North","facts":["North opens daily"]}, {"kind":"store","name":"N","facts":["N has parking"]}], "relations":[{"from":"North","from_kind":"store","to":"N","to_kind":"store","label":"near"}]});
+    let extracted_kind = if merge { "organisation" } else { "store" };
+    let mut answer = json!({"relations":[{"from":"North","from_kind":extracted_kind,"to":"N","to_kind":extracted_kind,"label":"near"}]});
+    if merge {
+        answer["organisations"] = json!([{"name":"North","facts":["North opens daily"]}, {"name":"N","facts":["N has parking"]}]);
+        answer["people"] = json!([{"name":"North","facts":["North enjoys cycling"]}]);
+    } else {
+        answer["other"] = json!([{"kind":"store","name":"North","facts":["North opens daily"]}, {"kind":"store","name":"N","facts":["N has parking"]}]);
+    }
     let mock = serve(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]).await;
     let app = TestApp::with_settings(model_app_settings(&mock)).await;
     let doc = upload_csv(&app, "routes.csv", "route,store,distance\nRound,North,5\n").await;
@@ -4091,13 +4098,17 @@ async fn extraction_and_merge(merge: bool) {
     let custom = ok(app.tool("memory_write", json!({"subject_kind":"store","subject_name":"North","text":"North is a store"})).await);
     ok(app.tool("entity_update", json!({"entity_id":custom["entity"]["id"], "aliases":["N"]})).await);
     if merge {
-    let builtin = write(&app, "North old", "organisation").await;
+    let builtin = write(&app, "North", "organisation").await;
+    ok(app.tool("entity_update", json!({"entity_id":builtin["entity"]["id"], "aliases":["N"]})).await);
     let person = write(&app, "Ada", "person").await;
     ok(app.tool("code_relate", json!({"from_id":person["entity"]["id"],"to_id":builtin["entity"]["id"],"label":"visits"})).await);
     let merged = ok(app.tool("entity_merge", json!({"winner_id":custom["entity"]["id"],"loser_id":builtin["entity"]["id"]})).await);
     assert_eq!(merged["kind"], "store");
     let got = ok(app.tool("entities_get", json!({"id":custom["entity"]["id"]})).await);
-    assert!(got.to_string().contains("North old is a organisation") && got.to_string().contains("visits"), "{got}");
+    assert!(got.to_string().contains("North is a organisation") && got.to_string().contains("visits"), "{got}");
+    assert!(!got.to_string().contains("@eunomia/merged/"), "internal redirects are not public aliases: {got}");
+    // Replacing visible aliases must not erase the owner's merge decision.
+    ok(app.tool("entity_update", json!({"entity_id":custom["entity"]["id"], "aliases":["N"]})).await);
     }
     let record = eunomia_backend::entities::extract::ExtractRecord { id:"notes:1".into(),title:"North".into(),body_text:"North opens daily and has parking for visitors near the entrance.".into(),occurred_at:None,vault:None,source:"notes".into(),payload:Value::Null,owner_name:None };
     for _ in 0..2 { common::sys(eunomia_backend::entities::extract::extract_entities(&app.db().await, &app.state.settings, &app.user.id, &record)).await.unwrap(); }
@@ -4107,6 +4118,7 @@ async fn extraction_and_merge(merge: bool) {
     assert_eq!(kind(&o, "store")["entities"], 1, "{o}");
     let got = ok(app.tool("entities_get", json!({"id":custom["entity"]["id"]})).await);
     assert!(got.to_string().contains("North opens daily") && got.to_string().contains("N has parking"), "{got}");
+    assert!(!got.to_string().contains("North enjoys cycling"), "a merged organisation must not redirect a person: {got}");
 }
 
 #[tokio::test]
@@ -4147,6 +4159,20 @@ async fn review209_extraction_keeps_person_and_store_jordan_separate() {
     assert!(got.to_string().contains("Jordan sells groceries"), "{got}");
     let got = ok(app.tool("entities_get", json!({"id":person})).await);
     assert!(got.to_string().contains("Jordan enjoys cycling"), "{got}");
+}
+
+#[tokio::test]
+async fn review209_only_owner_merges_create_kind_qualified_aliases() {
+    let app = TestApp::new().await;
+    let entity = write(&app, "North", "organisation").await["entity"]["id"].clone();
+    let reserved = "@eunomia/merged/person:jordan";
+    for args in [json!({"entity_id":entity,"aliases":[reserved]}), json!({"entity_id":entity,"name":reserved})] {
+        let out = app.tool("entity_update", args).await;
+        assert!(out.to_string().contains("reserved merge namespace"), "{out}");
+    }
+    let db = app.db().await;
+    let result = common::sys(eunomia_backend::entities::service::upsert_entity(&db, &app.user.id, "organisation", "South", Some(vec![reserved.into()]), None)).await;
+    assert!(result.is_err(), "a caller cannot manufacture an owner merge redirect");
 }
 
 #[tokio::test]

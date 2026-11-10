@@ -142,7 +142,7 @@ fn entity_out(row: &EntityRow) -> EntityOut {
         id: row.id.to_string(),
         kind: row.kind(),
         name: row.name.clone(),
-        aliases: row.aliases.clone(),
+        aliases: super::merge_alias::visible(&row.aliases),
         summary: row.summary.clone(),
         vault: row.vault.to_string(),
     }
@@ -556,6 +556,7 @@ pub(crate) async fn upsert_in_vault(
     let table = kind_table(kind)?;
     let aliases = aliases.unwrap_or_default();
     let name = name.trim();
+    super::merge_alias::validate(Some(name), &aliases)?;
     if name.is_empty() {
         return Err(AppError::bad_request("entity name can't be empty"));
     }
@@ -1232,6 +1233,7 @@ pub async fn update_entity(
     summary: Option<&str>,
 ) -> AppResult<Option<EntityOut>> {
     let name = name.map(str::trim);
+    super::merge_alias::validate(name, aliases.as_deref().unwrap_or_default())?;
     if name == Some("") {
         return Err(AppError::bad_request("entity name can't be empty"));
     }
@@ -1245,7 +1247,7 @@ pub async fn update_entity(
         set_clauses.push("name = $name");
     }
     if aliases.is_some() {
-        set_clauses.push("aliases = $aliases");
+        set_clauses.push(q::EDIT_VISIBLE_ALIASES);
     }
     if summary.is_some() {
         set_clauses.push("summary = $summary");
@@ -1258,7 +1260,7 @@ pub async fn update_entity(
             qry = qry.bind(("name", n.to_string()));
         }
         if let Some(a) = aliases {
-            qry = qry.bind(("aliases", a));
+            qry = qry.bind(("aliases", a)).bind(("merge_prefix", super::merge_alias::PREFIX));
         }
         if let Some(s) = summary {
             qry = qry.bind(("summary", s.to_string()));
@@ -1338,7 +1340,12 @@ pub async fn merge_entities(
     if winner.kind() != loser.kind() {
         crate::ontology::property::validate_merge_values(db, &winner.vault, &winner.kind(), loser_id).await?;
     }
-    merge_rows(db, winner_id, loser_id, loser_names(&loser), (winner.kind() != loser.kind()).then(|| winner.kind())).await?;
+    let mut aliases = loser_names(&loser);
+    if winner.kind() != loser.kind() {
+        // Only this owner-authorised cross-kind merge may create kind-qualified aliases.
+        aliases.extend(loser_names(&loser).iter().map(|name| super::merge_alias::encode(&loser.kind(), name)));
+    }
+    merge_rows(db, winner_id, loser_id, aliases, (winner.kind() != loser.kind()).then(|| winner.kind())).await?;
     changes::record(db, &winner.vault, changes::MERGED, changes::ENTITY, loser_id).await;
     changes::record(db, &winner.vault, changes::UPDATED, changes::ENTITY, winner_id).await;
     let winner = select_entity(db, winner_id).await?.ok_or_else(|| AppError::internal("winner vanished during merge"))?;
@@ -1417,7 +1424,7 @@ pub async fn get_entity(db: &OrgDb, control: &ControlDb, owner: &RecordId, entit
         id: entity_id.to_string(),
         kind: row.kind(),
         name: row.name.clone(),
-        aliases: row.aliases.clone(),
+        aliases: super::merge_alias::visible(&row.aliases),
         summary: row.summary.clone(),
         owner_email: row.owner.as_ref().and_then(|o| emails.get(&o.to_string()).cloned()),
         memory: memory_out_rows,
