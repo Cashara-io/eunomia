@@ -1,0 +1,55 @@
+import { describe, expect, test } from "bun:test";
+import {
+  affected,
+  mergeConflicts,
+  mergeTargets,
+  reviewFields,
+} from "../src/components/twin/review-model";
+import { definitions } from "../src/components/twin/model";
+import { reviewFixture } from "../tests/fixtures/ontology-review";
+
+describe("review evidence", () => {
+  test("an unapproved destination warns that redirected writes may be refused", () => {
+    const model = reviewFixture();
+    model.kinds[0].properties[1].status = "proposed";
+    const items = definitions(model);
+    expect(mergeConflicts(items[1], items[2])).toContain(
+      "The destination is not approved. Future writes or calls may be refused until an owner approves it.",
+    );
+  });
+  test("counts distinguish historical values from objects and future calls", () => {
+    const items = definitions(reviewFixture());
+    expect(affected(items[0])).toBe("6,000 existing objects");
+    expect(affected(items[1])).toBe("6,000 recorded values, including history");
+    expect(affected(items[4])).toBe("Future calls to this metric");
+  });
+  test("merge candidates stay within type and kind and exclude rejected destinations", () => {
+    const model = reviewFixture();
+    model.kinds[0].properties[1].status = "rejected";
+    const source = definitions(model)[1];
+    expect(mergeTargets(source, model).map((t) => t.name)).toEqual([
+      "quantity",
+    ]);
+  });
+  test("different datatypes, units, choices and descriptions are explicit conflicts", () => {
+    const model = reviewFixture();
+    const source = definitions(model)[1];
+    const target = definitions(model)[3];
+    const conflicts = mergeConflicts(source, target);
+    expect(conflicts).toContain("Data types differ: money and integer.");
+    expect(conflicts).toContain("Units differ: AUD and none.");
+    expect(conflicts).toContain(
+      "Descriptions differ. The destination keeps its own description.",
+    );
+  });
+  test("stale comparisons include source, samples, choices, unit and reason", () => {
+    const source = definitions(reviewFixture())[1];
+    expect(reviewFields(source)).toMatchObject({
+      "Data type": "money",
+      Unit: "AUD",
+      Choices: "None",
+      "Source mapping": "stock_item.csv: csv, unit_cost",
+      Samples: "AUD 12.00; AUD 13.20",
+    });
+  });
+});

@@ -1,10 +1,12 @@
 "use client";
-import { haptic } from "@/lib/haptics";
 
-import { useQueryClient } from "@tanstack/react-query";
-import { ApiError } from "@/lib/api";
-import Activity from "./Activity";
-import { useState } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
+import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { z } from "zod";
+import { CheckIcon, ShieldCheckIcon, XIcon } from "@phosphor-icons/react/ssr";
+import { API_URL, ApiError } from "@/lib/api";
+import { haptic } from "@/lib/haptics";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import {
   useDecideKind,
@@ -14,15 +16,43 @@ import {
   useTryMetric,
   type OntologyOut,
 } from "@/lib/queries/ontology";
+import { MetricRow, STATUS, words } from "./DefinitionRows";
 import {
-  KindRow,
-  LinkRow,
-  MetricRow,
-  PropertyRow,
-  words,
-} from "./DefinitionRows";
-import { definitions } from "./model";
-import type { Definition as DefinitionItem } from "./model";
+  definitions,
+  twinHref,
+  type Definition as DefinitionItem,
+} from "./model";
+import { isTyping, mergeTargets, reviewFields } from "./review-model";
+import styles from "./review.module.css";
+import ReviewEvidence from "./ReviewEvidence";
+import MergePreview from "./MergePreview";
+
+const activitySchema = z.object({
+  events: z.array(
+    z.object({
+      action: z.string(),
+      revision: z.number(),
+      actor_name: z.string(),
+      at: z.string(),
+      reason: z.string().nullable(),
+    }),
+  ),
+});
+type Action =
+  | { action: "approve" }
+  | { action: "reject"; merge_into?: string }
+  | { action: "describe"; description: string };
+type SaveState =
+  | { kind: "idle" }
+  | { kind: "saving" }
+  | { kind: "failed"; error: Failure; action: Action }
+  | { kind: "stale"; refreshFailed: boolean }
+  | {
+      kind: "saved";
+      definition: DefinitionItem;
+      action: Action;
+      reason: string;
+    };
 
 export default function Definition({
   definition: incoming,
@@ -30,268 +60,586 @@ export default function Definition({
   isOwner,
   locked = false,
   initialReason = "",
+  onNext,
+  onBusyChange,
+  queueReview = false,
 }: {
   definition: DefinitionItem;
   data: OntologyOut;
   isOwner: boolean;
   locked?: boolean;
   initialReason?: string;
+  queueReview?: boolean;
+  onNext?: () => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const cache = useQueryClient();
   const [d, setDefinition] = useState(incoming);
   const [reason, setReason] = useState(initialReason);
-  const [conflict, setConflict] = useState(false);
+  const [targetId, setTargetId] = useState("");
+  const [description, setDescription] = useState<string | null>(null);
+  const editButton = useRef<HTMLButtonElement>(null);
+  const [state, setState] = useState<SaveState>({ kind: "idle" });
+  const inFlight = useRef(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const mergeSelect = useRef<HTMLSelectElement>(null);
+  const receiptHeading = useRef<HTMLHeadingElement>(null);
+  const reasonId = useId();
+  const descriptionId = useId();
   const kind = useDecideKind(data.vault);
   const link = useDecideLink(data.vault);
   const property = useDecideProperty(data.vault);
   const metric = useDecideMetric(data.vault);
   const preview = useTryMetric(data.vault);
-  const [error, setError] = useState<Failure | null>(null);
-  const busy =
-    conflict || locked ||
-    kind.isPending ||
-    link.isPending ||
-    property.isPending ||
-    metric.isPending;
-  async function run(fn: () => Promise<OntologyOut>, fallback: string) {
-    setError(null);
+  const history = useQuery({
+    queryKey: ["ontology-activity", data.vault, "decision-receipt", d.id],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        definition_type: d.type,
+        kind: d.kind,
+        name: d.name,
+        newest: "true",
+        limit: "30",
+      });
+      const response = await fetch(
+        `${API_URL}/api/vaults/${encodeURIComponent(data.vault)}/ontology/activity?${params}`,
+        { credentials: "include" },
+      );
+      if (!response.ok) throw new Error("Activity is unavailable");
+      return activitySchema.parse(await response.json());
+    },
+  });
+  const proposer = history.data?.events.find(
+    (e) => e.action === "proposed" && e.revision === d.item.revision,
+  );
+  const targets = mergeTargets(d, data);
+  const target = targets.find((t) => t.id === targetId);
+  const stale =
+    state.kind === "stale" ||
+    (state.kind !== "saved" && incoming.item.revision !== d.item.revision);
+  const busy = locked || state.kind === "saving";
+  const canDecide = isOwner && !busy && !stale && state.kind !== "saved";
+  const builtIn = d.type === "kind" && d.item.built_in;
+
+  useEffect(() => {
+    if (queueReview) heading.current?.focus({ preventScroll: true });
+  }, [queueReview]);
+  useEffect(() => {
+    if (state.kind === "saved") receiptHeading.current?.focus();
+  }, [state]);
+
+  async function refreshLatest() {
     try {
-      const saved = await fn();
-      const updated = definitions(saved).find(item => item.id === d.id);
-      if (updated) setDefinition(updated);
-      haptic("success");
-      return true;
-    } catch (e) {
-      if (e instanceof ApiError && e.code === "ontology.stale_revision") {
-        await cache.invalidateQueries({ queryKey: ["ontology", data.vault] });
-        setConflict(true);
-        setError(null);
-      } else {
-        setError(failure(e, fallback));
-      }
-      return false;
+      await cache.refetchQueries(
+        { queryKey: ["ontology", data.vault], exact: true },
+        { throwOnError: true },
+      );
+      setState({ kind: "stale", refreshFailed: false });
+    } catch {
+      setState({ kind: "stale", refreshFailed: true });
     }
   }
-  const parent = data.kinds.find((k) => k.kind === d.kind);
+  async function decide(action: Action) {
+    if (!canDecide || inFlight.current) return;
+    inFlight.current = true;
+    onBusyChange?.(true);
+    setState({ kind: "saving" });
+    const common = { decision: action, revision: d.item.revision, reason };
+    try {
+      const saved =
+        d.type === "kind"
+          ? await kind.mutateAsync({ ...common, kind: d.kind })
+          : d.type === "property"
+            ? await property.mutateAsync({
+                ...common,
+                kind: d.kind,
+                name: d.name,
+              })
+            : d.type === "metric"
+              ? await metric.mutateAsync({
+                  ...common,
+                  kind: d.kind,
+                  name: d.name,
+                })
+              : await link.mutateAsync({
+                  ...common,
+                  from_kind: d.item.from_kind,
+                  label: d.item.label,
+                  to_kind: d.item.to_kind,
+                });
+      const updated = definitions(saved).find((item) => item.id === d.id);
+      if (!updated)
+        throw new Error(
+          "The server response did not include this definition. Refresh before deciding again.",
+        );
+      setState({ kind: "saved", definition: updated, action, reason });
+      haptic("success");
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "ontology.stale_revision") {
+        setState({ kind: "stale", refreshFailed: false });
+        await refreshLatest();
+      } else
+        setState({
+          kind: "failed",
+          action,
+          error: failure(
+            e,
+            "The decision was not confirmed. Your reason and evidence are kept here.",
+          ),
+        });
+    } finally {
+      inFlight.current = false;
+      onBusyChange?.(false);
+    }
+  }
+  const shortcut = useEffectEvent((e: KeyboardEvent) => {
+    if (
+      e.defaultPrevented ||
+      e.metaKey ||
+      e.ctrlKey ||
+      e.altKey ||
+      document.querySelector("dialog[open]")
+    )
+      return;
+    if (e.key === "Escape" && targetId && !busy) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setTargetId("");
+      mergeSelect.current?.focus();
+      return;
+    }
+    if (e.key === "Escape" && description !== null && !busy) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setDescription(null);
+      editButton.current?.focus();
+      return;
+    }
+    if (isTyping(e.target) || !canDecide || targetId || description !== null)
+      return;
+    if (e.key.toLowerCase() === "a") {
+      e.preventDefault();
+      void decide({ action: "approve" });
+    }
+    if (e.key.toLowerCase() === "r" && !builtIn) {
+      e.preventDefault();
+      void decide({ action: "reject" });
+    }
+  });
+  useEffect(() => {
+    if (!queueReview) return;
+    const handler = (e: KeyboardEvent) => shortcut(e);
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [queueReview]);
+
+  const receiptEvent =
+    state.kind === "saved"
+      ? history.data?.events.find(
+          (e) =>
+            e.revision === state.definition.item.revision &&
+            ["approved", "rejected", "merged"].includes(e.action),
+        )
+      : undefined;
+  const evidence = <ReviewEvidence definition={d} data={data} />;
+  const displayed = state.kind === "saved" ? state.definition : d;
+
   return (
-    <div className="flex flex-col gap-3 min-w-0 [overflow-wrap:anywhere]">
-      {error && <ErrorLine error={error} />}
-      {conflict && <section role="alert" className="ledger p-3 flex flex-col gap-2">
-        <h4 className="font-medium">This definition changed</h4>
-        <RevisionChanges before={d} after={incoming} />
-        <p>Review the latest evidence and dependencies before deciding again.</p>
-        <button className="btn btn-sm self-start" onClick={() => { setDefinition(incoming); setConflict(false); setError(null); }}>Review latest version</button>
-      </section>}
-      {isOwner && <label className="flex flex-col gap-1 text-[13px]">
-        Reason for decision (optional)
-        <textarea className="field p-2" maxLength={500} value={reason} onChange={e => setReason(e.target.value)} disabled={busy} />
-      </label>}
-      <ul aria-label="Definition details">
-        {d.type === "kind" && (
-          <KindRow
-            item={d.item}
-            isOwner={isOwner}
-            busy={busy}
-            targets={data.kinds
-              .filter(
-                (k) =>
-                  k.kind !== d.kind &&
-                  k.status !== "rejected" &&
-                  (k.built_in || k.status === "approved" || k.entities > 0),
-              )
-              .map((k) => ({ value: k.kind, label: words(k.kind) }))}
-            onDecide={(decision, fallback) =>
-              run(() => kind.mutateAsync({ kind: d.kind, decision, revision: d.item.revision, reason }), fallback)
-            }
-          />
-        )}
-        {d.type === "property" && (
-          <PropertyRow
-            item={d.item}
-            isOwner={isOwner}
-            busy={busy}
-            targets={(parent?.properties ?? [])
-              .filter((p) => p.name !== d.name && p.status !== "rejected")
-              .map((p) => ({ value: p.name, label: words(p.name) }))}
-            onDecide={(decision, fallback) =>
-              run(
-                () =>
-                  property.mutateAsync({
-                    kind: d.kind,
-                    name: d.name,
-                    decision,
-                    revision: d.item.revision, reason,
-                  }),
-                fallback,
-              )
-            }
-          />
-        )}
-        {d.type === "metric" && (
-          <MetricRow
-            item={d.item}
-            isOwner={isOwner}
-            busy={busy}
-            targets={(parent?.metrics ?? [])
-              .filter((m) => m.name !== d.name && m.status !== "rejected")
-              .map((m) => ({ value: m.name, label: words(m.name) }))}
-            onDecide={(decision, fallback) =>
-              run(
-                () =>
-                  metric.mutateAsync({ kind: d.kind, name: d.name, decision, revision: d.item.revision, reason }),
-                fallback,
-              )
-            }
-            onTry={() => preview.mutateAsync({ kind: d.kind, name: d.name })}
-          />
-        )}
-        {d.type === "link" && (
-          <LinkRow
-            item={d.item}
-            isOwner={isOwner}
-            busy={busy}
-            onDecide={(decision, fallback) =>
-              run(
-                () =>
-                  link.mutateAsync({
-                    from_kind: d.item.from_kind,
-                    label: d.item.label,
-                    to_kind: d.item.to_kind,
-                    decision,
-                    revision: d.item.revision, reason,
-                  }),
-                fallback,
-              )
-            }
-          />
-        )}
-      </ul>
-      <Evidence definition={d} />
-      <Activity space={data.vault} compact definition={{ type: d.type, kind: d.kind, name: d.name }} />
-    </div>
+    <article className={styles.reading} aria-busy={busy}>
+      <header className={styles.identity}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 ref={heading} tabIndex={-1}>
+            {words(d.name)}
+          </h3>
+          <span
+            className={styles.suggested}
+            data-saved={state.kind === "saved"}
+          >
+            {displayed.item.status === "proposed"
+              ? "Suggested"
+              : STATUS[displayed.item.status].label}
+          </span>
+        </div>
+        <div className={styles.meta}>
+          <span>
+            {words(d.type)}
+            {d.type !== "kind" && ` on ${words(d.kind)}`}
+          </span>
+          <span>
+            {proposer
+              ? `Proposed by ${proposer.actor_name}`
+              : d.item.origin === "agent"
+                ? "Proposed by an AI app, name unavailable"
+                : d.item.origin === "human"
+                  ? "Added by a person, name unavailable"
+                  : d.item.origin === "suggested"
+                    ? "Suggested by the server model"
+                    : "Proposer not recorded"}
+          </span>
+          <span>Version {displayed.item.revision}</span>
+        </div>
+      </header>
+      {state.kind === "saved" ? (
+        <>
+          <section
+            className={`${styles.receipt} ${styles.reveal}`}
+            aria-label="Saved decision"
+          >
+            <span className={styles.receiptIcon}>
+              <CheckIcon size={24} weight="duotone" />
+            </span>
+            <h4 ref={receiptHeading} tabIndex={-1}>
+              Saved. {words(d.name).replace(/^./, (c) => c.toUpperCase())}{" "}
+              {state.action.action === "describe"
+                ? "description updated"
+                : state.action.action === "approve"
+                  ? "approved"
+                  : state.action.merge_into
+                    ? `merged into ${words(state.action.merge_into)}`
+                    : "rejected"}
+              .
+            </h4>
+            <p className={styles.dim}>The server confirmed this decision.</p>
+            <dl>
+              <dt>Definition</dt>
+              <dd>
+                {words(d.name)}, version {state.definition.item.revision}
+              </dd>
+              <dt>Reviewed version</dt>
+              <dd>{d.item.revision}</dd>
+              <dt>Decision</dt>
+              <dd>
+                {state.action.action === "describe"
+                  ? "Edit description"
+                  : state.action.action === "approve"
+                    ? "Approve"
+                    : state.action.merge_into
+                      ? "Reject and redirect"
+                      : "Reject without merging"}
+              </dd>
+              <dt>Reason</dt>
+              <dd>{state.reason || "No reason supplied"}</dd>
+              <dt>Recorded by</dt>
+              <dd>
+                {receiptEvent
+                  ? `${receiptEvent.actor_name} · ${new Date(receiptEvent.at).toLocaleString("en-AU")}`
+                  : "Actor and time are awaiting the activity record."}
+              </dd>
+            </dl>
+            <div className="flex flex-wrap gap-3">
+              <Link
+                className="btn btn-sm"
+                href={twinHref("/ontology/activity", data.vault, {
+                  definition_type: d.type,
+                  kind: d.kind,
+                })}
+              >
+                View Activity
+              </Link>
+              {onNext && (
+                <button className="btn btn-primary btn-sm" onClick={onNext}>
+                  Next suggestion
+                </button>
+              )}
+            </div>
+          </section>
+          <details className={styles.section}>
+            <summary className="cursor-pointer min-h-11">
+              Review the evidence again
+            </summary>
+            {evidence}
+          </details>
+        </>
+      ) : (
+        <>
+          {stale && (
+            <section role="alert" className={styles.notice}>
+              <h4 className="font-medium mb-2">This definition changed</h4>
+              <RevisionChanges before={d} after={incoming} />
+              <p className="my-3">
+                Your reason is kept. Review the latest fields before deciding
+                again.
+              </p>
+              {state.kind === "stale" && state.refreshFailed ? (
+                <button
+                  className="btn btn-sm"
+                  onClick={() => void refreshLatest()}
+                >
+                  Retry loading latest version
+                </button>
+              ) : incoming.item.revision !== d.item.revision ? (
+                <button
+                  className="btn btn-sm"
+                  onClick={() => {
+                    setDefinition(incoming);
+                    setTargetId("");
+                    setState({ kind: "idle" });
+                    heading.current?.focus();
+                  }}
+                >
+                  Review latest version
+                </button>
+              ) : (
+                <p>
+                  The latest version is not available yet.{" "}
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => void refreshLatest()}
+                  >
+                    Retry loading latest version
+                  </button>
+                </p>
+              )}
+            </section>
+          )}
+          {evidence}
+          {d.type === "metric" && (
+            <details className={styles.section}>
+              <summary className="cursor-pointer min-h-11">
+                Try calculation
+              </summary>
+              <ul>
+                <MetricRow
+                  item={d.item}
+                  isOwner={false}
+                  busy={busy}
+                  targets={[]}
+                  onDecide={async () => false}
+                  onTry={() =>
+                    preview.mutateAsync({ kind: d.kind, name: d.name })
+                  }
+                />
+              </ul>
+            </details>
+          )}
+          {isOwner && (
+            <details
+              className={styles.section}
+              aria-label="Other definition options"
+            >
+              <summary className="cursor-pointer min-h-11 py-2">
+                {targets.length > 0 && !builtIn
+                  ? "Merge or edit definition"
+                  : "Edit definition"}
+              </summary>
+              {isOwner && (
+                <section className={styles.section}>
+                  {description === null ? (
+                    <button
+                      ref={editButton}
+                      className="btn btn-ghost btn-sm"
+                      disabled={!canDecide}
+                      onClick={() => {
+                        setTargetId("");
+                        setDescription(d.item.description ?? "");
+                      }}
+                    >
+                      Edit description
+                    </button>
+                  ) : (
+                    <div className={styles.reason}>
+                      <label htmlFor={descriptionId}>Description</label>
+                      <textarea
+                        id={descriptionId}
+                        className="field"
+                        autoFocus
+                        value={description}
+                        maxLength={500}
+                        disabled={busy || stale}
+                        onChange={(e) => setDescription(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </section>
+              )}
+              {isOwner &&
+                description === null &&
+                !builtIn &&
+                targets.length > 0 && (
+                  <MergePreview
+                    definition={d}
+                    targets={targets}
+                    targetId={targetId}
+                    selectRef={mergeSelect}
+                    disabled={busy || stale}
+                    onTargetChange={(id) => {
+                      setTargetId(id);
+                      setState({ kind: "idle" });
+                    }}
+                  />
+                )}
+            </details>
+          )}
+          {isOwner ? (
+            <>
+              <section className={styles.section}>
+                <label className={styles.reason} htmlFor={reasonId}>
+                  Your reason, saved with the decision (optional)
+                  <textarea
+                    id={reasonId}
+                    className="field"
+                    maxLength={500}
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    disabled={busy}
+                    placeholder="What supports your decision?"
+                  />
+                </label>
+              </section>
+              {state.kind === "failed" && (
+                <div className={styles.notice}>
+                  <ErrorLine error={state.error} />
+                  <p className="my-2">
+                    Your reason and evidence are kept here. The save has not
+                    been confirmed.
+                  </p>
+                  <button
+                    className="btn btn-sm"
+                    disabled={!canDecide}
+                    onClick={() => void decide(state.action)}
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              <footer className={styles.actions}>
+                <span className={styles.shortcuts}>
+                  {busy ? (
+                    "Saving decision…"
+                  ) : description !== null ? (
+                    <>
+                      <kbd>Esc</kbd> Cancel edit
+                    </>
+                  ) : target ? (
+                    <>
+                      <kbd>Esc</kbd> Cancel merge
+                    </>
+                  ) : (
+                    <>
+                      <kbd>A</kbd> Approve <kbd>R</kbd> Reject
+                    </>
+                  )}
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {description !== null ? (
+                    <>
+                      <button
+                        className="btn btn-sm"
+                        disabled={busy}
+                        onClick={() => {
+                          setDescription(null);
+                          editButton.current?.focus();
+                        }}
+                      >
+                        Cancel edit
+                      </button>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        disabled={!canDecide}
+                        onClick={() =>
+                          void decide({
+                            action: "describe",
+                            description: description.trim(),
+                          })
+                        }
+                      >
+                        Save description
+                      </button>
+                    </>
+                  ) : target ? (
+                    <>
+                      <button
+                        className="btn btn-sm"
+                        disabled={busy}
+                        onClick={() => {
+                          setTargetId("");
+                          mergeSelect.current?.focus();
+                        }}
+                      >
+                        Cancel merge
+                      </button>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        disabled={!canDecide}
+                        onClick={() =>
+                          void decide({
+                            action: "reject",
+                            merge_into: target.name,
+                          })
+                        }
+                      >
+                        Confirm merge
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {!builtIn && (
+                        <button
+                          className="btn btn-sm"
+                          disabled={!canDecide}
+                          onClick={() => void decide({ action: "reject" })}
+                        >
+                          <XIcon size={16} />
+                          Reject
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-primary btn-sm"
+                        disabled={!canDecide}
+                        onClick={() => void decide({ action: "approve" })}
+                      >
+                        <CheckIcon size={16} />
+                        Approve {words(d.name)}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </footer>
+            </>
+          ) : (
+            <section className={styles.section}>
+              <h4>
+                <ShieldCheckIcon size={20} weight="duotone" />
+                Owner-only decision
+              </h4>
+              <p className={styles.dim}>
+                You can read this evidence. Only an owner of this space can
+                approve, reject or merge a definition.
+              </p>
+            </section>
+          )}
+        </>
+      )}
+      <p role="status" className="sr-only">
+        {state.kind === "saving"
+          ? "Saving decision"
+          : state.kind === "saved"
+            ? "Decision saved by the server"
+            : ""}
+      </p>
+    </article>
   );
 }
 
-export function Evidence({ definition: d }: { definition: DefinitionItem }) {
-  const item = d.item;
-  const samples =
-    d.type === "metric"
-      ? []
-      : d.type === "link"
-        ? d.item.samples.map((s) => `${s.from} → ${s.to}`)
-        : d.item.samples;
-  const sources =
-    d.type === "property" || d.type === "link" ? (d.item.source_map ?? []) : [];
-  const synonyms = "synonyms" in item ? item.synonyms : [];
-  const target = "merge_into" in item ? item.merge_into : null;
-  const consequences =
-    d.type === "kind"
-      ? "Approval lets AI apps use this kind in strict mode. Rejection refuses new writes unless you explicitly choose a merge target."
-      : d.type === "property"
-        ? "Only approved properties accept typed values. Rejection refuses new values unless you explicitly choose a merge target."
-        : d.type === "metric"
-          ? "Only approved metrics run by name for AI apps. A rejected metric cannot run unless it has an explicit replacement."
-          : "Approval lets AI apps use this link type in strict mode. Rejection refuses new links of this type in strict mode.";
+export function RevisionChanges({
+  before,
+  after,
+}: {
+  before: DefinitionItem;
+  after: DefinitionItem;
+}) {
+  const previous = reviewFields(before);
   return (
-    <dl className="grid gap-4 text-[13px]">
-      <div>
-        <dt className="font-medium">Why it was suggested</dt>
-        <dd className="mt-1" style={{ color: "var(--ink-dim)" }}>
-          {item.reason || "No reason recorded."}
-        </dd>
-      </div>
-      <div>
-        <dt className="font-medium">Source and examples</dt>
-        <dd
-          className="mt-1 flex flex-col gap-1"
-          style={{ color: "var(--ink-dim)" }}
-        >
-          <span>
-            {item.origin === "agent"
-              ? "Proposed by an AI app."
-              : item.origin === "suggested"
-                ? "Suggested by the server model."
-                : item.origin === "human"
-                  ? "Added by a person."
-                  : "Origin not recorded."}
-          </span>
-          {sources.length > 0 ? (
-            <ul className="list-disc pl-5 max-h-36 overflow-auto">
-              {sources.map((s, i) => (
-                <li key={i}>
-                  {s.source}: {s.record_type}, {s.path}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <span>No source mapping recorded.</span>
-          )}
-          {samples.length > 0 ? (
-            <ul className="list-disc pl-5 max-h-36 overflow-auto">
-              {samples.map((s, i) => (
-                <li key={i}>{s}</li>
-              ))}
-            </ul>
-          ) : (
-            <span>No sample values recorded.</span>
-          )}
-        </dd>
-      </div>
-      {synonyms.length > 0 && (
-        <div>
-          <dt className="font-medium">Aliases</dt>
-          <dd>{synonyms.join(", ")}</dd>
-        </div>
-      )}
-      <div>
-        <dt className="font-medium">Consequences</dt>
-        <dd className="mt-1" style={{ color: "var(--ink-dim)" }}>
-          {consequences} Approval checks the definition, not every stored value.
-        </dd>
-      </div>
-      <div>
-        <dt className="font-medium">Merge target</dt>
-        <dd className="mt-1" style={{ color: "var(--ink-dim)" }}>
-          {d.type === "link"
-            ? "Link types cannot be merged."
-            : target
-              ? `Suggested replacement: ${words(target)}. Choose Reject and merge to apply it. Batch rejection does not merge.`
-              : "None suggested. Rejection alone does not merge data."}
-        </dd>
-      </div>
-      {(d.type === "property" || d.type === "metric" || d.type === "link") && (
-        <div>
-          <dt className="font-medium">Depends on</dt>
-          <dd>
-            {d.type === "link"
-              ? `${words(d.item.from_kind)} and ${words(d.item.to_kind)}`
-              : words(d.kind)}
-            . Approve the required kind before approving this definition.
-          </dd>
-        </div>
-      )}
+    <dl className="text-[13px] flex flex-col gap-3">
+      {Object.entries(reviewFields(after))
+        .filter(([key, value]) => previous[key] !== value)
+        .map(([key, value]) => (
+          <div key={key}>
+            <dt className="font-medium">{key}</dt>
+            <dd>Before: {previous[key] || "None"}</dd>
+            <dd>Now: {value || "None"}</dd>
+          </div>
+        ))}
     </dl>
   );
-}
-
-export function RevisionChanges({ before, after }: { before: DefinitionItem; after: DefinitionItem }) {
-  const previous = reviewFields(before);
-  return <>
-    <p>You reviewed: {before.item.status}, {before.item.description || "no description"}.</p>
-    <p>Latest: {after.item.status}, {after.item.description || "no description"}.</p>
-    <dl className="text-[13px] flex flex-col gap-2">{Object.entries(reviewFields(after)).filter(([key, value]) => previous[key] !== value).map(([key, value]) => <div key={key}><dt className="font-medium">{key}</dt><dd>Before: {previous[key] || "None"}</dd><dd>Now: {value || "None"}</dd></div>)}</dl>
-  </>;
-}
-
-function reviewFields(d: DefinitionItem): Record<string, string> {
-  const item = d.item;
-  return {
-    Status: item.status,
-    Description: item.description ?? "",
-    "Suggested reason": item.reason ?? "",
-    ...(d.type !== "link" ? { "Merge target": d.item.merge_into ?? "", Aliases: d.item.synonyms.join(", ") } : {}),
-    ...(d.type === "metric" ? { Calculation: d.item.expr_words, Unit: d.item.unit ?? "" } : {}),
-    ...(d.type === "property" ? { "Data type": d.item.datatype, Unit: d.item.unit ?? "", Choices: d.item.enum_values?.join(", ") ?? "" } : {}),
-    ...(d.type === "property" || d.type === "link" ? { "Source mapping": d.item.source_map?.map(s => `${s.source}: ${s.record_type}, ${s.path}`).join("; ") ?? "" } : {}),
-  };
 }

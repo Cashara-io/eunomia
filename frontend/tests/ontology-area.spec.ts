@@ -9,6 +9,11 @@ async function choose(page: Page, label: string, option: string) {
   ).toContainText(option);
 }
 
+async function openBatch(page: Page) {
+  const batch = page.locator("details").filter({ has: page.getByText("Review a batch", { exact: true }) });
+  if (!(await batch.evaluate(e => e.hasAttribute("open")))) await batch.locator("summary").first().click();
+}
+
 async function seed(page: Page) {
   await registerAndOnboard(page, uniqueEmail("twin"));
   const created = await page.request.post("/api/vaults", {
@@ -135,12 +140,13 @@ test("dedicated area, URL filters, kind details, Add data and old links", async 
   await expect(page.getByText("shop", { exact: true })).toBeVisible();
   await choose(page, "Kind section", "Properties");
   await page.getByText("revenue (money, AUD)", { exact: true }).click();
-  await expect(page.getByText("document: stores.csv, revenue")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Source evidence" }).first()).toContainText("stores.csv");
   await choose(page, "Kind section", "Numbers");
   await page
     .locator("summary")
     .filter({ hasText: /^total revenue$/ })
     .click();
+  await page.getByText("Try calculation", { exact: true }).click();
   await page.getByRole("button", { name: "Try it", exact: true }).click();
   await expect(page.getByRole("status")).toBeVisible();
   await choose(page, "Kind section", "Incoming and outgoing links");
@@ -162,6 +168,7 @@ test("owner batch decisions, receipts, explicit merge and strict policy", async 
   await page.goto(
     `/ontology/review?space=${encodeURIComponent(vault.id)}&type=kind&q=store`,
   );
+  await openBatch(page);
   await page
     .getByRole("checkbox", { name: "Select store", exact: true })
     .check();
@@ -185,6 +192,7 @@ test("owner batch decisions, receipts, explicit merge and strict policy", async 
   await page.goto(
     `/ontology/review?space=${encodeURIComponent(vault.id)}&type=kind&q=fixture_0`,
   );
+  await openBatch(page);
   await page
     .getByRole("checkbox", { name: "Select fixture 0", exact: true })
     .check();
@@ -200,12 +208,12 @@ test("owner batch decisions, receipts, explicit merge and strict policy", async 
   );
   await page.goto(`/ontology/review?space=${encodeURIComponent(vault.id)}&q=shop`);
   await page.getByRole("link", { name: /shop.*kind/ }).click();
-  await page
-    .getByRole("button", { name: "Reject and merge into store", exact: true })
-    .click();
+  await page.getByText("Merge or edit definition", { exact: true }).click();
+  await page.getByRole("combobox", { name: "Merge shop into", exact: true }).selectOption({ label: "store" });
+  await page.getByRole("button", { name: "Confirm merge", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Selected suggestion" }),
-  ).toContainText("New memories go to store.");
+  ).toContainText("merged into store");
   await page.goto(`/ontology/schema?space=${encodeURIComponent(vault.id)}`);
   await page
     .getByRole("switch", { name: /Only approved kinds and links/ })
@@ -230,6 +238,7 @@ test("mobile navigation, keyboard filters and honest load failure", async ({
     await page.goto(`/ontology/schema?space=${encodeURIComponent(vault.id)}`);
     await choose(page, "View", "Review");
     await expect(page).toHaveURL(/\/ontology\/review/);
+    await page.getByText("Search and filter suggestions", { exact: true }).click();
     await page.getByRole("searchbox").fill("store");
     await page.getByRole("combobox", { name: "Type", exact: true }).focus();
     await page.keyboard.press("Enter");
@@ -331,6 +340,7 @@ test("a batch approves dependencies in order and reports each saved result", asy
   await page.goto(
     `/ontology/review?space=${encodeURIComponent(vault.id)}&kind=store`,
   );
+  await openBatch(page);
   await page
     .getByRole("checkbox", { name: "Select suggestions on this page" })
     .check();
@@ -383,7 +393,7 @@ test("one suggestion approves on its own, and closing it keeps the queue page", 
 
   await page.goto(`/ontology/review?space=${space}&type=kind&q=fixture_1`);
   await page.getByRole("link", { name: /^fixture 1 kind/ }).click();
-  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await page.getByRole("button", { name: "Approve fixture 1", exact: true }).click();
   await expect
     .poll(async () => {
       const current = await (
@@ -414,6 +424,7 @@ test("batch merge stores its reason for each selected definition", async ({ page
   const approved = await page.request.post(`${path}/kinds/decide`, { data: { kind: "store", revision: 1, decision: { action: "approve" } } });
   expect(approved.ok()).toBeTruthy();
   await page.goto(`/ontology/review?space=${encodeURIComponent(vault.id)}&type=kind&q=fixture`);
+  await openBatch(page);
   await page.getByRole("checkbox", { name: "Select fixture 0", exact: true }).check();
   await page.getByRole("checkbox", { name: "Select fixture 1", exact: true }).check();
   await page.getByRole("textbox", { name: "Reason for this batch (optional)" }).fill("Duplicate names for a store");
