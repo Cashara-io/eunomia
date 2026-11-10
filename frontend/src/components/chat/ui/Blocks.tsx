@@ -10,6 +10,7 @@ import { resolvedDataProps } from "./catalog";
 import ImpactView from "../views/ImpactView";
 import MetricView from "../views/MetricView";
 import ScenarioView from "../views/ScenarioView";
+import DiagramView from "../views/DiagramView";
 import SubgraphView from "../views/SubgraphView";
 import { parseView } from "../views";
 
@@ -145,12 +146,13 @@ function Block({
   const rows = rowsOf(data);
   const object = scalarObject.safeParse(data);
   const value = object.success ? object.data : {};
-  if (["Impact", "Subgraph", "Metric", "Scenario"].includes(kind)) {
+  if (["Impact", "Subgraph", "Metric", "Scenario", "Diagram"].includes(kind)) {
     const view = parseView(JSON.stringify(data));
     if (!view) return <Notice />;
     // Source discriminants and their props are validated by the server before persistence.
     if (view.view === "impact" && "start" in view)
       return <ImpactView view={view} />;
+    if (view.view === "diagram" && "diagram" in view) return <DiagramView view={view} title={title} />;
     if (view.view === "subgraph" && "entities" in view)
       return <SubgraphView view={view} />;
     if (view.view === "metric" && "metric" in view)

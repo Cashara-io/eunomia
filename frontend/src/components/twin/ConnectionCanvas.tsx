@@ -32,6 +32,7 @@ import { humanLabel, plural } from "./overview-format";
 import { useLandscapeTint } from "./landscape-shared";
 import ConnectionKindIcon from "./ConnectionKindIcon";
 import LandscapeSolid from "./LandscapeSolid";
+import { boxesIntersect } from "./canvas-geometry";
 import shared from "./overview.module.css";
 import styles from "./connections.module.css";
 
@@ -223,10 +224,7 @@ export default function ConnectionCanvas({
   const intersects = (b: { x: number; y: number; w: number; h: number }) =>
     occupied.some(
       (r) =>
-        b.x < r.x + r.w &&
-        b.x + b.w > r.x &&
-        b.y < r.y + r.h &&
-        b.y + b.h > r.y,
+        boxesIntersect(b, r),
     );
   const drawnRoutes = [...routes.entries()]
     .filter(([, r]) => onScreen(r.from) && onScreen(r.to))

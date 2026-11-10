@@ -158,6 +158,8 @@ pub(crate) async fn relations_of(db: &OrgDb, vault: &RecordId, id: &RecordId) ->
 tokio::task_local! {
     /// Actual edge rows materialised by this task, before filtering or deduplication.
     pub static FETCHED_EDGE_ROWS: std::cell::Cell<usize>;
+    /// Largest diagram query result, including its lookahead row.
+    pub static LARGEST_DIAGRAM_QUERY: std::cell::Cell<usize>;
 }
 
 /// What [`walk`] reached.
@@ -317,4 +319,95 @@ pub async fn neighbourhood(
         .map(|e| Edge { id: e.id.to_string(), from: e.from.to_string(), label: e.label, to: e.to.to_string() })
         .collect();
     Ok(Neighbourhood { vault: vault.to_string(), depth, nodes, edges, link_types, truncated })
+}
+/// Diagram selection only needs names and stored links, so skip facts, properties and ontology
+/// hydration. Each indexed edge read returns at most 32 rows plus one lookahead; each direct-ID
+/// node read returns at most 32 rows. Only one query is in flight. If the waiter times out, at
+/// most that one bounded query can continue, and its server-side TIMEOUT is one second.
+/// Hub pages have at most 500 skipped index entries, matching the existing per-entity cap.
+pub(crate) async fn diagram_search(
+    db: &OrgDb, vault: &RecordId, start: Node, depth: u8, deadline: tokio::time::Instant,
+) -> AppResult<(Neighbourhood, bool)> {
+    const BATCH: usize = 32;
+    const FETCH_BUDGET: usize = MAX_EDGES * 4;
+    let start_id = crate::rid::parse(&start.id).map_err(|_| not_found(vault))?;
+    let mut order = vec![start_id];
+    let mut seen = HashSet::from([start.id.clone()]);
+    let mut edge_ids = HashSet::new();
+    let mut edges = Vec::new();
+    let mut frontier = order.clone();
+    let mut fetched = 0;
+    let mut truncated = false;
+    let mut expired = false;
+    'walk: for _ in 0..depth {
+        let mut next = Vec::new();
+        for id in &frontier {
+            for outgoing in [true, false] {
+              let mut offset = 0;
+              loop {
+                if tokio::time::Instant::now() >= deadline { expired = true; break 'walk; }
+                let remaining = FETCH_BUDGET - fetched;
+                if remaining == 0 || edges.len() >= MAX_EDGES { truncated = true; break 'walk; }
+                let page = BATCH.min(remaining).min(MAX_EDGES_PER_ENTITY - offset);
+                let limit = page + 1;
+                let query = q::DIAGRAM_EDGES.on(db).until(deadline).bind(("id", id.clone()))
+                    .bind(("outgoing", outgoing)).bind(("limit", limit)).bind(("start", offset));
+                let mut response = match tokio::time::timeout_at(deadline, query).await {
+                    Ok(Err(_)) if tokio::time::Instant::now() >= deadline => { expired = true; break 'walk; }
+                    Ok(result) => result?,
+                    Err(_) => { expired = true; break 'walk; }
+                };
+                let mut rows: Vec<EdgeRow> = response.take(0)?;
+                let count = rows.len();
+                #[cfg(feature = "test-support")]
+                let _ = LARGEST_DIAGRAM_QUERY.try_with(|n| n.set(n.get().max(count)));
+                #[cfg(feature = "test-support")]
+                let _ = FETCHED_EDGE_ROWS.try_with(|n| n.set(n.get() + count));
+                let more = count > page;
+                fetched += count.min(remaining);
+                rows.truncate(page);
+                for e in rows {
+                    if e.from_vault.as_ref() != Some(vault) || e.to_vault.as_ref() != Some(vault)
+                        || edge_ids.contains(&e.id.to_string()) { continue; }
+                    if edges.len() == MAX_EDGES { truncated = true; break 'walk; }
+                    let new_end = [&e.from, &e.to].into_iter().find(|end| !seen.contains(&end.to_string()));
+                    if let Some(end) = new_end {
+                        if seen.len() == MAX_NODES { truncated = true; continue; }
+                        seen.insert(end.to_string());
+                        order.push(end.clone());
+                        next.push(end.clone());
+                    }
+                    edge_ids.insert(e.id.to_string());
+                    edges.push(e);
+                }
+                offset += page;
+                if !more { break; }
+                if offset == MAX_EDGES_PER_ENTITY { truncated = true; break; }
+              }
+            }
+        }
+        frontier = next;
+        if frontier.is_empty() { break; }
+    }
+    let mut nodes = vec![start];
+    for ids in order[1..].chunks(BATCH) {
+        if expired || tokio::time::Instant::now() >= deadline { expired = true; break; }
+        let query = q::DIAGRAM_NODES.on(db).until(deadline).bind(("ids", ids.to_vec())).bind(("limit", ids.len()));
+        let mut response = match tokio::time::timeout_at(deadline, query).await {
+            Ok(Err(_)) if tokio::time::Instant::now() >= deadline => { expired = true; break; }
+            Ok(result) => result?,
+            Err(_) => { expired = true; break; }
+        };
+        let rows: Vec<NodeRow> = response.take(0)?;
+        #[cfg(feature = "test-support")]
+        let _ = LARGEST_DIAGRAM_QUERY.try_with(|n| n.set(n.get().max(rows.len())));
+        nodes.extend(rows.into_iter().filter(|n| &n.vault == vault).map(|n| Node {
+            id: n.id.to_string(), name: n.name.clone(), kind: n.kind(),
+            summary: None, facts: vec![], properties: vec![],
+        }));
+    }
+    let ids: HashSet<_> = nodes.iter().map(|n| n.id.as_str()).collect();
+    let edges = edges.into_iter().filter(|e| ids.contains(e.from.to_string().as_str()) && ids.contains(e.to.to_string().as_str()))
+        .map(|e| Edge { id: e.id.to_string(), from: e.from.to_string(), to: e.to.to_string(), label: e.label }).collect();
+    Ok((Neighbourhood { vault: vault.to_string(), depth, nodes, edges, link_types: vec![], truncated: truncated || expired }, expired))
 }

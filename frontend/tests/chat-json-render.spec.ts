@@ -1,3 +1,5 @@
+import { mockOntology } from "./fixtures/ontology-ui";
+import { diagramFixture } from "./fixtures/chat-diagrams";
 import type { Spec } from "@json-render/core";
 import { test, expect, type Locator } from "@playwright/test";
 import { registerAndOnboard, uniqueEmail } from "./helpers";
@@ -67,6 +69,7 @@ const metric = {
   warnings: [],
 };
 const legacy: Record<string, object> = {
+  Diagram: diagramFixture("neighbourhood"),
   Impact: {
     view: "impact",
     start: entity,
@@ -159,7 +162,7 @@ function fixture(kind: string, state = "full") {
       : kind === "Divider"
         ? {}
         : {
-            title: kind,
+            title: kind === "Diagram" ? "Diagram of House blend connections" : kind,
             summary: "Fixture data for component coverage",
             data: { $state: "/sources/sample" },
             x:
@@ -277,7 +280,8 @@ for (const theme of ["light", "dark"])
     }) => {
       test.setTimeout(120000);
       await page.setViewportSize({ width, height: 900 });
-      await registerAndOnboard(page, uniqueEmail("gen-ui"));
+      if (process.env.E2E_MOCK_API === "1") await mockOntology(page);
+      else await registerAndOnboard(page, uniqueEmail("gen-ui"));
       await page.addInitScript((t) => {
         localStorage.setItem("eunomia-theme", t);
       }, theme);
@@ -391,6 +395,9 @@ for (const theme of ["light", "dark"])
         ).toContainText(name === "Divider" ? "" : name);
       }
       await expect(
+        page.locator(".generative-ui").nth(names.indexOf("Diagram")).getByRole("heading", { name: "Diagram of House blend connections", exact: true }),
+      ).toBeVisible();
+      await expect(
         page.getByText(
           "This display could not be drawn. The source answer is below.",
         ),
@@ -449,7 +456,8 @@ for (const theme of ["light", "dark"])
 for (const width of [1280, 390])
   test(`dense networks and nested cards at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await registerAndOnboard(page, uniqueEmail("ui-layout"));
+    if (process.env.E2E_MOCK_API === "1") await mockOntology(page);
+    else await registerAndOnboard(page, uniqueEmail("ui-layout"));
     const views = [10, 30].map((count) => {
       const view = fixture("Network");
       return {
@@ -586,7 +594,8 @@ for (const width of [1280, 390])
   });
 
 test("typed money keeps its currency and missing values are unavailable", async ({ page }) => {
-  await registerAndOnboard(page, uniqueEmail("typed-values"));
+  if (process.env.E2E_MOCK_API === "1") await mockOntology(page);
+  else await registerAndOnboard(page, uniqueEmail("typed-values"));
   const bad = fixture("Bar");
   bad.spec.elements.a.props.y = "name";
   const usd = fixture("Stat");

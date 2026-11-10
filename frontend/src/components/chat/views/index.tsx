@@ -5,6 +5,9 @@ const UiView = dynamic(() => import("../ui/UiView"), { loading: () => <Generatin
 // The chat's generative UI: `show_view` results drawn by view name. A view this app does not know yet
 // falls back to the plain text the server sends with every view.
 import type { ComponentType } from "react";
+import DiagramView from "./DiagramView";
+import type { DiagramView as Diagram } from "./diagram-schema";
+import { diagramViewSchema } from "./diagram-schema";
 import ImpactView from "./ImpactView";
 import MetricView from "./MetricView";
 import ScenarioView from "./ScenarioView";
@@ -13,9 +16,10 @@ import type { ImpactView as Impact, MetricView as Metric, ScenarioView as Scenar
 
 export const SHOW_VIEW = "show_view";
 
-type Known = Impact | Subgraph | Metric | Scenario;
+type Known = Diagram | Impact | Subgraph | Metric | Scenario;
 
 const VIEWS: { [K in Known["view"]]: ComponentType<{ view: Extract<Known, { view: K }> }> } = {
+  diagram: DiagramView,
   impact: ImpactView,
   subgraph: SubgraphView,
   metric: MetricView,
@@ -27,6 +31,10 @@ export function parseView(result: string | undefined): ShownView | null {
   if (!result) return null;
   try {
     const v = JSON.parse(result);
+    if (v?.view === "diagram") {
+      const parsed = diagramViewSchema.safeParse(v);
+      return parsed.success ? parsed.data : null;
+    }
     return v && typeof v.view === "string" && typeof v.text === "string" ? (v as ShownView) : null;
   } catch {
     return null;

@@ -109,6 +109,7 @@ export const components = {
       "Comparison",
       "Impact",
       "Subgraph",
+      "Diagram",
       "Metric",
       "Scenario",
     ].map((name) => [

@@ -236,6 +236,18 @@ pub const EDGES_IN_DIRECTION: Stmt = Stmt::new(
         (SELECT id, in, out, label, in.vault AS from_vault, out.vault AS to_vault FROM relates_to WHERE out = $id LIMIT $limit)
     };"#,
 );
+/// Diagram search reads one indexed direction at a time, with a small caller row budget.
+pub const DIAGRAM_EDGES: Stmt = Stmt::new(
+    "entities.diagram_edges",
+    r#"RETURN IF $outgoing {
+        (SELECT id, in, out, label, in.vault AS from_vault, out.vault AS to_vault FROM relates_to WHERE in = $id LIMIT $limit START $start TIMEOUT 1s)
+    } ELSE {
+        (SELECT id, in, out, label, in.vault AS from_vault, out.vault AS to_vault FROM relates_to WHERE out = $id LIMIT $limit START $start TIMEOUT 1s)
+    };"#,
+);
+pub const DIAGRAM_NODES: Stmt = Stmt::new(
+    "entities.diagram_nodes", "SELECT id, vault, kind, name FROM $ids LIMIT $limit TIMEOUT 1s",
+);
 /// Whether `$id` has any relation, either way, to an entity in its own vault `$vault`.
 pub const HAS_RELATION: Stmt = Stmt::at(
     "entities.has_relation",
@@ -359,6 +371,8 @@ pub const ALL: &[&Stmt] = &[
     &EDGES_AMONG,
     &EDGES_TOUCHING,
     &EDGES_IN_DIRECTION,
+    &DIAGRAM_EDGES,
+    &DIAGRAM_NODES,
     &HAS_RELATION,
     &NODES_BY_ID,
     &RELATIONS_BY_ID,
