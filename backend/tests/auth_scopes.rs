@@ -337,7 +337,7 @@ async fn vault_restricted_token_is_confined_to_its_vault() {
     let (_, v) = mcp_call(&app, &t, "recall", json!({"query": "personal"})).await;
     assert!(!v.to_string().contains("in personal"), "{v}");
 
-    // it sees only its vault, cannot make new ones, cannot read raw source records
+    // It sees only its vault and cannot make new ones or read account settings.
     let (_, _, vs) = send(&app.router, "GET", "/api/vaults", None, &h).await;
     let ids: Vec<&str> = vs.as_array().or(vs["results"].as_array()).unwrap().iter().map(|v| v["id"].as_str().unwrap()).collect();
     assert_eq!(ids, [org.to_string()]);
@@ -352,7 +352,8 @@ async fn vault_restricted_token_is_confined_to_its_vault() {
         assert_eq!((status, body["code"].as_str()), (StatusCode::FORBIDDEN, Some("auth.scope")), "{m} {p}");
     }
     let (is_error, v) = mcp_call(&app, &t, "search", json!({"query": "x"})).await;
-    assert!((is_error, v["code"].as_str()) == (true, Some("auth.scope")), "{v}");
+    assert!(!is_error, "a default read uses the bound vault: {v}");
+    assert_eq!(v["results"], json!([]), "no Personal source records enter a team-bound read");
 
     // and the unrestricted token still reaches both
     let (status, _, _) = send(&app.router, "GET", &format!("/api/entities?vault_id={}", personal.to_string()), None, &bearer(&app.token)).await;

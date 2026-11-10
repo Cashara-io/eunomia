@@ -142,12 +142,6 @@ pub fn is_destructive(name: &str) -> bool {
     matches!(name, "memory_delete" | "entity_delete" | "entity_merge" | "vault_delete" | "vault_remove_member" | "vault_leave" | "vault_set_role" | "vault_transfer_ownership" | "document_delete" | "skill_delete" | "vault_repair")
 }
 
-/// Tools over the user's raw synced source records, which belong to no vault:
-/// a vault-restricted token may not use them.
-fn reads_source_records(name: &str) -> bool {
-    matches!(name, "search" | "get" | "list" | "links")
-}
-
 /// What each tool does, for the model choosing between them (chat agent and
 /// MCP clients alike). Every registered tool must have one -- see tests.
 pub fn description(name: &str) -> &'static str {
@@ -436,13 +430,21 @@ async fn call_inner(app: &AppState, user: &User, name: &str, mut args: Value) ->
         return Ok(AppError::coded(ErrorCode::ToolNotFound, format!("unknown tool {name}")).to_tool_value());
     };
 
-    let needed = authz::require_scope(scopes::for_tool(name, is_read_only(name))).and_then(|()| {
-        if reads_source_records(name) { authz::require_unrestricted() } else { Ok(()) }
-    });
+    let needed = authz::require_scope(scopes::for_tool(name, is_read_only(name)));
     if let Err(e) = needed {
         record_event(&app.control, owner, name, e.code.as_str(), "").await;
         count_call(app, user, name, true, 0);
         return Err(e);
+    }
+    // A bound credential already identifies the only vault a required vault argument can name.
+    // Optional scopes are resolved by the services; explicit input is never replaced.
+    if spec.schema["required"].as_array().is_some_and(|fields| fields.iter().any(|f| f == "vault_id"))
+        && let Some(only) = authz::restricted_vault()?
+        && let Some(object) = args.as_object_mut()
+        && !object.contains_key("vault_id")
+        && !object.contains_key("vault_ids")
+    {
+        object.insert("vault_id".into(), only.to_string().into());
     }
     let state = &app.org(&user.org).await?;
     if let Err(e) = resolve_vault_names(&state.db, owner, &mut args).await {

@@ -13,6 +13,7 @@ const sha256 = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 async function newToken(request: APIRequestContext): Promise<string> {
   const reg = await request.post("/api/auth/register", { data: { email: uniqueEmail("docs"), password: "correct-horse-battery-staple" } });
   expect(reg.ok()).toBeTruthy();
+  // These document and record operations must work with the default Personal-only token.
   return (await (await request.post("/api/auth/tokens", { data: { name: "MCP" } })).json()).token;
 }
 
@@ -117,6 +118,7 @@ test.describe("Documents", () => {
     expect(recallHit.document.char_start).toBe(0);
 
     const searched = await tool(request, token, "search", { query: "lighthouse restoration", mode: "keyword" });
+    expect(searched.error, JSON.stringify(searched)).toBeUndefined();
     expect(searched.results[0].document.document_id).toBe(up.id);
 
     const record = await tool(request, token, "get", { id: chunkId });
@@ -132,8 +134,18 @@ test.describe("Documents", () => {
 
     // another account cannot reach it
     const other = await newToken(request);
-    expect((await tool(request, other, "document_get", { id: up.id })).code).toBe("document.not_found");
-    const theirs = await request.get(where.download.path, { headers: { Authorization: `Bearer ${other}` } });
+    expect((await tool(request, other, "document_get", { id: up.id })).code).toBe("auth.scope");
+    const scopedDownload = await request.get(where.download.path, { headers: { Authorization: `Bearer ${other}` } });
+    expect(scopedDownload.status()).toBe(403);
+
+    // Check membership separately from token binding. All-space read grants no new membership.
+    const membershipToken = await request.post("/api/auth/tokens", {
+      data: { name: "Cross-user membership check", vault_id: null, scopes: ["memory:read"] },
+    });
+    expect(membershipToken.ok()).toBeTruthy();
+    const { token: reader } = await membershipToken.json();
+    expect((await tool(request, reader, "document_get", { id: up.id })).code).toBe("document.not_found");
+    const theirs = await request.get(where.download.path, { headers: { Authorization: `Bearer ${reader}` } });
     expect(theirs.status()).toBe(404);
 
     const deleted = await tool(request, token, "document_delete", { id: up.id });

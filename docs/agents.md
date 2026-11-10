@@ -706,3 +706,38 @@ credentials. Space selection at consent is tracked in
 | `sdk/README.md`, `docs/sdk.md` | Name-only creation for memory clients. Personal, read/write memory and 90 days suffice; other destinations or permissions require explicit choices. |
 | `docs/extensions.md` | Extension account APIs deliberately request all spaces. Extension management explicitly requires `connectors`; no change to the minimal defaults is needed. |
 | Project CLI | Explicit project space and `memory:write`, which includes read; omitted expiry receives 90 days. |
+
+## Restricted token defaults across tools
+
+An omitted space means the token's bound space when it has one. This applies to
+reads and writes, including `list`, `search`, `get`, `links`, memory, entities,
+documents, skills and ontology tools. A Personal-only token can read its own
+synced records and document passages. It cannot use an unqualified call to reach
+a team space. Explicit arguments do not override the credential's binding.
+
+MCP advertises `vault_id` as optional for a bound token, including vault reads
+that otherwise require it. Other required arguments remain required. Scope and
+membership checks still apply. Administrative tools need their explicit scopes;
+held-secret operations still need the person's approval.
+
+The name-only mint audit includes all Playwright specs, backend tests and
+`scripts/ci/e2e-setup.sh`:
+
+| Consumer | Resolution |
+| --- | --- |
+| `frontend/tests/documents.spec.ts`, uploading agent | Product fix (b). Keep the name-only Personal token. Upload, search, recall, get and download all belong in Personal. |
+| Same spec, another user's default token | Keep the default and pin `auth.scope` / 403 when it tries to read outside its bound Personal space. |
+| Same spec, cross-user membership check | Explicit access (a). A separate all-space, `memory:read` token tests the membership boundary and still receives not found / 404. All-space scope grants no extra membership. |
+| `frontend/tests/memory-correctness.spec.ts` | Product fix (b). Demo records and their derived facts are Personal. Keep the name-only token; list, get, links, search and recall use that space. |
+| `frontend/tests/skill.spec.ts` | Minimal token already fits MCP instructions and skill retrieval. Keep the name-only mint. |
+| `frontend/tests/secret-requests.spec.ts` | Minimal token already fits Personal secret requests and status. Keep the name-only mint and user-approval boundary. |
+| `frontend/tests/click-fixes.spec.ts` | The minted token is a token-management fixture. Listing, renaming and revoking use the browser session, so no elevated token is needed. |
+| `frontend/tests/brand-and-motion.spec.ts`, `security-defaults.spec.ts` | Presentation mocks or creation-contract interceptions, not a consumer using a name-only token for broad calls. Keep the safe creation contract. |
+| `frontend/tests/every-tool.spec.ts`, `mcp.spec.ts`, `recall-eval.spec.ts`, `vault-isolation.spec.ts` | Already explicitly request broader scopes and all spaces for tests that deliberately administer or compare spaces. Keep those deliberate opt-ins (a). |
+| Ontology Playwright fixtures | Already select their intended vault explicitly. Keep the selected-vault opt-in (a). |
+| `backend/tests/auth_scopes.rs` | Deliberate default, token CRUD, cache and authority tests. Keep minimal name-only mints. Replace the obsolete blanket record-refusal assertion with scoped success and no Personal leakage into a team-bound read. |
+| `backend/tests/isolation.rs` | The name-only mint creates a control-row canary, not a credential used for broad calls. Its separate fixture credentials explicitly list their authority. No guard or assertion is removed. |
+| `backend/tests/security_consumers.rs` | Agent setup deliberately exercises name-only defaults. Upgrade fixture A separately opts into exactly its required authority. |
+| `backend/tests/default_tokens.rs` | Deliberately mint the real name-only token, walk every registered MCP tool without a space argument, pin intended refusals, and prove that no call exposes or changes the team canary. Also cover a team-bound minimal token, document retrieval and tombstones. |
+| Remaining internal backend fixtures | Every internal issuer now supplies scopes, vault and expiry explicitly. No name-only internal convenience issuer remains. |
+| `scripts/ci/e2e-setup.sh` | No PAT mint. Registration/onboarding use cookies; database discovery uses separate disposable fixture credentials. |

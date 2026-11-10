@@ -33,3 +33,11 @@ MCP skill resource with `memory:read`; they no longer need account settings
 access. Upgrade fixtures explicitly request the space administration they use.
 Peer refusals use the same owner lookup and audit write for unknown, used and
 expired codes, with identical public status, body and headers.
+
+Vault-bound tokens now use their bound space for unqualified record reads,
+including `list`, `search`, `get` and `links`. The former blanket record-tool
+refusal blocked the new default Personal tokens even for their own documents and
+synced records. The existing vault filters now enforce those reads. Required
+vault arguments also default to the token's binding, and MCP advertises that
+argument as optional for bound credentials. Explicit space arguments, scopes,
+membership checks and administrative refusals remain enforced.

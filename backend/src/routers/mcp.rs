@@ -418,7 +418,23 @@ fn tool_list() -> Vec<Value> {
     every_tool()
         .iter()
         .filter(|(name, _)| caller.as_ref().is_some_and(|c| c.allows(crate::scopes::for_tool(name, registry::is_read_only(name)))))
-        .map(|(_, tool)| tool.clone())
+        .map(|(_, tool)| {
+            let mut tool = tool.clone();
+            // The registry supplies a bound token's vault before validating required arguments.
+            // Keep the cached catalogue unchanged for sessions and unrestricted credentials.
+            if caller.as_ref().is_some_and(|c| c.vault.is_some()) {
+                let schema = &mut tool["inputSchema"];
+                if let Some(required) = schema.get_mut("required").and_then(Value::as_array_mut) {
+                    required.retain(|field| field != "vault_id");
+                }
+                if schema.get("required").and_then(Value::as_array).is_some_and(Vec::is_empty)
+                    && let Some(object) = schema.as_object_mut()
+                {
+                    object.remove("required");
+                }
+            }
+            tool
+        })
         .collect()
 }
 
