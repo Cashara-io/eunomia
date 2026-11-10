@@ -6,6 +6,8 @@ import { formatted, objectHref } from "./ObjectProfile";
 import { humanLabel, relativeTime } from "./overview-format";
 import ReadState from "./ReadState";
 import styles from "./connections.module.css";
+import { sourceAvailable, sourceLabel, sourceMismatch, caseOnlyNote } from "./receipt-model";
+import receiptStyles from "./receipts.module.css";
 import shared from "./overview.module.css";
 export default function ConnectionInspector({
   space,
@@ -51,6 +53,7 @@ export default function ConnectionInspector({
           <dl>
             {query.data.properties.map((p) => {
               const source = query.data.sources.find((s) => s.id === p.source);
+              const mismatch = sourceMismatch(p, source);
               return (
                 <div className={styles.value} key={p.name}>
                   <dt>{humanLabel(p.name)}</dt>
@@ -72,28 +75,12 @@ export default function ConnectionInspector({
                       ? ` · ${relativeTime(p.as_of, now)}`
                       : " · Date not recorded"}
                     <br />
-                    {p.source
-                      ? source?.document
-                        ? ""
-                        : p.source_label
-                      : "Source not recorded"}
-                    {source?.document && (
-                      <span>
-                        {" "}
-                        {source.document.filename}
-                        {source.document.row
-                          ? ` · row ${source.document.row.line}`
-                          : ` · ${source.document.note}`}
-                      </span>
+                    {p.source ? p.source_state === "unavailable" ? "Source unavailable" : sourceLabel(source) : "Source not recorded"}
+                    {sourceAvailable(source) && source?.record && (
+                      <span> · {source.record.external_id}</span>
                     )}
-                    {source?.record && (
-                      <span>
-                        {" "}
-                        · {source.record.title || source.record.source} ·{" "}
-                        {source.record.external_id}
-                      </span>
-                    )}
-                    {p.state === "stale" && (
+                    {mismatch && <p role="note" className={mismatch === caseOnlyNote ? receiptStyles.caseNote : receiptStyles.mismatch}>{mismatch}</p>}
+                    {p.state === "stale" && !mismatch && (
                       <p>The source changed after this value was recorded.</p>
                     )}
                     {p.state === "missing" && (

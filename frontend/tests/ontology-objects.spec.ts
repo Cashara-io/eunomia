@@ -196,6 +196,12 @@ test("typed objects, server pages, sources, scoped numbers and related objects",
       exact: true,
     }),
   ).toBeVisible();
+  await expect(page.getByRole("region", { name: "Properties", exact: true })).toContainText("Zero");
+  const sourceValue = page.getByRole("button", { name: "Inspect source for Price", exact: true });
+  await sourceValue.click();
+  await expect(page.getByRole("complementary", { name: "Source inspector" })).toContainText("AUD 0.00");
+  await page.goBack();
+  await expect(sourceValue).toBeFocused();
   await page.getByRole("button", { name: "Numbers", exact: true }).click();
   await expect(page.getByRole("region", { name: "Numbers" })).toContainText(
     "AUD 0.00",
