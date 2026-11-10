@@ -117,7 +117,7 @@ test("keyboard queue, approval, rejection, Escape and focus", async ({
   expect(fixture.mutations).toHaveLength(0);
   await page.keyboard.press("Escape");
   await expect(page).not.toHaveURL(/selected=/);
-  await expect(page.locator("a[data-definition]").first()).toBeFocused();
+  await expect(page.getByRole("listitem").filter({ has: page.locator("a[data-definition]", { hasText: "Unit cost" }) })).toBeFocused();
   await page.keyboard.press("j");
   await expect(
     page.getByRole("heading", { name: "Unit cost", exact: true }),
@@ -495,7 +495,7 @@ test("a live refresh reveals changed fields without replacing a drafted reason",
   const property = fixture.model.kinds[0].properties[0];
   property.description = "Cost including freight";
   property.revision = 2;
-  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await page.getByRole("button", { name: "Refresh ontology", exact: true }).click();
   await expect(detail(page).getByRole("alert")).toContainText(
     "Now: Cost including freight",
   );
@@ -601,12 +601,14 @@ test("queue page, filters and focus survive closing a selected proposal", async 
     .click();
   await expect(page).toHaveURL(/type=kind/);
   await expect(page).toHaveURL(/page=2/);
-  await expect(first).toBeFocused();
-  expect(
-    await page.evaluate(() =>
-      document.activeElement?.getAttribute("data-definition"),
-    ),
-  ).toBe(id);
+  const row = first.locator("..");
+  await expect(row).toBeFocused();
+  await expect(row).toHaveAttribute("aria-current", "true");
+  expect(await first.getAttribute("data-definition")).toBe(id);
+  await page.keyboard.press("Enter");
+  await expect(row).toBeFocused();
+  await expect(page).not.toHaveURL(/selected=/);
+  expect(fixture.mutations).toHaveLength(0);
 });
 
 test("200% text, forced colours and queue touch targets", async ({ page }) => {
