@@ -22,6 +22,9 @@ export function ProtectedSpaceContent({ children }: { children: ReactNode }) {
 const MissingObjects = createContext<ReadonlySet<string>>(new Set());
 export const useMissingSpaceObjects = () => useContext(MissingObjects);
 
+// Stateful readers retain their query while the address bar withholds it.
+const WithheldParams = createContext<URLSearchParams | null>(null);
+export const useWithheldSpaceParams = () => useContext(WithheldParams);
 const ActiveSpace = createContext("");
 export type ProtectedQueries = {
   keys: readonly string[];
@@ -50,8 +53,17 @@ function AccessGate({ space, children, queries: protectedQueries }: { space: str
     };
   }, [cache, space, protectedQueries]);
   const [access, setAccess] = useState<Access>(protectedQueries.checkOnMount ? { kind: "checking", attempt: 1 } : { kind: "confirmed" });
+  const withheld = useRef<{ pathname: string; search: string; hash: string } | null>(null);
+  const [withheldParams, setWithheldParams] = useState<URLSearchParams | null>(null);
   const [missing, setMissing] = useState<ReadonlySet<string>>(new Set());
   const retry = useRef(() => {});
+  useEffect(() => {
+    if (access.kind !== "denied") return;
+    // A URL update can render existing observers before denial commits. Purge those entries after unmount too.
+    const scoped = { predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey.includes(space) };
+    void cache.cancelQueries(scoped);
+    cache.removeQueries(scoped);
+  }, [access.kind, cache, space]);
   useEffect(() => {
     const queries = cache.getQueryCache();
     const controller = new AbortController();
@@ -62,6 +74,20 @@ function AccessGate({ space, children, queries: protectedQueries }: { space: str
     let generation = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     function transition(next: Access) {
+      if (next.kind === "checking" || next.kind === "unknown") {
+        if (!withheld.current) {
+          withheld.current = { pathname: window.location.pathname, search: window.location.search, hash: window.location.hash };
+          setWithheldParams(new URLSearchParams(withheld.current.search));
+        }
+        // Both Objects and Connections keep only the space ID while access is withheld.
+        window.history.replaceState(null, "", `${window.location.pathname}?${new URLSearchParams({ space })}`);
+      } else {
+        if (next.kind === "confirmed" && withheld.current && window.location.pathname === withheld.current.pathname && new URLSearchParams(window.location.search).get("space") === space) {
+          window.history.replaceState(null, "", withheld.current.pathname + withheld.current.search + withheld.current.hash);
+        }
+        withheld.current = null;
+        setWithheldParams(null);
+      }
       state = next;
       setAccess(next);
       clearTimeout(timer);
@@ -158,6 +184,7 @@ function AccessGate({ space, children, queries: protectedQueries }: { space: str
   return (
     <ActiveSpace.Provider value={space}>
     <ConfirmedAccess.Provider value={access.kind === "confirmed"}>
+    <WithheldParams.Provider value={withheldParams}>
       {access.kind === "denied" ? (
         <ErrorLine action={<button className="btn btn-sm" onClick={() => retry.current()}>Retry space access</button>}>
           This information is unavailable to you in this space. Ask a space owner for access.
@@ -173,6 +200,7 @@ function AccessGate({ space, children, queries: protectedQueries }: { space: str
           <MissingObjects.Provider value={missing}>{children}</MissingObjects.Provider>
         </>
       )}
+    </WithheldParams.Provider>
     </ConfirmedAccess.Provider>
     </ActiveSpace.Provider>
   );

@@ -4,9 +4,11 @@ import { usePathname, useSearchParams } from "next/navigation";
 import Select from "@/components/Select";
 import { STATUS } from "./DefinitionRows";
 import { PAGE_SIZE } from "./model";
+import { useWithheldSpaceParams } from "./SpaceAccess";
 
 export function useTwinParams() {
-  const params = useSearchParams();
+  const currentParams = useSearchParams();
+  const params = useWithheldSpaceParams() ?? currentParams;
   const pathname = usePathname();
   function update(values: Record<string, string>, replace = false) {
     const next = new URLSearchParams(window.location.search);

@@ -49,8 +49,9 @@ export default function ObjectProfile(props: { space: string; id: string; compac
 }
 function ProfileContent(props: { space: string; id: string; compact?: boolean }) {
   const missing = useMissingSpaceObjects();
+  const confirmed = useConfirmedSpaceAccess();
   const { params } = useTwinParams();
-  if (missing.has(props.id)) return <section className="ledger p-6" aria-label="Object unavailable"><h2 className="section-title">Object unavailable</h2><p className="mt-3">This object could not be found in this space. It may have been removed or belong to another space.</p><Link className="link inline-block mt-4" href={safeReturn(params.get("back"), props.space) ?? twinHref("/ontology/objects", props.space)}>Back to Objects</Link></section>;
+  if (missing.has(props.id)) return confirmed ? <section className="ledger p-6" aria-label="Object unavailable"><h2 className="section-title">Object unavailable</h2><p className="mt-3">This object could not be found in this space. It may have been removed or belong to another space.</p><Link className="link inline-block mt-4" href={safeReturn(params.get("back"), props.space) ?? twinHref("/ontology/objects", props.space)}>Back to Objects</Link></section> : null;
   return <ProfileDetails {...props} />;
 }
 function ProfileDetails({

@@ -116,6 +116,7 @@ test("compact source keeps page two and pagination reachable", async ({ page }) 
   await expect(page.getByRole("navigation",{name:"Object pages"})).toBeVisible();
   await expect(page.getByRole("button",{name:"Previous",exact:true})).toBeEnabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
+  await expect(page.getByLabel("Source inspector", {exact:true})).toBeVisible();
   const bounds = await page.getByLabel("Object inspector", {exact:true}).evaluate(el => ({outer:el.getBoundingClientRect().right, source:el.querySelector('[aria-label="Source inspector"]')!.getBoundingClientRect().right}));
   expect(bounds.source).toBeLessThanOrEqual(bounds.outer);
 });
@@ -141,4 +142,50 @@ for (const theme of ["light", "dark"]) test(`mobile receipts keep values beside 
   const warning=page.getByRole('note').first();
   await expect(warning).toContainText('The file now says AUD 99.00.');
   expect(await warning.evaluate(el=>parseFloat(getComputedStyle(el).borderLeftWidth))).toBeGreaterThanOrEqual(4);
+});
+
+async function noProtectedValues(page: Page) {
+  const names = ["House blend 1kg", "products.csv", "AUD 12.00"];
+  await expect.poll(() => page.evaluate(names => {
+    const attributesAndUrl = [location.href,
+      ...Array.from(document.querySelectorAll("*")).flatMap(el => Array.from(el.attributes, a => a.value))];
+    const values = [document.documentElement.textContent ?? "", ...attributesAndUrl.map(value => decodeURIComponent(value.replaceAll("+", " ")))];
+    return values.filter(value => names.some(name => value.includes(name)));
+  }, names)).toEqual([]);
+}
+test("checking and unknown withhold table query text everywhere and restore confirmed input", async ({ page }) => {
+  const { state } = await mockReceipts(page);
+  const query = new URLSearchParams({space:"business",kind:"product",search:"House blend 1kg",selected:"House blend 1kg",focus:"House blend 1kg",q:"House blend 1kg",filter:"House blend 1kg",value:"House blend 1kg"});
+  state.membership = "pending";
+  await page.clock.install();
+  await page.goto(`/ontology/objects?${query}`);
+  await expect(page.getByText("Checking access", {exact:true})).toBeVisible();
+  await noProtectedValues(page);
+  await page.clock.fastForward(11_000);
+  await expect(page.getByRole("button", {name:"Try again",exact:true})).toBeVisible();
+  await noProtectedValues(page);
+  state.membership = "ok";
+  await page.getByRole("button", {name:"Try again",exact:true}).click();
+  await expect(page.getByLabel("Search objects")).toHaveValue("House blend 1kg");
+  await expect.poll(() => page.evaluate(() => location.search)).toBe(`?${query}`);
+});
+test("missing object fallback cannot leak its Back query during checking or unknown", async ({ page }) => {
+  const { state } = await mockReceipts(page);
+  const back = "/ontology/objects?space=business&search=House+blend+1kg&selected=house";
+  await page.goto(`${profile}&back=${encodeURIComponent(back)}`);
+  await expect(page.getByRole("heading", {name:"House blend 1kg",exact:true})).toBeVisible();
+  state.mode = "missing";
+  await page.getByRole("button", {name:"Refresh ontology"}).click();
+  await expect(page.getByRole("region", {name:"Object unavailable"})).toBeVisible();
+  await page.clock.install();
+  state.membership = "pending";
+  await cacheAction(page, "recheck");
+  await expect(page.getByText("Checking access", {exact:true})).toBeVisible();
+  await noProtectedValues(page);
+  await page.clock.fastForward(11_000);
+  await expect(page.getByRole("button", {name:"Try again",exact:true})).toBeVisible();
+  await noProtectedValues(page);
+  state.membership = "ok";
+  await page.getByRole("button", {name:"Try again",exact:true}).click();
+  await expect(page.getByRole("link", {name:"Back to Objects"})).toHaveAttribute("href", back);
 });
