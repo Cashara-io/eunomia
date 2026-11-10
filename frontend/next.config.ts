@@ -4,7 +4,11 @@ const backend = process.env.BACKEND_INTERNAL_URL || "http://localhost:8001";
 
 const nextConfig: NextConfig = {
   // Diagnostics can spend a minute waiting for the updater before streaming the ZIP.
-  experimental: { proxyTimeout: 120_000 },
+  experimental: {
+    proxyTimeout: 960_000,
+    // Large-body routes bypass the cloning proxy and authenticate before streaming.
+    proxyClientMaxBodySize: "1mb",
+  },
   async headers() {
     return [
       {

@@ -92,6 +92,7 @@ jobs:
           git diff --exit-code -- src/lib/gen
           test -z "$(git status --porcelain -- src/lib/gen)"
       - run: bun run lint
+      - run: bun run test:proxy
       # `next build` generates `.next/types/*.d.ts`, which `next-env.d.ts`
       # references and tsconfig.json includes -- both are gitignored
       # (Next.js regenerates them), so a fresh checkout has neither until

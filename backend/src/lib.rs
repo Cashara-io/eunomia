@@ -133,17 +133,19 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
             .layer(cors)
     };
 
-    let open = axum::Router::new().route("/healthz", axum::routing::get(healthz)).route("/readyz", axum::routing::get(readyz)).merge(routers::mcp::router()).merge(routers::extensions::hook_router()).merge(oauth::router());
-    // One ceiling for every request body, ahead of everything else (a handler that reads the body
-    // itself, like the webhook, is bounded too); raise it with the env var. Document uploads are the
-    // exception: their router has its own ceiling, the document size limit plus room for the request.
+    let open = axum::Router::new().route("/healthz", axum::routing::get(healthz)).route("/readyz", axum::routing::get(readyz)).merge(routers::extensions::hook_router()).merge(oauth::router());
+    // Normal routes share a small ceiling. Upload handlers authenticate first, then read with their
+    // configured ceiling and the per-user concurrency guard.
     let max_body = max_body_bytes();
-    let max_upload = state.settings.documents_max_bytes.saturating_add(64 * 1024).max(max_body);
     let limited = |routes: axum::Router<AppState>, max: usize| {
         routes.layer(axum::extract::DefaultBodyLimit::max(max)).layer(tower_http::limit::RequestBodyLimitLayer::new(max))
     };
-    limited(guarded(open, open_cors).merge(guarded(axum::Router::new().nest("/api", api), cors.clone())), max_body)
-        .merge(limited(guarded(axum::Router::new().nest("/api", routers::documents::router()), cors), max_upload))
+    limited(guarded(open, open_cors.clone()).merge(guarded(axum::Router::new().nest("/api", api), cors.clone())), max_body)
+        .merge(guarded(axum::Router::new().nest("/api", routers::documents::router()), cors)
+            .layer(axum::extract::DefaultBodyLimit::max(max_body)))
+        // MCP authenticates before reading its bounded JSON-RPC envelope. Only upload-only calls
+        // may exceed the normal ceiling, and each user has one body read in flight across both routes.
+        .merge(guarded(routers::mcp::router(), open_cors))
         .with_state(state)
 }
 
