@@ -1,3 +1,4 @@
+import LandscapeSolid from "./LandscapeSolid";
 import { memo, type CSSProperties } from "react";
 import type { KindItem } from "@/lib/queries/ontology";
 import type { overviewLayout } from "./overview-layout";
@@ -135,31 +136,7 @@ export default memo(function LandscapePlane({
           data-selected="false"
           style={tint(kind.kind)}
         >
-          <ellipse
-            cx={x + 8}
-            cy={y + 16}
-            rx="91"
-            ry="34"
-            fill={`url(#${id}-shadow)`}
-          />
-          <path
-            className={styles.baseRing}
-            d={`M${x - 74} ${y - 10}l101 -17 50 30 -102 18Z`}
-          />
-          <g className={styles.solid}>
-            <path
-              className={styles.faceLeft}
-              d={`M${x - 62} ${y - height - 9}l38 24v${height}l-38 -24Z`}
-            />
-            <path
-              className={styles.faceRight}
-              d={`M${x - 24} ${y - height + 15}l88 -14v${height}l-88 14Z`}
-            />
-            <path
-              className={styles.faceTop}
-              d={`M${x - 62} ${y - height - 9}l88 -14 38 24 -88 15Z`}
-            />
-          </g>
+          <LandscapeSolid x={x} y={y} height={height} shadow={`${id}-shadow`} />
         </g>
       ))}
     </svg>

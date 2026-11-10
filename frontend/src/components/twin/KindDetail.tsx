@@ -77,6 +77,7 @@ export default function KindDetail({
       <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
         {item.description || "No definition recorded."}
       </p>
+      <Link className="link" href={twinHref("/ontology/connections", vault.id, { kind })}>Explore connections</Link>
       <div className="flex flex-wrap gap-4 items-end">
         <Filter
           label="Kind section"
