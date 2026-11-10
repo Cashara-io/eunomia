@@ -79,6 +79,18 @@ test("real backend confirms credentials before intact 2 MiB HTTP and MCP uploads
   expect(oauthResult.error).toBeUndefined();
   const oauthDownload = await request.get(`/api/documents/${oauthResult.id}/download`);
   expect(await oauthDownload.text()).toBe(text);
+  const readTokenResponse = await request.post("/api/auth/tokens", { data: { name: "read-only proof", scopes: ["memory:read"] } });
+  expect(readTokenResponse.status()).toBe(200);
+  const { token: readToken } = await readTokenResponse.json();
+  for (const path of ["/mcp", "/api/documents?filename=readonly.txt"]) {
+    expect(await refusedBeforeBodyCompletes({ url: `${baseURL}${path}`, credential: `Bearer ${readToken}` })).toBe(403);
+    expect(await refusedBeforeBodyCompletes({ url: `${baseURL}${path}`, credential: `Bearer ${token}`, chunked: true })).toBe(408);
+  }
+  // The timed-out stream is cancelled upstream, so a later upload can acquire the same slot.
+  const afterTimeout = await request.post("/api/documents?filename=after-timeout.txt", {
+    headers: { authorization: `Bearer ${token}`, cookie: "" }, data: "slot released",
+  });
+  expect(afterTimeout.status(), await afterTimeout.text()).toBe(200);
   const revoked = await request.delete(`/api/auth/tokens/${id}`);
   expect(revoked.ok()).toBe(true);
   expect(await refusedBeforeBodyCompletes({ url: `${baseURL}/api/documents?filename=revoked.txt`, credential: `Bearer ${token}` })).toBe(401);

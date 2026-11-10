@@ -9,6 +9,8 @@ async fn next_streams_only_after_real_backend_authentication() {
     }).await;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
+    assert!(address.ip().is_loopback());
+    assert!(![3000, 8000, 8001, 3600, 8600, 3700, 18470, 18471, 18472, 18473].contains(&address.port()));
     let marker = uuid::Uuid::new_v4().to_string();
     let header = axum::http::HeaderValue::from_str(&marker).unwrap();
     let router = app.router.layer(axum::middleware::map_response(move |mut response: axum::response::Response| {

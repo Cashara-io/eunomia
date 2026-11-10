@@ -63,7 +63,22 @@ const SKILL_URI: &str = "eunomia://skill";
 const SKILL_DESCRIPTION: &str = "The user's Eunomia memory skill: when to recall and what to remember.";
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/mcp", post(handle).get(method_not_allowed).delete(method_not_allowed))
+    Router::new().route("/mcp", post(handle).head(upload_preflight).get(method_not_allowed).delete(method_not_allowed))
+}
+
+fn upload_limit(state: &AppState) -> usize {
+    state.settings.documents_max_bytes.saturating_mul(6).saturating_add(64 * 1024).max(crate::max_body_bytes())
+}
+
+async fn upload_preflight(State(state): State<AppState>, authn: Option<Extension<Authn>>, headers: HeaderMap) -> Response {
+    if !origin_allowed(&headers, &state.settings.cors_allowed_origins) {
+        return AppError::coded(ErrorCode::AuthForbidden, "origin not allowed").into_response();
+    }
+    if gate_user(authn).is_none() {
+        return AppError::unauthorized("missing or invalid access token").into_response();
+    }
+    let upload = super::upload_body::allowed();
+    super::upload_body::preflight(if upload { upload_limit(&state) } else { crate::max_body_bytes() }, upload)
 }
 
 async fn method_not_allowed() -> Response {
@@ -84,14 +99,22 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
         return ([(header::WWW_AUTHENTICATE, crate::oauth::www_authenticate(&state.settings, presented))], err).into_response();
     };
 
-    let Some(body_slot) = state.large_bodies.acquire(user.id.to_string()) else {
-        return crate::gate::rate_limited(1);
-    };
+    let can_upload = super::upload_body::allowed();
     let normal_limit = crate::max_body_bytes();
-    let upload_limit = state.settings.documents_max_bytes.saturating_mul(6).saturating_add(64 * 1024).max(normal_limit);
-    let body = match axum::body::to_bytes(request.into_body(), upload_limit).await {
+    let limit = if can_upload { upload_limit(&state) } else { normal_limit };
+    if !can_upload && headers.get(header::CONTENT_LENGTH).and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<usize>().ok()).is_some_and(|n| n > normal_limit) {
+        return super::upload_body::scope_denied().into_response();
+    }
+    // Read-only calls never acquire the shared upload slot or receive its larger ceiling.
+    let body_slot = if can_upload {
+        let Some(slot) = state.large_bodies.acquire(user.id.to_string()) else {
+            return crate::gate::rate_limited(1);
+        };
+        Some(slot)
+    } else { None };
+    let body = match super::upload_body::read(request.into_body(), limit).await {
         Ok(body) => body,
-        Err(_) => return AppError::coded(ErrorCode::DocumentTooLarge, format!("MCP body exceeds the {upload_limit} byte transport limit")).into_response(),
+        Err(error) => return error.into_response(),
     };
     let Ok(message) = serde_json::from_slice::<Value>(&body) else {
         return (StatusCode::BAD_REQUEST, Json(error_response(Value::Null, -32700, ErrorCode::ValidationInvalid, "Parse error"))).into_response();
@@ -107,7 +130,7 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
     }
 
     // Small calls release the slot before dispatch. A large upload retains it until its data is dropped.
-    let _large_body_slot = (body.len() > normal_limit).then_some(body_slot);
+    let _large_body_slot = (body.len() > normal_limit).then_some(body_slot).flatten();
     drop(body);
 
     // a session from before the tool surface changed: 404 makes the client start over (issue #90).

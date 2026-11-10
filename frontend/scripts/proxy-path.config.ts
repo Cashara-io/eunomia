@@ -12,7 +12,7 @@ export default defineConfig({
     cwd: resolve(__dirname, ".."),
     command: `bunx next ${process.env.PROXY_TEST_PRODUCTION ? "start" : "dev"} --hostname 127.0.0.1 --port ${port}`,
     url: `http://127.0.0.1:${port}/login`,
-    env: { BACKEND_INTERNAL_URL: process.env.PROXY_TEST_REAL_BACKEND_URL || "http://127.0.0.1:18191" },
+    env: { EUNOMIA_UPLOAD_BODY_TIMEOUT_MS: "1000", BACKEND_INTERNAL_URL: process.env.PROXY_TEST_REAL_BACKEND_URL || "http://127.0.0.1:18191" },
     timeout: 60_000,
   },
 });

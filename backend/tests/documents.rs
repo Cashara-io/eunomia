@@ -13,8 +13,10 @@ use common::TestApp;
 use eunomia_backend::config::Settings;
 use eunomia_backend::jobs::{handlers, worker, WorkerConfig};
 use eunomia_backend::models_user;
+use eunomia_backend::rid::RecordIdExt;
 use eunomia_backend::tools::registry;
 use http_body_util::BodyExt;
+use futures::StreamExt;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use surrealdb::types::RecordId;
@@ -656,4 +658,75 @@ async fn review209_large_body_slot_is_shared_and_released_on_cancellation() {
         let (status, _, _) = raw(&app, "POST", "/mcp", br#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#.to_vec(), Some("application/json"), &app.token).await;
         assert_eq!(status, StatusCode::OK, "slot was not released after cancellation");
     }
+}
+
+#[tokio::test]
+async fn review209_read_only_large_upload_is_refused_before_body_read() {
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
+    let token = models_user::create_api_token_with(&app.state.control, &app.user.id, "read", &["memory:read".into()], None, None).await.unwrap().token;
+    for path in ["/mcp", "/api/documents?filename=readonly.csv"] {
+        let polls = Arc::new(AtomicUsize::new(0));
+        let count = polls.clone();
+        let body = Body::from_stream(futures::stream::once(async move {
+            count.fetch_add(1, Ordering::SeqCst);
+            Ok::<_, std::io::Error>(vec![b'x'; 20 << 20])
+        }));
+        let req = Request::builder().method("POST").uri(path)
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::CONTENT_LENGTH, 20 << 20).body(body).unwrap();
+        let response = app.router.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{path}");
+        assert_eq!(polls.load(Ordering::SeqCst), 0, "read-only body was polled: {path}");
+    }
+    let _held = app.state.large_bodies.acquire(app.user.id.to_string()).unwrap();
+    for (credential, allowed, limit) in [(&token, "0", eunomia_backend::max_body_bytes()), (&app.token, "1", (25 << 20) * 6 + 64 * 1024)] {
+        let (status, headers, _) = raw(&app, "HEAD", "/mcp", vec![], None, credential).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(headers["x-eunomia-upload-allowed"], allowed);
+        assert_eq!(headers["x-eunomia-body-limit"], limit.to_string());
+    }
+    let (status, _, _) = raw(&app, "POST", "/mcp", br#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#.to_vec(), Some("application/json"), &token).await;
+    assert_eq!(status, StatusCode::OK, "read-only MCP still accepts small calls");
+}
+
+#[tokio::test]
+async fn review209_stalled_upload_times_out_and_releases_shared_slot() {
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
+    for path in ["/mcp", "/api/documents?filename=stalled.csv"] {
+        let (started, reading) = tokio::sync::oneshot::channel();
+        let body = Body::from_stream(futures::stream::once(async move {
+            started.send(()).unwrap();
+            std::future::pending::<Result<Vec<u8>, std::io::Error>>().await
+        }));
+        let req = Request::builder().method("POST").uri(path)
+            .header(header::AUTHORIZATION, format!("Bearer {}", app.token)).body(body).unwrap();
+        let router = app.router.clone();
+        let held = tokio::spawn(async move { router.oneshot(req).await.unwrap() });
+        reading.await.unwrap();
+        tokio::time::pause();
+        tokio::time::advance(Duration::from_secs(121)).await;
+        let response = tokio::time::timeout(Duration::from_secs(1), held).await;
+        tokio::time::resume();
+        assert_eq!(response.expect("body deadline did not release the request").unwrap().status(), StatusCode::REQUEST_TIMEOUT, "{path}");
+        let (status, _, _) = raw(&app, "POST", "/mcp", br#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#.to_vec(), Some("application/json"), &app.token).await;
+        assert_eq!(status, StatusCode::OK, "shared slot remained held after timeout");
+    }
+}
+
+#[tokio::test]
+async fn review209_read_only_chunked_body_has_only_the_small_budget() {
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
+    let token = models_user::create_api_token_with(&app.state.control, &app.user.id, "read", &["memory:read".into()], None, None).await.unwrap().token;
+    let polls = Arc::new(AtomicUsize::new(0));
+    let count = polls.clone();
+    let body = Body::from_stream(futures::stream::iter(0..80).map(move |_| {
+        count.fetch_add(1, Ordering::SeqCst);
+        Ok::<_, std::io::Error>(vec![b'x'; 256 << 10])
+    }));
+    let req = Request::builder().method("POST").uri("/mcp").header(header::AUTHORIZATION, format!("Bearer {token}")).body(body).unwrap();
+    let response = app.router.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert!(polls.load(Ordering::SeqCst) <= eunomia_backend::max_body_bytes() / (256 << 10) + 1);
 }
