@@ -615,6 +615,14 @@ fn parse_sse_payloads(buf: &str) -> Vec<&str> {
 /// Appends `user_message` to `thread_id`'s conversation and runs the OpenAI
 /// function-calling loop (executing any tool calls via the shared registry,
 /// persisting every step), sending one [`ChatEvent`] per step over `tx`.
+/// Cancellation is observed before each history write, model request and tool call,
+/// and while waiting for a model or tool. A submitted history step finishes even
+/// if this future is dropped: the user row, each complete tool batch, and the final
+/// answer are separate units. History is therefore unchanged, user-only, or saved
+/// through the last complete step, and can be replayed on the next send.
+/// The final answer is buffered in full. If disconnect is observed before its
+/// write boundary, none is saved; otherwise it is saved whole, even if delivery
+/// fails. A disconnect never saves partial prose or half a tool exchange.
 /// Assumes the caller (the router) has already validated that `thread_id`
 /// exists and is owned by `owner`; this does not re-check.
 pub async fn send_stream(
@@ -624,14 +632,25 @@ pub async fn send_stream(
     user_message: String,
     tx: mpsc::Sender<ChatEvent>,
 ) {
-    let result = tokio::select! {
-        biased;
-        _ = tx.closed() => return,
-        result = crate::views::TURN_STARTED.scope(Datetime::default(), run_send(&state, &user, &thread_id, &user_message, &tx)) => result,
+    let caller = match crate::authz::caller() {
+        Ok(caller) => caller,
+        Err(e) => {
+            let _ = tx.send(ChatEvent::Error { message: e.message, code: e.code.as_str().into(), trace_id: crate::telemetry::current_trace_id() }).await;
+            return;
+        }
     };
-    if let Err((code, message)) = result {
-        let event = ChatEvent::Error { message, code: code.as_str().to_string(), trace_id: crate::telemetry::current_trace_id() };
-        let _ = tx.send(event).await;
+    let trace_id = crate::telemetry::current_trace_id();
+    // Dropping the join handle detaches the worker. Only model/tool waits are
+    // cancellable; accepted history writes run to completion before it exits.
+    let worker = tokio::spawn(crate::authz::with_caller(caller,
+        crate::telemetry::with_trace_id(trace_id, crate::views::TURN_STARTED.scope(Datetime::default(), async move {
+            if let Err((code, message)) = run_send(&state, &user, &thread_id, &user_message, &tx).await {
+                let event = ChatEvent::Error { message, code: code.as_str().to_string(), trace_id: crate::telemetry::current_trace_id() };
+                let _ = tx.send(event).await;
+            }
+        }))));
+    if let Err(e) = worker.await {
+        tracing::error!(error = %e, "chat worker failed");
     }
 }
 
@@ -646,6 +665,9 @@ struct ModelCall<'a> {
     model: &'a str,
     tools: &'a [Value],
     messages: &'a [Value],
+    tx: &'a mpsc::Sender<ChatEvent>,
+    #[cfg(any(test, feature = "test-support"))]
+    thread_id: &'a RecordId,
 }
 
 impl ModelCall<'_> {
@@ -653,6 +675,7 @@ impl ModelCall<'_> {
     /// buffers the whole stream for prose validation. Returns text and tool calls.
     async fn run(&self, reasoning_off: &mut bool) -> Result<(String, BTreeMap<usize, ToolCallAcc>), Failed> {
         let resp = loop {
+            if self.tx.is_closed() { return Err((ErrorCode::Internal, "Chat disconnected".into())); }
             let mut body = json!({ "model": self.model, "messages": self.messages, "stream": true });
             if !self.tools.is_empty() { body["tools"] = json!(self.tools); }
             else { body["tool_choice"] = json!("none"); }
@@ -698,6 +721,10 @@ impl ModelCall<'_> {
                     for choice in &parsed.choices {
                         // Buffer all text until its complete numeric spans can be checked.
                         apply_delta(&mut content, &mut tool_calls_acc, &choice.delta);
+                        #[cfg(any(test, feature = "test-support"))]
+                        if choice.delta.content.is_some() {
+                            crate::sources::mock::chat_write_checkpoint(self.thread_id, "answer_chunk").await;
+                        }
                     }
                 }
             }
@@ -724,7 +751,9 @@ async fn run_send(
     let mut messages: Vec<Value> = vec![json!({ "role": "system", "content": SYSTEM_PROMPT })];
     messages.extend(existing_rows.iter().map(row_to_api_message));
 
+    if tx.is_closed() { return Ok(()); }
     persist(db, owner, thread_id, "user", user_message, None, None).await.map_err(|e| (e.code, e.message))?;
+    if tx.is_closed() { return Ok(()); }
     if is_first_message {
         touch_thread(db, thread_id, Some(&derive_title(user_message))).await.map_err(|e| (e.code, e.message))?;
     } else {
@@ -755,8 +784,16 @@ async fn run_send(
             messages.push(json!({"role":"system","content":"The tool budget is exhausted. Give your final answer now using only this turn's results. State what you found and explicitly say which parts you could not finish. Do not list planned steps or request more tools."}));
         }
         let offered = if final_turn { &[][..] } else { tools.as_slice() };
-        let call = ModelCall { client: &client, url: &url, bearer: p.bearer(), model: &model, tools: offered, messages: &messages };
-        let (content, tool_calls_acc) = match tokio::time::timeout(limit, call.run(&mut reasoning_off)).await {
+        let call = ModelCall { client: &client, url: &url, bearer: p.bearer(), model: &model, tools: offered, messages: &messages, tx,
+            #[cfg(any(test, feature = "test-support"))]
+            thread_id,
+        };
+        let response = tokio::select! {
+            biased;
+            _ = tx.closed() => return Ok(()),
+            response = tokio::time::timeout(limit, call.run(&mut reasoning_off)) => response,
+        };
+        let (content, tool_calls_acc) = match response {
             Ok(done) => done?,
             // what was stored so far ends on a user message or a tool result, so the thread takes the next message
             Err(_) => {
@@ -777,8 +814,15 @@ async fn run_send(
         let content = tree::plain_text(&checked);
         let stored = tree::encode(&checked);
         if tool_calls_acc.is_empty() || final_turn {
-            if tx.send(ChatEvent::Text { delta: content.clone(), tree: checked.clone() }).await.is_err() { return Ok(()); }
+            #[cfg(any(test, feature = "test-support"))]
+            crate::sources::mock::chat_write_checkpoint(thread_id, "answer_ready").await;
+            if tx.is_closed() { return Ok(()); }
+            #[cfg(any(test, feature = "test-support"))]
+            crate::sources::mock::chat_write_checkpoint(thread_id, "answer_write").await;
             persist(db, owner, thread_id, "assistant", &stored, None, None).await.map_err(|e| (e.code, e.message))?;
+            #[cfg(any(test, feature = "test-support"))]
+            crate::sources::mock::chat_write_checkpoint(thread_id, "answer_saved").await;
+            let _ = tx.send(ChatEvent::Text { delta: content.clone(), tree: checked.clone() }).await;
             let _ = tx.send(ChatEvent::Done { reply: content, tree: checked, tool_calls_made }).await;
             return Ok(());
         }
@@ -796,11 +840,12 @@ async fn run_send(
             .collect();
 
         // Keep the entire exchange in memory until every call has a result.
-        // A disconnect can drop any await below without leaving dangling calls.
+        // Cancelling a tool wait leaves no dangling calls in stored history.
         let mut batch = vec![json!({"role":"assistant", "content":stored, "tool_calls":tool_calls_dump, "created_at":Datetime::default()})];
         messages.push(json!({ "role": "assistant", "content": content, "tool_calls": tool_calls_dump }));
 
         for tc in ordered {
+            if tx.is_closed() { return Ok(()); }
             let name = tc.name.clone().unwrap_or_default();
             let _ = tx.send(ChatEvent::ToolCall { id: tc.id.clone(), name: name.clone() }).await;
 
@@ -813,10 +858,12 @@ async fn run_send(
             } else if said.restates(&name, &args) && !resends_stored_text(db, owner, &name, &args).await {
                 json!({ "error": "Not saved: this text repeats a tool result or your own answer. Save only a new fact the user told you.", "code": ErrorCode::ValidationInvalid.as_str() })
             } else {
-                match crate::usage::with_context(crate::usage::Channel::Chat, thread_id.to_string(), registry::call(&state.app, user, &name, args)).await {
-                    Ok(v) => v,
-                    Err(e) => e.to_tool_value(),
-                }
+                let result = tokio::select! {
+                    biased;
+                    _ = tx.closed() => return Ok(()),
+                    result = crate::usage::with_context(crate::usage::Channel::Chat, thread_id.to_string(), registry::call(&state.app, user, &name, args)) => result,
+                };
+                match result { Ok(v) => v, Err(e) => e.to_tool_value() }
             };
             if within_budget { tool_calls_made.push(name.clone()); }
             prose.result(&result);
@@ -828,9 +875,14 @@ async fn run_send(
             let view = (name == crate::views::TOOL && result.get("error").is_none()).then_some(result);
             let _ = tx.send(ChatEvent::ToolResult { id: tc.id, name, view }).await;
         }
+        #[cfg(any(test, feature = "test-support"))]
+        crate::sources::mock::chat_write_checkpoint(thread_id, "batch_ready").await;
+        if tx.is_closed() { return Ok(()); }
+        #[cfg(any(test, feature = "test-support"))]
+        crate::sources::mock::chat_write_checkpoint(thread_id, "batch_write").await;
         store::app::CHAT_TOOL_BATCH_CREATE.on(db)
             .bind(("owner", owner.clone())).bind(("thread_id", thread_id.clone()))
-            .bind(("messages", batch)).await.map_err(|e| { let e = AppError::from(e); (e.code, e.message) })?;
+            .bind(("messages", batch)).await.and_then(|res| res.check()).map_err(|e| { let e = AppError::from(e); (e.code, e.message) })?;
         // after the calls: a reply that says what it is saving ("Saved: ...") must not refuse that save
         said.row("assistant", &content);
     }
