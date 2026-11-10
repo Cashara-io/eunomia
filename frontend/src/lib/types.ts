@@ -252,6 +252,7 @@ export type CloudSimilarity = { space: "semantic" | "lexical"; ids: string[]; co
 export type ChatToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
 
 export type ChatMessage = {
+  tree?: import("./gen/types.gen").ChatNode[] | null;
   role: "user" | "assistant" | "tool";
   content: string;
   tool_calls?: ChatToolCall[] | null;

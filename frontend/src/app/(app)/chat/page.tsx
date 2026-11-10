@@ -11,12 +11,13 @@ import Link from "next/link";
 import { ArrowCounterClockwiseIcon, ArrowElbowDownLeftIcon, ArrowUpIcon, ChatsCircleIcon, PlusIcon, SquareIcon, TrashIcon, WarningCircleIcon } from "@phosphor-icons/react/ssr";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyNote from "@/components/ui/EmptyState";
-import Markdown from "@/components/Markdown";
+import ChatText from "@/components/chat/ChatText";
 import AuthorTag from "@/components/AuthorTag";
 import SyncMark from "@/components/bits/SyncMark";
 import Tooltip, { TooltipGroup } from "@/components/bits/Tooltip";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, chat } from "@/lib/api";
+import type { ChatNode } from "@/lib/gen/types.gen";
 import type { ChatMessage, ChatThread } from "@/lib/types";
 import { useMe } from "@/lib/queries/auth";
 import { useSettings } from "@/lib/queries/settings";
@@ -88,7 +89,7 @@ function toolWords(name: string): string {
 // between two of them (tool calls, their results, and the reply text).
 type Turn =
   | { kind: "user"; content: string; at?: string }
-  | { kind: "assistant"; content: string; steps: ToolStep[]; at?: string };
+  | { kind: "assistant"; content: string; tree: ChatNode[]; steps: ToolStep[]; at?: string };
 
 function toTurns(messages: ChatMessage[]): Turn[] {
   const turns: Turn[] = [];
@@ -100,7 +101,7 @@ function toTurns(messages: ChatMessage[]): Turn[] {
     }
     let last = turns[turns.length - 1];
     if (!last || last.kind !== "assistant") {
-      last = { kind: "assistant", content: "", steps: [], at: m.created_at };
+      last = { kind: "assistant", content: "", tree: [], steps: [], at: m.created_at };
       turns.push(last);
     }
     if (m.role === "tool") {
@@ -115,6 +116,7 @@ function toTurns(messages: ChatMessage[]): Turn[] {
       last.steps.push(step);
       pending.push(step);
     }
+    if (m.tree) last.tree.push(...m.tree);
     if (m.content) last.content = last.content ? `${last.content}\n\n${m.content}` : m.content;
   }
   return turns;
@@ -148,21 +150,6 @@ function prettyJson(text: string): string {
   } catch {
     return text;
   }
-}
-
-function argsPreview(args: string): string {
-  try {
-    const parsed = JSON.parse(args);
-    if (parsed && typeof parsed === "object") {
-      // the words a person typed or the model chose (a query, a memory, a headline), not record ids
-      return Object.values(parsed)
-        .filter((v): v is string => typeof v === "string" && v.trim() !== "" && !/^[a-z_]+:[a-z0-9]{8,}$/i.test(v))
-        .join(" · ");
-    }
-  } catch {
-    // not JSON, show as-is
-  }
-  return args;
 }
 
 const secs = (ms: number) => `${(Math.max(0, ms) / 1000).toFixed(1)}s`;
@@ -203,7 +190,6 @@ function TurnHeader({ name, at, children }: { name: string; at?: string; childre
 }
 
 function ToolRow({ step, live }: { step: ToolStep; live?: boolean }) {
-  const preview = argsPreview(step.args);
   const inspectable = !step.running && !!(step.args || step.result);
   const row = (
     <>
@@ -212,11 +198,6 @@ function ToolRow({ step, live }: { step: ToolStep; live?: boolean }) {
       <span className="text-[13px] font-medium shrink-0" style={{ color: "var(--ink)" }}>
         {toolWords(step.name)}
       </span>
-      {preview && (
-        <span className="text-[13px] truncate min-w-0" style={{ color: "var(--ink-dim)" }}>
-          {preview}
-        </span>
-      )}
       <span className="ml-auto pl-2 shrink-0 flex items-center gap-1 text-[12px]" style={{ color: "var(--ink-dim)" }}>
         {/* history rows mount "done" and sit still; live rows draw the check when their tool returns */}
         <SyncMark status={step.running ? "running" : "done"} size={12} />
@@ -236,7 +217,7 @@ function ToolRow({ step, live }: { step: ToolStep; live?: boolean }) {
         </div>
         {step.args && (
           <div>
-            <div className="label mb-1">Arguments</div>
+            <div className="label mb-1">What the assistant asked the tool</div>
             <pre className="tool-pre">{prettyJson(step.args)}</pre>
           </div>
         )}
@@ -299,7 +280,7 @@ function TurnView({ turn, me }: { turn: Turn; me: string | null }) {
       <TurnViews steps={turn.steps} />
       {turn.content && (
         <div className="text-[15px] px-0.5 break-words" style={{ color: "var(--ink)" }}>
-          <Markdown text={turn.content} />
+          <ChatText tree={turn.tree} />
         </div>
       )}
     </article>
@@ -421,6 +402,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [streamingTree, setStreamingTree] = useState<ChatNode[]>([]);
   const [liveSteps, setLiveSteps] = useState<ToolStep[]>([]);
   const [error, setError] = useState<Failure | null>(null);
   const [loadError, setLoadError] = useState<Failure | null>(null);
@@ -550,6 +532,7 @@ export default function ChatPage() {
       }
     }
     setStreamingText("");
+    setStreamingTree([]);
     setLiveSteps([]);
     const start = performance.now();
     setStartedAt(start);
@@ -558,12 +541,20 @@ export default function ChatPage() {
     const controller = new AbortController();
     abortRef.current = controller;
     let reply = "";
+    let replyTree: ChatNode[] = [];
     try {
       await chat.send(threadId, text, (event) => {
         if (event.type === "text") {
           if (!reply) setThoughtMs(performance.now() - start);
           reply += event.delta;
+          replyTree = [...replyTree, ...event.tree];
+          setStreamingTree(replyTree);
           setStreamingText(reply);
+        } else if (event.type === "done") {
+          reply = event.reply;
+          replyTree = event.tree;
+          setStreamingText(reply);
+          setStreamingTree(replyTree);
         } else if (event.type === "tool_call") {
           steps.push({ name: event.name, args: "", running: true, callId: event.id });
           setLiveSteps([...steps]);
@@ -589,13 +580,13 @@ export default function ChatPage() {
         const at = new Date().toISOString();
         // one result row per call, in order, so the turn pairs each view with its call as history does
         const results = steps.map((s) => ({ role: "tool" as const, content: s.result ?? "", created_at: at }));
-        setMessages((prev) => [...(prev ?? []), { role: "assistant", content: reply, tool_calls, created_at: at }, ...results]);
+        setMessages((prev) => [...(prev ?? []), { role: "assistant", content: reply, tree: replyTree, tool_calls, created_at: at }, ...results]);
       }
       queryClient.invalidateQueries({ queryKey: chatKeys.threads() });
     } catch (e) {
       if (controller.signal.aborted) {
         // stopped by the person: keep whatever streamed so far
-        if (reply) setMessages((prev) => [...(prev ?? []), { role: "assistant", content: reply, created_at: new Date().toISOString() }]);
+        if (reply) setMessages((prev) => [...(prev ?? []), { role: "assistant", content: reply, tree: replyTree, created_at: new Date().toISOString() }]);
         return;
       }
       const msg = e instanceof Error ? e.message : "Something went wrong.";
@@ -606,6 +597,7 @@ export default function ChatPage() {
       abortRef.current = null;
       setSending(false);
       setStreamingText("");
+      setStreamingTree([]);
       setLiveSteps([]);
     }
   }
@@ -689,7 +681,7 @@ export default function ChatPage() {
                   <TurnViews steps={liveSteps} />
                   {streamingText && (
                     <div className="settle text-[14px] px-0.5 break-words" style={{ color: "var(--ink)" }}>
-                      <Markdown text={streamingText} />
+                      <ChatText tree={streamingTree} />
                     </div>
                   )}
                 </article>

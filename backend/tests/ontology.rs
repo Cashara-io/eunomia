@@ -3071,7 +3071,9 @@ async fn the_chat_answers_a_number_from_the_space_coverage_returned() {
         // the model first forgets the space, then passes the one coverage returned
         ("\"tool_call_id\":\"c1\"", turn(tool_call(0, "c2", "metric_eval", json!({"metric": "avg_price"})))),
         ("\"tool_call_id\":\"c2\"", turn(tool_call(0, "c3", "metric_eval", json!({"metric": "avg_price", "vault_id": team})))),
-        ("\"tool_call_id\":\"c3\"", json!([{"choices": [{"delta": {"content": "The average part price is $664.48, from 2 parts."}}]}])),
+        // Server formatting must itself be in this turn's evidence before prose quotes it.
+        ("\"tool_call_id\":\"c3\"", turn(tool_call(0, "c4", "show_view", json!({"view":"metric","metric":"avg_price","vault_id":team})))),
+        ("\"tool_call_id\":\"c4\"", json!([{"choices": [{"delta": {"content": "The average part price is $664.48, from 2 parts."}}]}])),
     ])
     .await;
     let (thread_id, events) = chat(&app, question).await;

@@ -129,12 +129,12 @@ export async function downloadExport(): Promise<void> {
 // One parsed Server-Sent Event from `POST /api/chat/threads/{id}` -- see
 // the backend chat module for the exact event shapes.
 export type ChatStreamEvent =
-  | { type: "text"; delta: string }
+  | { type: "text"; delta: string; tree: import("./gen/types.gen").ChatNode[] }
   // `id`: the model's id for the call; its tool_result repeats it
   | { type: "tool_call"; id?: string; name: string }
   // `view`: what a `show_view` call drew (components/chat/views); no other tool's result carries one
   | { type: "tool_result"; id?: string; name: string; view?: unknown }
-  | { type: "done"; reply: string; tool_calls_made: string[] }
+  | { type: "done"; reply: string; tree: import("./gen/types.gen").ChatNode[]; tool_calls_made: string[] }
   | { type: "error"; message: string; code?: string; trace_id?: string };
 
 export const chat = {

@@ -33,13 +33,14 @@ fn display(text: &str) -> String {
     })
 }
 fn normalise(text: &str) -> String { display(text).to_lowercase() }
+const CURRENCY_CODE: &str = r"(?:aed|afn|all|amd|ang|aoa|ars|aud|awg|azn|bam|bbd|bdt|bgn|bhd|bif|bmd|bnd|bob|brl|bsd|btn|bwp|byn|bzd|cad|cdf|chf|clp|cny|cop|crc|cuc|cup|cve|czk|djf|dkk|dop|dzd|egp|ern|etb|eur|fjd|fkp|gbp|gel|ghs|gip|gmd|gnf|gtq|gyd|hkd|hnl|hrk|htg|huf|idr|ils|inr|iqd|irr|isk|jmd|jod|jpy|kes|kgs|khr|kmf|kpw|krw|kwd|kyd|kzt|lak|lbp|lkr|lrd|lsl|lyd|mad|mdl|mga|mkd|mmk|mnt|mop|mru|mur|mvr|mwk|mxn|myr|mzn|nad|ngn|nio|nok|npr|nzd|omr|pab|pen|pgk|php|pkr|pln|pyg|qar|ron|rsd|rub|rwf|sar|sbd|scr|sdg|sek|sgd|shp|sle|sll|sos|srd|ssp|stn|svc|syp|szl|thb|tjs|tmt|tnd|top|try|ttd|twd|tzs|uah|ugx|usd|uyu|uzs|ves|vnd|vuv|wst|xaf|xag|xau|xba|xbb|xbc|xbd|xcd|xcg|xdr|xof|xpd|xpf|xpt|xst|xsu|xts|xua|xxx|yer|zar|zmw|zwg|zwl)";
 // Byte ranges in the normalised display. Whitespace cannot detach numeric modifiers.
 // Ordinary words, including "per cent", terminate a span.
 fn spans(text: &str) -> Vec<std::ops::Range<usize>> {
     static NUMBER: OnceLock<Regex> = OnceLock::new();
     let number = NUMBER.get_or_init(|| {
         // ISO currency codes from the local ICU currency enumeration, plus fund and metal codes.
-        let code = r"(?:aed|afn|all|amd|ang|aoa|ars|aud|awg|azn|bam|bbd|bdt|bgn|bhd|bif|bmd|bnd|bob|brl|bsd|btn|bwp|byn|bzd|cad|cdf|chf|clp|cny|cop|crc|cuc|cup|cve|czk|djf|dkk|dop|dzd|egp|ern|etb|eur|fjd|fkp|gbp|gel|ghs|gip|gmd|gnf|gtq|gyd|hkd|hnl|hrk|htg|huf|idr|ils|inr|iqd|irr|isk|jmd|jod|jpy|kes|kgs|khr|kmf|kpw|krw|kwd|kyd|kzt|lak|lbp|lkr|lrd|lsl|lyd|mad|mdl|mga|mkd|mmk|mnt|mop|mru|mur|mvr|mwk|mxn|myr|mzn|nad|ngn|nio|nok|npr|nzd|omr|pab|pen|pgk|php|pkr|pln|pyg|qar|ron|rsd|rub|rwf|sar|sbd|scr|sdg|sek|sgd|shp|sle|sll|sos|srd|ssp|stn|svc|syp|szl|thb|tjs|tmt|tnd|top|try|ttd|twd|tzs|uah|ugx|usd|uyu|uzs|ves|vnd|vuv|wst|xaf|xag|xau|xba|xbb|xbc|xbd|xcd|xcg|xdr|xof|xpd|xpf|xpt|xst|xsu|xts|xua|xxx|yer|zar|zmw|zwg|zwl)";
+        let code = CURRENCY_CODE;
         let iso = r"[0-9]{4}-[0-9]{2}-[0-9]{2}(?:t[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:z|[+-][0-9]{2}:[0-9]{2}))?";
         let modifier = r"[\p{Sc}+%‰-]";
         let connector = format!(r"(?:{modifier} *|[/\x{{2044}}e])");
@@ -301,7 +302,7 @@ fn bound(binding: &str, data: &Value) -> AppResult<String> {
         _ => None,
     };
     if trusted_number(data, &path) && let Some(n) = value.as_f64().filter(|n| n.is_finite()) {
-        let count = matches!(rest.as_slice(), ["total_rows"] | ["totals", _, "count" | "distinct"] | ["metric", "n_entities"] | ["metric", "series", _, "n"] | ["result", "n_changed"] | ["result", "baseline" | "scenario", _, "n_entities"] | ["distributions", _, "bins" | "density", _, "count"]);
+        let count = matches!(rest.as_slice(), ["total_rows"] | ["totals", _, "count" | "distinct"] | ["metric", "n_entities"] | ["metric", "groups", _, "n_entities"] | ["metric", "series", _, "n"] | ["result", "n_changed"] | ["result", "baseline" | "scenario", _, "n_entities"] | ["distributions", _, "bins" | "density", _, "count"]);
         let unit = if count { None } else if let Some(c) = column { c["unit"].as_str() }
             else if rest.first() == Some(&"metric") { source["metric"]["unit"].as_str() }
             else if matches!(rest.last(), Some(&"delta_pct")) { Some("%") }
@@ -313,7 +314,8 @@ fn bound(binding: &str, data: &Value) -> AppResult<String> {
     if typed_date && let Some(s) = value.as_str() && date(s).is_some() { return Ok(s.into()); }
     Err(binding_error(format!("text placeholder {{{{{binding}}}}} must bind a non-null server-typed numeric or date value"), data))
 }
-fn render(raw: &str, data: &Value, allowed: &Allowed, field: &str) -> AppResult<String> {
+type Substitutions = Vec<(std::ops::Range<usize>, String)>;
+fn interpolate(raw: &str, data: &Value, field: &str) -> AppResult<(String, Substitutions)> {
     let mut out = String::new();
     let mut rest = raw;
     let mut substitutions = Vec::new();
@@ -328,6 +330,10 @@ fn render(raw: &str, data: &Value, allowed: &Allowed, field: &str) -> AppResult<
     }
     if rest.contains("}}") { return Err(bad(format!("unexpected placeholder closing braces in {field}"))); }
     out.push_str(rest);
+    Ok((out, substitutions))
+}
+fn render(raw: &str, data: &Value, allowed: &Allowed, field: &str) -> AppResult<String> {
+    let (out, substitutions) = interpolate(raw, data, field)?;
     allowed.check(&out, &substitutions, field)?;
     Ok(display(&out))
 }
@@ -357,10 +363,471 @@ pub(super) fn resolve_allowed(value: &Value, data: &Value, allowed: &Allowed) ->
     Ok(rendered)
 }
 
+/// A decimal value with its semantic unit. Decimal arithmetic preserves integer
+/// identities beyond f64 precision and makes midpoint rounding deterministic.
+#[derive(Clone, Debug, PartialEq)]
+struct ChatNumber {
+    value: rust_decimal::Decimal,
+    precision: u32,
+    scale: rust_decimal::Decimal,
+    unit: ChatUnit,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ChatUnit { Plain, Percent, Ratio, Money(String), Other(String) }
+impl ChatUnit {
+    fn parse(unit: &str) -> Self {
+        static CODE: OnceLock<Regex> = OnceLock::new();
+        let code = CODE.get_or_init(|| Regex::new(&format!("^{CURRENCY_CODE}$")).unwrap());
+        let unit = normalise(unit).trim().to_string();
+        match unit.as_str() {
+            "" => Self::Plain,
+            "%" | "percent" | "percentage" => Self::Percent,
+            "ratio" => Self::Ratio,
+            "$" | "€" | "£" | "¥" => Self::Money(unit),
+            _ if code.is_match(&unit) => Self::Money(unit),
+            _ => Self::Other(unit),
+        }
+    }
+    fn compatible(&self, other: &Self) -> bool {
+        if self == other { return true; }
+        match (self, other) {
+            (Self::Money(a), Self::Money(b)) => {
+                let symbol = |code: &str| match code {
+                    "usd" | "aud" | "cad" | "nzd" | "hkd" | "sgd" | "$" => "$",
+                    "eur" | "€" => "€", "gbp" | "£" => "£", "jpy" | "cny" | "¥" => "¥", _ => "",
+                };
+                (a.chars().count() == 1 || b.chars().count() == 1)
+                    && !symbol(a).is_empty() && symbol(a) == symbol(b)
+            }
+            (Self::Other(a), Self::Other(b)) => unit_form(a) == unit_form(b),
+            _ => false,
+        }
+    }
+}
+fn unit_form(unit: &str) -> &str {
+    match unit {
+        "kilogram" | "kilograms" | "kgs" => "kg",
+        "gram" | "grams" => "g",
+        "litre" | "litres" | "liter" | "liters" => "l",
+        "metre" | "metres" | "meter" | "meters" => "m",
+        _ if unit.len() > 3 => unit.strip_suffix('s').unwrap_or(unit),
+        _ => unit,
+    }
+}
+fn chat_spans(text: &str) -> Vec<std::ops::Range<usize>> {
+    static SUFFIX: OnceLock<Regex> = OnceLock::new();
+    let suffix = SUFFIX.get_or_init(|| Regex::new(&format!(r"^ *(?:thousand|million|billion|k|m|b)\b(?: *(?:{CURRENCY_CODE}\b|[%‰]))?|^ *(?:per cent|percent|percentage)\b")).unwrap());
+    let mut out = Vec::new();
+    for mut span in spans(text) {
+        if out.last().is_some_and(|r: &std::ops::Range<usize>| span.start < r.end) { continue; }
+        if let Some(m) = suffix.find(&text[span.end..]) { span.end += m.end(); }
+        out.push(span);
+    }
+    out
+}
+impl ChatNumber {
+    fn parse(raw: &str, context: &ChatUnit) -> Option<Self> {
+        static NUMBER: OnceLock<Regex> = OnceLock::new();
+        let number = NUMBER.get_or_init(|| Regex::new(&format!(r"^(?P<sign>[+-]?) *(?P<prefix>\p{{Sc}}|{CURRENCY_CODE})? *(?P<inner>[+-]?)(?P<value>(?:[0-9][0-9,]*)(?:\.[0-9]+)?|\.[0-9]+) *(?P<scale>thousand|million|billion|k|m|b)? *(?P<suffix>%|‰|per cent|percent|percentage|\p{{Sc}}|{CURRENCY_CODE})?$" )).unwrap());
+        let c = number.captures(raw.trim())?;
+        let digits = c.name("value")?.as_str().replace(',', "");
+        let sign = c.name("sign").map(|s| s.as_str()).unwrap_or("");
+        let inner = c.name("inner").map(|s| s.as_str()).unwrap_or("");
+        if !sign.is_empty() && !inner.is_empty() { return None; }
+        // from_str rounds excess fractional digits. Never let parsing change a claim.
+        let exact_digits = if digits.contains('.') { digits.trim_end_matches('0').trim_end_matches('.') } else { &digits };
+        let value = rust_decimal::Decimal::from_str_exact(&format!("{sign}{inner}{exact_digits}")).ok()?;
+        let precision = digits.split_once('.').map(|(_,s)| s.len() as u32).unwrap_or(0);
+        let scale = match c.name("scale").map(|s| s.as_str()) {
+            Some("k" | "thousand") => 1000, Some("m" | "million") => 1_000_000,
+            Some("b" | "billion") => 1_000_000_000, _ => 1,
+        }.into();
+        let prefix = c.name("prefix").map(|s| ChatUnit::parse(s.as_str()));
+        let suffix = c.name("suffix").map(|s| match s.as_str() { "per cent" => ChatUnit::Percent, "‰" => ChatUnit::Other("‰".into()), s => ChatUnit::parse(s) });
+        if let (Some(a),Some(b)) = (&prefix,&suffix) && !a.compatible(b) { return None; }
+        let unit = match (prefix, suffix) {
+            (Some(ChatUnit::Money(symbol)), Some(code)) if symbol.chars().count() == 1 => code,
+            (Some(unit), _) | (_, Some(unit)) => unit,
+            _ => context.clone(),
+        };
+        Some(Self { value, precision, scale, unit })
+    }
+    fn supports(&self, shown: &Self) -> bool {
+        use rust_decimal::{Decimal, RoundingStrategy};
+        let Some(mut value) = self.value.checked_mul(self.scale) else { return false; };
+        if self.unit == ChatUnit::Ratio && shown.unit == ChatUnit::Percent {
+            let Some(percent) = value.checked_mul(Decimal::from(100)) else { return false; }; value = percent;
+        } else if !self.unit.compatible(&shown.unit) { return false; }
+        let Some(value) = value.checked_div(shown.scale) else { return false; };
+        // Rounding may not erase every non-zero significant digit.
+        (self.value.is_zero() || !shown.value.is_zero())
+            && value.round_dp_with_strategy(shown.precision.min(28), RoundingStrategy::MidpointAwayFromZero) == shown.value
+    }
+}
+
+/// Current-turn evidence only. Chat renders this checked tree directly.
+#[derive(Default)]
+pub(crate) struct ChatProse {
+    numbers: Vec<ChatNumber>,
+    exact: HashSet<String>,
+    sources: serde_json::Map<String, Value>,
+}
+const UNVERIFIED: &str = "[unverified number]";
+const NUMBER_NOTE: &str = "Some numbers couldn't be checked against tool results.";
+// Text nodes are grouped by the actual tree's paragraphs, headings, cells and items.
+// A navigation autolink's URL is exempt prose. It breaks the checking unit so
+// adjacent digits cannot borrow its URL. Hrefs are never visited or rewritten.
+fn tree_units<'a>(nodes: &'a mut [crate::chat::tree::ChatNode], current: &mut Vec<&'a mut String>, units: &mut Vec<Vec<&'a mut String>>) {
+    use crate::chat::tree::ChatNode;
+    for node in nodes {
+        if matches!(node, ChatNode::Link { href, autolink: true, .. } if crate::chat::tree::navigation_autolink(href)) {
+            units.push(std::mem::take(current));
+        } else if node.is_unit() {
+            // Entering and leaving nested blocks must not join their neighbours.
+            units.push(std::mem::take(current));
+            let mut own = Vec::new();
+            tree_units(node.children_mut(), &mut own, units);
+            units.push(own);
+        } else {
+            match node {
+                ChatNode::Text { text } => current.push(text),
+                _ => tree_units(node.children_mut(), current, units),
+            }
+        }
+    }
+}
+
+// Normalisation can change byte lengths. Retain each originating character.
+fn unit_text(unit: &[&mut String]) -> (String, Vec<(usize, std::ops::Range<usize>)>) {
+    let mut text = String::new();
+    let mut origins = Vec::new();
+    for (i, value) in unit.iter().enumerate() {
+        for (offset,c) in value.char_indices() {
+            for ch in normalise(&c.to_string()).chars() {
+                if ch == ' ' && text.ends_with(' ') { continue; }
+                text.push(ch);
+                origins.extend(std::iter::repeat_n((i, offset..offset + c.len_utf8()), ch.len_utf8()));
+            }
+        }
+    }
+    (text, origins)
+}
+
+impl ChatProse {
+    fn evidence(&mut self, text: &str, unit: &ChatUnit) {
+        let text = normalise(text);
+        for span in chat_spans(&text) {
+            let raw = &text[span];
+            if let Some(n) = ChatNumber::parse(raw, unit) { self.numbers.push(n); }
+            else { self.exact.insert(raw.into()); }
+        }
+    }
+    pub(crate) fn text(&mut self, text: &str) { self.evidence(text, &ChatUnit::Plain); }
+    pub(crate) fn result(&mut self, value: &Value) {
+        self.collect(value, &ChatUnit::Plain, &HashMap::new());
+        if let Some(sources) = value.pointer("/data/sources").and_then(Value::as_object) { self.sources.extend(sources.clone()); }
+    }
+    fn collect(&mut self, value: &Value, unit: &ChatUnit, columns: &HashMap<String,ChatUnit>) {
+        match value {
+            Value::Number(n) => self.evidence(&n.to_string(), unit),
+            Value::String(s) => {
+                self.evidence(s, &ChatUnit::Plain);
+                if let Some(d) = date(&normalise(s)) { self.text(d.split('T').next().unwrap_or(&d)); }
+            }
+            Value::Array(a) => for v in a { self.collect(v, unit, columns); },
+            Value::Object(m) => {
+                let own_unit = m.get("unit").and_then(Value::as_str).map(ChatUnit::parse).unwrap_or_else(|| unit.clone());
+                let mut columns = columns.clone();
+                for c in m.get("columns").and_then(Value::as_array).into_iter().flatten() {
+                    if let Some(key) = c["key"].as_str() {
+                        columns.insert(key.into(), ChatUnit::parse(c["unit"].as_str().unwrap_or_else(|| if c["datatype"] == "percent" { "%" } else { "" })));
+                    }
+                }
+                for (key,v) in m {
+                    // Opaque IDs cannot authorise claims, and counters stay unit-free.
+                    if key == "id" || key == "vault" || key.ends_with("_id") || key.ends_with("_ids") { continue; }
+                    let unit = if matches!(key.as_str(), "count" | "distinct" | "n" | "n_entities" | "total_rows" | "limit" | "offset") { ChatUnit::Plain }
+                        else { columns.get(key).cloned().unwrap_or_else(|| own_unit.clone()) };
+                    self.collect(v, &unit, &columns);
+                }
+            }
+            _ => (),
+        }
+    }
+    fn supported(&self, raw: &str) -> bool {
+        ChatNumber::parse(raw, &ChatUnit::Plain).map(|shown| self.numbers.iter().any(|n| n.supports(&shown)))
+            .unwrap_or_else(|| self.exact.contains(raw))
+    }
+    fn number_spans(&self, text: &str) -> Vec<(std::ops::Range<usize>, bool)> {
+        let mut checked = Vec::new();
+        for mut span in chat_spans(text) {
+            if checked.last().is_some_and(|(r,_): &(std::ops::Range<usize>, bool)| span.start < r.end) { continue; }
+            // Evidence defines arbitrary units. Consume the same text (or a cheap
+            // plural/abbreviation) after the number, with a word boundary.
+            let mut matched = None;
+            for evidence in &self.numbers {
+                let unit = match &evidence.unit {
+                    ChatUnit::Other(unit) => unit.as_str(),
+                    ChatUnit::Ratio => "ratio",
+                    _ => continue,
+                };
+                let mut forms = vec![unit.to_string(), unit_form(unit).into(), format!("{}s", unit_form(unit))];
+                for alias in ["kg", "kilogram", "kilograms", "g", "gram", "grams", "l", "litre", "litres", "liter", "liters", "m", "metre", "metres", "meter", "meters"] {
+                    if unit_form(alias) == unit_form(unit) { forms.push(alias.into()); }
+                }
+                let base_end = spans(&text[span.clone()]).first().map_or(span.end, |r| span.start + r.end);
+                let rest = &text[base_end..];
+                let gap = rest.len() - rest.trim_start().len();
+                for form in forms {
+                    if rest[gap..].starts_with(&form) {
+                        let end = base_end + gap + form.len();
+                        if text[end..].chars().next().is_some_and(|c| c.is_alphanumeric()) { continue; }
+                        if ChatNumber::parse(&text[span.start..base_end], &evidence.unit).is_some_and(|shown| evidence.supports(&shown))
+                            && matched.is_none_or(|old| end > old) { matched = Some(end); }
+                    }
+                }
+            }
+            let supported = if let Some(end) = matched { span.end = end; true } else { self.supported(&text[span.clone()]) };
+            checked.push((span, supported));
+        }
+        checked
+    }
+    fn checked_tree(&self, raw: &str, mark: bool) -> AppResult<Vec<crate::chat::tree::ChatNode>> {
+        use crate::chat::tree::{self, ChatNode};
+        static CONTROLS: OnceLock<Regex> = OnceLock::new();
+        let controls = CONTROLS.get_or_init(|| Regex::new(r"\p{Cf}").unwrap());
+        let data = serde_json::json!({"sources":self.sources});
+        // Resolve independently, so a broken placeholder cannot erase useful prose.
+        static PLACEHOLDER: OnceLock<Regex> = OnceLock::new();
+        let placeholder = PLACEHOLDER.get_or_init(|| Regex::new(r"\{\{.*?(?:\}\}|$)").unwrap());
+        let mut changed = false;
+        let mut tree = tree::parse(raw);
+        let mut units = Vec::new();
+        let mut current = Vec::new();
+        tree_units(&mut tree, &mut current, &mut units);
+        units.push(current);
+        for mut unit in units {
+            for text in &mut unit {
+                let clean = controls.replace_all(text, "");
+                **text = placeholder.replace_all(&clean, |c: &regex::Captures<'_>| {
+                    match interpolate(&c[0], &data, "assistant reply") {
+                        Ok((text,_)) => text,
+                        Err(_) => { changed = true; UNVERIFIED.into() }
+                    }
+                }).into_owned();
+            }
+            let (text, origins) = unit_text(&unit);
+            let mut edits: HashMap<usize, Vec<(std::ops::Range<usize>, String)>> = HashMap::new();
+            let mut rejected: Vec<_> = self.number_spans(&text).into_iter().filter_map(|(r,ok)| (!ok).then_some(r)).collect();
+            // Includes placeholders introduced by entity decoding or NFKC.
+            for token in ["{{", "}}"] {
+                rejected.extend(text.match_indices(token).map(|(start,_)| start..start + token.len()));
+            }
+            if !rejected.is_empty() && !mark { return Err(bad("unsupported number or unresolved placeholder in assistant reply")); }
+            for range in rejected {
+                changed = true;
+                let mut pieces: Vec<(usize, std::ops::Range<usize>)> = Vec::new();
+                for (i,r) in &origins[range] {
+                    if let Some((last, joined)) = pieces.last_mut() && last == i { joined.end = r.end; }
+                    else { pieces.push((*i,r.clone())); }
+                }
+                for (part,(i,r)) in pieces.into_iter().enumerate() {
+                    edits.entry(i).or_default().push((r, if part == 0 { UNVERIFIED.into() } else { String::new() }));
+                }
+            }
+            for (i,mut replacements) in edits {
+                replacements.sort_by_key(|(r,_)| std::cmp::Reverse(r.start));
+                // Placeholder delimiters can overlap a numeric span. Merge before editing.
+                let mut merged: Vec<(std::ops::Range<usize>, String)> = Vec::new();
+                for (r, value) in replacements {
+                    if let Some((last, _)) = merged.last_mut() && r.end > last.start {
+                        last.start = last.start.min(r.start);
+                    } else { merged.push((r, value)); }
+                }
+                for (r,value) in merged { unit[i].replace_range(r, &value); }
+            }
+        }
+        if changed && !mark { return Err(bad("unresolved placeholder in assistant reply")); }
+        if changed { tree.push(ChatNode::Paragraph { children: vec![ChatNode::Text { text: NUMBER_NOTE.into() }] }); }
+        Ok(tree)
+    }
+    #[cfg(test)]
+    pub(crate) fn check(&self, raw: &str) -> AppResult<String> {
+        self.checked_tree(raw, false).map(|_| raw.into())
+    }
+    pub(crate) fn safe_tree(&self, raw: &str) -> Vec<crate::chat::tree::ChatNode> {
+        self.checked_tree(raw, true).expect("marking text nodes is infallible")
+    }
+    #[cfg(test)]
+    fn safe(&self, raw: &str) -> String { crate::chat::tree::visible_text(&self.safe_tree(raw)) }
+
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn chat_rounds_to_displayed_precision_and_scale() {
+        for (evidence, good, bad) in [
+            (json!({"value":664.475,"unit":"AUD"}), "$664.48", "$664.47"),
+            (json!({"value":34.578125,"unit":"%"}), "34.58%", "34.57%"),
+            (json!({"value":615548,"unit":"AUD"}), "$615.5k", "$616.5k"),
+            (json!({"value":615548000,"unit":"AUD"}), "$615.5M", "$616.5M"),
+            (json!({"value":615548000000_i64,"unit":"AUD"}), "$615.5 billion", "$616.5 billion"),
+            (json!({"value":615548,"unit":"AUD"}), "AUD 615.5 thousand", "AUD 616.5 thousand"),
+            (json!({"value":615548000,"unit":"AUD"}), "615.5 million AUD", "616.5 million AUD"),
+        ] {
+            let mut prose = ChatProse::default(); prose.result(&evidence);
+            assert!(prose.check(good).is_ok(), "{good} from {evidence}");
+            assert!(prose.check(bad).is_err(), "{bad} from {evidence}");
+        }
+    }
+    #[test]
+    fn chat_checks_visible_markdown_and_decoded_entities() {
+        let mut prose = ChatProse::default(); prose.result(&json!([1,2]));
+        for raw in ["1**2**", "1&#50;", "&#123;&#123;sources.sales.value&#125;&#125;", "&lbrace;&lbrace;sources.sales.value&rbrace;&rbrace;"] {
+            assert!(prose.check(raw).is_err(), "{raw}");
+        }
+        prose.result(&json!(12));
+        assert_eq!(prose.check("**Count:** 1**2** &amp; done").unwrap(), "**Count:** 1**2** &amp; done");
+    }
+    #[test]
+    fn chat_preserves_numeric_units_and_scaled_values() {
+        let mut prose = ChatProse::default(); prose.result(&json!(12));
+        assert!(prose.check("12 records").is_ok());
+        for raw in ["$12", "$12k", "12%", "12 percentage", "12 thousand", "12M", "12 billion"] {
+            assert!(prose.check(raw).is_err(), "{raw}");
+        }
+        for evidence in [json!({"value":12,"unit":"%"}), json!({"value":0.12,"unit":"ratio"})] {
+            let mut prose = ChatProse::default(); prose.result(&evidence);
+            for shown in ["12%", "12 percent", "12 percentage"] { assert!(prose.check(shown).is_ok(), "{evidence}: {shown}"); }
+            assert!(prose.check("$12").is_err());
+        }
+        let mut prose = ChatProse::default(); prose.result(&json!({"value":12000,"unit":"AUD"}));
+        assert!(prose.check("$12k").is_ok());
+        assert!(prose.check("12%").is_err());
+        assert!(prose.check("USD 12k").is_err());
+        assert!(prose.check("$12k USD").is_err());
+        assert!(prose.check("$12k AUD").is_ok());
+        let mut prose = ChatProse::default(); prose.text("9007199254740992");
+        assert!(prose.check("9007199254740993").is_err());
+    }
+    #[test]
+    fn chat_rounding_never_erases_all_significant_digits() {
+        for (value, good, bad) in [(0.49, "$0.49", "$0"), (0.0049, "$0.005", "$0.00"), (-0.49, "-$0.49", "$0")] {
+            let mut prose = ChatProse::default(); prose.result(&json!({"value":value,"unit":"AUD"}));
+            assert!(prose.check(good).is_ok());
+            assert!(prose.check(bad).is_err(), "{value} must not support {bad}");
+        }
+        let mut zero = ChatProse::default(); zero.result(&json!({"value":0,"unit":"AUD"}));
+        assert!(zero.check("$0.00").is_ok());
+    }
+    #[test]
+    fn chat_decimal_matching_never_silently_discards_digits() {
+        let mut prose = ChatProse::default(); prose.result(&json!(12));
+        assert!(prose.check("12.00000000000000000000000000001").is_err());
+        assert!(prose.check("12.00000000000000000000000000000").is_ok());
+    }
+    #[test]
+    fn chat_matches_arbitrary_evidence_units_and_common_forms() {
+        for (unit, shown) in [("kg", "12 kg"), ("kg", "12 kilograms"), ("kg", "12kg"), ("metre", "12 m"), ("µm", "12 µm"), ("m²", "12 m²"), ("ratio", "12 ratio"), ("ratio", "12 ratios"), ("widget", "12 widgets"), ("WIDGETS", "12 widget"), ("litre", "12 L"), ("boxes shipped", "12 boxes shipped")] {
+            let mut prose = ChatProse::default(); prose.result(&json!({"value":12,"unit":unit}));
+            assert!(prose.check(shown).is_ok(), "{unit}: {shown}");
+            assert!(prose.check("12%").is_err());
+            assert!(prose.check("$12").is_err());
+        }
+    }
+    #[test]
+    fn chat_table_cells_are_independent_visible_units() {
+        let mut prose = ChatProse::default(); prose.result(&json!([12,34]));
+        let reply = "| Left | Right |\n| --- | --- |\n| 1**2** | `34` |";
+        assert_eq!(prose.check(reply).unwrap(), reply);
+        assert!(prose.check("- 12\n\n  34").is_ok());
+        assert!(ChatProse::default().safe("Useful **advice** and 999.").contains("Useful advice"));
+    }
+    #[test]
+    fn chat_tree_matches_shared_parity_corpus() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/chat_markdown.json");
+        let mut fixture: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let evidence = fixture["evidence"].clone();
+        for case in fixture["cases"].as_array_mut().unwrap() {
+            let mut prose = ChatProse::default();
+            prose.result(case.get("evidence").unwrap_or(&evidence));
+            let tree = prose.safe_tree(case["reply"].as_str().unwrap());
+            let text = crate::chat::tree::visible_text(&tree);
+            if std::env::var_os("UPDATE_CHAT_MARKDOWN_FIXTURE").is_some() {
+                case["tree"] = json!(tree); case["visible_text"] = json!(text);
+            } else {
+                assert_eq!(case["tree"], json!(tree), "{}", case["name"]);
+                assert_eq!(case["visible_text"], text, "{}", case["name"]);
+            }
+        }
+        if std::env::var_os("UPDATE_CHAT_MARKDOWN_FIXTURE").is_some() {
+            std::fs::write(path, serde_json::to_string_pretty(&fixture).unwrap() + "\n").unwrap();
+        }
+    }
+    #[test]
+    fn image_alt_cannot_authorise_a_different_visible_number() {
+        let mut prose = ChatProse::default(); prose.result(&json!(123));
+        let tree = prose.safe_tree("Count 12![3](/icon.svg)");
+        assert_eq!(crate::chat::tree::visible_text(&tree), format!("Count {UNVERIFIED}{NUMBER_NOTE}"));
+        assert!(prose.check("Count 12![3](/icon.svg)").is_err());
+    }
+    #[test]
+    fn autolink_urls_are_not_claims_and_hrefs_are_never_rewritten() {
+        use crate::chat::tree::{ChatNode, visible_text};
+        let tree = ChatProse::default().safe_tree("<https://example.com/999>");
+        assert_eq!(visible_text(&tree), "https://example.com/999");
+        assert!(matches!(&tree[0].children()[0], ChatNode::Link { href, autolink: true, .. } if href == "https://example.com/999"));
+        let tree = ChatProse::default().safe_tree("[999](https://example.com/999)");
+        assert!(matches!(&tree[0].children()[0], ChatNode::Link { href, autolink: false, .. } if href == "https://example.com/999"));
+        assert!(visible_text(&tree).starts_with(UNVERIFIED));
+    }
+    #[test]
+    fn only_navigation_autolinks_exempt_their_url_digits() {
+        use crate::chat::tree::{ChatNode, visible_text};
+        let prose = ChatProse::default();
+        for raw in ["Bakery sales <AUD:0.00>.", "<ftp://example.com/999>", "<custom:999>", "www.example.com/999"] {
+            let tree = prose.safe_tree(raw);
+            assert!(visible_text(&tree).contains(UNVERIFIED), "{raw}");
+            assert!(prose.check(raw).is_err(), "{raw}");
+            assert!(!serde_json::to_string(&tree).unwrap().contains("\"kind\":\"link\""), "{raw}");
+        }
+        for raw in ["<http://example.com/999>", "<HTTPS://example.com/999>", "<mailto:person999@example.com>", "<person999@example.com>"] {
+            let tree = prose.safe_tree(raw);
+            assert!(!visible_text(&tree).contains(UNVERIFIED), "{raw}");
+            assert!(matches!(&tree[0].children()[0], ChatNode::Link { autolink: true, .. }), "{raw}");
+            assert!(prose.check(&format!("999{raw}999")).is_err(), "adjacent claims: {raw}");
+        }
+    }
+    #[test]
+    fn link_titles_and_code_info_are_absent_and_visible_attributes_are_checked() {
+        let prose = ChatProse::default();
+        for raw in ["[Report](https://example.com \"Bakery sales $0.00\")", "[Report][ref]\n\n[ref]: https://example.com \"Bakery sales $0.00\"", "```Bakery sales $0.00\nUseful code\n```"] {
+            let tree = prose.safe_tree(raw);
+            let encoded = serde_json::to_string(&tree).unwrap();
+            assert!(!encoded.contains("$0.00"), "{raw}");
+            assert!(!encoded.contains("\"title\"") && !encoded.contains("\"language\""), "{encoded}");
+        }
+        for raw in ["# Sales {#999}", "| Sales {#999} |\n| --- |\n| Useful |", "[^999]: Bakery sales $0.00\n\nFootnote [^999]"] {
+            let text = prose.safe(raw);
+            assert!(!text.contains("999") && !text.contains("0.00"), "{text}");
+            assert!(text.contains(UNVERIFIED), "{raw}");
+        }
+        let tree = prose.safe_tree("999. Useful list item");
+        assert!(matches!(tree[0], crate::chat::tree::ChatNode::List { start: Some(1), .. }));
+    }
+    #[test]
+    fn chat_marks_only_bad_spans_even_across_inline_nodes() {
+        let mut prose = ChatProse::default(); prose.result(&json!([12,34]));
+        assert_eq!(prose.safe("Count 1\u{202e}2"), "Count 12");
+        let marked = prose.safe("Keep **12**, [34](https://example.com). Wrong 9**9**9 and `888`. Also &#55;77.");
+        assert_eq!(marked.matches("unverified number").count(),3,"{marked}");
+        assert!(marked.contains("12")); assert!(marked.contains("34"));
+        assert!(!marked.contains("999")); assert!(!marked.contains("888")); assert!(!marked.contains("777"));
+        assert_eq!(marked.matches(NUMBER_NOTE).count(),1);
+    }
     fn data() -> Value { json!({"sources":{"sales":{
         "rows":[{"amount":1588.0,"quantity":12,"other":1,"next":2,"category":"ISO 27001","name":"Scope 3","date":"2026-01-01"}],
         "columns":[{"key":"amount","datatype":"money","unit":"AUD"},{"key":"quantity","datatype":"integer"},{"key":"category","datatype":"text"},{"key":"date","datatype":"date"}],

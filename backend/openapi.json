@@ -9585,6 +9585,344 @@
           }
         }
       },
+      "ChatNode": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "text",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "text"
+                ]
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "children",
+              "kind"
+            ],
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatNode"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "paragraph"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "level",
+              "children",
+              "kind"
+            ],
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatNode"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "heading"
+                ]
+              },
+              "level": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "children",
+              "kind"
+            ],
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatNode"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "list"
+                ]
+              },
+              "start": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int64",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "children",
+              "kind"
+            ],
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatNode"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "item"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "children",
+              "kind"
+            ],
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatNode"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "table"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "children",
+              "kind"
+            ],
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatNode"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "table_head"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "children",
+              "kind"
+            ],
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatNode"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "table_row"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "children",
+              "kind"
+            ],
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatNode"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "table_cell"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "children",
+              "kind"
+            ],
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatNode"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "strong"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "children",
+              "kind"
+            ],
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatNode"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "em"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "children",
+              "kind"
+            ],
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatNode"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "code_span"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "children",
+              "kind"
+            ],
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatNode"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "code_block"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "href",
+              "autolink",
+              "children",
+              "kind"
+            ],
+            "properties": {
+              "autolink": {
+                "type": "boolean"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatNode"
+                }
+              },
+              "href": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "link"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "children",
+              "kind"
+            ],
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatNode"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "line_break"
+                ]
+              }
+            }
+          }
+        ]
+      },
       "ChatRequest": {
         "type": "object",
         "required": [
@@ -12711,6 +13049,15 @@
             ],
             "items": {
               "type": "object"
+            }
+          },
+          "tree": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ChatNode"
             }
           }
         }

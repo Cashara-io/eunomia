@@ -35,6 +35,7 @@ use crate::rid::RecordIdExt;
 use tokio::sync::mpsc;
 
 use crate::config::Settings;
+use super::tree::{self, ChatNode};
 use crate::embeddings::provider;
 use crate::pool::OrgDb;
 use crate::store;
@@ -44,19 +45,14 @@ use crate::state::OrgState;
 use crate::tools::registry;
 
 
-/// Caps the tool-call loop so a confused model can't spin forever -- if the
-/// model still hasn't produced a final reply after this many rounds,
-/// `send_stream` sends a "done" event saying so rather than looping/
-/// truncating silently. A "what does this affect" answer takes five rounds
-/// when the model calls one tool at a time (search, ontology, neighbourhood,
-/// view, reply), six when it fixes an id `show_view` refused; a number takes
-/// five (coverage, ontology, metric_eval, view, reply); a what-if six (coverage, search, ontology,
-/// scenario_run, view, reply).
+/// Caps tool executions, including parallel batches. One tool-free answer follows the budget.
 const MAX_TOOL_ITERATIONS: usize = 10;
 
 pub const DEFAULT_THREAD_TITLE: &str = "New chat";
 
-const SYSTEM_PROMPT: &str = "You are Eunomia's assistant. Use Australian English and never use em dashes. You have tools to search, recall, and write \
+const SYSTEM_PROMPT: &str = "Every numeric span in your text must match this turn's tool results or the user's message. Do not use numbered lists unless their numbers are supported. Never emit unresolved placeholders in chat text.
+For comparisons and rankings, use metric_eval group_by with an approved property or link:label, sort {property: value, descending: true}, and top_n as needed. Use one show_view with view ui and several named metric sources to display several metrics at once. A grouped metric can use view metric with the same arguments.
+You are Eunomia's assistant. Use Australian English and never use em dashes. You have tools to search, recall, and write \
 to the user's personal data layer: cached records from their connected \
 sources (`search`/`get`/`list`/`links`, `recall` for memory-ranked \
 retrieval across both), and an entity-memory graph of people, \
@@ -227,7 +223,7 @@ impl std::error::Error for ChatNotConfigured {}
 #[serde(tag = "type")]
 pub enum ChatEvent {
     #[serde(rename = "text")]
-    Text { delta: String },
+    Text { delta: String, tree: Vec<ChatNode> },
     /// `id`: the model's id for the call, which its `tool_result` repeats.
     #[serde(rename = "tool_call")]
     ToolCall {
@@ -245,7 +241,7 @@ pub enum ChatEvent {
         view: Option<Value>,
     },
     #[serde(rename = "done")]
-    Done { reply: String, tool_calls_made: Vec<String> },
+    Done { reply: String, tree: Vec<ChatNode>, tool_calls_made: Vec<String> },
     #[serde(rename = "error")]
     Error { message: String, code: String, trace_id: String },
 }
@@ -372,23 +368,25 @@ async fn touch_thread(db: &OrgDb, thread_id: &RecordId, title: Option<&str>) -> 
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Deserialize, SurrealValue)]
-struct MessageRow {
-    thread_id: RecordId,
-    role: String,
-    content: String,
+pub(crate) struct MessageRow {
+    pub(crate) id: RecordId,
+    pub(crate) thread_id: RecordId,
+    pub(crate) role: String,
+    pub(crate) content: String,
     #[serde(default)]
     #[surreal(default)]
-    tool_calls: Option<Vec<Value>>,
+    pub(crate) tool_calls: Option<Vec<Value>>,
     #[serde(default)]
     #[surreal(default)]
-    tool_call_id: Option<String>,
-    created_at: Datetime,
+    pub(crate) tool_call_id: Option<String>,
+    pub(crate) created_at: Datetime,
 }
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct MessageOut {
     pub role: String,
     pub content: String,
+    pub tree: Option<Vec<ChatNode>>,
     #[schema(value_type = Option<Vec<Object>>)]
     pub tool_calls: Option<Vec<Value>>,
     pub thread_id: String,
@@ -396,14 +394,29 @@ pub struct MessageOut {
     pub created_at: Datetime,
 }
 
-fn message_out(row: MessageRow) -> MessageOut {
+fn message_out(row: MessageRow, prose: &crate::views::ui::prose::ChatProse) -> MessageOut {
+    let tree = (row.role == "assistant").then(|| tree::decode(&row.content).unwrap_or_else(|| prose.safe_tree(&row.content)));
+    let content = tree.as_deref().map(tree::plain_text).unwrap_or(row.content);
     MessageOut {
         role: row.role,
-        content: row.content,
+        content,
+        tree,
         tool_calls: row.tool_calls,
         thread_id: row.thread_id.to_string(),
         created_at: row.created_at,
     }
+}
+
+// Legacy Markdown rows are checked on the server with their own turn's evidence.
+// New rows already contain the checked tree and are never reparsed.
+pub(crate) fn messages_out(rows: Vec<MessageRow>) -> Vec<MessageOut> {
+    let mut evidence = std::collections::HashMap::<String, crate::views::ui::prose::ChatProse>::new();
+    rows.into_iter().map(|row| {
+        let prose = evidence.entry(row.thread_id.to_string()).or_default();
+        if row.role == "user" { *prose = Default::default(); prose.text(&row.content); }
+        if row.role == "tool" && let Ok(value) = serde_json::from_str::<Value>(&row.content) { prose.result(&value); }
+        message_out(row, prose)
+    }).collect()
 }
 
 /// Reshapes a persisted `chat_message` row into the OpenAI chat-completion
@@ -411,7 +424,7 @@ fn message_out(row: MessageRow) -> MessageOut {
 /// split out as a pure function so the history-to-API-format transform is
 /// unit-testable.
 fn row_to_api_message(row: &MessageRow) -> Value {
-    let content = if row.role == "tool" { as_untrusted_data(&row.content) } else { row.content.clone() };
+    let content = if row.role == "tool" { as_untrusted_data(&row.content) } else { tree::stored_text(&row.role, &row.content) };
     let mut msg = json!({ "role": row.role, "content": content });
     if let Some(tool_calls) = &row.tool_calls
         && !tool_calls.is_empty() {
@@ -439,7 +452,7 @@ pub async fn history(db: &OrgDb, owner: &RecordId, thread_id: &RecordId) -> AppR
         return Ok(None);
     }
     let rows = rows_for_thread(db, owner, thread_id).await?;
-    Ok(Some(rows.into_iter().map(message_out).collect()))
+    Ok(Some(messages_out(rows)))
 }
 
 /// Every chat message across all of `owner`'s threads, oldest first -- used
@@ -449,7 +462,7 @@ pub async fn history_all(db: &OrgDb, owner: &RecordId) -> AppResult<Vec<MessageO
     let mut res =
         store::app::CHAT_MESSAGES_FOR_OWNER.on(db).bind(("owner", owner.clone())).await?;
     let rows: Vec<MessageRow> = res.take(0)?;
-    Ok(rows.into_iter().map(message_out).collect())
+    Ok(messages_out(rows))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -609,7 +622,12 @@ pub async fn send_stream(
     user_message: String,
     tx: mpsc::Sender<ChatEvent>,
 ) {
-    if let Err((code, message)) = crate::views::TURN_STARTED.scope(Datetime::default(), run_send(&state, &user, &thread_id, &user_message, &tx)).await {
+    let result = tokio::select! {
+        biased;
+        _ = tx.closed() => return,
+        result = crate::views::TURN_STARTED.scope(Datetime::default(), run_send(&state, &user, &thread_id, &user_message, &tx)) => result,
+    };
+    if let Err((code, message)) = result {
         let event = ChatEvent::Error { message, code: code.as_str().to_string(), trace_id: crate::telemetry::current_trace_id() };
         let _ = tx.send(event).await;
     }
@@ -630,10 +648,12 @@ struct ModelCall<'a> {
 
 impl ModelCall<'_> {
     /// Sends the call (once more without reasoning when the model refuses tools while reasoning) and
-    /// reads the whole stream, sending each text delta on `tx`. Returns the text and the tool calls.
-    async fn run(&self, reasoning_off: &mut bool, tx: &mpsc::Sender<ChatEvent>) -> Result<(String, BTreeMap<usize, ToolCallAcc>), Failed> {
+    /// buffers the whole stream for prose validation. Returns text and tool calls.
+    async fn run(&self, reasoning_off: &mut bool) -> Result<(String, BTreeMap<usize, ToolCallAcc>), Failed> {
         let resp = loop {
-            let mut body = json!({ "model": self.model, "messages": self.messages, "tools": self.tools, "stream": true });
+            let mut body = json!({ "model": self.model, "messages": self.messages, "stream": true });
+            if !self.tools.is_empty() { body["tools"] = json!(self.tools); }
+            else { body["tool_choice"] = json!("none"); }
             if *reasoning_off {
                 body["reasoning_effort"] = json!("none");
             }
@@ -674,9 +694,8 @@ impl ModelCall<'_> {
                     }
                     let Ok(parsed) = serde_json::from_str::<StreamChunk>(payload) else { continue };
                     for choice in &parsed.choices {
-                        if let Some(delta_text) = apply_delta(&mut content, &mut tool_calls_acc, &choice.delta) {
-                            let _ = tx.send(ChatEvent::Text { delta: delta_text }).await;
-                        }
+                        // Buffer all text until its complete numeric spans can be checked.
+                        apply_delta(&mut content, &mut tool_calls_acc, &choice.delta);
                     }
                 }
             }
@@ -712,7 +731,7 @@ async fn run_send(
     messages.push(json!({ "role": "user", "content": user_message }));
     let mut said = Said::default();
     for r in &existing_rows {
-        said.row(&r.role, &r.content);
+        said.row(&r.role, &tree::stored_text(&r.role, &r.content));
     }
     said.row("user", user_message);
 
@@ -724,11 +743,18 @@ async fn run_send(
     let url = p.url("chat/completions");
     let model = provider::chat_model(&p).await;
 
+    let mut prose = crate::views::ui::prose::ChatProse::default();
+    prose.text(user_message);
     let mut reasoning_off = false;
     let limit = std::time::Duration::from_secs(settings.chat_model_timeout_secs);
-    for _ in 0..MAX_TOOL_ITERATIONS {
-        let call = ModelCall { client: &client, url: &url, bearer: p.bearer(), model: &model, tools: &tools, messages: &messages };
-        let (content, tool_calls_acc) = match tokio::time::timeout(limit, call.run(&mut reasoning_off, tx)).await {
+    for round in 0..=MAX_TOOL_ITERATIONS {
+        let final_turn = round == MAX_TOOL_ITERATIONS || tool_calls_made.len() >= MAX_TOOL_ITERATIONS;
+        if final_turn {
+            messages.push(json!({"role":"system","content":"The tool budget is exhausted. Give your final answer now using only this turn's results. State what you found and explicitly say which parts you could not finish. Do not list planned steps or request more tools."}));
+        }
+        let offered = if final_turn { &[][..] } else { tools.as_slice() };
+        let call = ModelCall { client: &client, url: &url, bearer: p.bearer(), model: &model, tools: offered, messages: &messages };
+        let (content, tool_calls_acc) = match tokio::time::timeout(limit, call.run(&mut reasoning_off)).await {
             Ok(done) => done?,
             // what was stored so far ends on a user message or a tool result, so the thread takes the next message
             Err(_) => {
@@ -743,9 +769,15 @@ async fn run_send(
             }
         };
 
-        if tool_calls_acc.is_empty() {
-            persist(db, owner, thread_id, "assistant", &content, None, None).await.map_err(|e| (e.code, e.message))?;
-            let _ = tx.send(ChatEvent::Done { reply: content, tool_calls_made }).await;
+        let checked = prose.safe_tree(if content.trim().is_empty() && (tool_calls_acc.is_empty() || final_turn) {
+            "I could not complete a written answer. Please refer to the verified tool results above."
+        } else { &content });
+        let content = tree::plain_text(&checked);
+        let stored = tree::encode(&checked);
+        if tool_calls_acc.is_empty() || final_turn {
+            if tx.send(ChatEvent::Text { delta: content.clone(), tree: checked.clone() }).await.is_err() { return Ok(()); }
+            persist(db, owner, thread_id, "assistant", &stored, None, None).await.map_err(|e| (e.code, e.message))?;
+            let _ = tx.send(ChatEvent::Done { reply: content, tree: checked, tool_calls_made }).await;
             return Ok(());
         }
 
@@ -761,9 +793,9 @@ async fn run_send(
             })
             .collect();
 
-        persist(db, owner, thread_id, "assistant", &content, Some(tool_calls_dump.clone()), None)
-            .await
-            .map_err(|e| (e.code, e.message))?;
+        // Keep the entire exchange in memory until every call has a result.
+        // A disconnect can drop any await below without leaving dangling calls.
+        let mut batch = vec![json!({"role":"assistant", "content":stored, "tool_calls":tool_calls_dump, "created_at":Datetime::default()})];
         messages.push(json!({ "role": "assistant", "content": content, "tool_calls": tool_calls_dump }));
 
         for tc in ordered {
@@ -771,7 +803,10 @@ async fn run_send(
             let _ = tx.send(ChatEvent::ToolCall { id: tc.id.clone(), name: name.clone() }).await;
 
             let args: Value = serde_json::from_str(&tc.arguments).unwrap_or_else(|_| json!({}));
-            let result = if !chat_may_call(&name) {
+            let within_budget = tool_calls_made.len() < MAX_TOOL_ITERATIONS;
+            let result = if !within_budget {
+                json!({"error":"Tool budget exhausted. Answer using the available results and state what remains unfinished."})
+            } else if !chat_may_call(&name) {
                 json!({ "error": format!("`{name}` is not available in the in-app chat; the user can do this from the app itself") })
             } else if said.restates(&name, &args) && !resends_stored_text(db, owner, &name, &args).await {
                 json!({ "error": "Not saved: this text repeats a tool result or your own answer. Save only a new fact the user told you.", "code": ErrorCode::ValidationInvalid.as_str() })
@@ -781,28 +816,24 @@ async fn run_send(
                     Err(e) => e.to_tool_value(),
                 }
             };
-            tool_calls_made.push(name.clone());
+            if within_budget { tool_calls_made.push(name.clone()); }
+            prose.result(&result);
 
             said.tool_result(&result);
             let result_text = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
-            persist(db, owner, thread_id, "tool", &result_text, None, tc.id.as_deref())
-                .await
-                .map_err(|e| (e.code, e.message))?;
+            batch.push(json!({"role":"tool", "content":result_text, "tool_call_id":tc.id, "created_at":Datetime::default()}));
             messages.push(json!({ "role": "tool", "tool_call_id": tc.id, "content": as_untrusted_data(&result_text) }));
             let view = (name == crate::views::TOOL && result.get("error").is_none()).then_some(result);
             let _ = tx.send(ChatEvent::ToolResult { id: tc.id, name, view }).await;
         }
+        store::app::CHAT_TOOL_BATCH_CREATE.on(db)
+            .bind(("owner", owner.clone())).bind(("thread_id", thread_id.clone()))
+            .bind(("messages", batch)).await.map_err(|e| { let e = AppError::from(e); (e.code, e.message) })?;
         // after the calls: a reply that says what it is saving ("Saved: ...") must not refuse that save
         said.row("assistant", &content);
     }
 
-    let limit_msg = format!(
-        "I wasn't able to finish after {MAX_TOOL_ITERATIONS} tool calls -- stopping here rather than looping \
-         further. Try rephrasing or breaking the request down."
-    );
-    persist(db, owner, thread_id, "assistant", &limit_msg, None, None).await.map_err(|e| (e.code, e.message))?;
-    let _ = tx.send(ChatEvent::Done { reply: limit_msg, tool_calls_made }).await;
-    Ok(())
+    unreachable!("the last iteration always returns a final answer")
 }
 
 #[cfg(test)]
@@ -891,6 +922,7 @@ mod tests {
 
     fn row(role: &str, content: &str, tool_calls: Option<Vec<Value>>, tool_call_id: Option<&str>) -> MessageRow {
         MessageRow {
+            id: crate::rid::parse("chat_message:abc").unwrap(),
             thread_id: crate::rid::parse("chat_thread:abc").unwrap(),
             role: role.to_string(),
             content: content.to_string(),
@@ -997,9 +1029,24 @@ mod tests {
     }
 
     #[test]
+    fn stored_tree_is_preserved_in_history_and_model_context() {
+        let checked = crate::views::ui::prose::ChatProse::default().safe_tree("**Useful** <https://example.com/999> and 888.");
+        let stored = tree::encode(&checked);
+        let row = row("assistant", &stored, None, None);
+        let api = row_to_api_message(&row);
+        let output = message_out(row, &Default::default());
+        assert_eq!(output.tree, Some(checked.clone()));
+        assert_eq!(output.content, tree::plain_text(&checked));
+        assert_eq!(api["content"], output.content);
+        assert!(!output.content.contains("888"));
+        assert!(!output.content.contains("eunomia.chat.tree"));
+        assert_eq!(tree::stored_text("user", &stored), stored);
+    }
+
+    #[test]
     fn chat_event_serializes_with_tagged_type_field() {
-        let e = ChatEvent::Text { delta: "hi".to_string() };
-        assert_eq!(serde_json::to_value(&e).unwrap(), json!({ "type": "text", "delta": "hi" }));
+        let e = ChatEvent::Text { delta: "hi".to_string(), tree: tree::parse("hi") };
+        assert_eq!(serde_json::to_value(&e).unwrap(), json!({ "type": "text", "delta": "hi", "tree": tree::parse("hi") }));
 
         let e = ChatEvent::ToolCall { id: Some("call_1".to_string()), name: "search".to_string() };
         assert_eq!(serde_json::to_value(&e).unwrap(), json!({ "type": "tool_call", "id": "call_1", "name": "search" }));
@@ -1010,10 +1057,10 @@ mod tests {
         let e = ChatEvent::ToolResult { id: Some("call_2".to_string()), name: "show_view".to_string(), view: Some(json!({ "view": "impact" })) };
         assert_eq!(serde_json::to_value(&e).unwrap(), json!({ "type": "tool_result", "id": "call_2", "name": "show_view", "view": { "view": "impact" } }));
 
-        let e = ChatEvent::Done { reply: "hi".to_string(), tool_calls_made: vec!["search".to_string()] };
+        let e = ChatEvent::Done { reply: "hi".to_string(), tree: tree::parse("hi"), tool_calls_made: vec!["search".to_string()] };
         assert_eq!(
             serde_json::to_value(&e).unwrap(),
-            json!({ "type": "done", "reply": "hi", "tool_calls_made": ["search"] })
+            json!({ "type": "done", "reply": "hi", "tree": tree::parse("hi"), "tool_calls_made": ["search"] })
         );
 
         let e = ChatEvent::Error { message: "boom".to_string(), code: "internal".to_string(), trace_id: "t".to_string() };

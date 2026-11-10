@@ -85,21 +85,6 @@ struct RelationRow {
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
-struct ChatMessageRow {
-    id: RecordId,
-    thread_id: RecordId,
-    role: String,
-    content: String,
-    #[serde(default)]
-    #[surreal(default)]
-    tool_calls: Option<Vec<Value>>,
-    #[serde(default)]
-    #[surreal(default)]
-    tool_call_id: Option<String>,
-    created_at: Option<Datetime>,
-}
-
-#[derive(Debug, Deserialize, SurrealValue)]
 struct UserEmailRow {
     id: RecordId,
     email: String,
@@ -281,18 +266,21 @@ pub async fn build_export(db: &OrgDb, control: &ControlDb, user: &User) -> AppRe
         .on(db)
         .bind(("owner", user.id.clone()))
         .await?;
-    let chat_rows: Vec<ChatMessageRow> = chat_res.take(0)?;
+    let chat_rows: Vec<crate::chat::service::MessageRow> = chat_res.take(0)?;
+    let checked = crate::chat::service::messages_out(chat_rows.clone());
     let chat_history: Vec<Value> = chat_rows
         .iter()
-        .map(|m| {
+        .zip(checked)
+        .map(|(m, checked)| {
             json!({
                 "id": m.id.to_string(),
                 "thread_id": m.thread_id.to_string(),
                 "role": m.role,
-                "content": m.content,
+                "content": checked.content,
+                "tree": checked.tree,
                 "tool_calls": m.tool_calls,
                 "tool_call_id": m.tool_call_id,
-                "created_at": datetime_str(&m.created_at),
+                "created_at": m.created_at,
             })
         })
         .collect();

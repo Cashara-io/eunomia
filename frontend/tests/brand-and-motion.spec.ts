@@ -535,7 +535,7 @@ async function generationFixture(page: Page) {
     await route
       .fulfill({
         contentType: "text/event-stream",
-        body: 'data: {"type":"text","delta":"The generated reply is ready."}\n\n',
+        body: 'data: {"type":"text","delta":"The generated reply is ready.","tree":[{"kind":"paragraph","children":[{"kind":"text","text":"The generated reply is ready."}]}]}\n\n',
       })
       .catch(() => {});
   });

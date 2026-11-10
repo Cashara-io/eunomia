@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
+import { parseFragment } from "parse5";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import ChatText from "../src/components/chat/ChatText";
+import MetricView from "../src/components/chat/views/MetricView";
 import UiView from "../src/components/chat/ui/UiView";
 import Chart from "../src/components/chat/ui/Charts";
 import DataBlock from "../src/components/chat/ui/Blocks";
@@ -117,4 +120,74 @@ test("UI prose never reparses Markdown entities or escapes", () => {
     expect(html).not.toContain("½");
     expect(html).not.toContain("<strong>bold</strong>");
   }
+});
+
+
+test("grouped metric view displays server groups and keeps a missing value missing", () => {
+  const html = renderToStaticMarkup(<MetricView view={{view: "metric", text: "Sales by group", entities: [], metric: {
+    metric: "sales", kind: "sale", vault: "vault:test", description: null, expr_words: "Sum of sales", value: null,
+    unit: "AUD", as_of: "2026-11-10T00:00:00Z", n_entities: 3, entity_ids: [], truncated: false, status: "approved", warnings: [],
+    groups: [
+      {group: {entity_id: "entity:store", name: "Store"}, value: 40.25, n_entities: 2, entity_ids: [], truncated: false},
+      {group: null, value: null, n_entities: 1, entity_ids: [], truncated: false},
+    ],
+  }}} />);
+  expect(html).toContain("Store");
+  expect(html).toContain("40.25");
+  expect(html).toContain("Unassigned");
+  expect(html).toContain("none");
+  expect(html).not.toContain("No value");
+  expect(html).not.toContain("0.00");
+});
+
+function domText(node) {
+  return node.nodeName === "#text" ? node.value : (node.childNodes || []).map(domText).join("");
+}
+test("checked tree visible text equals rendered DOM text across the server corpus", () => {
+  const fixture = JSON.parse(readFileSync(new URL("../../backend/tests/fixtures/chat_markdown.json", import.meta.url), "utf8"));
+  for (const sample of fixture.cases) {
+    const html = renderToStaticMarkup(<ChatText tree={sample.tree} />);
+    expect(domText(parseFragment(html))).toBe(sample.visible_text);
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("javascript:");
+    if (sample.name === "image regression") {
+      expect(sample.visible_text).toStartWith("Count [unverified number]");
+      expect(html).not.toContain("12");
+    }
+    if (sample.name === "autolink regression") {
+      expect(html).toContain('href="https://example.com/999"');
+      expect(sample.visible_text).toBe("https://example.com/999");
+    }
+  }
+});
+test("chat renderer treats Markdown and HTML inside text nodes literally", () => {
+  const text = "**bold** &amp; <img src=x onerror=alert(999)>";
+  const html = renderToStaticMarkup(<ChatText tree={[{kind: "paragraph", children: [{kind: "text", text}]}]} />);
+  expect(domText(parseFragment(html))).toBe(text);
+  expect(html).not.toContain("<strong>");
+  expect(html).not.toContain("<img");
+});
+test("chat links never render unchecked titles from older stored trees", () => {
+  const html = renderToStaticMarkup(<ChatText tree={[{kind: "link", href: "https://example.com", title: "Bakery sales $0.00", autolink: false, children: [{kind: "text", text: "Report"}]}]} />);
+  expect(html).toContain('href="https://example.com"');
+  expect(html).not.toContain("title=");
+  expect(html).not.toContain("$0.00");
+});
+test("chat ignores code info and ordered-list offsets from older stored trees", () => {
+  const html = renderToStaticMarkup(<ChatText tree={[
+    {kind: "code_block", language: "Bakery sales $0.00", children: [{kind: "text", text: "Checked code"}]},
+    {kind: "list", start: 999, children: [{kind: "item", children: [{kind: "text", text: "First item"}]}]},
+  ]} />);
+  expect(html).toContain("<ol>");
+  expect(html).not.toContain("999");
+  expect(html).not.toContain("$0.00");
+  expect(domText(parseFragment(html))).toBe("Checked codeFirst item");
+});
+test("overlap notes are visible in metric and generated views", () => {
+  const note = "1 entity contributes to more than one group; groups overlap and must not be summed";
+  const metric = {as_of: "2026-01-01T00:00:00Z", expr_words: "Sum of sales", metric: "sales", kind: "sample", value: null, unit: "AUD", groups: [{group: "Supplier", value: 100, n_entities: 1, entity_ids: [], truncated: false}], warnings: [note], status: "approved", entity_ids: [], n_entities: 1, truncated: false};
+  expect(renderToStaticMarkup(<MetricView view={{type: "metric", headline: "Sales", metric, entities: []}} />)).toContain(note);
+  const view = {type: "ui", spec: {root: "h", elements: {h: {type: "Heading", props: {text: "Sales"}, children: []}}}, data: {sources: {sales: {warnings: [note]}}}, text: note};
+  expect(renderToStaticMarkup(<UiView view={view} />)).toContain(note);
 });

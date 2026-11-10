@@ -1,0 +1,1440 @@
+{
+  "evidence": [
+    12,
+    34,
+    {
+      "value": 664.475,
+      "unit": "AUD"
+    },
+    {
+      "value": 25,
+      "unit": "%"
+    }
+  ],
+  "cases": [
+    {
+      "name": "weekly",
+      "reply": "# Weekly results\n\nThe **team** processed 1**2** requests. The [source report](https://example.com/report) explains the method &amp; limits.\n\n| Measure | Result |\n| --- | ---: |\n| Requests | **12** |\n| Follow-ups | `34` |\n| Revenue | $664.48 |\n| Completion | 25% |\n| Unchecked forecast | **999** |\n\n- **Requests:** 12, with a careful review.\n- Follow-ups: [34](https://example.com/details).\n  - Nested count: 12\n- [x] Confirmed count: 34\n\n## Interpretation\n\nUse the measured results to plan the next review. Keep the link and table available for context. An entity count &#49;&#50; and a code span `34` are visible text too.\n\n<span>Inline HTML is ignored.</span>\n\n<div>Hidden raw block 777</div>\n\nA footnote-like label [^12] stays ordinary CommonMark.\n\n[^12]: Reference text 34.\n\n~Single tilde~ and ~~deleted text~~ stay in the same dialect.\n\n- 12\n\n  34\n",
+      "tree": [
+        {
+          "kind": "heading",
+          "level": 1,
+          "children": [
+            {
+              "kind": "text",
+              "text": "Weekly results"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "The "
+            },
+            {
+              "kind": "strong",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "team"
+                }
+              ]
+            },
+            {
+              "kind": "text",
+              "text": " processed 1"
+            },
+            {
+              "kind": "strong",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "2"
+                }
+              ]
+            },
+            {
+              "kind": "text",
+              "text": " requests. The "
+            },
+            {
+              "kind": "link",
+              "href": "https://example.com/report",
+              "autolink": false,
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "source report"
+                }
+              ]
+            },
+            {
+              "kind": "text",
+              "text": " explains the method "
+            },
+            {
+              "kind": "text",
+              "text": "&"
+            },
+            {
+              "kind": "text",
+              "text": " limits."
+            }
+          ]
+        },
+        {
+          "kind": "table",
+          "children": [
+            {
+              "kind": "table_head",
+              "children": [
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "Measure"
+                    }
+                  ]
+                },
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "Result"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "table_row",
+              "children": [
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "Requests"
+                    }
+                  ]
+                },
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "strong",
+                      "children": [
+                        {
+                          "kind": "text",
+                          "text": "12"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "table_row",
+              "children": [
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "Follow-ups"
+                    }
+                  ]
+                },
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "code_span",
+                      "children": [
+                        {
+                          "kind": "text",
+                          "text": "34"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "table_row",
+              "children": [
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "Revenue"
+                    }
+                  ]
+                },
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "$664.48"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "table_row",
+              "children": [
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "Completion"
+                    }
+                  ]
+                },
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "25%"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "table_row",
+              "children": [
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "Unchecked forecast"
+                    }
+                  ]
+                },
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "strong",
+                      "children": [
+                        {
+                          "kind": "text",
+                          "text": "[unverified number]"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "list",
+          "start": null,
+          "children": [
+            {
+              "kind": "item",
+              "children": [
+                {
+                  "kind": "strong",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "Requests:"
+                    }
+                  ]
+                },
+                {
+                  "kind": "text",
+                  "text": " 12, with a careful review."
+                }
+              ]
+            },
+            {
+              "kind": "item",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "Follow-ups: "
+                },
+                {
+                  "kind": "link",
+                  "href": "https://example.com/details",
+                  "autolink": false,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "34"
+                    }
+                  ]
+                },
+                {
+                  "kind": "text",
+                  "text": "."
+                },
+                {
+                  "kind": "list",
+                  "start": null,
+                  "children": [
+                    {
+                      "kind": "item",
+                      "children": [
+                        {
+                          "kind": "text",
+                          "text": "Nested count: 12"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "item",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "["
+                },
+                {
+                  "kind": "text",
+                  "text": "x"
+                },
+                {
+                  "kind": "text",
+                  "text": "]"
+                },
+                {
+                  "kind": "text",
+                  "text": " Confirmed count: 34"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "heading",
+          "level": 2,
+          "children": [
+            {
+              "kind": "text",
+              "text": "Interpretation"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Use the measured results to plan the next review. Keep the link and table available for context. An entity count "
+            },
+            {
+              "kind": "text",
+              "text": "1"
+            },
+            {
+              "kind": "text",
+              "text": "2"
+            },
+            {
+              "kind": "text",
+              "text": " and a code span "
+            },
+            {
+              "kind": "code_span",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "34"
+                }
+              ]
+            },
+            {
+              "kind": "text",
+              "text": " are visible text too."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "<span>"
+            },
+            {
+              "kind": "text",
+              "text": "Inline HTML is ignored."
+            },
+            {
+              "kind": "text",
+              "text": "</span>"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": "<div>Hidden raw block [unverified number]</div>\n"
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "A footnote-like label "
+            },
+            {
+              "kind": "text",
+              "text": "["
+            },
+            {
+              "kind": "text",
+              "text": "^12"
+            },
+            {
+              "kind": "text",
+              "text": "]"
+            },
+            {
+              "kind": "text",
+              "text": " stays ordinary CommonMark."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "["
+            },
+            {
+              "kind": "text",
+              "text": "^12"
+            },
+            {
+              "kind": "text",
+              "text": "]"
+            },
+            {
+              "kind": "text",
+              "text": ": Reference text 34."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "~Single tilde~ and ~~deleted text~~ stay in the same dialect."
+            }
+          ]
+        },
+        {
+          "kind": "list",
+          "start": null,
+          "children": [
+            {
+              "kind": "item",
+              "children": [
+                {
+                  "kind": "paragraph",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "12"
+                    }
+                  ]
+                },
+                {
+                  "kind": "paragraph",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "34"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "Weekly resultsThe team processed 12 requests. The source report explains the method & limits.MeasureResultRequests12Follow-ups34Revenue$664.48Completion25%Unchecked forecast[unverified number]Requests: 12, with a careful review.Follow-ups: 34.Nested count: 12[x] Confirmed count: 34InterpretationUse the measured results to plan the next review. Keep the link and table available for context. An entity count 12 and a code span 34 are visible text too.<span>Inline HTML is ignored.</span><div>Hidden raw block [unverified number]</div>\nA footnote-like label [^12] stays ordinary CommonMark.[^12]: Reference text 34.~Single tilde~ and ~~deleted text~~ stay in the same dialect.1234Some numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "image regression",
+      "reply": "Count 12![3](/icon.svg)",
+      "evidence": [
+        123
+      ],
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Count [unverified number]"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "Count [unverified number]Some numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "autolink regression",
+      "reply": "<https://example.com/999>",
+      "evidence": [],
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "link",
+              "href": "https://example.com/999",
+              "autolink": true,
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "https://example.com/999"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "visible_text": "https://example.com/999"
+    },
+    {
+      "name": "reference and entities",
+      "reply": "[Count **12**][ref] &amp; &#51;4 \\*literal\\*\n\n[ref]: https://example.com/999 \"Report\"",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "link",
+              "href": "https://example.com/999",
+              "autolink": false,
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "Count "
+                },
+                {
+                  "kind": "strong",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "12"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "text",
+              "text": " "
+            },
+            {
+              "kind": "text",
+              "text": "&"
+            },
+            {
+              "kind": "text",
+              "text": " "
+            },
+            {
+              "kind": "text",
+              "text": "3"
+            },
+            {
+              "kind": "text",
+              "text": "4 "
+            },
+            {
+              "kind": "text",
+              "text": "*literal"
+            },
+            {
+              "kind": "text",
+              "text": "*"
+            }
+          ]
+        }
+      ],
+      "visible_text": "Count 12 & 34 *literal*"
+    },
+    {
+      "name": "nested emphasis",
+      "reply": "Count **1*2*** and *nested **34***.",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Count "
+            },
+            {
+              "kind": "strong",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "1"
+                },
+                {
+                  "kind": "em",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "2"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "text",
+              "text": " and "
+            },
+            {
+              "kind": "em",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "nested "
+                },
+                {
+                  "kind": "strong",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "34"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "text",
+              "text": "."
+            }
+          ]
+        }
+      ],
+      "visible_text": "Count 12 and nested 34."
+    },
+    {
+      "name": "breaks",
+      "reply": "Count 12\nsoft 34  \nhard 12\\\nend 34",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Count 12"
+            },
+            {
+              "kind": "text",
+              "text": " "
+            },
+            {
+              "kind": "text",
+              "text": "soft 34"
+            },
+            {
+              "kind": "line_break",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "\n"
+                }
+              ]
+            },
+            {
+              "kind": "text",
+              "text": "hard 12"
+            },
+            {
+              "kind": "line_break",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "\n"
+                }
+              ]
+            },
+            {
+              "kind": "text",
+              "text": "end 34"
+            }
+          ]
+        }
+      ],
+      "visible_text": "Count 12 soft 34\nhard 12\nend 34"
+    },
+    {
+      "name": "table code pipes",
+      "reply": "| Code | Count |\n| --- | --- |\n| `a\\|b` | 12 |\n| `34` | 999 |",
+      "tree": [
+        {
+          "kind": "table",
+          "children": [
+            {
+              "kind": "table_head",
+              "children": [
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "Code"
+                    }
+                  ]
+                },
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "Count"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "table_row",
+              "children": [
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "code_span",
+                      "children": [
+                        {
+                          "kind": "text",
+                          "text": "a|b"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "12"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "table_row",
+              "children": [
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "code_span",
+                      "children": [
+                        {
+                          "kind": "text",
+                          "text": "34"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "[unverified number]"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "CodeCounta|b1234[unverified number]Some numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "setext",
+      "reply": "Count 12\n===\n\nSecond 34\n---",
+      "tree": [
+        {
+          "kind": "heading",
+          "level": 1,
+          "children": [
+            {
+              "kind": "text",
+              "text": "Count 12"
+            }
+          ]
+        },
+        {
+          "kind": "heading",
+          "level": 2,
+          "children": [
+            {
+              "kind": "text",
+              "text": "Second 34"
+            }
+          ]
+        }
+      ],
+      "visible_text": "Count 12Second 34"
+    },
+    {
+      "name": "inert HTML",
+      "reply": "<script>window.__pwned = 999</script>\n\nInline <b>12</b> &lt;tag&gt;",
+      "tree": [
+        {
+          "kind": "text",
+          "text": "<script>window.__pwned = [unverified number]</script>\n"
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Inline "
+            },
+            {
+              "kind": "text",
+              "text": "<b>"
+            },
+            {
+              "kind": "text",
+              "text": "12"
+            },
+            {
+              "kind": "text",
+              "text": "</b>"
+            },
+            {
+              "kind": "text",
+              "text": " "
+            },
+            {
+              "kind": "text",
+              "text": "<"
+            },
+            {
+              "kind": "text",
+              "text": "tag"
+            },
+            {
+              "kind": "text",
+              "text": ">"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "<script>window.__pwned = [unverified number]</script>\nInline <b>12</b> <tag>Some numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "unsafe links",
+      "reply": "[open](javascript:alert%28999%29) [safe](https://example.com/999)",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "link",
+              "href": "javascript:alert%28999%29",
+              "autolink": false,
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "open"
+                }
+              ]
+            },
+            {
+              "kind": "text",
+              "text": " "
+            },
+            {
+              "kind": "link",
+              "href": "https://example.com/999",
+              "autolink": false,
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "safe"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "visible_text": "open safe"
+    },
+    {
+      "name": "e2e",
+      "reply": "## Plan\n\nUse **bold**, *italics* and `inline code`, see [the docs](https://example.com/docs).\n\n- first item\n- second item\n\n```rust\nlet answer = \"42\";\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n<script>window.__pwned = true</script>",
+      "evidence": [
+        42,
+        1,
+        2
+      ],
+      "tree": [
+        {
+          "kind": "heading",
+          "level": 2,
+          "children": [
+            {
+              "kind": "text",
+              "text": "Plan"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Use "
+            },
+            {
+              "kind": "strong",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "bold"
+                }
+              ]
+            },
+            {
+              "kind": "text",
+              "text": ", "
+            },
+            {
+              "kind": "em",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "italics"
+                }
+              ]
+            },
+            {
+              "kind": "text",
+              "text": " and "
+            },
+            {
+              "kind": "code_span",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "inline code"
+                }
+              ]
+            },
+            {
+              "kind": "text",
+              "text": ", see "
+            },
+            {
+              "kind": "link",
+              "href": "https://example.com/docs",
+              "autolink": false,
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "the docs"
+                }
+              ]
+            },
+            {
+              "kind": "text",
+              "text": "."
+            }
+          ]
+        },
+        {
+          "kind": "list",
+          "start": null,
+          "children": [
+            {
+              "kind": "item",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "first item"
+                }
+              ]
+            },
+            {
+              "kind": "item",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "second item"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "code_block",
+          "children": [
+            {
+              "kind": "text",
+              "text": "let answer = \"42\";\n"
+            }
+          ]
+        },
+        {
+          "kind": "table",
+          "children": [
+            {
+              "kind": "table_head",
+              "children": [
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "a"
+                    }
+                  ]
+                },
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "b"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "table_row",
+              "children": [
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "1"
+                    }
+                  ]
+                },
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "2"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": "<script>window.__pwned = true</script>"
+        }
+      ],
+      "visible_text": "PlanUse bold, italics and inline code, see the docs.first itemsecond itemlet answer = \"42\";\nab12<script>window.__pwned = true</script>"
+    },
+    {
+      "name": "currency scheme autolink",
+      "reply": "Bakery sales <AUD:0.00>.",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Bakery sales "
+            },
+            {
+              "kind": "text",
+              "text": "AUD:[unverified number]"
+            },
+            {
+              "kind": "text",
+              "text": "."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "Bakery sales AUD:[unverified number].Some numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "unsupported autolink scheme",
+      "reply": "<ftp://example.com/999>",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "ftp://example.com[unverified number]"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "ftp://example.com[unverified number]Some numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "bare domain stays checked",
+      "reply": "www.example.com/999",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "www.example.com[unverified number]"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "www.example.com[unverified number]Some numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "email autolink",
+      "reply": "<person999@example.com>",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "link",
+              "href": "mailto:person999@example.com",
+              "autolink": true,
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "person999@example.com"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "visible_text": "person999@example.com"
+    },
+    {
+      "name": "link hover title omitted",
+      "reply": "[Report](https://example.com \"Bakery sales $0.00\")",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "link",
+              "href": "https://example.com",
+              "autolink": false,
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "Report"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "visible_text": "Report"
+    },
+    {
+      "name": "reference hover title omitted",
+      "reply": "[Report][ref]\n\n[ref]: https://example.com \"Bakery sales $0.00\"",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "link",
+              "href": "https://example.com",
+              "autolink": false,
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "Report"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "visible_text": "Report"
+    },
+    {
+      "name": "code info omitted",
+      "reply": "```Bakery sales $0.00\nUseful code 999\n```",
+      "tree": [
+        {
+          "kind": "code_block",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Useful code [unverified number]\n"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "Useful code [unverified number]\nSome numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "ordered list offset omitted",
+      "reply": "999. Useful item",
+      "tree": [
+        {
+          "kind": "list",
+          "start": 1,
+          "children": [
+            {
+              "kind": "item",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "Useful item"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "visible_text": "Useful item"
+    },
+    {
+      "name": "heading attributes literal",
+      "reply": "# Sales {#999}",
+      "tree": [
+        {
+          "kind": "heading",
+          "level": 1,
+          "children": [
+            {
+              "kind": "text",
+              "text": "Sales {#[unverified number]}"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "Sales {#[unverified number]}Some numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "table header attributes literal",
+      "reply": "| Sales {#999} |\n| --- |\n| Useful |",
+      "tree": [
+        {
+          "kind": "table",
+          "children": [
+            {
+              "kind": "table_head",
+              "children": [
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "Sales {#[unverified number]}"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "table_row",
+              "children": [
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "Useful"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "Sales {#[unverified number]}UsefulSome numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "footnote like text",
+      "reply": "[^999]: Bakery sales $0.00\n\nFootnote [^999]",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "["
+            },
+            {
+              "kind": "text",
+              "text": "^[unverified number]"
+            },
+            {
+              "kind": "text",
+              "text": "]"
+            },
+            {
+              "kind": "text",
+              "text": ": Bakery sales [unverified number]"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Footnote "
+            },
+            {
+              "kind": "text",
+              "text": "["
+            },
+            {
+              "kind": "text",
+              "text": "^[unverified number]"
+            },
+            {
+              "kind": "text",
+              "text": "]"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "[^[unverified number]]: Bakery sales [unverified number]Footnote [^[unverified number]]Some numbers couldn't be checked against tool results."
+    }
+  ]
+}

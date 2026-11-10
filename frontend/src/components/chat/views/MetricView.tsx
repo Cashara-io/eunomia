@@ -72,7 +72,19 @@ export default function MetricView({ view }: { view: Metric }) {
           {run.description && <p className="text-[13px]">{run.description}</p>}
         </div>
       </header>
-      {!run.series && <MetricNumber run={run} />}
+      {!run.series && !run.groups && <MetricNumber run={run} />}
+      {run.groups && (
+        <table className="data-table w-full max-w-md" aria-label={`${words(run.metric)} by group`}>
+          <thead><tr><th scope="col">Group</th><th scope="col">Value</th><th scope="col">From</th></tr></thead>
+          <tbody>{run.groups.map((row) => (
+            <tr key={JSON.stringify(row.group)}>
+              <td>{row.group === null ? "Unassigned" : typeof row.group === "object" ? row.group.name : String(row.group)}</td>
+              <td className="font-mono">{row.value === null ? "none" : withUnit(row.value, run.unit)}</td>
+              <td className="font-mono">{row.n_entities}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      )}
       {run.series && (
         <table className="data-table w-full max-w-md" aria-label={`${words(run.metric)} by period`}>
           <thead>
