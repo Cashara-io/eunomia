@@ -52,6 +52,11 @@ x[12]	Pass	Pass
 "[5 m]"	Fail	Pass
 '[5 m]'	Fail	Pass
 [5 m] - next	Fail	Fail
+([5 m])/s	Fail	Fail
+([5 m]) squared	Fail	Fail
+"[5 m]"-squared	Fail	Fail
+([5 m]).	Fail	Pass
+([5 m]), and	Fail	Pass
 [5 m]-squared	Fail	Fail
 [5 m]-per-second	Fail	Fail
 [5 m] - million	Fail	Fail

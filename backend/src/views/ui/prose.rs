@@ -202,11 +202,14 @@ fn complete_custom_binding(raw: &str, substitutions: &[(std::ops::Range<usize>, 
         || spans(value).first().is_some_and(|span| *span == (0..value.len()))
     { return false; }
     let Some((original, _)) = substitutions.iter().find(|(r, _)| normalise(&raw[..r.start]).len() == range.start) else { return false; };
-    match raw[original.end..].trim_start_matches(|c: char| c.is_whitespace() && !matches!(c, '\n' | '\r')).chars().next() {
-        None => true,
-        Some(c) => matches!(c, '.' | ',' | ';' | ':' | ')' | ']' | '}' | '\'' | '"' | '?' | '!' | '\n' | '\r'
-            | '\u{2018}' | '\u{2019}' | '\u{201c}' | '\u{201d}'),
-    }
+    // A closing bracket or quote is not the end of the clause: `(5 m)/s` and
+    // `(5 m) squared` still change the quantity. Look past the closers.
+    let horizontal = |c: char| c.is_whitespace() && !matches!(c, '\n' | '\r');
+    let closer = |c: char| matches!(c, ')' | ']' | '}' | '\'' | '"' | '\u{2018}' | '\u{2019}' | '\u{201c}' | '\u{201d}');
+    let rest = raw[original.end..].trim_start_matches(horizontal);
+    let after = rest.trim_start_matches(closer);
+    let after = if after.len() == rest.len() { after } else { after.trim_start_matches(horizontal) };
+    after.chars().next().is_none_or(|c| matches!(c, '.' | ',' | ';' | ':' | '?' | '!' | '\n' | '\r'))
 }
 // Dates are a single span, including ranges. No endpoint can license a prefix or suffix.
 fn iso_span(text: &str) -> Option<Vec<String>> {
