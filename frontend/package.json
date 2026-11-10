@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint && bun test scripts/chat-ui-values.test.jsx scripts/object-numbers.test.jsx scripts/import-progress.test.jsx",
     "gen:api": "openapi-ts",
-    "test": "playwright test"
+    "test": "playwright test",
+    "test:proxy": "playwright test --config scripts/proxy-path.config.ts"
   },
   "dependencies": {
     "@blobatar/react": "^2.7.0",

@@ -215,6 +215,12 @@ The next sign-ins find the account by `(issuer, subject)`, so a changed email at
 
 **Notes.** A public provider (Google, a shared AuthKit tenant) lets anyone with an account sign in: set `SIGNUP=invite` or `closed`, or restrict who the provider application is assigned to. The provider's discovery, JWKS, token and userinfo endpoints must be https (http only for loopback); requests have a 10 second timeout, never follow redirects and are capped at 1 MiB. If the ID token has no email, the userinfo endpoint is asked (its `sub` must match). Sign-in attempts at the callback share the per-address `RATE_LIMIT_AUTH_PER_MIN` limit.
 
+### Upload and MCP body handling
+
+Both the bundled Caddy proxy and a direct `:3000` install reach the same Next route handlers for `/api/documents` and `/mcp`. These paths bypass `src/proxy.ts`, because Next clones request bodies before that proxy runs. A body-bearing request first checks credentials with the fixed internal backend, without reading the incoming body. Uploads use a bodyless `/api/auth/me` request. MCP uses a small, fixed `ping`, because OAuth access tokens are accepted only at `/mcp`. These checks are uncached. Only a 200 response permits streaming the original body. Missing, fake, expired or revoked credentials fail before the body is read. Backend failures fail closed. The backend still authenticates and authorises the actual request and enforces its upload size and concurrency limits.
+
+All other Next proxy routes have a 1 MiB cloning ceiling. Large uploads do not require raising that ceiling or configuring a bundled reverse proxy. The streaming handlers apply the same forwarding-header policy as `src/proxy.ts`. If you supply your own reverse proxy, keep request buffering disabled there, for example `proxy_request_buffering off` for nginx, so it does not spool an unauthenticated upload before Next can refuse it. Bundled Caddy streams requests without a request-buffer configuration.
+
 ## 3. The browser only ever talks to the frontend
 
 The frontend calls same-origin `/api/*`, and `frontend/next.config.ts`

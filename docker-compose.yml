@@ -169,7 +169,6 @@ services:
       - "${FRONTEND_BIND:-0.0.0.0}:${FRONTEND_PORT:-3000}:3000"
     environment:
       # 1 only behind a trusted reverse proxy: believe the X-Forwarded-For/Proto it sets (src/proxy.ts)
-      - EUNOMIA_DOCUMENTS_MAX_BYTES=${EUNOMIA_DOCUMENTS_MAX_BYTES:-26214400}
       - FRONTEND_TRUST_FORWARDED=${FRONTEND_TRUST_FORWARDED:-}
     depends_on:
       backend:
