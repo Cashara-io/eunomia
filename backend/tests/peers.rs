@@ -33,7 +33,7 @@ struct Node {
 impl Node {
     async fn new(name: &str) -> Node {
         let app = TestApp::new().await;
-        let base = format!("http://{name}.test:3000");
+        let base = format!("http://{name}.test:18195");
         peers::net::test_route(&base, app.router.clone());
         Node { app, base }
     }
@@ -259,5 +259,36 @@ fn stopping_keeps_both_copies() {
         assert_eq!(b.link(&link).await.status, peers::status::REVOKED);
         assert!(names(&b.find(&vb, "Pat").await).contains(&"Pat".to_string()));
         assert!(names(&a.find(&va, "Pat").await).contains(&"Pat".to_string()));
+    });
+}
+
+#[test]
+fn review209_owner_merge_redirects_sync_to_existing_and_new_peer() {
+    run(|| async {
+        let (a, b, c) = (Node::new("merge-a").await, Node::new("merge-b").await, Node::new("merge-c").await);
+        let va = a.vault("Stores").await;
+        a.app.tool("ontology_propose", json!({"vault_id":va.to_string(),"kinds":[{"kind":"store","description":"A shop"}]})).await;
+        let (status, decided) = a.app.http_session("POST", &format!("/api/vaults/{}/ontology/kinds/decide", va.to_string()), Some(json!({"kind":"store","decision":{"action":"approve"}}))).await;
+        assert_eq!(status, 200, "{decided}");
+        let winner = a.app.tool("memory_write", json!({"subject_kind":"store","subject_name":"North","text":"North opens daily","vault_id":va.to_string()})).await;
+        let loser = a.app.tool("memory_write", json!({"subject_kind":"organisation","subject_name":"North Co","text":"North Co sells food","vault_id":va.to_string()})).await;
+        let (vb, link) = b.join(&a.code(&va, "edit").await).await;
+        let merged = a.app.tool("entity_merge", json!({"winner_id":winner["entity"]["id"],"loser_id":loser["entity"]["id"]})).await;
+        assert!(merged.get("error").is_none(), "{merged}");
+        let r = b.sync(&link).await;
+        assert_eq!(r.failed, 0, "{r:?}");
+        assert_eq!(a.digest(&va).await, b.digest(&vb).await);
+        let (vc, _) = c.join(&a.code(&va, "edit").await).await;
+        assert_eq!(a.digest(&va).await, c.digest(&vc).await);
+        for (node, vault) in [(&a, &va), (&b, &vb), (&c, &vc)] {
+            let got = node.find(vault, "North").await;
+            assert!(!got.to_string().contains("@eunomia/merged/"), "{got}");
+            assert_eq!(names(&got), vec!["North"]);
+        }
+        // Also exercise a guest-to-host update carrying the redirect back.
+        let entity = b.find(&vb, "North").await["results"][0]["id"].clone();
+        b.app.tool("entity_update", json!({"entity_id":entity,"summary":"Fresh summary"})).await;
+        assert_eq!(b.sync(&link).await.failed, 0);
+        assert_eq!(a.digest(&va).await, b.digest(&vb).await);
     });
 }

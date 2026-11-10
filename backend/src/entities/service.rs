@@ -1274,6 +1274,41 @@ pub async fn update_entity(
     Ok(Some(entity_out(&row)))
 }
 
+/// Only authenticated peer application may restore owner merge redirects from the wire.
+/// Ordinary service entry points still reject the reserved namespace.
+pub(crate) fn peer_aliases(aliases: Vec<String>) -> AppResult<(Vec<String>, Vec<String>)> {
+    let (redirects, visible): (Vec<_>, Vec<_>) = aliases.into_iter().partition(|a| super::merge_alias::reserved(a));
+    for alias in &redirects {
+        let valid = super::merge_alias::decode(alias).is_some_and(|(kind, name)| !name.is_empty() && super::merge_alias::encode(kind, name) == *alias);
+        if !valid { return Err(AppError::bad_request("invalid peer merge redirect")); }
+    }
+    Ok((visible, redirects))
+}
+
+fn require_peer_write() -> AppResult<()> {
+    let caller = crate::authz::caller()?;
+    if caller.actor.kind != "system" || !caller.actor.id.starts_with("peer:") {
+        return Err(AppError::coded(crate::error::ErrorCode::AuthForbidden, "merge redirects require a trusted peer write"));
+    }
+    Ok(())
+}
+
+pub(crate) async fn add_peer_redirects(db: &OrgDb, owner: &RecordId, id: &RecordId, redirects: Vec<String>) -> AppResult<()> {
+    if redirects.is_empty() { return Ok(()); }
+    require_peer_write()?;
+    let (_, redirects) = peer_aliases(redirects)?;
+    let row = select_entity(db, id).await?.ok_or_else(|| AppError::not_found("peer entity not found"))?;
+    if !accessible(db, owner, &row.vault, Action::WriteMemories).await? {
+        return Err(AppError::not_found("peer entity not found"));
+    }
+    if redirects.iter().all(|a| row.aliases.contains(a)) { return Ok(()); }
+    with_retry(|| async {
+        q::MERGE_ALIASES.on(db).bind(("id", id.clone())).bind(("aliases", redirects.clone())).await?.check()
+    }).await?;
+    changes::record(db, &row.vault, changes::UPDATED, changes::ENTITY, id).await;
+    Ok(())
+}
+
 /// Delete an entity and everything hanging off it: its `memory` rows and its
 /// `relates_to` edges in both directions. Vault-scoped, same
 /// not-found-is-false convention as `delete_memory`.
@@ -1313,6 +1348,15 @@ pub async fn merge_entities(
     winner_id: &RecordId,
     loser_id: &RecordId,
 ) -> AppResult<EntityOut> {
+    merge_entities_inner(db, owner, winner_id, loser_id, false).await
+}
+
+pub(crate) async fn merge_peer_entities(db: &OrgDb, owner: &RecordId, winner: &RecordId, loser: &RecordId) -> AppResult<EntityOut> {
+    require_peer_write()?;
+    merge_entities_inner(db, owner, winner, loser, true).await
+}
+
+async fn merge_entities_inner(db: &OrgDb, owner: &RecordId, winner_id: &RecordId, loser_id: &RecordId, peer: bool) -> AppResult<EntityOut> {
     if winner_id == loser_id {
         return Err(AppError::bad_request("winner_id and loser_id must refer to different entities"));
     }
@@ -1332,8 +1376,8 @@ pub async fn merge_entities(
     same_vault(&winner, &loser)?;
     if winner.kind() != loser.kind() {
         let cross_kind = winner_id.table() == CUSTOM_TABLE && KINDS.contains(&loser.kind().as_str())
-            && crate::authz::role_of(db, owner, &winner.vault).await? == Some(crate::authz::Role::Owner)
-            && crate::ontology::is_approved_kind(db, &winner.vault, &winner.kind()).await?;
+            && (peer || (crate::authz::role_of(db, owner, &winner.vault).await? == Some(crate::authz::Role::Owner)
+                && crate::ontology::is_approved_kind(db, &winner.vault, &winner.kind()).await?));
         if !cross_kind { return Err(AppError::bad_request(format!("cannot merge entities of different kinds: {:?} vs {:?}", winner.kind(), loser.kind()))); }
     }
 
@@ -1342,7 +1386,7 @@ pub async fn merge_entities(
     }
     let mut aliases = loser_names(&loser);
     if winner.kind() != loser.kind() {
-        // Only this owner-authorised cross-kind merge may create kind-qualified aliases.
+        // An owner merge, or its authenticated peer copy, may create kind-qualified aliases.
         aliases.extend(loser_names(&loser).iter().map(|name| super::merge_alias::encode(&loser.kind(), name)));
     }
     merge_rows(db, winner_id, loser_id, aliases, (winner.kind() != loser.kind()).then(|| winner.kind())).await?;

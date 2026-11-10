@@ -516,7 +516,7 @@ async fn create_local(ctx: &Ctx<'_>, item: &Item) -> AppResult<Option<RecordId>>
     let (db, owner, vault, d) = (ctx.db(), ctx.owner(), ctx.vault(), &item.data);
     Ok(Some(match item.kind.as_str() {
         changes::ENTITY => {
-            let aliases: Vec<String> = serde_json::from_value(d["aliases"].clone()).unwrap_or_default();
+            let (aliases, redirects) = entities::peer_aliases(serde_json::from_value(d["aliases"].clone()).unwrap_or_default())?;
             let (out, _) = Box::pin(entities::upsert_entity_created(db, owner, s(d, "kind"), s(d, "name"), Some(aliases.clone()), Some(vault))).await?;
             let id = crate::rid::parse(&out.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
             // found an entity of that name already: keep its aliases too, take the summary unless empty
@@ -530,6 +530,7 @@ async fn create_local(ctx: &Ctx<'_>, item: &Item) -> AppResult<Option<RecordId>>
             if merged != out.aliases || summary != out.summary {
                 Box::pin(entities::update_entity(db, owner, &id, None, Some(merged), Some(&summary))).await?;
             }
+            Box::pin(entities::add_peer_redirects(db, owner, &id, redirects)).await?;
             id
         }
         changes::MEMORY => {
@@ -560,10 +561,12 @@ async fn update_local(ctx: &Ctx<'_>, item: &Item, l: &RecordId, cur: &Local) -> 
     let (db, owner, d) = (ctx.db(), ctx.owner(), &item.data);
     match item.kind.as_str() {
         changes::ENTITY => {
-            let aliases: Vec<String> = serde_json::from_value(d["aliases"].clone()).unwrap_or_default();
+            let (aliases, redirects) = entities::peer_aliases(serde_json::from_value(d["aliases"].clone()).unwrap_or_default())?;
             let name = s(d, "name");
             let rename = (cur.row.name.as_deref() != Some(name)).then_some(name);
-            Box::pin(entities::update_entity(db, owner, l, rename, Some(aliases), Some(s(d, "summary")))).await?;
+            Box::pin(entities::update_entity(db, owner, l, rename, Some(aliases), Some(s(d, "summary")))).await?
+                .ok_or_else(|| AppError::not_found("peer entity not found"))?;
+            Box::pin(entities::add_peer_redirects(db, owner, l, redirects)).await?;
             Ok(Some(l.clone()))
         }
         changes::MEMORY => {
@@ -639,8 +642,8 @@ async fn apply_one(ctx: &Ctx<'_>, item: &Item) -> AppResult<Outcome> {
                 _ => None,
             };
             match winner {
-                Some(w) if w != l && w.table() == l.table() => {
-                    Box::pin(entities::merge_entities(ctx.db(), ctx.owner(), &w, &l)).await?;
+                Some(w) if w != l => {
+                    Box::pin(entities::merge_peer_entities(ctx.db(), ctx.owner(), &w, &l)).await?;
                     ctx.drop_map(&l).await?;
                 }
                 _ => delete_local(ctx, kind, &l).await?,
