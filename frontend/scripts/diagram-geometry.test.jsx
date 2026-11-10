@@ -109,3 +109,15 @@ test("the full edge cap keeps every parallel label clear", () => {
     for (const other of g.edges.slice(i + 1))
       expect(boxesIntersect(e.box, other.box)).toBe(false);
 });
+
+
+test("phone impact labels fit within the node column", () => {
+  const g = diagramGeometry(diagramFixture("impact").diagram, true);
+  const left = Math.min(...g.nodes.map((n) => n.box.x));
+  const right = Math.max(...g.nodes.map((n) => n.box.x + n.box.w));
+  for (const e of g.edges) {
+    expect(e.box.x).toBeGreaterThanOrEqual(left);
+    expect(e.box.x + e.box.w).toBeLessThanOrEqual(right);
+  }
+  expect(g.width * 0.86).toBeLessThanOrEqual(320);
+});

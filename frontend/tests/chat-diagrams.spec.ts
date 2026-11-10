@@ -106,6 +106,16 @@ for (const theme of ["light", "dark"])
         });
         expect(geometry.collision).toBe(false);
         expect(geometry.minimum).toBeGreaterThanOrEqual(11.9);
+        if (type === "impact" && width === 390) {
+          const frame = await card.getByRole("region").boundingBox();
+          if (!frame) throw new Error("Missing diagram frame");
+          for (const label of await picture.locator("[data-label-box]").all()) {
+            const box = await label.boundingBox();
+            if (!box) throw new Error("Missing edge label");
+            expect(box.x).toBeGreaterThanOrEqual(frame.x + 1);
+            expect(box.x + box.width).toBeLessThanOrEqual(frame.x + frame.width - 1);
+          }
+        }
         const marker = picture.locator("marker");
         expect(Number(await marker.getAttribute("markerWidth"))).toBeGreaterThanOrEqual(16);
         await card.getByRole("region").evaluate((el) => el.scrollIntoView({ block: "end" }));

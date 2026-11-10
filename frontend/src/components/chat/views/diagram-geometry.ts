@@ -94,15 +94,25 @@ export function diagramGeometry(d: Diagram, phone: boolean) {
       let midpoint = { x: 0, y: 0 };
       // A single quadratic has a continuous tangent through its midpoint.
       // Try small perpendicular offsets first, keeping ordinary links close to the forms.
-      placement: for (const offset of [0, 32, -32, 48, -48, 64, -64, 72, -72, 96, -96, 160, -160, 240, -240, 340, -340, 480, -480, 680, -680]) {
-        for (const along of [0, 16, -16, 24, -24, 48, -48]) {
-          midpoint = self
-            ? { x: from.x + 140 + Math.abs(offset), y: from.y }
-            : { x: (start.x + end.x) / 2 - dy / len * offset + dx / len * along,
-                y: (start.y + end.y) / 2 + dx / len * offset + dy / len * along };
-          const candidate = { x: midpoint.x - w / 2, y: midpoint.y - h / 2, w, h };
-          box = candidate;
-          if (!occupied.some((r) => boxesIntersect(candidate, r))) break placement;
+      const columnLeft = Math.min(...nodes.map((n) => n.box.x));
+      const columnRight = Math.max(...nodes.map((n) => n.box.x + n.box.w));
+      // On phones, first keep plates in the node column so labels remain visible
+      // without sideways scrolling. Dense graphs can still use the wider canvas.
+      const alongOffsets = vertical
+        ? [0, 16, -16, 24, -24, 48, -48, 64, -64, 80, -80, 96, -96]
+        : [0, 16, -16, 24, -24, 48, -48];
+      placement: for (const inColumn of vertical ? [true, false] : [false]) {
+        for (const offset of [0, 32, -32, 48, -48, 64, -64, 72, -72, 96, -96, 160, -160, 240, -240, 340, -340, 480, -480, 680, -680]) {
+          for (const along of alongOffsets) {
+            midpoint = self
+              ? { x: from.x + 140 + Math.abs(offset), y: from.y }
+              : { x: (start.x + end.x) / 2 - dy / len * offset + dx / len * along,
+                  y: (start.y + end.y) / 2 + dx / len * offset + dy / len * along };
+            const candidate = { x: midpoint.x - w / 2, y: midpoint.y - h / 2, w, h };
+            if (inColumn && (candidate.x < columnLeft || candidate.x + w > columnRight)) continue;
+            box = candidate;
+            if (!occupied.some((r) => boxesIntersect(candidate, r))) break placement;
+          }
         }
       }
       // Dense parallel links may fill every nearby slot. Reserve a clear outer midpoint
