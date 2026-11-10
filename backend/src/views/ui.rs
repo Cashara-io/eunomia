@@ -13,6 +13,7 @@ pub const MAX_BYTES: usize = 64 * 1024;
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag="type", rename_all="snake_case", deny_unknown_fields)]
 pub enum Source {
+    Diagram { diagram: super::diagram::Request },
     Dataset { #[serde(flatten)] query: dataset::Dataset },
     Metric { #[serde(default)] evidence_cursor: Option<String>, #[serde(flatten)] args: crate::ontology::metric::EvalArgs },
     Scenario { scenario: crate::ontology::scenario::ScenarioArgs, headline: String },
@@ -26,7 +27,7 @@ pub fn catalog() -> &'static Value {
 }
 pub fn description() -> &'static str {
     static DESCRIPTION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    DESCRIPTION.get_or_init(|| format!("Show an answer with server-resolved data. Keep the four legacy views, or use view ui with spec and named sources. Sources: dataset (vault_id, kind, properties, filters, group_by, bucket day/week/month/quarter/year, aggregates [{{op count/sum/avg/min/max/median/distinct,property?}}], sort {{property,descending}}, limit at most 500. To show detailed rows and totals, omit aggregates; totals are always computed separately. Aggregate column keys are generated as op_property, or count without a property. Model aliases are refused); metric (metric_eval arguments); scenario (each named source is {{type: scenario, headline: words, scenario: {{vault_id, changes, metrics}}}}; headline belongs INSIDE that source, not at the top level); impact (start_id, headline, reach {{depth, kinds, labels}}, cursor, from the previous next_cursor, sixteen linked items per page in immutable record-ID order with a server total, or at least total when total_partial is true. Items added after the first page may not appear; use reach instead of affected for large selections; follow remaining pages with show_view) and subgraph (existing view arguments). A dataset returns rows, columns, totals, distributions, total_rows, status, truncated and warnings. Totals are nested by returned column key then operation: /totals/amount/sum without aggregates; /totals/sum_amount/sum after sum of amount. total_rows counts output rows or groups before the limit. Omit aggregates for Histogram, Scatter and detail tables: totals and distributions are already supplied from the detailed rows. Bind data with {{\"$state\":\"/sources/sales/rows\"}}. Stat binds a scalar pointer. Legacy blocks bind the whole source. Never send literal numeric props or inline data; bind measured values to sources. x, y and series name columns. In all written text, use bound placeholders for numbers: title \"Rows {{{{/sources/sales/total_rows}}}}\". Dotted paths such as {{{{sources.sales.rows[0].amount}}}} also work. The server resolves one exact typed numeric or date path and formats it with server units and currency. UI prose is literal plain text without Markdown or entity decoding. Separate placeholders from numeric tokens. Raw digits are allowed only in verbatim phrases with adjacent letter-bearing words in server strings predating the turn, or matching applied ISO dates or bucket labels. No identifier exemption. Number words remain unchecked. The server resolves chart columns and refuses ambiguous y choices. No actions, repeats or visibility expressions. At most 100 elements, depth 12 and 64 KiB. The server returns useful text for terminal clients.\n{}", catalog()["prompt"].as_str().unwrap_or("")))
+    DESCRIPTION.get_or_init(|| format!("Show an answer with server-resolved data. Use view diagram with diagram {{selection: {{type: neighbourhood/impact, focus_id, hops: one/two/three; or type: path, from_id, to_id, hops, direction: both/in/out; or type: kinds, vault_id, kind?}}, emphasis: [existing references], annotations: [{{entity_id, metric: approved metric name}}]}}. A diagram helps explain connections, paths and linked impact. Prefer a sentence for one fact and a table for many detailed values. Never supply labels, nodes, edges, numbers, positions or colours. The server resolves everything within one authorised vault, caps the picture, and returns structured data plus matching terminal text. No path within a hop limit is not proof of no relationship. Impact describes reachability, not causality. Diagram is also a UI source {{type: diagram, diagram: ...}} for the Diagram component. Keep the four legacy views, or use view ui with spec and named sources. Sources: dataset (vault_id, kind, properties, filters, group_by, bucket day/week/month/quarter/year, aggregates [{{op count/sum/avg/min/max/median/distinct,property?}}], sort {{property,descending}}, limit at most 500. To show detailed rows and totals, omit aggregates; totals are always computed separately. Aggregate column keys are generated as op_property, or count without a property. Model aliases are refused); metric (metric_eval arguments); scenario (each named source is {{type: scenario, headline: words, scenario: {{vault_id, changes, metrics}}}}; headline belongs INSIDE that source, not at the top level); impact (start_id, headline, reach {{depth, kinds, labels}}, cursor, from the previous next_cursor, sixteen linked items per page in immutable record-ID order with a server total, or at least total when total_partial is true. Items added after the first page may not appear; use reach instead of affected for large selections; follow remaining pages with show_view) and subgraph (existing view arguments). A dataset returns rows, columns, totals, distributions, total_rows, status, truncated and warnings. Totals are nested by returned column key then operation: /totals/amount/sum without aggregates; /totals/sum_amount/sum after sum of amount. total_rows counts output rows or groups before the limit. Omit aggregates for Histogram, Scatter and detail tables: totals and distributions are already supplied from the detailed rows. Bind data with {{\"$state\":\"/sources/sales/rows\"}}. Stat binds a scalar pointer. Legacy blocks bind the whole source. Never send literal numeric props or inline data; bind measured values to sources. x, y and series name columns. In all written text, use bound placeholders for numbers: title \"Rows {{{{/sources/sales/total_rows}}}}\". Dotted paths such as {{{{sources.sales.rows[0].amount}}}} also work. The server resolves one exact typed numeric or date path and formats it with server units and currency. UI prose is literal plain text without Markdown or entity decoding. Separate placeholders from numeric tokens. Raw digits are allowed only in verbatim phrases with adjacent letter-bearing words in server strings predating the turn, or matching applied ISO dates or bucket labels. No identifier exemption. Number words remain unchecked. The server resolves chart columns and refuses ambiguous y choices. No actions, repeats or visibility expressions. At most 100 elements, depth 12 and 64 KiB. The server returns useful text for terminal clients.\n{}", catalog()["prompt"].as_str().unwrap_or("")))
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -116,6 +117,7 @@ fn trusted_number(data: &Value, path: &str) -> bool {
         };
     }
     match source["view"].as_str() {
+        Some("diagram") => matches!(rest, ["diagram", "total_nodes" | "total_edges" | "omitted_edges"] | ["diagram", "nodes", _, "count"] | ["diagram", "groups", _, "count"] | ["diagram", "nodes", _, "metrics", _, "value" | "n_entities"]),
         Some("impact") => matches!(rest, ["pagination", "total" | "page" | "page_size"]),
         Some("metric") => matches!(rest, ["metric", "value" | "n_entities"] | ["metric", "series", _, "value" | "n"] | ["metric", "groups", _, "value" | "n_entities"]),
         Some("scenario") => matches!(rest, ["result", "baseline" | "scenario", _, "value" | "delta" | "delta_pct" | "n_entities"] | ["result", "n_changed"]),
@@ -174,7 +176,7 @@ fn validate_binding(kind: &str, props: &Value, path: &str, value: &Value, data: 
         if !trusted_number(data, path) { return Err(bad("Stat requires a typed numeric scalar binding")); }
         return Ok(());
     }
-    if matches!(kind, "Impact" | "Subgraph" | "Metric" | "Scenario") {
+    if matches!(kind, "Impact" | "Subgraph" | "Metric" | "Scenario" | "Diagram") {
         if value["view"].as_str() != Some(kind.to_lowercase().as_str()) { return Err(bad("legacy block needs its matching source")); }
         return Ok(());
     }
@@ -255,6 +257,7 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, mut spec: Value, sources: BTr
             },
             other => {
                 let view = match other {
+                    Source::Diagram { diagram } => ViewSpec::Diagram { diagram },
                     Source::Metric { args, evidence_cursor } => ViewSpec::Metric { args, evidence_cursor },
                     Source::Scenario { scenario, headline } => ViewSpec::Scenario { scenario, headline },
                     Source::Impact { start_id, headline, affected, reach, page, cursor } => ViewSpec::Impact { start_id, headline, affected, reach, page, cursor },
@@ -360,7 +363,7 @@ pub fn sources_schema() -> Value {
     json!({"type":"object","minProperties":1,"maxProperties":8,"additionalProperties":{
         "type":"object",
         "properties":{
-            "type":{"type":"string","enum":["dataset","metric","scenario","impact","subgraph"]},
+            "type":{"type":"string","enum":["dataset","metric","scenario","impact","subgraph","diagram"]},
             "vault_id":string,"kind":string,"properties":strings,"group_by":{"type":"string","description":"One property key, or link:label for an approved outgoing link"},
             "bucket":{"type":"string","enum":["day","week","month","quarter","year"]},
             "filters":{"type":"array","items":{"type":"object"}},
@@ -371,6 +374,7 @@ pub fn sources_schema() -> Value {
             "metric":string,"as_of":string,"group_by_grain":{"type":"boolean"},"allow_unapproved":{"type":"boolean"},"related_to":{"type":"object"},
             "headline":{"type":"string","description":"REQUIRED inside each scenario or impact source"},
             "scenario":{"type":"object","description":"scenario_run arguments: vault_id, changes, metrics, optional as_of, impact_from and depth"},
+            "diagram":super::diagram::schema(),
             "reach":super::impact::schema(),"cursor":{"type":"string","description":"impact: previous next_cursor, repeat the same reach. Items added after the first page may not appear"},"evidence_cursor":{"type":"string","description":"metric: previous evidence.next_cursor, repeat evidence.args"},
             "start_id":string,"affected":{"type":"array","items":{"type":"object"}},"title":string,"entity_ids":strings,"relation_ids":strings
         },"required":["type"]

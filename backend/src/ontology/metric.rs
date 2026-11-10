@@ -1652,7 +1652,7 @@ pub(super) async fn prepare(db: &OrgDb, vault: &RecordId, args: &EvalArgs) -> Ap
     prepare_scoped(db, vault, args, None).await
 }
 
-pub(super) async fn eval_object(db: &OrgDb, vault: &RecordId, args: &EvalArgs, entity: &RecordId) -> AppResult<Value> {
+pub(crate) async fn eval_object(db: &OrgDb, vault: &RecordId, args: &EvalArgs, entity: &RecordId) -> AppResult<Value> {
     let prepared = prepare_scoped(db, vault, args, Some(entity)).await?;
     let inputs = prepared.plan.properties();
     let mut out = serde_json::to_value(prepared.run(None)?).map_err(|e|AppError::internal(e.to_string()))?;

@@ -167,8 +167,13 @@ impl Allowed {
         for span in &numeric {
             let overlaps: Vec<_> = bindings.iter().filter(|(range, _)| range.start < span.end && span.start < range.end).collect();
             let authorised = if !overlaps.is_empty() {
-                // A binding cannot borrow even one connector from prose or another binding.
-                overlaps.len() == 1 && overlaps[0].0 == *span && overlaps[0].1 == text[span.clone()]
+                // A binding cannot borrow a connector from prose or another binding. Compare
+                // numeric spans inside its server-formatted value, including non-currency units.
+                overlaps.len() == 1 && spans(&overlaps[0].1).into_iter().any(|part| {
+                    overlaps[0].0.start + part.start == span.start
+                        && overlaps[0].0.start + part.end == span.end
+                        && overlaps[0].1[part] == text[span.clone()]
+                })
             } else if iso_span(&text[span.clone()]).is_some() {
                 !text[..span.start].chars().next_back().is_some_and(token)
                     && !following_token(&text[span.end..])
@@ -304,6 +309,9 @@ fn bound(binding: &str, data: &Value) -> AppResult<String> {
     if trusted_number(data, &path) && let Some(n) = value.as_f64().filter(|n| n.is_finite()) {
         let count = matches!(rest.as_slice(), ["total_rows"] | ["totals", _, "count" | "distinct"] | ["metric", "n_entities"] | ["metric", "groups", _, "n_entities"] | ["metric", "series", _, "n"] | ["result", "n_changed"] | ["result", "baseline" | "scenario", _, "n_entities"] | ["distributions", _, "bins" | "density", _, "count"]);
         let unit = if count { None } else if let Some(c) = column { c["unit"].as_str() }
+            else if matches!(rest.as_slice(), ["diagram", "nodes", _, "metrics", _, "value"]) {
+                path.rsplit_once('/').and_then(|(parent, _)| data.pointer(parent)).and_then(|m| m["unit"].as_str())
+            }
             else if rest.first() == Some(&"metric") { source["metric"]["unit"].as_str() }
             else if matches!(rest.last(), Some(&"delta_pct")) { Some("%") }
             else { rest.get(2).and_then(|i| i.parse::<usize>().ok()).and_then(|i| source["result"][rest[1]][i]["unit"].as_str()) };
@@ -742,6 +750,17 @@ impl ChatProse {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn diagram_bindings_keep_metric_units_and_refuse_layout_coordinates() {
+        let data = json!({"sources":{"graph":{"view":"diagram","diagram":{"total_nodes":2,"nodes":[{"x":80,"metrics":[{"value":42,"unit":"AUD","n_entities":1}]}]}}}});
+        assert_eq!(bound("/sources/graph/diagram/nodes/0/metrics/0/value", &data).unwrap(), "42.00 AUD");
+        assert_eq!(bound("/sources/graph/diagram/total_nodes", &data).unwrap(), "2");
+        let custom = json!({"sources":{"graph":{"view":"diagram","diagram":{"nodes":[{"metrics":[{"value":42,"unit":"orders"}]}]}}}});
+        assert_eq!(resolve(&json!({"title":"Count {{/sources/graph/diagram/nodes/0/metrics/0/value}}"}), &custom).unwrap()["title"], "Count 42 orders");
+        assert!(resolve(&json!({"title":"Count {{/sources/graph/diagram/nodes/0/metrics/0/value}}999"}), &custom).is_err());
+        assert!(bound("/sources/graph/diagram/nodes/0/x", &data).is_err());
+    }
+
     #[test]
     fn computed_write_receipts_verify_but_request_only_counts_do_not() {
         for (tool, result, reply) in [

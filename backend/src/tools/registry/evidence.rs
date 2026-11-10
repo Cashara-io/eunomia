@@ -12,7 +12,7 @@ const METRIC: &[&str] = &["expr_words", "metric_mapped"];
 const SCENARIO: &[&str] = &["changes", "changed/*/after", "baseline/*/expr_words", "scenario/*/expr_words"];
 const VIEW: &[&str] = &[
     "text", "headline", "title", "affected/*/why", "spec", "evidence", "pagination/reach",
-    "bucket_column", "applied_dates",
+    "bucket_column", "applied_dates", "diagram/height", "diagram/nodes/*/x", "diagram/nodes/*/y",
 ];
 
 #[derive(Clone, Copy)]

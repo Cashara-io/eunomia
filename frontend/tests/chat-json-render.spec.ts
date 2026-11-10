@@ -1,3 +1,4 @@
+import { diagramFixture } from "./fixtures/chat-diagrams";
 import type { Spec } from "@json-render/core";
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { registerAndOnboard, uniqueEmail } from "./helpers";
@@ -67,6 +68,7 @@ const metric = {
   warnings: [],
 };
 const legacy: Record<string, object> = {
+  Diagram: diagramFixture("neighbourhood"),
   Impact: {
     view: "impact",
     start: entity,

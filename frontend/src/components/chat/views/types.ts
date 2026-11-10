@@ -67,4 +67,4 @@ export type ScenarioRun = {
 export type ScenarioView = { view: "scenario"; headline: string; result: ScenarioRun; text: string };
 
 /** Any view, known to this app or not: an unknown one still has its text. */
-export type ShownView = ImpactView | SubgraphView | MetricView | ScenarioView | { view: string; text: string };
+export type ShownView = import("./diagram-schema").DiagramView | ImpactView | SubgraphView | MetricView | ScenarioView | { view: string; text: string };
