@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useId,
   useMemo,
   useRef,
@@ -41,8 +42,23 @@ type Mark = FormAnchor & {
   hop: number;
   group?: Layout["groups"][number];
 };
-const plateTop = (n: Mark) =>
-  -n.height - (n.group ? 115 : n.scale > 1 ? 100 : 85);
+function labelPlates(marks: Mark[], zoom: number) {
+  const small = Math.max(12, 11 / zoom), name = Math.max(17, 13 / zoom);
+  const boxes = marks.map(n => ({ x: n.x - 85, y: n.y - n.height - 30 * n.scale, w: 170, h: n.height + 60 }));
+  const plates = new Map<string, { top: number; height: number }>();
+  for (const n of [...marks].sort((a, b) => a.y - b.y || a.id.localeCompare(b.id))) {
+    const height = 18 + small * 1.4 + name * 1.25 + (n.group ? small * 1.4 + 3 : 0);
+    let y = n.y - n.height - height - 36;
+    for (;;) {
+      const collisions = boxes.filter(b => n.x - 106 < b.x + b.w && n.x + 106 > b.x && y - 6 < b.y + b.h && y + height + 6 > b.y);
+      if (!collisions.length) break;
+      y = Math.min(...collisions.map(b => b.y)) - height - 12;
+    }
+    plates.set(n.id, { top: y - n.y, height });
+    boxes.push({ x: n.x - 100, y, w: 200, h: height });
+  }
+  return plates;
+}
 export default function ConnectionCanvas({
   scene,
   focus,
@@ -66,11 +82,14 @@ export default function ConnectionCanvas({
   const [manual, move] = useState<Camera | null>(null);
   const [help, setHelp] = useState(false);
   const [keyboardTarget, setKeyboardTarget] = useState("");
+  const cameraRef = useRef<Camera | null>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const id = useId().replaceAll(":", "");
   const { tint } = useLandscapeTint();
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const previous = cameraRef.current;
+    if (previous) move(current => current ?? previous);
     const w = new Worker(new URL("./connections.worker.ts", import.meta.url));
     w.onmessage = (e: MessageEvent<Layout>) => {
       setLayout(e.data);
@@ -116,15 +135,16 @@ export default function ConnectionCanvas({
   }, [layout, expanded, degrees, focus]);
   const fitCamera = useMemo(() => {
     if (!marks.length) return { x: 0, y: 0, zoom: 1 };
-    const minX = Math.min(...marks.map((n) => n.x)) - 125,
-      maxX = Math.max(...marks.map((n) => n.x)) + 125;
-    const minY = Math.min(...marks.map((n) => n.y - n.height)) - 105,
-      maxY = Math.max(...marks.map((n) => n.y)) + 85;
-    const zoom = Math.min(
-      1.05,
-      (size.width - 36) / (maxX - minX),
-      (size.height - 100) / (maxY - minY),
-    );
+    const minX = Math.min(...marks.map(n => n.x)) - 125,
+      maxX = Math.max(...marks.map(n => n.x)) + 125;
+    const maxY = Math.max(...marks.map(n => n.y)) + 85;
+    let zoom = 1.05, minY = 0;
+    // Text has a screen-size floor. Include its plates while solving Fit bounds.
+    for (let i = 0; i < 8; i++) {
+      const labels = marks.length <= 80 ? labelPlates(marks, zoom) : null;
+      minY = Math.min(...marks.map(n => n.y + (labels?.get(n.id)?.top ?? -n.height - 150))) - 20;
+      zoom = Math.min(1.05, (size.width - 36) / (maxX - minX), (size.height - 100) / (maxY - minY));
+    }
     return {
       zoom,
       x: size.width / 2 - ((minX + maxX) / 2) * zoom,
@@ -132,11 +152,19 @@ export default function ConnectionCanvas({
     };
   }, [marks, size]);
   const camera = manual ?? fitCamera;
+  useEffect(() => {
+    if (layout) cameraRef.current = camera;
+  }, [camera, layout]);
+  const smallText = Math.max(12, 11 / camera.zoom);
+  const nameText = Math.max(17, 13 / camera.zoom);
+  const verbScale = Math.max(1, 11 / (14 * camera.zoom));
+  const detail = camera.zoom < Math.min(0.55, fitCamera.zoom * 0.8) ? "low" : "full";
   const onScreen = (n: { x: number; y: number }) =>
     n.x * camera.zoom + camera.x > -180 &&
     n.x * camera.zoom + camera.x < size.width + 180 &&
     n.y * camera.zoom + camera.y > -100 &&
     n.y * camera.zoom + camera.y < size.height + 160;
+  const plates = labelPlates(marks.filter(n => onScreen(n) || n.id === active || n.id === selected || n.id === keyboardTarget), camera.zoom);
   const anchors = new Map<string, Mark>();
   for (const n of layout?.nodes ?? []) {
     const group = marks.find((g) => g.id === n.group && !expanded.has(n.group));
@@ -176,7 +204,7 @@ export default function ConnectionCanvas({
     routes.set(key, route);
   }
   const occupied = marks.filter(onScreen).flatMap((n) => [
-    { x: n.x - 102, y: n.y + plateTop(n) - 4, w: 204, h: 60 },
+    { x: n.x - 106, y: n.y + (plates.get(n.id)?.top ?? 0) - 6, w: 212, h: (plates.get(n.id)?.height ?? 0) + 12 },
     {
       x: n.x - 85,
       y: n.y - n.height - 24,
@@ -199,45 +227,64 @@ export default function ConnectionCanvas({
         b = formCentre(r.to);
       const self = r.from.id === r.to.id;
       let label = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      const width = Math.max(80, r.label.length * 8 + 28);
+      const width = Math.max(80, r.label.length * 8 + 28) * verbScale;
       let placed = false;
+      const minX = (16 - camera.x) / camera.zoom,
+        maxX = (size.width - 16 - camera.x) / camera.zoom,
+        minY = (16 - camera.y) / camera.zoom,
+        maxY = (size.height - 74 - camera.y) / camera.zoom;
+      function place(p: { x: number; y: number }) {
+        const box = { x: p.x - width / 2 - 5, y: p.y - 19 * verbScale, w: width + 10, h: 38 * verbScale };
+        if (box.x < minX || box.x + box.w > maxX || box.y < minY || box.y + box.h > maxY || intersects(box)) return false;
+        occupied.push(box);
+        label = p;
+        return true;
+      }
       for (const t of [0.52, 0.36, 0.68, 0.22, 0.8]) {
         for (const offset of [
-          0, 36, -36, 70, -70, 110, -110, 160, -160, 220, -220,
+          0, 36, -36, 70, -70, 110, -110, 160, -160, 220, -220, 320, -320, 480, -480,
         ]) {
           const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
           const p = self
             ? { x: a.x + 115, y: a.y - 25 }
             : {
-                x: a.x + (b.x - a.x) * t - ((b.y - a.y) / len) * offset,
-                y: a.y + (b.y - a.y) * t + ((b.x - a.x) / len) * offset,
+                x: a.x + (b.x - a.x) * t - ((b.y - a.y) / len) * offset * Math.max(1, verbScale / 2),
+                y: a.y + (b.y - a.y) * t + ((b.x - a.x) / len) * offset * Math.max(1, verbScale / 2),
               };
-          const box = {
-            x: p.x - width / 2 - 5,
-            y: p.y - 19,
-            w: width + 10,
-            h: 38,
-          };
-          if (!intersects(box)) {
-            occupied.push(box);
-            label = p;
+          if (place(p)) {
             placed = true;
             break;
           }
         }
         if (placed) break;
       }
+      // A crowded centre still has room at the edge of the viewport.
+      for (let y = minY + 20 * verbScale; !placed && y < maxY; y += 40 * verbScale) {
+        for (let x = minX + width / 2 + 6; x + width / 2 + 6 < maxX; x += width + 12) {
+          if (place({ x, y })) { placed = true; break; }
+        }
+      }
       const control = {
         x: 2 * label.x - (a.x + b.x) / 2,
         y: 2 * label.y - (a.y + b.y) / 2,
       };
+      // Separate ports at shared endpoints while staying on the real top face.
+      function fanned(mark: Mark, centre: { x: number; y: number }) {
+        const siblings = [...routes.keys()].filter(key => {
+          const route = routes.get(key);
+          return route && (route.from.id === mark.id || route.to.id === mark.id);
+        }).sort();
+        const angle = (siblings.indexOf(key) - (siblings.length - 1) / 2) * Math.min(0.09, 0.9 / siblings.length);
+        const dx = control.x - centre.x, dy = control.y - centre.y;
+        return { x: centre.x + dx * Math.cos(angle) - dy * Math.sin(angle), y: centre.y + dx * Math.sin(angle) + dy * Math.cos(angle) };
+      }
       const start = formPort(
         r.from,
-        self ? { x: a.x + 80, y: a.y - 15 } : control,
+        self ? { x: a.x + 80, y: a.y - 15 } : fanned(r.from, a),
       );
-      const end = formPort(r.to, self ? { x: b.x + 80, y: b.y + 20 } : control);
+      const end = formPort(r.to, self ? { x: b.x + 80, y: b.y + 20 } : fanned(r.to, b));
       const d = `M${start.x},${start.y} Q${2 * label.x - (start.x + end.x) / 2},${2 * label.y - (start.y + end.y) / 2} ${end.x},${end.y}`;
-      return { key, r, label, width, d, start, end };
+      return { key, r, label, width, d, start, end, placed };
     });
   function zoom(amount: number) {
     const z = Math.min(2, Math.max(0.2, camera.zoom + amount));
@@ -307,8 +354,10 @@ export default function ConnectionCanvas({
         <div
           className={styles.plane}
           data-layout-ms={layout?.ms}
+          data-detail={detail}
           data-camera={`${camera.x},${camera.y},${camera.zoom}`}
           style={{
+            ...{ "--small-text": `${smallText}px`, "--name-text": `${nameText}px` },
             transform: `translate(${camera.x}px,${camera.y}px) scale(${camera.zoom})`,
           }}
         >
@@ -323,15 +372,13 @@ export default function ConnectionCanvas({
                 viewBox="0 0 8 8"
                 refX="7"
                 refY="4"
-                markerWidth="7"
-                markerHeight="7"
+                markerWidth="10"
+                markerHeight="10"
                 orient="auto"
               >
                 <path
-                  d="M1 1 7 4 1 7"
-                  fill="none"
-                  stroke="context-stroke"
-                  strokeWidth="1.4"
+                  d="M0 0 8 4 0 8Z"
+                  fill="context-stroke"
                 />
               </marker>
             </defs>
@@ -375,12 +422,12 @@ export default function ConnectionCanvas({
               rx="133"
               ry="55"
             />
-            {drawnRoutes.map(({ key, r, label, width, d, start, end }) => (
+            {drawnRoutes.map(({ key, r, label, width, d, start, end, placed }) => (
               <g
                 key={key}
                 className={styles.route}
                 data-active={r.active}
-                opacity={highlighted && !r.active ? 0.13 : 1}
+                data-dimmed={highlighted && !r.active}
               >
                 <title>{r.sentences.join(". ")}</title>
                 <path
@@ -395,15 +442,16 @@ export default function ConnectionCanvas({
                 <g
                   transform={`translate(${label.x},${label.y})`}
                   data-edge-label
+                  style={{ display: placed && (detail === "full" || r.active) ? undefined : "none" }}
                 >
                   <rect
                     x={-width / 2}
-                    y="-15"
+                    y={-15 * verbScale}
                     width={width}
-                    height="30"
+                    height={30 * verbScale}
                     rx="15"
                   />
-                  <text y="5" textAnchor="middle">
+                  <text y={5 * verbScale} textAnchor="middle" style={{ fontSize: 14 * verbScale }}>
                     {r.label.replaceAll("_", " ")}
                   </text>
                 </g>
@@ -421,7 +469,8 @@ export default function ConnectionCanvas({
             .map((n) => {
               const lit =
                 n.id === active || n.id === selected || n.kind === activeKind;
-              const plateY = plateTop(n);
+              const plate = plates.get(n.id);
+              const plateY = plate?.top ?? 0;
               return (
                 <div
                   key={n.id}
@@ -463,7 +512,7 @@ export default function ConnectionCanvas({
                     </g>
                     <path
                       data-label-stalk
-                      d={`M0,${plateY + (n.group ? 65 : 44)} L0,${-n.height - 4}`}
+                      d={`M0,${plateY + (plate?.height ?? 52) - 6} L0,${-n.height - 4}`}
                       className={styles.stalk}
                     />
                     <circle
@@ -475,9 +524,10 @@ export default function ConnectionCanvas({
                   </svg>
                   <button
                     className={styles.plate}
-                    style={{ top: plateY }}
+                    style={{ top: plateY, height: plate?.height }}
                     data-object={n.group ? undefined : n.id}
                     data-group={n.group?.id}
+                    aria-label={`${n.name}, ${humanLabel(n.kind)}${n.id === focus ? ", Focus" : ""}${n.group ? `, ${expanded.has(n.id) ? "Close group" : `Open ${n.group.count} loaded objects`}` : ""}`}
                     aria-expanded={n.group ? expanded.has(n.id) : undefined}
                     aria-pressed={n.group ? undefined : selected === n.id}
                     ref={(el) => {

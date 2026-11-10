@@ -123,6 +123,7 @@ function Objects({ space }: { space: string }) {
     !!search.trim() || (!focus && !!kind),
   );
   const query = useNeighbourhood(space, focus, depth);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [hovered, setHovered] = useState("");
   const [activeKind, setActiveKind] = useState("");
   const [recent, setRecent] = useState<ConnectionNode[]>([]);
@@ -319,7 +320,8 @@ function Objects({ space }: { space: string }) {
         </div>
       ) : (
         <>
-          <div className={styles.filters}>
+          <button className={`btn btn-sm ${styles.filterToggle}`} aria-expanded={filtersOpen} aria-controls="connection-filters" onClick={() => setFiltersOpen(v => !v)}>Filters</button>
+          <div id="connection-filters" className={styles.filters} data-open={filtersOpen}>
             <label>
               Depth
               <select

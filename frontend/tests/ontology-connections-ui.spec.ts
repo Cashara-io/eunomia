@@ -186,7 +186,7 @@ for (const state of [
             (state === "start" ? "" : "&focus=house") +
             (state === "filtered" ? "&relation=absent" : ""),
         );
-        await expect(
+        if (state !== "denied") await expect(
           page.getByRole("navigation", { name: "Ontology views" }),
         ).toBeVisible();
         if (state === "loading")

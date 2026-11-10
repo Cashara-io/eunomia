@@ -29,6 +29,7 @@ import KindDetail from "./KindDetail";
 import Review from "./Review";
 import Objects from "./Objects";
 import Connections from "./Connections";
+import ConnectionAccess from "./ConnectionAccess";
 import ObjectProfile from "./ObjectProfile";
 
 const views = [
@@ -72,7 +73,11 @@ export default function TwinArea({
       ) : !query.data ? (
         <LoadingSkeleton label="Loading memory spaces" />
       ) : vault ? (
-        <SelectedSpace key={vault.id} vault={vault} view={view} kind={kind} />
+        view === "connections" ? (
+          <ConnectionAccess key={vault.id} space={vault.id}>
+            <SelectedSpace vault={vault} view={view} kind={kind} />
+          </ConnectionAccess>
+        ) : <SelectedSpace key={vault.id} vault={vault} view={view} kind={kind} />
       ) : (
         <>
           <h1 className="page-title">Ontology</h1>
@@ -195,6 +200,8 @@ function SelectedSpace({
                 "object-kinds",
                 "objects",
                 "object-profile",
+                "connections",
+                "connection-search",
                 "ontology-activity",
               ])
                 void cache.invalidateQueries({ queryKey: [key, vault.id] });

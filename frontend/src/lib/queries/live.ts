@@ -59,14 +59,14 @@ async function flush(qc: QueryClient, p: Pending) {
   for (const vault of p.ontology) {
     // A first fetch may have read just before hello or the event. Cancel it so
     // its late response cannot hide a proposal whose cursor we already saw.
-    const keys = [ontologyKeys.vault(vault), ["ontology-activity", vault], ["objects", vault], ["object-kinds", vault], ["object-profile", vault]];
+    const keys = [ontologyKeys.vault(vault), ["ontology-activity", vault], ["objects", vault], ["object-kinds", vault], ["object-profile", vault], ["connections", vault], ["connection-search", vault]];
     await Promise.all(keys.map(queryKey => qc.cancelQueries({ queryKey })));
     await Promise.all(keys.map(queryKey => qc.invalidateQueries({ queryKey })));
   }
   if (p.all || p.entities || p.documents || p.vaults) void qc.invalidateQueries({ queryKey: ontologyKeys.all });
   if (p.all || p.entities) {
     void qc.invalidateQueries({ queryKey: entityKeys.all });
-    for (const key of ["objects", "object-kinds", "object-profile"]) void qc.invalidateQueries({ queryKey: [key] });
+    for (const key of ["objects", "object-kinds", "object-profile", "connections", "connection-search"]) void qc.invalidateQueries({ queryKey: [key] });
   }
   if (p.all || p.documents) void qc.invalidateQueries({ queryKey: documentKeys.all });
 }
