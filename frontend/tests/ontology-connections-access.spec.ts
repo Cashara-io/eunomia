@@ -295,3 +295,53 @@ test('delayed confirmation of a deleted selection preserves input and camera', a
   await page.getByRole('searchbox').fill('');
   await expect(page.getByLabel('Recently viewed objects')).toContainText('House blend 1kg');
 });
+
+test('healthy navigation never starts a membership confirmation', async ({page}) => {
+  let checks = 0;
+  await setup(page);
+  await page.route('**/api/vaults/business/members', r => {
+    checks++;
+    return r.fulfill({json:{results:[]}});
+  });
+  await page.getByLabel('Depth', {exact:true}).selectOption('2');
+  await page.getByRole('searchbox').fill('North');
+  await expect(page.getByLabel('Object search results')).toContainText('North Coast Beans');
+  await expect(page.getByLabel('Selected object')).toContainText('North Coast Beans');
+  await expect(page.getByText('Checking access', {exact:true})).toHaveCount(0);
+  expect(checks).toBe(0);
+});
+
+test('a late membership success cannot reopen a confirmed denial', async ({page}) => {
+  await setup(page);
+  let releaseSearch = () => {};
+  const heldSearch = new Promise<void>(resolve => {releaseSearch = resolve;});
+  let searchStarted = () => {};
+  const startedSearch = new Promise<void>(resolve => {searchStarted = resolve;});
+  await page.route('**/api/tools/entities_search', async r => {
+    searchStarted();
+    await heldSearch;
+    await r.fulfill({status:403,json:{code:'vault.forbidden'}});
+  });
+  await page.getByRole('searchbox').fill('Late');
+  await startedSearch;
+  let releaseMembership = () => {};
+  const heldMembership = new Promise<void>(resolve => {releaseMembership = resolve;});
+  let delivered = () => {};
+  const completed = new Promise<void>(resolve => {delivered = resolve;});
+  await page.route('**/api/vaults/business/members', async r => {
+    await heldMembership;
+    await r.fulfill({json:{results:[]}});
+    delivered();
+  });
+  await page.route('**/api/tools/entities_neighbourhood', r => r.fulfill({json:{error:'not found',code:'entity.not_found'}}));
+  await page.getByLabel('Depth', {exact:true}).selectOption('2');
+  await expect(page.getByRole('status').filter({hasText:'Checking access'})).toBeVisible();
+  releaseSearch();
+  await expect(page.getByRole('alert').filter({hasText:'unavailable to you'})).toBeVisible();
+  releaseMembership();
+  await completed;
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await expectNoProtectedContent(page);
+  await expect(page.getByRole('button', {name:'Retry space access'})).toBeVisible();
+  await expect.poll(async () => (await cacheKeys(page)).filter(k => k.includes('business'))).toEqual([]);
+});

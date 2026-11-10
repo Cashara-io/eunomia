@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useEffectEvent, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useOntology } from "@/lib/queries/ontology";
 import {
@@ -153,16 +153,17 @@ function Objects({ space }: { space: string }) {
     scene?.edges.filter((e) => e.from === selected || e.to === selected) ?? [];
   const denied =
     query.error instanceof ApiError && [403, 404].includes(query.error.status);
-  useEffect(() => {
-    function escape(event: globalThis.KeyboardEvent) {
-      if (event.key === "Escape" && selected) {
-        update({ selected: "" });
-        focusObject(selected);
-      }
+  const escape = useEffectEvent((event: globalThis.KeyboardEvent) => {
+    if (confirmed && event.key === "Escape" && selected) {
+      update({ selected: "" });
+      focusObject(selected);
     }
-    window.addEventListener("keydown", escape);
-    return () => window.removeEventListener("keydown", escape);
   });
+  useEffect(() => {
+    const listener = (event: globalThis.KeyboardEvent) => escape(event);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
   useEffect(() => {
     if (!confirmed || !missing.size) return;
     if (missing.has(focus)) update({ focus: "", selected: "" }, true);
