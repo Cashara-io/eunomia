@@ -76,11 +76,11 @@ export function ReadinessPanel({ vaultId }: { vaultId: string }) {
             ? "Ready to answer numbers"
             : "Not ready to answer every number yet"}
         </StatusLabel>
-        <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+        <span className="text-detail" style={{ color: "var(--ink-dim)" }}>
           Approved: {approved}
         </span>
       </div>
-      <p className="text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
+      <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
         Ready means nothing proposed is waiting for you, at least one metric is
         approved, and every property an approved metric reads is approved and
         has values. A kind with no metric, like a person or a supplier, never
@@ -88,7 +88,7 @@ export function ReadinessPanel({ vaultId }: { vaultId: string }) {
       </p>
       {r.blockers.length > 0 && (
         <ul
-          className="flex flex-col gap-0.5 text-[13px] list-disc pl-5"
+          className="flex flex-col gap-0.5 text-detail list-disc pl-5"
           aria-label="What is in the way"
         >
           {r.blockers.slice(0, 5).map((b) => (
@@ -142,10 +142,10 @@ export function StrictSwitch({
         onChange={(e) => toggle(e.target.checked)}
       />
       <span className="flex flex-col gap-0.5">
-        <span className="text-[14px] font-medium">
+        <span className="text-body font-medium">
           Only approved kinds and links
         </span>
-        <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+        <span className="text-detail" style={{ color: "var(--ink-dim)" }}>
           {on
             ? "On. AI apps can only save things under the kinds and links approved here. Anything else is turned away and appears in Review as a suggestion."
             : "Off. AI apps can save things under any kind or link; new ones appear in Structure as in use. Turn this on to accept only what you approved."}
@@ -193,8 +193,8 @@ export function KindRow({
     <li className="flex flex-col gap-1.5 py-2.5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <span className="flex-1 min-w-[160px] flex items-baseline gap-2">
-          <span className="text-[14px] font-medium">{words(item.kind)}</span>
-          <span className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+          <span className="text-body font-medium">{words(item.kind)}</span>
+          <span className="text-caption" style={{ color: "var(--ink-dim)" }}>
             {item.built_in ? `built in · ${count}` : count}
           </span>
         </span>
@@ -216,7 +216,7 @@ export function KindRow({
         onCancel={() => setEditing(false)}
       />
       {(detail || (item.status === "proposed" && item.reason)) && (
-        <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+        <p className="text-caption" style={{ color: "var(--ink-dim)" }}>
           {[detail, item.reason?.replaceAll(item.kind, words(item.kind))]
             .filter(Boolean)
             .join(" ")}
@@ -259,7 +259,7 @@ export function KindRow({
             <span className="flex items-center gap-1.5">
               <Duo icon={ArrowsMergeIcon} tone="none" />
               <Select
-                className="h-8 text-[13px] w-[160px]"
+                className="h-8 text-detail w-[160px]"
                 aria-label={`Merge ${words(item.kind)} into`}
                 placeholder="Merge into…"
                 value={
@@ -335,8 +335,8 @@ export function PropertyRow({
     <li className="flex flex-col gap-1 py-1.5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="flex-1 min-w-[160px] flex flex-wrap items-baseline gap-x-2">
-          <span className="text-[13px] font-medium">{words(item.name)}</span>
-          <span className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+          <span className="text-detail font-medium">{words(item.name)}</span>
+          <span className="text-caption" style={{ color: "var(--ink-dim)" }}>
             {type} · {values}
           </span>
         </span>
@@ -358,7 +358,7 @@ export function PropertyRow({
         onCancel={() => setEditing(false)}
       />
       {detail && (
-        <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+        <p className="text-caption" style={{ color: "var(--ink-dim)" }}>
           {detail}
           {item.reason ? ` ${item.reason}` : ""}
         </p>
@@ -403,7 +403,7 @@ export function PropertyRow({
             <span className="flex items-center gap-1.5">
               <Duo icon={ArrowsMergeIcon} tone="none" />
               <Select
-                className="h-8 text-[13px] w-[160px]"
+                className="h-8 text-detail w-[160px]"
                 aria-label={`Merge ${words(item.name)} into`}
                 placeholder="Merge into…"
                 value={
@@ -481,8 +481,8 @@ export function MetricRow({
     <li className="flex flex-col gap-1 py-1.5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="flex-1 min-w-[160px] flex flex-wrap items-baseline gap-x-2">
-          <span className="text-[13px] font-medium">{words(item.name)}</span>
-          <span className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+          <span className="text-detail font-medium">{words(item.name)}</span>
+          <span className="text-caption" style={{ color: "var(--ink-dim)" }}>
             {item.expr_words}
             {item.unit ? ` · ${item.unit}` : ""}
           </span>
@@ -505,7 +505,7 @@ export function MetricRow({
         onCancel={() => setEditing(false)}
       />
       {detail && (
-        <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+        <p className="text-caption" style={{ color: "var(--ink-dim)" }}>
           {detail}
           {item.reason ? ` ${item.reason}` : ""}
         </p>
@@ -550,7 +550,7 @@ export function MetricRow({
             <span className="flex items-center gap-1.5">
               <Duo icon={ArrowsMergeIcon} tone="none" />
               <Select
-                className="h-8 text-[13px] w-[160px]"
+                className="h-8 text-detail w-[160px]"
                 aria-label={`Merge ${words(item.name)} into`}
                 placeholder="Merge into…"
                 value={
@@ -592,7 +592,7 @@ export function MetricRow({
       {tried && "error" in tried && (
         <p
           role="status"
-          className="text-[12px]"
+          className="text-caption"
           style={{ color: "var(--ink-dim)" }}
         >
           {tried.error}
@@ -604,7 +604,7 @@ export function MetricRow({
           className="soft-panel px-3 py-2.5 flex flex-col gap-1.5 max-w-md"
         >
           <MetricNumber run={tried} size={22} />
-          <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+          <p className="text-caption" style={{ color: "var(--ink-dim)" }}>
             As of {asOfDate(tried.as_of)}, from{" "}
             <span className="font-mono">{tried.n_entities}</span>{" "}
             {tried.n_entities === 1 ? "entry" : "entries"}
@@ -646,12 +646,12 @@ export function LinkRow({
     <li className="flex flex-col gap-1.5 py-2.5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <span className="flex-1 min-w-[160px] flex flex-wrap items-baseline gap-x-2">
-          <span className="text-[14px]">
+          <span className="text-body">
             {words(item.from_kind)}{" "}
             <span className="font-medium">{words(item.label)}</span>{" "}
             {words(item.to_kind)}
           </span>
-          <span className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+          <span className="text-caption" style={{ color: "var(--ink-dim)" }}>
             {item.count} {item.count === 1 ? "link" : "links"}
           </span>
         </span>
@@ -673,7 +673,7 @@ export function LinkRow({
         onCancel={() => setEditing(false)}
       />
       {item.status === "proposed" && item.reason && (
-        <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+        <p className="text-caption" style={{ color: "var(--ink-dim)" }}>
           <MatchShare reason={item.reason} />
         </p>
       )}
@@ -745,10 +745,10 @@ function Description({
         onCancel={onCancel}
       />
     );
-  if (text) return <p className="text-[13px]">{text}</p>;
+  if (text) return <p className="text-detail">{text}</p>;
   if (samples.length === 0) return null;
   return (
-    <p className="text-[12px] truncate" style={{ color: "var(--ink-dim)" }}>
+    <p className="text-caption truncate" style={{ color: "var(--ink-dim)" }}>
       For example: {samples.join(", ")}
     </p>
   );
@@ -779,7 +779,7 @@ function DescriptionEditor({
         aria-label="Description"
         autoFocus
         maxLength={500}
-        className="field h-9 px-3 text-[13px] flex-1 min-w-[200px]"
+        className="field h-9 px-3 text-detail flex-1 min-w-[200px]"
         placeholder="What this is, in one sentence"
         value={value}
         onChange={(e) => setValue(e.target.value)}

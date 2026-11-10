@@ -42,9 +42,9 @@ export default function Objects({ space }: { space: string }) {
     data?.columns.filter((c) => !hiddenColumns.includes(c.name)) ?? [];
   if (!confirmed) return null;
   return (
-    <div className="flex flex-col gap-4 min-w-0 text-[13px]">
+    <div className="flex flex-col gap-4 min-w-0 text-detail">
       <div>
-        <h2 className="text-[22px] font-medium">Objects</h2>
+        <h2 className="text-display font-medium">Objects</h2>
         <p className="text-[var(--ink-dim)] mt-2">
           Real objects and their latest approved properties. Missing values stay
           missing.

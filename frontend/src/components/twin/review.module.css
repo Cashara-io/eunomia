@@ -16,7 +16,7 @@
   align-items: start;
 }
 .title {
-  font-size: var(--type-page-title);
+  font-size: var(--type-display);
   font-weight: 500;
   line-height: 1.2;
   letter-spacing: -0.03em;
@@ -124,7 +124,7 @@
   padding: calc(var(--spacing) * 6) calc(var(--spacing) * 6) calc(var(--spacing) * 5);
 }
 .identity h3 {
-  font-size: var(--type-page-title);
+  font-size: var(--type-display);
   font-weight: 500;
   letter-spacing: -0.03em;
   line-height: 1.2;

@@ -94,7 +94,7 @@ export default function Structure({
           {suggest.isPending ? "Suggesting…" : "Suggest kinds"}
         </button>
       </div>
-      <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+      <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
         A kind groups similar objects, such as stores or suppliers. A link type
         describes how two kinds connect.
       </p>
