@@ -13,9 +13,9 @@ export default defineConfig({
     command: `bun run ${process.env.PROXY_TEST_PRODUCTION ? "start" : "dev"} --hostname 127.0.0.1 --port ${port}`,
     url: `http://127.0.0.1:${port}/login`,
     env: {
-      // Only the optional real-backend fixture needs shortened timeout probes.
-      // The isolated Next smoke tests use the production upload policy.
-      ...(process.env.PROXY_TEST_REAL_BACKEND_URL ? { EUNOMIA_UPLOAD_GRACE_MS: "200", EUNOMIA_UPLOAD_WINDOW_MS: "200" } : {}),
+      // Socket timeout probes use seconds of margin, without pacing the sender.
+      EUNOMIA_UPLOAD_GRACE_MS: "3000",
+      EUNOMIA_UPLOAD_WINDOW_MS: "5000",
       BACKEND_INTERNAL_URL: process.env.PROXY_TEST_REAL_BACKEND_URL || "http://127.0.0.1:28191",
     },
     timeout: 60_000,

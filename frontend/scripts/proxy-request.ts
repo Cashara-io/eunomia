@@ -1,10 +1,11 @@
 import { request as httpRequest } from "node:http";
 
-export function refusedBeforeBodyCompletes({ url, credential, chunked = false, bytes = 256 * 1024 }: {
+export function refusedBeforeBodyCompletes({ url, credential, chunked = false, bytes = 256 * 1024, timeoutMs = 3000 }: {
   url: string;
   credential?: string;
   chunked?: boolean;
   bytes?: number;
+  timeoutMs?: number;
 }) {
   return new Promise<number | undefined>((resolve, reject) => {
     const req = httpRequest(url, {
@@ -19,7 +20,7 @@ export function refusedBeforeBodyCompletes({ url, credential, chunked = false, b
       req.destroy();
     });
     req.on("error", reject);
-    req.setTimeout(3000, () => req.destroy(new Error("frontend waited for the body")));
+    req.setTimeout(timeoutMs, () => req.destroy(new Error("frontend waited for the body")));
     // At most 256 KiB is sent. The other 19.75 MiB is withheld, and the request is not ended.
     // A cloning proxy waits for EOF and fails this test; a pre-body auth gate responds now.
     req.write(Buffer.alloc(bytes, 120));
