@@ -142,7 +142,7 @@ fn entity_out(row: &EntityRow) -> EntityOut {
         id: row.id.to_string(),
         kind: row.kind(),
         name: row.name.clone(),
-        aliases: row.aliases.clone(),
+        aliases: super::merge_alias::visible(&row.aliases),
         summary: row.summary.clone(),
         vault: row.vault.to_string(),
     }
@@ -556,6 +556,7 @@ pub(crate) async fn upsert_in_vault(
     let table = kind_table(kind)?;
     let aliases = aliases.unwrap_or_default();
     let name = name.trim();
+    super::merge_alias::validate(Some(name), &aliases)?;
     if name.is_empty() {
         return Err(AppError::bad_request("entity name can't be empty"));
     }
@@ -1232,6 +1233,7 @@ pub async fn update_entity(
     summary: Option<&str>,
 ) -> AppResult<Option<EntityOut>> {
     let name = name.map(str::trim);
+    super::merge_alias::validate(name, aliases.as_deref().unwrap_or_default())?;
     if name == Some("") {
         return Err(AppError::bad_request("entity name can't be empty"));
     }
@@ -1245,7 +1247,7 @@ pub async fn update_entity(
         set_clauses.push("name = $name");
     }
     if aliases.is_some() {
-        set_clauses.push("aliases = $aliases");
+        set_clauses.push(q::EDIT_VISIBLE_ALIASES);
     }
     if summary.is_some() {
         set_clauses.push("summary = $summary");
@@ -1258,7 +1260,7 @@ pub async fn update_entity(
             qry = qry.bind(("name", n.to_string()));
         }
         if let Some(a) = aliases {
-            qry = qry.bind(("aliases", a));
+            qry = qry.bind(("aliases", a)).bind(("merge_prefix", super::merge_alias::PREFIX));
         }
         if let Some(s) = summary {
             qry = qry.bind(("summary", s.to_string()));
@@ -1270,6 +1272,29 @@ pub async fn update_entity(
     }
 
     Ok(Some(entity_out(&row)))
+}
+
+/// Reserved merge aliases are local owner decisions, never peer input.
+/// Strip the entire namespace, including malformed entries, without blocking sync.
+pub(crate) fn peer_aliases(aliases: Vec<String>) -> Vec<String> {
+    let visible = super::merge_alias::visible(&aliases);
+    if visible.len() != aliases.len() {
+        static WARNED: std::sync::Once = std::sync::Once::new();
+        WARNED.call_once(|| tracing::warn!("stripped peer merge redirects; owner merge redirects are local-only"));
+    }
+    visible
+}
+
+pub(crate) fn sync_aliases(aliases: &[String]) -> Vec<String> {
+    super::merge_alias::visible(aliases)
+}
+
+fn require_peer_merge() -> AppResult<()> {
+    let caller = crate::authz::caller()?;
+    if caller.actor.kind != "system" || !caller.actor.id.starts_with("peer:") {
+        return Err(AppError::coded(crate::error::ErrorCode::AuthForbidden, "merge replay requires an authenticated peer"));
+    }
+    Ok(())
 }
 
 /// Delete an entity and everything hanging off it: its `memory` rows and its
@@ -1294,31 +1319,34 @@ pub async fn delete_entity(db: &OrgDb, owner: &RecordId, entity_id: &RecordId) -
     Ok(true)
 }
 
-/// Merge `loser_id` into `winner_id` -- for two entities of the same `kind`
-/// that turned out to be duplicates. Reassigns the loser's `memory` rows and
+/// Merge duplicate entities of the same kind, or an owner-approved built-in-to-custom correction.
+/// Reassigns the loser's `memory` rows and
 /// `relates_to` edges (both directions) to the winner, adds the loser's name
 /// and aliases as aliases of the winner, then deletes the loser, all in one
 /// transaction ([`merge_rows`]). If both had an observation they become one
 /// stale observation, rebuilt on the next consolidation. Returns the winner's
 /// row after the merge.
 ///
-/// Errors (400) if the two ids are the same, of different kinds or vaults, or not
-/// found / `owner` isn't a member of either one's vault.
+/// Errors (400) if the two ids are the same, of incompatible kinds or different vaults, or not
+/// found / `owner` isn't a member of either one's vault. Cross-kind corrections require every typed
+/// value to map to an approved target property of the same name, datatype and unit.
 pub async fn merge_entities(
     db: &OrgDb,
     owner: &RecordId,
     winner_id: &RecordId,
     loser_id: &RecordId,
 ) -> AppResult<EntityOut> {
+    merge_entities_inner(db, owner, winner_id, loser_id, false).await
+}
+
+pub(crate) async fn merge_peer_entities(db: &OrgDb, owner: &RecordId, winner: &RecordId, loser: &RecordId) -> AppResult<EntityOut> {
+    require_peer_merge()?;
+    merge_entities_inner(db, owner, winner, loser, true).await
+}
+
+async fn merge_entities_inner(db: &OrgDb, owner: &RecordId, winner_id: &RecordId, loser_id: &RecordId, peer: bool) -> AppResult<EntityOut> {
     if winner_id == loser_id {
         return Err(AppError::bad_request("winner_id and loser_id must refer to different entities"));
-    }
-    if winner_id.table() != loser_id.table() {
-        return Err(AppError::bad_request(format!(
-            "cannot merge entities of different kinds: {:?} vs {:?}",
-            winner_id.table(),
-            loser_id.table()
-        )));
     }
 
     let winner = select_entity(db, winner_id)
@@ -1335,10 +1363,21 @@ pub async fn merge_entities(
     }
     same_vault(&winner, &loser)?;
     if winner.kind() != loser.kind() {
-        return Err(AppError::bad_request(format!("cannot merge entities of different kinds: {:?} vs {:?}", winner.kind(), loser.kind())));
+        let cross_kind = winner_id.table() == CUSTOM_TABLE && KINDS.contains(&loser.kind().as_str())
+            && (peer || (crate::authz::role_of(db, owner, &winner.vault).await? == Some(crate::authz::Role::Owner)
+                && crate::ontology::is_approved_kind(db, &winner.vault, &winner.kind()).await?));
+        if !cross_kind { return Err(AppError::bad_request(format!("cannot merge entities of different kinds: {:?} vs {:?}", winner.kind(), loser.kind()))); }
     }
 
-    merge_rows(db, winner_id, loser_id, loser_names(&loser)).await?;
+    if winner.kind() != loser.kind() {
+        crate::ontology::property::validate_merge_values(db, &winner.vault, &winner.kind(), loser_id).await?;
+    }
+    let mut aliases = if peer { super::merge_alias::visible(&loser_names(&loser)) } else { loser_names(&loser) };
+    if !peer && winner.kind() != loser.kind() {
+        // Only this instance's owner merge may create kind-qualified aliases.
+        aliases.extend(loser_names(&loser).iter().map(|name| super::merge_alias::encode(&loser.kind(), name)));
+    }
+    merge_rows(db, winner_id, loser_id, aliases, (winner.kind() != loser.kind()).then(|| winner.kind())).await?;
     changes::record(db, &winner.vault, changes::MERGED, changes::ENTITY, loser_id).await;
     changes::record(db, &winner.vault, changes::UPDATED, changes::ENTITY, winner_id).await;
     let winner = select_entity(db, winner_id).await?.ok_or_else(|| AppError::internal("winner vanished during merge"))?;
@@ -1350,21 +1389,22 @@ fn loser_names(loser: &EntityRow) -> Vec<String> {
     std::iter::once(&loser.name).chain(&loser.aliases).filter(|n| !n.is_empty()).cloned().collect()
 }
 
-/// Moves everything of `loser` onto `winner` (same kind and vault, already checked) and deletes
+/// Moves everything of `loser` onto `winner` (compatible kinds and same vault, checked) and deletes
 /// `loser`, in ONE transaction (see [`q::MERGE_ENTITIES`]): any failing statement rolls all of it
 /// back, so a merge never half-happens. Retried on a commit conflict with a concurrent write.
-async fn merge_rows(db: &OrgDb, winner: &RecordId, loser: &RecordId, add_aliases: Vec<String>) -> AppResult<()> {
+async fn merge_rows(db: &OrgDb, winner: &RecordId, loser: &RecordId, add_aliases: Vec<String>, target_kind: Option<String>) -> AppResult<()> {
     with_retry(|| async {
         q::MERGE_ENTITIES
             .on(db)
             .bind(("winner", winner.clone()))
             .bind(("loser", loser.clone()))
             .bind(("aliases", add_aliases.clone()))
+            .bind(("target_kind", target_kind.clone()))
             .await?
             .check()
     })
     .await?;
-    crate::ontology::property::move_values(db, winner, loser).await
+    Ok(())
 }
 
 /// An entity's row plus its `memory` entries and `relates_to` edges in both
@@ -1416,7 +1456,7 @@ pub async fn get_entity(db: &OrgDb, control: &ControlDb, owner: &RecordId, entit
         id: entity_id.to_string(),
         kind: row.kind(),
         name: row.name.clone(),
-        aliases: row.aliases.clone(),
+        aliases: super::merge_alias::visible(&row.aliases),
         summary: row.summary.clone(),
         owner_email: row.owner.as_ref().and_then(|o| emails.get(&o.to_string()).cloned()),
         memory: memory_out_rows,

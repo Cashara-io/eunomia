@@ -1,10 +1,9 @@
 //! Document routes: thin wrappers over `documents/` (the same functions the `document_*` tools call).
 //! Upload takes the raw file as the body (no multipart), so this router gets its own body limit
-//! (`EUNOMIA_DOCUMENTS_MAX_BYTES`, see `lib.rs`). Downloads and exports are attachments and are
+//! (`EUNOMIA_DOCUMENTS_MAX_BYTES`), after authentication. Downloads and exports are attachments and are
 //! recorded in the audit log by document id, without content.
 
 use axum::{
-    body::Bytes,
     extract::{Path, Query, State},
     http::{header, HeaderMap, HeaderValue},
     response::{IntoResponse, Response},
@@ -14,6 +13,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::rid::RecordIdExt;
 use crate::documents::{self, DocumentDeleted, DocumentDetail, DocumentList, DocumentOut, Upload};
 use crate::error::{AppError, AppResult};
 use crate::models_user::User;
@@ -23,13 +23,18 @@ use crate::state::{AppState, OrgState};
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/documents", get(list_documents).post(upload_document))
+        .route("/documents", get(list_documents).post(upload_document).head(upload_preflight))
         .route("/documents/{document_id}", get(get_document).delete(delete_document))
         .route("/documents/{document_id}/download", get(download_document))
         .route("/documents/{document_id}/export", get(export_document))
         .route("/documents/{document_id}/reindex", post(reindex_document))
         .route("/documents/{document_id}/profile", get(profile_document))
         .route("/documents/{document_id}/import", post(import_document))
+}
+
+async fn upload_preflight(State(state): State<AppState>, _user: User) -> AppResult<Response> {
+    if !super::upload_body::allowed() { return Err(super::upload_body::scope_denied()); }
+    Ok(super::upload_body::preflight(state.settings.documents_max_bytes, true))
 }
 
 #[derive(utoipa::OpenApi)]
@@ -99,7 +104,10 @@ struct UploadQuery {
     responses((status = 200, body = DocumentOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
-async fn upload_document(State(state): State<AppState>, user: User, Query(q): Query<UploadQuery>, headers: HeaderMap, body: Bytes) -> AppResult<Json<DocumentOut>> {
+async fn upload_document(State(state): State<AppState>, user: User, Query(q): Query<UploadQuery>, headers: HeaderMap, request: axum::extract::Request) -> AppResult<Json<DocumentOut>> {
+    if !super::upload_body::allowed() { return Err(super::upload_body::scope_denied()); }
+    let limit = state.settings.documents_max_bytes;
+    let (body, _body_slot) = super::upload_body::read(request.into_body(), limit, &state.large_bodies, user.id.to_string()).await?;
     let state = state.org(&user.org).await?;
     let filename = q.filename.filter(|f| !f.trim().is_empty()).ok_or_else(|| AppError::bad_request("the filename query parameter is required"))?;
     let declared = q.content_type.or_else(|| headers.get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).map(str::to_string));

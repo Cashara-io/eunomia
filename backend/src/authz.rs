@@ -262,7 +262,7 @@ struct RoleRow {
     role: String,
 }
 
-async fn role_of(db: &OrgDb, user: &RecordId, vault: &RecordId) -> AppResult<Option<Role>> {
+pub(crate) async fn role_of(db: &OrgDb, user: &RecordId, vault: &RecordId) -> AppResult<Option<Role>> {
     let mut res = store::vaults::MEMBERSHIP_ACTIVE
         .on(db)
         .bind(("vault", vault.clone()))

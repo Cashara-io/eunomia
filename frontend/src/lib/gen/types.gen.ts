@@ -450,7 +450,7 @@ export type CloudSimilarityBody = {
 export type ColumnPlan = {
     column: string;
     /**
-     * The approved link type whose targets it names ("supplied_by supplier"), when no property takes it.
+     * The approved link type whose targets it names ("supplied_by supplier"), alongside any property.
      */
     link?: string | null;
     /**
