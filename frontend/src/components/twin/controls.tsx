@@ -10,7 +10,7 @@ export function useTwinParams() {
   const pathname = usePathname();
   function update(values: Record<string, string>, replace = false) {
     const next = new URLSearchParams(window.location.search);
-    if (!("page" in values) && !("selected" in values)) next.delete("page");
+    if (["q", "search", "kind", "status", "type", "sort", "descending", "filter", "op", "value"].some(key => key in values) && !("page" in values)) next.delete("page");
     for (const [key, value] of Object.entries(values)) {
       if (value) next.set(key, value);
       else next.delete(key);

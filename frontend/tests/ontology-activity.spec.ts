@@ -61,6 +61,11 @@ test("two contexts see proposals, durable reasons and stale-review conflicts liv
   expect(stored.events).toHaveLength(1);
   expect(stored.events[0].reason).toBe("Matches the source records");
   expect(stored.events[0].actor_type).toBe("user");
+  await page.getByRole("button", { name: "Pause view", exact: true }).click();
+  await page.locator("main li").filter({ hasText: "approved Delivery" }).getByRole("link", { name: "Delivery", exact: true }).click();
+  await expect(page.getByRole("complementary", { name: "Activity subject" })).toContainText("A delivery with a confirmed destination and date");
+  await page.getByRole("button", { name: "Back to activity", exact: true }).click();
+  await expect(page.getByText("View paused", { exact: true })).toBeVisible();
   // Screenshot the real data in both themes and responsive widths.
   for (const width of [1440, 390]) for (const theme of ["light", "dark"]) {
     await page.setViewportSize({ width, height: 1000 });

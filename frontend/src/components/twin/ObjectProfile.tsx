@@ -1,14 +1,20 @@
 "use client";
+import { useConfirmedSpaceAccess, useMissingSpaceObjects } from "./SpaceAccess";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import ValueReceipts from "./ValueReceipts";
+import ObjectHero from "./ObjectHero";
+import SourceInspector from "./SourceInspector";
+import { safeReturn } from "./receipt-model";
+import styles from "./receipts.module.css";
 import Select from "@/components/Select";
-import ErrorLine, { failure } from "@/components/ErrorLine";
+import { ApiError } from "@/lib/api";
+import ReadState from "./ReadState";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import {
   useObjectProfile,
-  type ObjectColumn,
-  type ObjectProfile as Profile,
 } from "@/lib/queries/objects";
-import { formatPropertyNumber } from "@/lib/numbers";
+import { formatted } from "./value-format";
 import { twinHref } from "./model";
 import { useTwinParams } from "./controls";
 import { words as plainWords } from "./DefinitionRows";
@@ -19,24 +25,7 @@ const words = (value: string) => {
 
 export const objectHref = (id: string, space: string) =>
   twinHref(`/ontology/objects/${encodeURIComponent(id)}`, space);
-export function formatted(
-  value: string | number | boolean | null | undefined,
-  column: Pick<ObjectColumn, "datatype" | "unit">,
-): string {
-  if (value === null || value === undefined) return "Missing";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "number")
-    return formatPropertyNumber(value, column.datatype, column.unit);
-  if (column.datatype === "date")
-    return Number.isNaN(Date.parse(value))
-      ? "Unavailable"
-      : new Date(value).toLocaleDateString("en-AU", {
-          dateStyle: "medium",
-          timeZone: "UTC",
-        });
-  if (column.datatype === "datetime") return date(value);
-  return value;
-}
+export { formatted } from "./value-format";
 function date(value: string | null | undefined) {
   if (!value || value === "NONE" || Number.isNaN(Date.parse(value)))
     return "Date not recorded";
@@ -54,7 +43,14 @@ const sections = [
   "Sources",
   "Related memories",
 ];
-export default function ObjectProfile({
+export default function ObjectProfile(props: { space: string; id: string; compact?: boolean }) {
+  const missing = useMissingSpaceObjects();
+  const confirmed = useConfirmedSpaceAccess();
+  const { params } = useTwinParams();
+  if (missing.has(props.id)) return confirmed ? <section className="ledger p-6" aria-label="Object unavailable"><h2 className="section-title">Object unavailable</h2><p className="mt-3">This object could not be found in this space. It may have been removed or belong to another space.</p><Link className="link inline-block mt-4" href={safeReturn(params.get("back"), props.space) ?? twinHref("/ontology/objects", props.space)}>Back to Objects</Link></section> : null;
+  return <ProfileDetails {...props} />;
+}
+function ProfileDetails({
   space,
   id,
   compact = false,
@@ -64,44 +60,60 @@ export default function ObjectProfile({
   compact?: boolean;
 }) {
   const { params, update } = useTwinParams();
-  const section = params.get("section") ?? "Summary";
-  const setSection = (section: string) => update({ section });
+  const confirmed = useConfirmedSpaceAccess();
+  const section = params.get("section") ?? "Properties";
+  const selectedValue = params.get("receipt");
+  const valueTrigger = useRef<HTMLButtonElement | null>(null);
+  function inspect(name: string, button: HTMLButtonElement) {
+    valueTrigger.current = button;
+    update({ receipt: name, section });
+  }
+  useEffect(() => {
+    const current = new URLSearchParams(window.location.search);
+    if (current.has("section")) return;
+    try {
+      const saved = sessionStorage.getItem(`receipt-section:${space}:${id}`);
+      if (saved && sections.includes(saved)) {
+        current.set("section", saved);
+        window.history.replaceState(null, "", `${window.location.pathname}?${current}`);
+      }
+    } catch { /* Sections still work without local presentation storage. */ }
+  }, [space, id]);
+  const setSection = (section: string) => {
+    try { sessionStorage.setItem(`receipt-section:${space}:${id}`, section); } catch { /* Optional presentation state. */ }
+    update({ section, receipt: "" });
+  };
   const [offset, setOffset] = useState(0);
-  const query = useObjectProfile(space, id, offset);
+  const query = useObjectProfile(space, id, offset, confirmed);
+  if (!confirmed) return null;
+  if (query.error instanceof ApiError && ["entity.not_found", "resource.not_found", "scope.mismatch"].includes(query.error.code))
+    return <section className="ledger p-6" aria-label="Object unavailable"><h2 className="section-title">Object unavailable</h2><p className="mt-3">This object could not be found in this space. It may have been removed or belong to another space.</p><Link className="link inline-block mt-4" href={safeReturn(params.get("back"), space) ?? twinHref("/ontology/objects", space)}>Back to Objects</Link></section>;
   if (query.isError)
     return (
-      <ErrorLine
-        error={failure(query.error, "Could not load this object. Try again.")}
-      />
+      <ReadState error={query.error} subject="this object" retry={() => void query.refetch()} />
     );
-  if (!query.data) return <p role="status">Loading object…</p>;
+  if (!query.data || query.isFetching) return <LoadingSkeleton label="Loading object receipt" layout="rows" rows={4} />;
   const data = query.data;
   return (
-    <div className="flex flex-col gap-5 min-w-0 text-[13px]">
+    <div className={styles.profile} data-compact={compact}>
       {!compact && (
         <Link
           className="link self-start"
-          href={twinHref("/ontology/objects", space, { kind: data.kind })}
+          href={safeReturn(params.get("back"), space) ?? twinHref("/ontology/objects", space, { kind: data.kind })}
         >
           Back to Objects
         </Link>
       )}
-      <div>
-        <h2 className="text-[22px] font-medium break-words">{data.name}</h2>
-        <p className="mt-2 text-[var(--ink-dim)]">
-          {words(data.kind)} ·{" "}
-          {data.kind_approved ? "Approved kind" : "Kind not approved"}
-        </p>
-      </div>
-      <p className="text-[var(--ink-dim)]">
-        Approval covers the kind definition, not every value.
-      </p>
+      <ObjectHero data={data} compact={compact} />
+      <p className={styles.disclaimer}>Approval covers the kind definition, not every value.</p>
+      <div className={styles.stack} data-open={!!selectedValue}>
+      <div className={styles.body}>
       {compact ? (
         <>
-          <Link className="btn btn-sm self-start" href={objectHref(id, space)}>
+          <Link className="btn btn-sm self-start" href={`${objectHref(id, space)}&back=${encodeURIComponent(twinHref("/ontology/objects", space, Object.fromEntries(params.entries())))}`}>
             Open object page
           </Link>
-          <Properties data={data} space={space} />
+          <ValueReceipts data={data} inspect={inspect} selected={selectedValue} />
           <Link
             className="link"
             href={`${objectHref(id, space)}&section=Links`}
@@ -172,12 +184,7 @@ export default function ObjectProfile({
             )}
             {section === "Properties" && (
               <>
-                <p className="text-[var(--ink-dim)] mb-4">
-                  Stale means the source changed after the value was recorded.
-                  Conflicting means different values share the latest as-of
-                  time.
-                </p>
-                <Properties data={data} space={space} />
+                <ValueReceipts data={data} inspect={inspect} selected={selectedValue} />
               </>
             )}
             {section === "Numbers" && (
@@ -226,18 +233,18 @@ export default function ObjectProfile({
                             Inspect inputs
                           </summary>
                           <p className="my-3">
-                            The evaluator uses the latest values below, applies
-                            the metric filters, then evaluates its definition.
-                            Missing inputs are omitted and reported in warnings.
+                            Current values are shown below. Historical input versions
+                            are not available, so these are not a receipt for the
+                            calculation at its cutoff. Missing inputs are reported in warnings.
                           </p>
-                          <Properties
+                          <ValueReceipts
                             data={{
                               ...data,
                               properties: data.properties.filter((p) =>
                                 n.result.run?.input_properties.includes(p.name),
                               ),
                             }}
-                            space={space}
+                            inspect={inspect} selected={selectedValue}
                           />
                         </details>
                       </>
@@ -277,6 +284,7 @@ export default function ObjectProfile({
                             >
                               {g.outgoing ? l.to_name : l.from_name}
                             </Link>
+                            <p className="text-[var(--ink-dim)]">{l.from_name} {plainWords(l.label)} {l.to_name}.</p>
                           </li>
                         ))}
                     </ul>
@@ -323,65 +331,7 @@ export default function ObjectProfile({
               </>
             )}
             {section === "Sources" && (
-              <div className="space-y-5">
-                {data.sources.length === 0 && <p>No source recorded.</p>}
-                {data.sources.map((s) => (
-                  <div key={s.id} id={`source-${s.id}`}>
-                    <h4 className="font-medium">
-                      {s.document?.filename ||
-                        s.record?.title ||
-                        s.record?.external_id ||
-                        "Source unavailable"}
-                    </h4>
-                    {s.document ? (
-                      <>
-                        <p>{s.document.note}</p>
-                        {s.document.row ? (
-                          <>
-                            <p className="font-mono mt-3">
-                              Row {s.document.row.line}
-                            </p>
-                            <dl className="mt-2 space-y-2">
-                              {Object.entries(s.document.row.cells).map(
-                                ([key, v]) => (
-                                  <div key={key}>
-                                    <dt className="label">{key}</dt>
-                                    <dd className="font-mono break-words">
-                                      {v || "Missing"}
-                                    </dd>
-                                  </div>
-                                ),
-                              )}
-                            </dl>
-                          </>
-                        ) : (
-                          <p>Exact row unavailable.</p>
-                        )}
-                        <Link
-                          className="link inline-block mt-3"
-                          href={`/documents?id=${encodeURIComponent(s.document.id)}&space=${encodeURIComponent(space)}`}
-                        >
-                          Open document
-                        </Link>
-                      </>
-                    ) : s.record ? (
-                      <>
-                        <p className="text-[var(--ink-dim)]">
-                          {s.record.source} · Exact source record
-                        </p>
-                        <pre className="overflow-auto max-h-80 whitespace-pre-wrap break-words font-mono text-xs mt-3">
-                          {JSON.stringify(s.record.payload, null, 2)}
-                        </pre>
-                      </>
-                    ) : (
-                      <p>
-                        The source record or CSV row is unavailable. Its
-                        location was not retained or the source was removed.
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <ValueReceipts data={data} inspect={inspect} selected={selectedValue} />
             )}
             {section === "Related memories" && (
               <div className="space-y-5">
@@ -431,59 +381,13 @@ export default function ObjectProfile({
           </section>
         </>
       )}
+      </div>
+      {selectedValue && <SourceInspector data={data} name={selectedValue} space={space}
+        close={() => {
+          if (valueTrigger.current) window.history.back();
+          else update({ receipt: "" }, true);
+        }} restoreFocus={() => valueTrigger.current?.focus()} />}
+      </div>
     </div>
-  );
-}
-function Properties({ data, space }: { data: Profile; space: string }) {
-  return (
-    <dl className="divide-y divide-[var(--border)]">
-      {data.properties.length === 0 && <p>No approved properties.</p>}
-      {data.properties.map((p) => (
-        <div key={p.name} className="py-4 first:pt-0 flex flex-col gap-2">
-          <div className="flex flex-wrap justify-between gap-2">
-            <dt>{words(p.name)}</dt>
-            <dd
-              className={
-                p.value === null
-                  ? "text-[var(--ink-faint)]"
-                  : [
-                        "number",
-                        "integer",
-                        "money",
-                        "percent",
-                        "date",
-                        "datetime",
-                      ].includes(p.datatype)
-                    ? "font-mono"
-                    : ""
-              }
-            >
-              {p.state === "unavailable"
-                ? "Unavailable"
-                : formatted(p.value, p)}
-            </dd>
-          </div>
-          <dd className="text-xs text-[var(--ink-dim)]">
-            <span>{words(p.state)}</span> ·{" "}
-            <span className="font-mono">
-              {p.as_of && p.as_of !== "NONE"
-                ? `As of ${date(p.as_of)}`
-                : "Date not recorded"}
-            </span>
-            {p.unit && <> · Unit: {p.unit}</>}
-            {p.source ? (
-              <Link
-                className="link block w-fit mt-1"
-                href={`${objectHref(data.id, space)}&section=Sources`}
-              >
-                {p.source_label}
-              </Link>
-            ) : (
-              <p className="mt-1">Source not recorded</p>
-            )}
-          </dd>
-        </div>
-      ))}
-    </dl>
   );
 }
