@@ -19,3 +19,17 @@ name-confirmation guard and API contract.
 
 Hosts now record expired, used and malformed peer-join reasons in their admin
 audit log. Public refusals stay generic and the peer protocol remains compatible.
+
+OAuth connections deliberately keep access to every space the signed-in user
+belongs to, with the scopes approved at interactive consent. This supports
+cross-space recall in ChatGPT and Claude. Consent now states this plainly,
+including Personal and team spaces. OAuth access tokens remain 15 minutes and
+rotating refresh tokens remain 30 days. These differ from the new Personal-only,
+90-day personal access token defaults. Space selection at consent is tracked in
+[issue 217](https://github.com/Cashara-io/eunomia/issues/217).
+
+Agent skill installation and the Claude SessionStart hook now read the existing
+MCP skill resource with `memory:read`; they no longer need account settings
+access. Upgrade fixtures explicitly request the space administration they use.
+Peer refusals use the same owner lookup and audit write for unknown, used and
+expired codes, with identical public status, body and headers.

@@ -678,6 +678,21 @@ costs one request per 500 rows, counted once the file is read, so a 5,000-row
 file is 10 requests. If a client still gets a 429,
 it should wait `Retry-After` seconds and resend that batch.
 
+## OAuth space access
+
+An interactive OAuth connection, such as ChatGPT or Claude, acts as the signed-in
+user in every space they belong to, including Personal and team spaces. The
+consent screen states that requested read and write permissions apply to every
+such space. Membership checks and the approved scopes still apply to each call.
+Access tokens last 15 minutes; rotating refresh tokens last 30 days. Refresh
+preserves the grant's space access and cannot expand its scopes.
+
+This deliberately differs from new personal access tokens, which default to
+Personal, read/write memory and 90 days. Cross-space recall is a core OAuth
+behaviour, so this release does not silently narrow OAuth grants or existing
+credentials. Space selection at consent is tracked in
+[issue 217](https://github.com/Cashara-io/eunomia/issues/217).
+
 ## Script permission inventory
 
 | Consumer | Authentication and required access |
