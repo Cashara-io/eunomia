@@ -266,10 +266,16 @@ description: Use Eunomia, the user'"'"'s long-term memory, on every task. Recall
 ---
 '
 
+# The MCP skill resource needs only memory:read, including with a Personal-only token.
+skill_text() {
+  if [ "$JSON" = jq ]; then jq -r '.result.contents[0].text // empty'
+  else python3 -c 'import json,sys;print((json.load(sys.stdin).get("result",{}).get("contents") or [{}])[0].get("text", ""))'; fi
+}
+
 # install_skill <token> <path>: the user's skill (Memory skill page) as SKILL.md
 install_skill() {
   local body
-  body="$(curl -fsS --max-time 10 -H "Authorization: Bearer $1" "$URL/api/settings" 2>/dev/null | jfield memory_skill)"
+  body="$(curl -fsS --max-time 10 -H "Authorization: Bearer $1" -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"eunomia://skill"}}' "$MCP_URL" 2>/dev/null | skill_text)"
   if [ -z "$body" ]; then warn "    couldn't fetch the memory skill -- skipped $2"; return 1; fi
   case "$body" in ---*) ;; *) body="$SKILL_FRONTMATTER
 $body" ;; esac
@@ -330,8 +336,9 @@ if command -v jq >/dev/null 2>&1; then J=jq; else J=py; fi
 
 case "${1:-}" in
   session)
-    if [ $J = jq ]; then skill="$(api "$EUNOMIA_URL/api/settings" | jq -r '.memory_skill // empty')"
-    else skill="$(api "$EUNOMIA_URL/api/settings" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("memory_skill",""))' 2>/dev/null)"; fi
+    body='{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"eunomia://skill"}}'
+    if [ $J = jq ]; then skill="$(api -d "$body" "$EUNOMIA_URL/mcp" | jq -r '.result.contents[0].text // empty')"
+    else skill="$(api -d "$body" "$EUNOMIA_URL/mcp" | python3 -c 'import json,sys;print((json.load(sys.stdin).get("result",{}).get("contents") or [{}])[0].get("text", ""))' 2>/dev/null)"; fi
     [ -n "$skill" ] || exit 0
     # drop the SKILL.md frontmatter
     printf '%s

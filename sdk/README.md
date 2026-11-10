@@ -57,3 +57,8 @@ cd sdk/typescript && npm install && npm test
 ```
 
 Each runs against a local stub server. Set `EUNOMIA_URL` and `EUNOMIA_TOKEN` to also run a live test that creates two vaults, merges them, recalls from the result and deletes what it made.
+
+Name-only token creation defaults to Personal, `memory:read` and `memory:write`,
+with a 90-day expiry. Renew before expiry. Choose another space or broader
+permissions explicitly when the client needs them. See [the agent permission
+guide](../docs/agents.md#api-token-defaults).

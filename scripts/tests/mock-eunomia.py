@@ -40,7 +40,12 @@ class H(BaseHTTPRequestHandler):
         if self.path == "/api/settings" and method == "GET":
             if not (self.headers.get("Authorization") or "").startswith("Bearer tok"):
                 return self._send(401, {})
-            return self._send(200, {"memory_skill": "---\nname: eunomia-memory\ndescription: test\n---\n\n# Eunomia memory\n\nRecall first."})
+            return self._send(403, {"detail": "Account settings require vaults:admin and all spaces"})
+        if self.path == "/mcp" and method == "POST":
+            body = self._body()
+            if body.get("method") == "resources/read" and body.get("params", {}).get("uri") == "eunomia://skill":
+                return self._send(200, {"jsonrpc": "2.0", "id": body["id"], "result": {"contents": [{"text": "# Eunomia memory\n\nRecall first."}]}})
+            return self._send(400, {})
         if self.path == "/api/tools/recall" and method == "POST":
             q = self._body().get("query", "")
             hits = [{"id": "memory:1", "text": "Ada prefers\nasync updates.", "kind": "memory"}] if "ada" in q.lower() else []

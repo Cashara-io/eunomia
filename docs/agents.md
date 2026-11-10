@@ -677,3 +677,17 @@ and 90 requests, well inside a minute's limit. A CSV import (`document_import_ro
 costs one request per 500 rows, counted once the file is read, so a 5,000-row
 file is 10 requests. If a client still gets a 429,
 it should wait `Retry-After` seconds and resend that batch.
+
+## Script permission inventory
+
+| Consumer | Authentication and required access |
+| --- | --- |
+| `scripts/connect-agents.sh` | Login/register and list, revoke and mint tokens use the user's session. Each agent token uses the minimal defaults. Skill installation and Claude SessionStart use MCP `resources/read` for `eunomia://skill`, requiring only `memory:read`. Prompt recall also needs only `memory:read`; the agent's memory writes need `memory:write`. Neither needs account settings or space administration. An existing supplied token is left unchanged. |
+| Installer documented in `docs/installation.md` | The hosted script was inspected on 10 November 2026. It delegates account setup and token creation to `scripts/connect-agents.sh`, using the checkout copy or downloading it when absent. It makes no separate PAT mint or settings request. |
+| `scripts/auto-update.sh` and update helpers | Docker operations and status files, no personal access token issuance. |
+| `scripts/ci/e2e-setup.sh` | Registration and onboarding use a session cookie. Database discovery uses separate SurrealDB fixture credentials. It does not mint a personal access token. |
+| `scripts/tests/update-path.test.sh` | Token A explicitly requests all spaces and `memory:read`, `memory:write`, `vaults:admin` for team-space creation, memory changes, documents and integrity checks. It prints this permission choice. Token B uses memory operations in its own Personal space and keeps the minimal defaults. Expiry is omitted for both, so current releases use 90 days. Earlier FROM releases retain their stored credential behaviour through the upgrade. |
+| `scripts/chaos.sh`, `loadtest/k6/lib.js`, `loadtest/k6/mcp-mix.js` | Name-only tokens, with memory operations in Personal. The minimal defaults suffice. Caller-supplied load-test tokens retain their permissions. |
+| `sdk/README.md`, `docs/sdk.md` | Name-only creation for memory clients. Personal, read/write memory and 90 days suffice; other destinations or permissions require explicit choices. |
+| `docs/extensions.md` | Extension account APIs deliberately request all spaces. Extension management explicitly requires `connectors`; no change to the minimal defaults is needed. |
+| Project CLI | Explicit project space and `memory:write`, which includes read; omitted expiry receives 90 days. |

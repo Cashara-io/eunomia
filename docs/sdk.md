@@ -58,3 +58,8 @@ The server rate-limits each token and replies `429` with `Retry-After`. The SDK 
 Failures raise `EunomiaError` with `status`, `code`, `detail` and `trace_id`, the fields of the API's problem+json body. See [errors](errors.md).
 
 The full method list, with the endpoint each one calls, is in [`sdk/README.md`](../sdk/README.md).
+
+Name-only token creation defaults to Personal, `memory:read` and `memory:write`,
+with a 90-day expiry. Renew before expiry. Choose another space or broader
+permissions explicitly when the client needs them. See [the agent permission
+guide](agents.md#api-token-defaults).
