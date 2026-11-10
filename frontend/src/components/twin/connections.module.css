@@ -55,13 +55,14 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  max-width: 38rem;
+  max-width: 48rem;
   flex: 1;
 }
 .search input {
   width: 100%;
   padding: 0.75rem 1rem;
-  min-height: 40px;
+  min-height: 56px;
+  font-size: 1rem;
 }
 .results {
   background: var(--surface);
@@ -143,7 +144,7 @@
 }
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 264px;
   border-block: 1px solid var(--border-strong);
 }
 .mainView {
@@ -173,20 +174,33 @@
   color: var(--ink-dim);
   line-height: 1.6;
 }
+.canvasWrap {
+  position: relative;
+}
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px 0;
+  font-size: 11px;
+  color: var(--ink-dim);
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+.legend > span:last-child {
+  margin-left: auto;
+}
+.heightKey {
+  color: var(--kind-repository);
+  letter-spacing: 2px;
+}
 .canvas {
-  height: 540px;
+  height: 700px;
   overflow: hidden;
   position: relative;
-  background-color: var(--ground);
-  background-image:
-    linear-gradient(
-      152deg,
-      transparent 48%,
-      var(--border) 49%,
-      transparent 50%
-    ),
-    linear-gradient(28deg, transparent 48%, var(--border) 49%, transparent 50%);
-  background-size: 60px 36px;
+  background:
+    radial-gradient(ellipse at 50% 47%, var(--accent-soft), transparent 65%),
+    var(--surface);
 }
 .plane {
   position: absolute;
@@ -204,41 +218,122 @@
   top: -2000px;
   overflow: visible;
   pointer-events: none;
+  z-index: 1;
+}
+.contour ellipse {
+  fill: none;
+  stroke: var(--ink-dim);
+  stroke-width: 0.8;
+  opacity: 0.16;
+}
+.contour text {
+  fill: var(--ink-dim);
+  font-size: 14px;
+}
+.focusRing {
+  fill: var(--accent-soft);
+  stroke: var(--kind-repository);
+  stroke-width: 1;
+  opacity: 0.45;
+}
+.route path {
+  stroke: var(--ink-dim);
+  stroke-width: 1.6;
+  fill: none;
+}
+.route[data-active="true"] path {
+  stroke: var(--ink);
+  stroke-width: 2.5;
+  stroke-dasharray: 8 6;
+  animation: flow 6s linear infinite;
+}
+.route rect {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+}
+.route text {
+  fill: var(--ink);
+  font-size: 14px;
+}
+@keyframes flow {
+  to {
+    stroke-dashoffset: -112;
+  }
 }
 .mark {
   position: absolute;
-  width: 210px;
-  transform: translate(-50%, -80px);
+  width: 0;
+  height: 0;
   text-align: center;
 }
-.mark > svg {
+.objectForm {
   position: absolute;
-  top: 63px;
-  left: 23px;
-  z-index: 0;
+  left: -130px;
+  top: -200px;
+  overflow: visible;
   pointer-events: none;
 }
-.mark button {
-  position: relative;
-  z-index: 1;
-  min-height: 58px;
-  padding: 0.5rem;
+.stalk {
+  fill: none;
+  stroke: var(--kind-hue);
+  stroke-width: 1.5;
 }
-.mark strong {
-  font-size: 0.875rem;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
+.plate {
+  position: absolute;
+  left: -100px;
+  width: 200px;
+  min-height: 52px;
+  border: 1px solid color-mix(in srgb, var(--kind-hue) 40%, var(--border));
+  border-radius: 9px;
+  padding: 7px 10px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  z-index: 3;
+  box-shadow: 0 4px 12px #0000000b;
+}
+.plate strong {
+  display: block;
+  font-size: 17px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .markKind {
-  color: var(--ink-dim);
-  font-size: 0.6875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--kind-hue);
+  font-size: 12px;
+  margin-bottom: 3px;
 }
-.mark[data-active="true"] button,
-.mark button[aria-pressed="true"] {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
+.groupHint {
+  display: block;
+  color: var(--ink-dim);
+  font-size: 11px;
+  margin-top: 3px;
+}
+.mark[data-active="true"] .plate,
+.plate[aria-pressed="true"] {
+  outline: 2px solid var(--kind-hue);
+  outline-offset: 3px;
+}
+.mark[data-focus="true"] .plate {
+  background: color-mix(in srgb, var(--kind-hue) 12%, var(--surface));
+}
+.mark[data-dimmed="true"] {
+  opacity: 0.22;
+}
+.sector {
+  position: absolute;
+  left: -100px;
+  width: 200px;
+  color: var(--ink-dim);
+  font-size: 14px;
+  opacity: 0.65;
+  pointer-events: none;
 }
 .root button:focus-visible,
 .root select:focus-visible,
@@ -247,17 +342,99 @@
   outline-offset: 4px;
 }
 .camera {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  gap: 0.35rem;
   align-items: center;
-  flex-wrap: wrap;
-  padding: 0.75rem;
-  border-top: 1px solid var(--border);
+  gap: 2px;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
   background: var(--surface);
+  box-shadow: 0 5px 24px #00000012;
+  z-index: 5;
 }
-.camera span {
-  font-size: 0.6875rem;
+.camera button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.camera button:hover {
+  background: var(--accent-soft);
+}
+.camera svg {
+  width: 16px;
+  height: 16px;
+}
+.camera output {
+  min-width: 40px;
+  font-size: 11px;
+  text-align: center;
   color: var(--ink-dim);
+}
+.shortcuts {
+  position: absolute;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 300px;
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  z-index: 6;
+  font-size: 13px;
+}
+.shortcuts p {
+  margin-top: 8px;
+}
+.kindBars {
+  margin: 24px 0;
+  display: grid;
+  gap: 20px;
+}
+.kindBars button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+.kindBars button > span:first-child {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.barTrack {
+  display: block;
+  background: var(--border);
+  height: 4px;
+}
+.barFill {
+  display: block;
+  background: var(--kind-hue);
+  height: 100%;
+}
+.suggestions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0 18px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+.suggestions button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--ink);
+  cursor: pointer;
 }
 .root .help {
   font-size: 0.75rem;
@@ -377,4 +554,29 @@
     animation: none !important;
     scroll-behavior: auto !important;
   }
+}
+@media (max-width: 640px) {
+  .workspace {
+    display: flex;
+    flex-direction: column;
+  }
+  .inspector {
+    order: -1;
+  }
+  .mobileTable {
+    max-height: 520px;
+    overflow: auto;
+    border-block: 1px solid var(--border);
+  }
+  .kindBars {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .search input {
+    font-size: 16px;
+  }
+}
+
+.canvas[data-compact="true"] {
+  height: 500px;
 }

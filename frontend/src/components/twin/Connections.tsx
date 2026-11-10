@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useOntology } from "@/lib/queries/ontology";
 import {
+  type ConnectionNode,
   useConnectionSearch,
   useNeighbourhood,
 } from "@/lib/queries/connections";
@@ -12,6 +13,7 @@ import { twinHref } from "./model";
 import { humanLabel, plural } from "./overview-format";
 import KindSummary from "./KindSummary";
 import ConnectionCanvas from "./ConnectionCanvas";
+import ConnectionSummary from "./ConnectionSummary";
 import ConnectionInspector from "./ConnectionInspector";
 import ReadState from "./ReadState";
 import { edgeSentence, filterScene, type Direction } from "./connections-model";
@@ -27,8 +29,7 @@ export default function Connections({ space }: { space: string }) {
     >
       <header className={styles.spread}>
         <div>
-          <h2>One object. A world of connections.</h2>
-          <p>One object, its connections, and the records behind it.</p>
+          <h2>Follow an object and the records that connect it.</h2>
         </div>
         <Link className="link" href={twinHref("/ontology", space)}>
           Back to Overview
@@ -123,6 +124,9 @@ function Objects({ space }: { space: string }) {
   );
   const query = useNeighbourhood(space, focus, depth);
   const [hovered, setHovered] = useState("");
+  const [activeKind, setActiveKind] = useState("");
+  const [recent, setRecent] = useState<ConnectionNode[]>([]);
+  const suggestions = useConnectionSearch(space, "", kind, 0, !search.trim());
   const scene = useMemo(
     () =>
       query.data
@@ -147,7 +151,18 @@ function Objects({ space }: { space: string }) {
     window.addEventListener("keydown", escape);
     return () => window.removeEventListener("keydown", escape);
   });
+  function remember(node: ConnectionNode) {
+    setRecent((prev) =>
+      [node, ...prev.filter((n) => n.id !== node.id)].slice(0, 4),
+    );
+  }
+  function open(node: ConnectionNode) {
+    remember(node);
+    update({ focus: node.id, selected: "", q: "", offset: "0" });
+  }
   function select(id: string) {
+    const node = nodes.get(id);
+    if (node) remember(node);
     update({ selected: id });
   }
   function close() {
@@ -179,6 +194,36 @@ function Objects({ space }: { space: string }) {
           </button>
         )}
       </form>
+      {!search.trim() && (
+        <>
+          {recent.length > 0 && (
+            <div
+              className={styles.suggestions}
+              aria-label="Recently viewed objects"
+            >
+              <span>Recently viewed</span>
+              {recent.map((n) => (
+                <button key={n.id} onClick={() => open(n)}>
+                  {n.name}
+                </button>
+              ))}
+            </div>
+          )}
+          {suggestions.data && (
+            <div className={styles.suggestions} aria-label="Suggested objects">
+              <span>Suggested starting points</span>
+              {suggestions.data.results
+                .filter((n) => !recent.some((r) => r.id === n.id))
+                .slice(0, 4)
+                .map((n) => (
+                  <button key={n.id} onClick={() => open(n)}>
+                    {n.name}
+                  </button>
+                ))}
+            </div>
+          )}
+        </>
+      )}
       {(search.trim() || (!focus && kind)) && (
         <section className={styles.results} aria-label="Object search results">
           {searchQuery.isError ? (
@@ -195,9 +240,10 @@ function Objects({ space }: { space: string }) {
                 <button
                   className={styles.result}
                   key={n.id}
-                  onClick={() =>
-                    update({ focus: n.id, selected: n.id, q: "", offset: "0" })
-                  }
+                  onClick={() => {
+                    remember(n);
+                    update({ focus: n.id, selected: n.id, q: "", offset: "0" });
+                  }}
                 >
                   <strong>{n.name}</strong>
                   <span>{humanLabel(n.kind)}</span>
@@ -392,6 +438,7 @@ function Objects({ space }: { space: string }) {
                             focus={focus}
                             selected={selected}
                             active={active}
+                            activeKind={activeKind}
                             select={select}
                             hover={setHovered}
                           />
@@ -507,15 +554,11 @@ function Objects({ space }: { space: string }) {
                         close={close}
                       />
                     ) : (
-                      <aside className={styles.inspector}>
-                        <span className="label">Object inspector</span>
-                        <h3>Keep a record in view.</h3>
-                        <p>
-                          Select an object to read its values and where they
-                          came from. Hover a connection to find it on the
-                          canvas.
-                        </p>
-                      </aside>
+                      <ConnectionSummary
+                        scene={scene}
+                        focus={focus}
+                        highlight={setActiveKind}
+                      />
                     )}
                   </div>
                 </>

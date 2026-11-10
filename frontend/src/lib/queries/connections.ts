@@ -92,7 +92,7 @@ export function useConnectionSearch(
 ) {
   return useQuery({
     queryKey: ["connection-search", space, query, kind, offset],
-    enabled: enabled && (query.trim().length > 0 || !!kind),
+    enabled,
     queryFn: ({ signal }) =>
       tool(
         "entities_search",

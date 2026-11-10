@@ -37,7 +37,24 @@ test("stable layout groups unique nodes and deduplicates returned edges", () => 
   expect(scene.edges.length).toBe(24);
   expect(a.nodes.find((n) => n.id === "house")).toMatchObject({
     x: 600,
-    y: 370,
+    y: 470,
     hop: 0,
   });
+});
+
+test("sentences retain the API subject, verb and object for opposing and self links", () => {
+  const nodes = new Map([
+    ["a", { id: "a", name: "House blend", kind: "product" }],
+    ["b", { id: "b", name: "North Coast", kind: "supplier" }],
+  ]);
+  const edges = [
+    { id: "ab", from: "a", label: "ordered_from", to: "b" },
+    { id: "ba", from: "b", label: "Supplies", to: "a" },
+    { id: "aa", from: "a", label: "replaces", to: "a" },
+  ];
+  expect(edges.map((e) => edgeSentence(e, nodes))).toEqual([
+    "House blend ordered from North Coast",
+    "North Coast Supplies House blend",
+    "House blend replaces House blend",
+  ]);
 });

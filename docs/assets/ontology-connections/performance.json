@@ -1,0 +1,63 @@
+{
+  "browserName": "chromium",
+  "browser": "156.0.8078.48",
+  "platform": "darwin",
+  "arch": "arm64",
+  "scene": {
+    "nodes": 1000,
+    "edges": 3000,
+    "seconds": 10,
+    "claim": "Synthetic renderer stress only. Service remains limited to 150 nodes and 600 edges.",
+    "initialMs": 461,
+    "workerLayoutMs": 0.9000000953674316,
+    "frames": {
+      "n": 601,
+      "p95": 16.700000000000728,
+      "worst": 16.80000000000109,
+      "over20ms": 0
+    },
+    "incrementalMB": 8.767398834228516
+  },
+  "supported": {
+    "nodes": 150,
+    "edges": 600,
+    "cold30": {
+      "n": 30,
+      "p95": 221,
+      "worst": 262,
+      "over20ms": 30
+    },
+    "coldInput30": {
+      "n": 30,
+      "p95": 26.5,
+      "worst": 27.09999990463257,
+      "over20ms": 30
+    },
+    "workerLayout30": {
+      "n": 30,
+      "p95": 0.39999985694885254,
+      "worst": 0.40000009536743164,
+      "over20ms": 0
+    },
+    "warm102": {
+      "n": 102,
+      "p95": 28.90000009536743,
+      "worst": 32,
+      "over20ms": 102
+    },
+    "cpu4x102": {
+      "n": 102,
+      "p95": 60.799999952316284,
+      "worst": 68.20000004768372,
+      "over20ms": 87
+    }
+  },
+  "timingMethod": "Trusted click capture to second requestAnimationFrame, an upper bound for next paint. Synthetic pan uses CSS transforms with viewport culling.",
+  "repeatedClosedHeapMB": [
+    9.404682159423828,
+    9.43618392944336,
+    9.458667755126953
+  ],
+  "closedHeapGrowthPercent": 1.1563780501536502,
+  "returnedHeapMB": 9.350540161132812
+}
