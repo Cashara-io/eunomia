@@ -267,7 +267,7 @@ async fn seeded_success_contract_covers_every_registered_tool() {
 
 #[tokio::test]
 async fn selector_refusals_never_turn_request_values_into_evidence() {
-    use eunomia_backend::{authz::{self, Actor, Caller}, error::ErrorCode, rid, scopes};
+    use eunomia_backend::{authz::{self, Actor, Caller}, rid, scopes};
     let app = TestApp::new().await;
     let caller = Caller { actor: Actor { kind: "token", id: "api_token:evidence-test".into() },
         scopes: scopes::ALL.iter().map(|s| s.to_string()).collect(),
@@ -283,9 +283,8 @@ async fn selector_refusals_never_turn_request_values_into_evidence() {
                 }
             }
             args[key] = if key == "vault_ids" { json!(["vault:request999777"]) } else { json!("vault:request999777") };
-            let error = authz::with_caller(caller.clone(), registry::call(&app.state, &app.user, name, args)).await.unwrap_err();
-            assert_eq!(error.code, ErrorCode::AuthScope, "{name}/{key}");
-            let result = error.to_tool_value();
+            let result = authz::with_caller(caller.clone(), registry::call(&app.state, &app.user, name, args)).await.unwrap_or_else(|e| e.to_tool_value());
+            assert_eq!(result["code"], "auth.scope", "{name}/{key}");
             let computed = evidence::for_tool(name).unwrap().computed(&result);
             assert!(!has_canary(&computed), "{name}/{key}: refusal registered a request value as evidence");
         }

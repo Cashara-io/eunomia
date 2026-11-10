@@ -132,8 +132,8 @@ async fn refuse_selector(app: &common::TestApp, caller: &eunomia_backend::authz:
         "email": "private-invitee@example.test", "name": "PRIVATE_ARGUMENT_CANARY",
         "role": "owner", "text": "PRIVATE_CONTENT_CANARY", "password": "PRIVATE_SECRET_CANARY"
     });
-    let error = authz::with_caller(caller.clone(), registry::call(&app.state, &app.user, tool, args)).await.unwrap_err();
-    assert_eq!(error.code, eunomia_backend::error::ErrorCode::AuthScope, "{tool}");
+    let result = authz::with_caller(caller.clone(), registry::call(&app.state, &app.user, tool, args)).await.unwrap_or_else(|e| e.to_tool_value());
+    assert_eq!(result["code"], "auth.scope", "{tool}");
 }
 
 async fn ledger(app: &common::TestApp, category: &str) -> serde_json::Value {
@@ -154,7 +154,7 @@ async fn preflight_invite_refusal_is_visible_to_admins_with_safe_context() {
     let ((status, result), _) = common::http(&app.router, "POST", "/api/tools/vault_invite", Some(serde_json::json!({
         "vault_id":foreign,"email":"private-invitee@example.test","password":"PRIVATE_SECRET_CANARY"
     })), Some(&issued.token), None).await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(status, StatusCode::OK);
     assert_eq!(result["code"], "auth.scope");
     let page = ledger(&app, "spaces").await;
     let row = page["results"].as_array().unwrap().iter().find(|r| r["action"] == "vault.invite").expect("preflight invite refusal in security ledger");
@@ -265,9 +265,9 @@ async fn preflight_generic_budget_is_per_token_across_tools_and_targets() {
     let _clock = RefusalClock::freeze();
     for i in 0..40 {
         let tool = if i % 2 == 0 { "vault_peers" } else { "ontology_get" };
-        let error = eunomia_backend::authz::with_caller(caller.clone(), eunomia_backend::tools::registry::call(&app.state, &app.user, tool,
-            serde_json::json!({"vault_id":format!("vault:foreign-{i}")}))).await.unwrap_err();
-        assert_eq!(error.code, eunomia_backend::error::ErrorCode::AuthScope);
+        let result = eunomia_backend::authz::with_caller(caller.clone(), eunomia_backend::tools::registry::call(&app.state, &app.user, tool,
+            serde_json::json!({"vault_id":format!("vault:foreign-{i}")}))).await.unwrap();
+        assert_eq!(result["code"], "auth.scope");
     }
     assert_eq!(refusal_details(&app, "auth.scope_refused").await.len(), 30);
     caller.actor.id = "api_token:another-token".into();
@@ -374,9 +374,9 @@ async fn preflight_long_selectors_keep_complete_json_detail() {
     let app = common::TestApp::new().await;
     let caller = restricted_caller(&app).await;
     let requested = format!("vault:{}", "long-selector".repeat(500));
-    let error = eunomia_backend::authz::with_caller(caller, eunomia_backend::tools::registry::call(&app.state, &app.user, "vault_peers",
-        serde_json::json!({"vault_id":requested}))).await.unwrap_err();
-    assert_eq!(error.code, eunomia_backend::error::ErrorCode::AuthScope);
+    let result = eunomia_backend::authz::with_caller(caller, eunomia_backend::tools::registry::call(&app.state, &app.user, "vault_peers",
+        serde_json::json!({"vault_id":requested}))).await.unwrap();
+    assert_eq!(result["code"], "auth.scope");
     let rows = refusal_details(&app, "auth.scope_refused").await;
     assert_eq!(rows.len(), 1);
     assert!(rows[0]["requested_vault"].as_str().unwrap().len() < 300);

@@ -6,7 +6,7 @@ use surrealdb::types::RecordId;
 
 use super::{ToolSpec, VAULT_ARGS, VAULT_LIST_ARGS};
 use crate::{audit, authz};
-use crate::error::{AppError, ErrorCode};
+use crate::error::{AppError, AppResult, ErrorCode};
 use crate::rid::RecordIdExt;
 use crate::state::OrgState;
 
@@ -14,6 +14,19 @@ pub(super) struct Refusal {
     pub error: AppError,
     pub selector: &'static str,
     pub requested: RecordId,
+}
+
+/// Keep the handler's error contract even when its vault check runs before dispatch.
+/// Search, recall and reflect propagate HTTP errors; the other handlers return tool values.
+pub(super) fn result(tool: &str, error: AppError) -> AppResult<Value> {
+    match tool {
+        "search" | "recall" | "reflect" => Err(error),
+        "vault_get" | "vault_clone" | "vault_merge" | "vault_invite" | "vault_members"
+        | "vault_remove_member" | "vault_set_role" | "vault_transfer_ownership" | "vault_leave"
+        | "vault_check" | "vault_repair" | "vault_accept_invitation" | "vault_decline_invitation"
+        | "vault_rename" | "vault_delete" => Ok(crate::vaults::tools::err_app(tool, &error)),
+        _ => Ok(error.to_tool_value()),
+    }
 }
 
 pub(super) fn check(name: &str, spec: &ToolSpec, args: &Value) -> Result<(), Box<Refusal>> {

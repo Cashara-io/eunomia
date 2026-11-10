@@ -1,12 +1,24 @@
 # Error codes
 
-Every error the backend returns has a stable dotted `code`. On HTTP it is an RFC 9457 `application/problem+json` body:
+Every error the backend returns has a stable dotted `code`. For HTTP errors it is an RFC 9457 `application/problem+json` body:
 
 ```json
 { "type": "about:blank", "title": "Not Found", "status": 404, "detail": "Vault not found.", "code": "vault.not_found", "trace_id": "0af7651916cd43dd8448eb211c80319c" }
 ```
 
 The same `trace_id` is in the `x-trace-id` response header on every response. Tool errors (REST `/api/tools/*` and MCP `tools/call`) are `{ "error", "code", "trace_id" }` values, and MCP protocol errors carry `{ "code", "trace_id" }` in the JSON-RPC error `data`. The browser sends a W3C `traceparent` header and the backend continues that trace.
+
+A handled tool refusal is still a tool result. Moving a vault check before the handler must preserve that handler's transport contract, including its HTTP status and error keys. These foreign-vault refusals have the following contracts when the token has the tool's required scope:
+
+| Tools | REST status and body | MCP status and result |
+| --- | --- | --- |
+| `skill_save`, `memory_write`, `vault_invite`, `entities_neighbourhood`, `secret_request` | 200, `{ "error", "code", "trace_id" }` | 200, `result.isError: true`, with the same JSON value in `result.content[0].text` |
+| `search`, `recall`, `reflect` | 403, the problem-details body above | 200, `result.isError: true`, with `{ "error", "code", "trace_id" }` in the text content |
+| `memory_write_batch` | 200, `{ "written", "failed", "results" }` | 200, the same value in the text content, `result.isError: false` |
+
+For these binding refusals, `code` is `auth.scope`. A refused batch item has exactly `{ "index", "ok": false, "error", "code" }`, without a per-item `trace_id`; an item's `vault_id` overrides the batch default. Vault-management tools such as `vault_invite` prefix the error message with the tool name. The `entities_neighbourhood` case above uses an entity in the requested foreign vault.
+
+REST authentication and missing-scope checks before tool dispatch remain HTTP errors. The status column below lists the default HTTP error status, not the status of a handled tool result. `backend/tests/tool_refusal_contract.rs` checks the table over both transports, including exact keys and trace IDs. OpenAPI describes the 200 tool result as an open JSON object and HTTP errors separately as `application/problem+json`.
 
 Raw database or upstream text is never in a response. It is only on the request span (field `source`), found by `trace_id`.
 

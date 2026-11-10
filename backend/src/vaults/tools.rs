@@ -13,7 +13,7 @@ fn err(tool_name: &str, message: &str) -> Value {
     json!({ "error": format!("{tool_name}: {message}") })
 }
 
-fn err_app(tool_name: &str, e: &crate::error::AppError) -> Value {
+pub(crate) fn err_app(tool_name: &str, e: &crate::error::AppError) -> Value {
     let mut v = e.to_tool_value();
     v["error"] = format!("{tool_name}: {}", e.detail()).into();
     v

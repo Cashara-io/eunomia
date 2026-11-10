@@ -476,7 +476,7 @@ async fn call_inner(app: &AppState, user: &User, name: &str, mut args: Value) ->
         let requested = prepared.as_ref().map(|p| p.scrub_text(&requested)).unwrap_or(requested);
         preflight::record(state, owner, name, &refusal, &requested).await;
         count_call(app, user, name, true, 0);
-        return Err(refusal.error);
+        return preflight::result(name, refusal.error);
     }
 
     let vault = args.get("vault_id").and_then(Value::as_str).unwrap_or("personal").to_string();
