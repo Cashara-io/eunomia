@@ -115,7 +115,7 @@ async fn chat_turns_across_processes() {
     let rows: Vec<service::MessageOut> = service::history(&db, &app.user.id, &id).await.unwrap().unwrap();
     assert_eq!(rows.len(), 60);
     assert!(rows.windows(2).all(|pair| pair[0].created_at < pair[1].created_at));
-    for pair in rows.chunks_exact(2) {
+    for pair in rows.as_chunks::<2>().0 {
         assert_eq!((&*pair[0].role, &*pair[1].role), ("user", "assistant"));
         assert_eq!(pair[0].content, pair[1].content, "two processes interleaved turns");
     }
