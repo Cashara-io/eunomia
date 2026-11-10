@@ -55,26 +55,23 @@ export function supportsMerge(d: Definition) {
   }
 }
 
-export function savedDecision(before: Definition, after: Definition) {
-  if (
-    before.item.description !== after.item.description &&
-    before.item.status === after.item.status
-  )
-    return { sentence: "description updated", label: "Edit description" };
-  if (after.item.status === "approved")
-    return { sentence: "approved", label: "Approve" };
-  if (after.item.status === "rejected") {
-    const redirect = after.type !== "link" ? after.item.merge_into : null;
-    return redirect
-      ? {
-          sentence: `merged into ${humanLabel(redirect)}`,
-          label: "Reject and redirect",
-        }
-      : { sentence: "rejected", label: "Reject without merging" };
+export type ReviewOperation = "describe" | "approve" | "reject" | "merge";
+
+export function savedDecision(operation: ReviewOperation, after: Definition) {
+  switch (operation) {
+    case "describe":
+      return { sentence: "description updated", label: "Edit description" };
+    case "approve":
+      return { sentence: "approved", label: "Approve" };
+    case "reject":
+      return { sentence: "rejected", label: "Reject without merging" };
+    case "merge": {
+      const redirect = after.type !== "link" ? after.item.merge_into : null;
+      return redirect
+        ? { sentence: `merged into ${humanLabel(redirect)}`, label: "Reject and redirect" }
+        : { sentence: "rejected", label: "Reject without merging" };
+    }
   }
-  return after.item.status === "proposed"
-    ? { sentence: "still suggested", label: "Suggested" }
-    : { sentence: "in use", label: "In use" };
 }
 
 export function mergeTargets(d: Definition, data: OntologyOut) {

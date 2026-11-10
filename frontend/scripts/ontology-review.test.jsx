@@ -71,17 +71,26 @@ test("merge support matches kind, property, metric and link decisions", () => {
     expect(supportsMerge(item)).toBe(item.type !== "link");
 });
 
-test("receipt outcomes come from returned status and redirect", () => {
-  const before = definitions(reviewFixture())[1];
+test("merge receipts report the returned redirect", () => {
   const model = reviewFixture();
   const property = model.kinds[0].properties[0];
   property.status = "rejected";
   property.merge_into = null;
-  expect(savedDecision(before, definitions(model)[1])).toEqual({
+  expect(savedDecision("merge", definitions(model)[1])).toEqual({
     sentence: "rejected", label: "Reject without merging",
   });
   property.merge_into = "price";
-  expect(savedDecision(before, definitions(model)[1])).toEqual({
+  expect(savedDecision("merge", definitions(model)[1])).toEqual({
     sentence: "merged into Price", label: "Reject and redirect",
   });
 });
+
+for (const status of ["approved", "rejected", "proposed"]) {
+  test(`describe receipt remains describe when status stays ${status}`, () => {
+    const model = reviewFixture();
+    model.kinds[0].properties[0].status = status;
+    expect(savedDecision("describe", definitions(model)[1])).toEqual({
+      sentence: "description updated", label: "Edit description",
+    });
+  });
+}

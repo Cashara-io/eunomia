@@ -1,7 +1,8 @@
 "use client";
 
 import {
-  useEffect, useEffectEvent, useId, useRef, useState,
+  useEffect, useEffectEvent, useId, useImperativeHandle, useRef, useState,
+  type Ref,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import Link from "next/link";
@@ -27,9 +28,10 @@ import {
 } from "./model";
 import {
   hasReviewOverlay, ignoreReviewKey, mergeTargets, reviewFields,
-  savedDecision, supportsMerge,
+  savedDecision, supportsMerge, type ReviewOperation,
 } from "./review-model";
 import styles from "./review.module.css";
+import { useReviewArming } from "./use-review-arming";
 import ReviewEvidence from "./ReviewEvidence";
 import MergePreview from "./MergePreview";
 import { humanLabel, ReviewTime } from "./review-format";
@@ -57,11 +59,15 @@ type SaveState =
   | { kind: "stale"; refreshFailed: boolean }
   | {
       kind: "saved";
+      operation: ReviewOperation;
       definition: DefinitionItem;
       reason: string;
     };
 
+export type ReviewHandle = { beginNavigation: () => void };
+
 export default function Definition({
+  ref,
   definition: incoming,
   data,
   isOwner,
@@ -71,6 +77,7 @@ export default function Definition({
   onBusyChange,
   queueReview = false,
 }: {
+  ref?: Ref<ReviewHandle>;
   definition: DefinitionItem;
   data: OntologyOut;
   isOwner: boolean;
@@ -130,6 +137,13 @@ export default function Definition({
     (state.kind !== "saved" && incoming.item.revision !== d.item.revision);
   const busy = locked || state.kind === "saving";
   const canDecide = isOwner && !busy && !stale && state.kind !== "saved";
+  const arming = useReviewArming({
+    id: d.id, revision: d.item.revision,
+    incomingId: incoming.id, incomingRevision: incoming.item.revision,
+    enabled: canDecide, mode: description !== null ? "describe" : targetId ? "merge" : "decision",
+    region: reviewRegion, heading,
+  });
+  useImperativeHandle(ref, () => ({ beginNavigation: arming.beginNavigation }));
   const builtIn = d.type === "kind" && d.item.built_in;
 
   useEffect(() => {
@@ -152,14 +166,16 @@ export default function Definition({
   }
   async function decide(
     action: Action,
-    seen = { id: d.id, revision: d.item.revision },
   ) {
     if (!isOwner || !isReviewOwner(cache, data.vault)) {
+      arming.disarm();
       setOwnerDenied(true);
       return;
     }
     if (action.action === "reject" && action.merge_into && !supportsMerge(d)) return;
-    if (seen.id !== d.id || seen.revision !== d.item.revision) return;
+    const latest = cache.getQueryData<OntologyOut>(["ontology", data.vault]);
+    const latestItem = latest && definitions(latest).find(item => item.id === d.id);
+    if (!arming.consume() || !latestItem || latestItem.item.revision !== d.item.revision) return;
     if (!canDecide || inFlight.current) return;
     inFlight.current = true;
     onBusyChange?.(true);
@@ -192,7 +208,10 @@ export default function Definition({
         throw new Error(
           "The server response did not include this definition. Refresh before deciding again.",
         );
-      setState({ kind: "saved", definition: updated, reason });
+      setState({
+        kind: "saved", definition: updated, reason,
+        operation: action.action === "reject" && action.merge_into ? "merge" : action.action,
+      });
       haptic("success");
     } catch (e) {
       if (e instanceof ApiError && e.code === "ontology.stale_revision") {
@@ -220,11 +239,11 @@ export default function Definition({
     const ignored = ignoreReviewKey(event.nativeEvent, reviewRegion.current) || hasReviewOverlay();
     event.preventDefault();
     if (ignored) return;
-    void decide(action, { id: d.id, revision: d.item.revision });
+    void decide(action);
   }
   const shortcut = useEffectEvent((e: KeyboardEvent) => {
     if (ignoreReviewKey(e, reviewRegion.current, true)) return;
-    // Escape cancels this review's inline preview, but never a separate overlay.
+    if (e.key === "Escape") arming.disarm();
     if (e.key === "Escape" && targetId && !busy && !hasReviewOverlay(false)) {
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -258,14 +277,28 @@ export default function Definition({
       ? history.data?.events.find(
           (e) =>
             e.revision === state.definition.item.revision &&
-            ["approved", "rejected", "merged"].includes(e.action),
+            e.action === ({ approve: "approved", reject: "rejected", merge: "merged", describe: "described" }[state.operation]),
         )
       : undefined;
   const evidence = <ReviewEvidence definition={d} data={data} />;
   const displayed = state.kind === "saved" ? state.definition : d;
 
   return (
-    <article ref={reviewRegion} className={styles.reading} aria-busy={busy}>
+    <article
+      ref={reviewRegion} className={styles.reading} aria-busy={busy}
+      onKeyDownCapture={event => {
+        if (event.key === "Escape") arming.disarm();
+      }}
+      onFocusCapture={event => {
+        if (event.target.hasAttribute("data-review-decision")) arming.arm();
+      }}
+      onPointerDownCapture={event => {
+        if (event.target instanceof Element && event.target.closest("[data-review-decision]")) arming.arm();
+      }}
+      onBlurCapture={event => {
+        if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) arming.disarm();
+      }}
+    >
       <header className={styles.identity}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 ref={heading} tabIndex={-1}>
@@ -310,7 +343,7 @@ export default function Definition({
             </span>
             <h4 ref={receiptHeading} tabIndex={-1}>
               Saved. {humanLabel(d.name)}{" "}
-              {savedDecision(d, state.definition).sentence}
+              {savedDecision(state.operation, state.definition).sentence}
               .
             </h4>
             <p className={styles.dim}>The server confirmed this decision.</p>
@@ -323,7 +356,7 @@ export default function Definition({
               <dd>{d.item.revision}</dd>
               <dt>Decision</dt>
               <dd>
-                {savedDecision(d, state.definition).label}
+                {savedDecision(state.operation, state.definition).label}
               </dd>
               <dt>Reason</dt>
               <dd>{state.reason || "No reason supplied"}</dd>
@@ -441,6 +474,7 @@ export default function Definition({
                       disabled={!canDecide}
                       onClick={() => {
                         setTargetId("");
+                        arming.disarm();
                         setDescription(d.item.description ?? "");
                       }}
                     >
@@ -473,6 +507,7 @@ export default function Definition({
                     selectRef={mergeSelect}
                     disabled={busy || stale}
                     onTargetChange={(id) => {
+                      arming.disarm();
                       setTargetId(id);
                       setState({ kind: "idle" });
                     }}
@@ -506,6 +541,7 @@ export default function Definition({
                   <button
                     className="btn btn-sm"
                     disabled={!canDecide}
+                    data-review-decision
                     onClick={() => void decide(state.action)}
                   >
                     Retry
@@ -546,6 +582,7 @@ export default function Definition({
                       <button
                         className="btn btn-primary btn-sm"
                         disabled={!canDecide}
+                        data-review-decision
                         onClick={() =>
                           void decide({
                             action: "describe",
@@ -571,6 +608,7 @@ export default function Definition({
                       <button
                         className="btn btn-primary btn-sm"
                         disabled={!canDecide}
+                        data-review-decision
                         onClick={() =>
                           void decide({
                             action: "reject",
@@ -588,6 +626,7 @@ export default function Definition({
                           className="btn btn-sm"
                           disabled={!canDecide}
                           ref={rejectButton}
+                          data-review-decision
                           onKeyDown={(event) => decisionKeyDown(event, { action: "reject" })}
                           onClick={() => void decide({ action: "reject" })}
                         >
@@ -599,6 +638,7 @@ export default function Definition({
                         className="btn btn-primary btn-sm"
                         disabled={!canDecide}
                         ref={approveButton}
+                        data-review-decision
                         onKeyDown={(event) => decisionKeyDown(event, { action: "approve" })}
                         onClick={() => void decide({ action: "approve" })}
                       >

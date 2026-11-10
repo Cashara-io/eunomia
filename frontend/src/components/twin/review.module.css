@@ -1,9 +1,9 @@
 .reading,
-:global([aria-label="Ontology review"]) {
+.workspace {
   --review-amber: #895d0c;
 }
 :global([data-theme="dark"]) .reading,
-:global([data-theme="dark"]) :global([aria-label="Ontology review"]) {
+:global([data-theme="dark"]) .workspace {
   --review-amber: #d8a640;
 }
 .workspace {

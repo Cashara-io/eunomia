@@ -204,3 +204,118 @@ test("a batch rechecks the role between writes", async ({ page }) => {
   expect(fixture.mutations).toHaveLength(1);
   await expect(page.getByRole("status").filter({ hasText: "Batch results" })).toContainText("Only an owner");
 });
+
+
+for (const navigation of ["Escape", "j"]) {
+  test(`A, ${navigation}, Enter without waiting never saves a cancelled review`, async ({ page }) => {
+    const fixture = await mockReview(page);
+    await page.goto(reviewUrl);
+    await expect(heading(page)).toBeFocused();
+    await page.keyboard.press("a");
+    await page.keyboard.press(navigation);
+    await page.keyboard.press("Enter");
+    await expect(page).not.toHaveURL(new RegExp(encodeURIComponent(JSON.stringify(["property", "stock_item", "unit_cost"]))));
+    await expect(page.getByRole("region", { name: "Saved decision" })).toHaveCount(0);
+    expect(fixture.mutations).toHaveLength(0);
+  });
+}
+
+for (const status of ["approved", "rejected", "proposed"] as const) {
+  test(`an unchanged description on a ${status} definition gets a describe receipt`, async ({ page }) => {
+    const fixture = await mockReview(page);
+    fixture.model.kinds[0].properties[0].status = status;
+    await page.goto(`${reviewUrl}&status=all`);
+    await page.getByText("Merge or edit definition", { exact: true }).click();
+    await page.getByRole("button", { name: "Edit description", exact: true }).click();
+    const save = page.getByRole("button", { name: "Save description", exact: true });
+    await save.focus();
+    await page.keyboard.press("Enter");
+    const receipt = page.getByRole("region", { name: "Saved decision" });
+    await expect(receipt.getByRole("heading")).toHaveText("Saved. Unit cost description updated.");
+    await expect(receipt.locator("dd").nth(2)).toHaveText("Edit description");
+    await expect(receipt.locator("time")).toBeVisible();
+    expect(fixture.mutations).toHaveLength(1);
+    expect(fixture.mutations[0]).toMatchObject({ decision: { action: "describe", description: "Cost of one unit, excluding delivery." } });
+    expect(fixture.model.kinds[0].properties[0].status).toBe(status);
+  });
+}
+
+for (const operation of ["approve", "reject", "merge"] as const) {
+  test(`${operation} receipt names the confirmed operation`, async ({ page }) => {
+    const fixture = await mockReview(page);
+    await page.goto(reviewUrl);
+    await expect(heading(page)).toBeFocused();
+    if (operation === "merge") {
+      await merge(page);
+      await page.getByRole("button", { name: "Confirm merge", exact: true }).focus();
+    } else await page.keyboard.press(operation === "approve" ? "a" : "r");
+    await page.keyboard.press("Enter");
+    const receipt = page.getByRole("region", { name: "Saved decision" });
+    await expect(receipt.getByRole("heading")).toHaveText(`Saved. Unit cost ${operation === "approve" ? "approved" : operation === "reject" ? "rejected" : "merged into Price"}.`);
+    await expect(receipt.locator("dd").nth(2)).toHaveText(operation === "approve" ? "Approve" : operation === "reject" ? "Reject without merging" : "Reject and redirect");
+    expect(fixture.mutations).toHaveLength(1);
+  });
+}
+
+
+test("a route change cancels the arm before another Enter", async ({ page }) => {
+  const fixture = await mockReview(page);
+  await page.goto(reviewUrl);
+  await expect(heading(page)).toBeFocused();
+  await page.keyboard.press("a");
+  await page.evaluate(() => window.history.pushState(null, "", `${window.location.href}&q=unit`));
+  await page.keyboard.press("Enter");
+  await expect(approve(page)).not.toBeFocused();
+  expect(fixture.mutations).toHaveLength(0);
+  await heading(page).focus();
+  await page.keyboard.press("a");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("region", { name: "Saved decision" })).toBeVisible();
+  expect(fixture.mutations).toHaveLength(1);
+});
+
+test("re-review requires a new arm for the latest revision", async ({ page }) => {
+  const fixture = await mockReview(page);
+  await page.goto(reviewUrl);
+  await expect(heading(page)).toBeFocused();
+  await page.keyboard.press("a");
+  fixture.model.kinds[0].properties[0].revision = 2;
+  fixture.model.kinds[0].properties[0].description = "Cost including freight";
+  fixture.notifyOntologyChange();
+  await expect(region(page).getByRole("alert")).toContainText("Now: Cost including freight");
+  await page.keyboard.press("Enter");
+  expect(fixture.mutations).toHaveLength(0);
+  await page.getByRole("button", { name: "Review latest version" }).click();
+  await page.keyboard.press("Enter");
+  expect(fixture.mutations).toHaveLength(0);
+  await page.keyboard.press("a");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("region", { name: "Saved decision" })).toBeVisible();
+  expect(fixture.mutations).toHaveLength(1);
+  expect(fixture.mutations[0]).toMatchObject({ revision: 2, decision: { action: "approve" } });
+});
+
+test("a lost and restored owner role requires a new arm", async ({ page }) => {
+  const fixture = await mockReview(page);
+  await page.goto(reviewUrl);
+  await expect(heading(page)).toBeFocused();
+  await page.keyboard.press("a");
+  await fixture.setMember(true);
+  await expect(region(page)).toContainText("Owner-only decision");
+  await fixture.setMember(false);
+  await expect(approve(page)).toBeVisible();
+  await page.keyboard.press("Enter");
+  expect(fixture.mutations).toHaveLength(0);
+});
+
+test("reselecting the displayed queue item still permits a fresh decision", async ({ page }) => {
+  const fixture = await mockReview(page);
+  await page.goto(reviewUrl);
+  await expect(heading(page)).toBeFocused();
+  await page.locator('a[data-definition][aria-current="true"]').click();
+  await heading(page).focus();
+  await page.keyboard.press("a");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("region", { name: "Saved decision" })).toBeVisible();
+  expect(fixture.mutations).toHaveLength(1);
+});

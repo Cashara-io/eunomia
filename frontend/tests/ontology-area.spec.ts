@@ -137,7 +137,7 @@ test("dedicated area, URL filters, kind details, Add data and old links", async 
   await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(2);
   await page.getByRole("link", { name: "store", exact: true }).click();
   await expect(page).toHaveURL(/\/ontology\/kinds\/store/);
-  await expect(page.getByText("shop", { exact: true })).toBeVisible();
+  await expect(page.getByText("Also called shop", { exact: true })).toBeVisible();
   await choose(page, "Kind section", "Properties");
   await page.getByText("revenue (money, AUD)", { exact: true }).click();
   await expect(page.getByRole("region", { name: "Source evidence" }).first()).toContainText("stores.csv");
@@ -148,7 +148,7 @@ test("dedicated area, URL filters, kind details, Add data and old links", async 
     .click();
   await page.getByText("Try calculation", { exact: true }).click();
   await page.getByRole("button", { name: "Try it", exact: true }).click();
-  await expect(page.getByRole("status")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Numbers", exact: true }).getByRole("status").filter({ hasText: "As of" })).toContainText(/0\.00\s*AUD/);
   await choose(page, "Kind section", "Incoming and outgoing links");
   await expect(
     page.locator("summary").filter({ hasText: /store supplies store/ }),
@@ -170,7 +170,7 @@ test("owner batch decisions, receipts, explicit merge and strict policy", async 
   );
   await openBatch(page);
   await page
-    .getByRole("checkbox", { name: "Select store", exact: true })
+    .getByRole("checkbox", { name: "Select Store", exact: true })
     .check();
   await expect(
     page.getByRole("button", { name: "Approve 1 selected" }),
@@ -179,11 +179,11 @@ test("owner batch decisions, receipts, explicit merge and strict policy", async 
     .getByRole("textbox", { name: "Reason for this batch (optional)" })
     .fill("Matches fixture source records");
   await page.getByRole("button", { name: "Approve 1 selected" }).click();
-  await expect(page.getByRole("dialog")).toContainText("store");
+  await expect(page.getByRole("dialog")).toContainText("Store");
   await page
     .getByRole("button", { name: "Approve selected", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("Kind store: Approved");
+  await expect(page.getByRole("status").filter({ hasText: "Batch results" })).toContainText("Kind Store: Approved");
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download receipt" }).click();
   expect((await download).suggestedFilename()).toBe(
@@ -194,7 +194,7 @@ test("owner batch decisions, receipts, explicit merge and strict policy", async 
   );
   await openBatch(page);
   await page
-    .getByRole("checkbox", { name: "Select fixture 0", exact: true })
+    .getByRole("checkbox", { name: "Select Fixture 0", exact: true })
     .check();
   await page
     .getByRole("textbox", { name: "Reason for this batch (optional)" })
@@ -203,17 +203,19 @@ test("owner batch decisions, receipts, explicit merge and strict policy", async 
   await page
     .getByRole("button", { name: "Reject selected", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText(
-    "Rejected without merging",
+  await expect(page.getByRole("status").filter({ hasText: "Batch results" })).toContainText(
+    "Kind Fixture 0: Rejected",
   );
+  const rejected = (await (await page.request.get(path)).json()).kinds.find((kind: { kind: string }) => kind.kind === "fixture_0");
+  expect(rejected).toMatchObject({ status: "rejected", merge_into: null });
   await page.goto(`/ontology/review?space=${encodeURIComponent(vault.id)}&q=shop`);
-  await page.getByRole("link", { name: /shop.*kind/ }).click();
+  await page.getByRole("link", { name: /shop.*kind/i }).click();
   await page.getByText("Merge or edit definition", { exact: true }).click();
-  await page.getByRole("combobox", { name: "Merge shop into", exact: true }).selectOption({ label: "store" });
+  await page.getByRole("combobox", { name: "Merge Shop into", exact: true }).selectOption({ label: "Store" });
   await page.getByRole("button", { name: "Confirm merge", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Selected suggestion" }),
-  ).toContainText("merged into store");
+  ).toContainText("merged into Store");
   await page.goto(`/ontology/schema?space=${encodeURIComponent(vault.id)}`);
   await page
     .getByRole("switch", { name: /Only approved kinds and links/ })
@@ -248,7 +250,7 @@ test("mobile navigation, keyboard filters and honest load failure", async ({
       page.getByRole("combobox", { name: "Type", exact: true }),
     ).toContainText("Kinds");
     await page
-      .getByRole("link", { name: /store.*kind/ })
+      .getByRole("link", { name: /store.*kind/i })
       .first()
       .click();
     await expect(
@@ -304,7 +306,7 @@ test("members inspect evidence but cannot decide, and no-model replies stay hone
     member.getByText(/Only an owner of this space can decide/),
   ).toBeVisible();
   await member
-    .getByRole("link", { name: /store.*kind/ })
+    .getByRole("link", { name: /store.*kind/i })
     .first()
     .click();
   await expect(
@@ -351,13 +353,13 @@ test("a batch approves dependencies in order and reports each saved result", asy
   await page
     .getByRole("button", { name: "Approve selected", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("Kind store: Approved");
-  await expect(page.getByRole("status")).toContainText("Property revenue on store");
-  await expect(page.getByRole("status")).toContainText(
-    "Metric total revenue on store",
+  await expect(page.getByRole("status").filter({ hasText: "Batch results" })).toContainText("Kind Store: Approved");
+  await expect(page.getByRole("status").filter({ hasText: "Batch results" })).toContainText("Property Revenue on Store");
+  await expect(page.getByRole("status").filter({ hasText: "Batch results" })).toContainText(
+    "Metric Total revenue on Store",
   );
-  await expect(page.getByRole("status")).toContainText(
-    "Link type store supplies store: Approved",
+  await expect(page.getByRole("status").filter({ hasText: "Batch results" })).toContainText(
+    "Link type Store supplies store: Approved",
   );
   const current = await (
     await page.request.get(`/api/vaults/${vault.id}/ontology`)
@@ -385,15 +387,15 @@ test("one suggestion approves on its own, and closing it keeps the queue page", 
   const { vault } = await seed(page);
   const space = encodeURIComponent(vault.id);
   await page.goto(`/ontology/review?space=${space}&page=2`);
-  await page.getByRole("link").filter({ hasText: /fixture/ }).first().click();
+  await page.getByRole("link").filter({ hasText: /fixture/i }).first().click();
   await expect(page).toHaveURL(/selected=/);
   await page.getByRole("button", { name: "Back to queue" }).click();
   await expect(page).toHaveURL(/page=2/);
   await expect(page).not.toHaveURL(/selected=/);
 
   await page.goto(`/ontology/review?space=${space}&type=kind&q=fixture_1`);
-  await page.getByRole("link", { name: /^fixture 1 kind/ }).click();
-  await page.getByRole("button", { name: "Approve fixture 1", exact: true }).click();
+  await page.getByRole("link", { name: /^fixture 1 kind/i }).click();
+  await page.getByRole("button", { name: "Approve Fixture 1", exact: true }).click();
   await expect
     .poll(async () => {
       const current = await (
@@ -425,13 +427,13 @@ test("batch merge stores its reason for each selected definition", async ({ page
   expect(approved.ok()).toBeTruthy();
   await page.goto(`/ontology/review?space=${encodeURIComponent(vault.id)}&type=kind&q=fixture`);
   await openBatch(page);
-  await page.getByRole("checkbox", { name: "Select fixture 0", exact: true }).check();
-  await page.getByRole("checkbox", { name: "Select fixture 1", exact: true }).check();
+  await page.getByRole("checkbox", { name: "Select Fixture 0", exact: true }).check();
+  await page.getByRole("checkbox", { name: "Select Fixture 1", exact: true }).check();
   await page.getByRole("textbox", { name: "Reason for this batch (optional)" }).fill("Duplicate names for a store");
   await page.getByLabel("Merge selected into").selectOption("store");
   await page.getByRole("button", { name: "Reject and merge 2 selected", exact: true }).click();
   await page.getByRole("button", { name: "Reject and merge selected", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Merged into store");
+  await expect(page.getByRole("status").filter({ hasText: "Batch results" })).toContainText("Merged into Store");
   const events = await (await page.request.get(`${path}/activity?action=merged`)).json();
   expect(events.events).toHaveLength(2);
   expect(events.events.every((event: { reason: string }) => event.reason === "Duplicate names for a store")).toBeTruthy();

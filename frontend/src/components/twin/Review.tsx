@@ -19,7 +19,7 @@ import { ontologyKeys, type OntologyOut } from "@/lib/queries/ontology";
 import type { Vault } from "@/lib/types";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import StatusLabel from "@/components/ui/StatusLabel";
-import Definition, { RevisionChanges } from "./Definition";
+import Definition, { RevisionChanges, type ReviewHandle } from "./Definition";
 import { STATUS } from "./DefinitionRows";
 import {
   Filter,
@@ -72,6 +72,7 @@ export default function Review({
   const busy = batchBusy || singleBusy;
   const queue = useRef<HTMLElement>(null);
   const reviewRegion = useRef<HTMLDivElement>(null);
+  const decisionReview = useRef<ReviewHandle>(null);
   const [ownerDenied, setOwnerDenied] = useState(false);
   const returnId = useRef<string | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
@@ -108,6 +109,7 @@ export default function Review({
   const owner = vault.role === "owner";
   const waiting = current.filter((d) => d.item.status === "proposed").length;
   function closeDetail() {
+    decisionReview.current?.beginNavigation();
     returnId.current = selected?.id ?? null;
     update({ selected: "" });
   }
@@ -115,12 +117,13 @@ export default function Review({
     const next = rows.find(
       (d) => d.id !== selected?.id && d.item.status === "proposed",
     );
-    if (next)
+    if (next) {
+      decisionReview.current?.beginNavigation();
       update({
         selected: next.id,
         page: String(Math.floor(rows.indexOf(next) / PAGE_SIZE) + 1),
       });
-    else closeDetail();
+    } else closeDetail();
   }
   useEffect(() => {
     if (!selected && returnId.current) {
@@ -156,11 +159,13 @@ export default function Review({
         : rows.length;
     const next =
       rows[Math.max(0, Math.min(rows.length - 1, index + direction))];
-    if (next)
+    if (next && next.id !== selected?.id) {
+      decisionReview.current?.beginNavigation();
       update({
         selected: next.id,
         page: String(Math.floor(rows.indexOf(next) / PAGE_SIZE) + 1),
       });
+    }
   });
   useEffect(() => {
     const handler = (e: KeyboardEvent) => keyboard(e);
@@ -284,7 +289,7 @@ export default function Review({
         results.push({
           id: d.id,
           name: describe(d),
-          result: humanLabel(savedDecision(d, updated).sentence),
+          result: humanLabel(savedDecision(confirm, updated).sentence),
         });
       } catch (e) {
         haptic("error");
@@ -319,7 +324,7 @@ export default function Review({
     URL.revokeObjectURL(url);
   }
   return (
-    <div ref={reviewRegion} role="region" aria-label="Ontology review" tabIndex={0}>
+    <div ref={reviewRegion} className={styles.workspace} role="region" aria-label="Ontology review" tabIndex={0}>
       {ownerDenied && <p role="alert" className={styles.notice}>{ownerOnly}</p>}
       {newItems.length > 0 && (
         <div aria-live="polite">
@@ -407,6 +412,9 @@ export default function Review({
                     aria-current={selected?.id === d.id ? "true" : undefined}
                     onClick={(e) => {
                       if (busy) e.preventDefault();
+                    }}
+                    onNavigate={() => {
+                      if (d.id !== selected?.id) decisionReview.current?.beginNavigation();
                     }}
                     href={twinHref("/ontology/review", vault.id, {
                       ...Object.fromEntries(params.entries()),
@@ -553,6 +561,7 @@ export default function Review({
                 Back to queue
               </button>
               <Definition
+                ref={decisionReview}
                 key={`${selected.id}:${reviewEpoch}`}
                 definition={selected}
                 data={data}
