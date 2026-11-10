@@ -43,18 +43,18 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, start_id: &str, headline: &st
     let start = graph.entity(start_id)?;
     let vault = crate::rid::parse(&start.vault).map_err(|_| AppError::bad_request("invalid vault"))?;
     let id = crate::rid::parse(start_id).map_err(|_| AppError::bad_request("invalid start"))?;
-    let walk = neighbourhood::walk_bounded(db, &vault, std::slice::from_ref(&id), reach.depth, neighbourhood::WalkLimits { nodes: 10_001, edges: 40_000, fetched_rows: 40_000, per_entity: 40_000 }, &reach.labels).await?;
-    let nodes = neighbourhood::load_nodes(db, walk.order.clone()).await?;
-    let mut selected: Vec<_> = nodes.values().filter(|n| n.id != id && (reach.kinds.is_empty() || reach.kinds.contains(&n.kind()))).collect();
-    // IDs do not change when a name or a shortest path changes between requests.
-    selected.sort_by_key(|n| n.id.to_string());
-    let total = selected.len();
     let scope = super::cursor::scope(&(start.id.as_str(), &reach));
     let boundary = super::cursor::Cursor::read(cursor, &scope)?;
     if (boundary.is_none() && page != 0) || boundary.as_ref().is_some_and(|c| page != 0 && page != c.page) {
         return Err(AppError::bad_request("later pages require the returned next_cursor as cursor; page alone is not a boundary"));
     }
     let page = boundary.as_ref().map_or(0, |c| c.page);
+    let walk = neighbourhood::walk_bounded(db, &vault, std::slice::from_ref(&id), reach.depth, neighbourhood::WalkLimits { nodes: 10_001, edges: 40_000, fetched_rows: 40_000, per_entity: 40_000 }, &reach.labels).await?;
+    let nodes = neighbourhood::load_nodes(db, walk.order.clone()).await?;
+    let mut selected: Vec<_> = nodes.values().filter(|n| n.id != id && (reach.kinds.is_empty() || reach.kinds.contains(&n.kind()))).collect();
+    // IDs do not change when a name or a shortest path changes between requests.
+    selected.sort_by_key(|n| n.id.to_string());
+    let total = selected.len();
     let remaining: Vec<_> = selected.into_iter().filter(|n| boundary.as_ref().is_none_or(|c| n.id.to_string() > c.key)).collect();
     let has_more = remaining.len() > PAGE_SIZE;
     let next_cursor = if has_more { remaining.get(PAGE_SIZE - 1).map(|n| super::cursor::Cursor::next(n.id.to_string(), page + 1, scope)) } else { None };

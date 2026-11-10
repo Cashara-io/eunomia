@@ -206,6 +206,7 @@ pub async fn show(db: &OrgDb, owner: &RecordId, spec: ViewSpec) -> AppResult<Sho
             View::Subgraph { title: clean("title", &title, MAX_HEADLINE)?, entities, relations }
         }
         ViewSpec::Metric { mut args, evidence_cursor } => {
+            cursor::Cursor::decode(evidence_cursor.as_deref())?;
             if args.as_of.is_none() { args.as_of = Some(chrono::Utc::now().to_rfc3339()); }
             let mut out = metric::eval_all_receipts(db, owner, &args).await?;
             args.vault_id = Some(out.vault.clone());

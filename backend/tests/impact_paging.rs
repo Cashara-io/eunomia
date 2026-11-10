@@ -250,3 +250,45 @@ async fn uneven_frontier_keeps_every_node_when_the_graph_fits_the_budget() {
     assert_eq!(scenario["reached"].as_array().unwrap().len(), 132, "{scenario}");
     assert_eq!(scenario["reached_truncated"], false);
 }
+
+#[tokio::test]
+async fn hostile_cursors_fail_before_traversing_the_graph() {
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use eunomia_backend::entities::neighbourhood::FETCHED_EDGE_ROWS;
+    assert_eq!(common::test_settings().surreal_url, "mem://");
+    let app = TestApp::new().await;
+    let start = entity(&app, "Cursor root", "sample").await;
+    for i in 0..17 {
+        let child = entity(&app, &format!("Cursor child {i}"), "sample").await;
+        ok(app.tool("entity_relate", json!({"from_id":start,"to_id":child,"label":"touches"})).await);
+    }
+    let args = json!({"view":"impact","start_id":start,"headline":"Linked items","reach":{"depth":1}});
+    let first = ok(app.tool("show_view", args.clone()).await);
+    let cursor: Value = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(first["pagination"]["next_cursor"].as_str().unwrap()).unwrap()).unwrap();
+    let mut edited = cursor.clone();
+    edited["page"] = json!(1_000_000);
+    edited["key"] = json!("'; SLEEP 999999s; --");
+    let mut request = args.clone();
+    request["cursor"] = json!(URL_SAFE_NO_PAD.encode(serde_json::to_vec(&edited).unwrap()));
+    FETCHED_EDGE_ROWS.scope(std::cell::Cell::new(0), async {
+        let out = ok(app.tool("show_view", request).await);
+        assert!(FETCHED_EDGE_ROWS.with(std::cell::Cell::get) <= 18, "an edited ordinal or key must not expand the query");
+        assert_eq!(out["pagination"]["page"], 1_000_000);
+        assert_eq!(out["pagination"]["total"], 17);
+    }).await;
+    for (field, hostile) in [
+        ("page", json!(u64::MAX)), ("page", json!(-1)), ("page", json!("999999999999999999999999")),
+        ("key", json!(["wrong type"])), ("key", json!("x".repeat(2048))),
+        ("scope", json!({"wrong":"type"})),
+    ] {
+        let mut edited = cursor.clone(); edited[field] = hostile;
+        let mut request = args.clone(); request["cursor"] = json!(URL_SAFE_NO_PAD.encode(serde_json::to_vec(&edited).unwrap()));
+        FETCHED_EDGE_ROWS.scope(std::cell::Cell::new(0), async {
+            let out = app.tool("show_view", request.clone()).await;
+            assert_eq!(out["code"], "validation.invalid", "{out}");
+            assert_eq!(FETCHED_EDGE_ROWS.with(std::cell::Cell::get), 0, "invalid cursor must not run the graph query");
+            let (status, _) = app.http_session("POST", "/api/tools/show_view", Some(request)).await;
+            assert_ne!(status, 500);
+        }).await;
+    }
+}
