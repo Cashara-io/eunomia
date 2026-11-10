@@ -114,6 +114,10 @@ export default function MetricView({ view }: { view: Metric }) {
         {run.metric_mapped && ` Asked for ${words(run.metric_mapped.from)}, which was merged into this one.`}
       </p>
       {view.entities.length > 0 && (
+        <details className="text-[13px]">
+          <summary className="cursor-pointer" style={{ color: "var(--ink-dim)" }}>
+            Based on {run.n_entities.toLocaleString("en-AU")} items, show evidence
+          </summary>
         <ul className="flex flex-wrap gap-1.5" aria-label="Computed from">
           {view.entities.map((e) => (
             <li key={e.id}>
@@ -128,6 +132,7 @@ export default function MetricView({ view }: { view: Metric }) {
             </li>
           )}
         </ul>
+        </details>
       )}
       <MetricWarnings warnings={run.warnings} />
     </section>

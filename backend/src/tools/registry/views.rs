@@ -26,6 +26,8 @@ fn schema() -> serde_json::Value {
             "start_id": {"type": "string", "description": "impact: the entity that changed"},
             "headline": {"type": "string", "description": "impact: one sentence, what happened; scenario: one sentence, what the what-if asks (at most 200 characters)"},
             "scenario": {"type": "object", "description": "scenario: the same arguments you gave scenario_run (changes, metrics, vault_id, as_of, impact_from, depth)"},
+            "reach": views::impact::schema(),
+            "page": {"type":"integer","minimum":0,"description":"impact with reach: zero-based page, default 0; repeat the same reach and increment page to fetch all items"},
             "affected": {
                 "type": "array",
                 "description": "impact: each affected entity once",

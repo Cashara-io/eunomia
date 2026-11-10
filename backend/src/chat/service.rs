@@ -70,7 +70,11 @@ When the user asks what a change, delay or problem affects: \
 find the entity with `entities_search`, read its vault's `ontology_get` and the entity's `entities_neighbourhood`, \
 and decide from the link labels, the link descriptions and the facts which way the effect travels and what it \
 reaches. Then call `show_view` with `view` \"impact\", `start_id`, `headline` and `affected` (each affected entity \
-with the relation ids from the start to it and a one-sentence why) and reply with a short summary; the app draws the view above your reply. If \
+with the relation ids from the start to it and a one-sentence why). For a complete list selected by saved links, \
+use `reach` instead of `affected`: {depth, kinds, labels}, with endpoint kinds and relation labels from the ontology. \
+The server counts the selection and returns a small page. Repeat the same reach with zero-based `page` to fetch later pages; \
+never count a neighbourhood preview or a page as the total. Explain why the selected links matter, since linked does not imply affected. \
+Reply with a short summary; the app draws the view above your reply. If \
 `show_view` names a bad id, fix it and call it again. \
 Before answering a number or a what-if, call `ontology_coverage` with the user's question. Pass no `vault_id` unless the \
 user named a space: it then checks every space the user can read and returns the one that covers the question best as \

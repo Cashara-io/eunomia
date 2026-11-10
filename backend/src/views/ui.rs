@@ -16,7 +16,7 @@ pub enum Source {
     Dataset { #[serde(flatten)] query: dataset::Dataset },
     Metric { #[serde(flatten)] args: crate::ontology::metric::EvalArgs },
     Scenario { scenario: crate::ontology::scenario::ScenarioArgs, headline: String },
-    Impact { start_id: String, headline: String, #[serde(default)] affected: Vec<super::AffectedSpec> },
+    Impact { start_id: String, headline: String, #[serde(default)] affected: Vec<super::AffectedSpec>, #[serde(default)] reach: Option<super::ImpactReach>, #[serde(default)] page: usize },
     Subgraph { title: String, entity_ids: Vec<String>, #[serde(default)] relation_ids: Vec<String> },
 }
 fn bad(s: impl Into<String>) -> AppError { AppError::bad_request(s) }
@@ -26,7 +26,7 @@ pub fn catalog() -> &'static Value {
 }
 pub fn description() -> &'static str {
     static DESCRIPTION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    DESCRIPTION.get_or_init(|| format!("Show an answer with server-resolved data. Keep the four legacy views, or use view ui with spec and named sources. Sources: dataset (vault_id, kind, properties, filters, group_by, bucket day/week/month/quarter/year, aggregates [{{op count/sum/avg/min/max/median/distinct,property?}}], sort {{property,descending}}, limit at most 500. To show detailed rows and totals, omit aggregates; totals are always computed separately. Aggregate column keys are generated as op_property, or count without a property. Model aliases are refused); metric (metric_eval arguments); scenario (each named source is {{type: scenario, headline: words, scenario: {{vault_id, changes, metrics}}}}; headline belongs INSIDE that source, not at the top level); impact and subgraph (existing view arguments). A dataset returns rows, columns, totals, distributions, total_rows, status, truncated and warnings. Totals are nested by returned column key then operation: /totals/amount/sum without aggregates; /totals/sum_amount/sum after sum of amount. total_rows counts output rows or groups before the limit. Omit aggregates for Histogram, Scatter and detail tables: totals and distributions are already supplied from the detailed rows. Bind data with {{\"$state\":\"/sources/sales/rows\"}}. Stat binds a scalar pointer. Legacy blocks bind the whole source. Never send literal numeric props or inline data; bind measured values to sources. x, y and series name columns. In all written text, use bound placeholders for numbers: title \"Rows {{{{/sources/sales/total_rows}}}}\". Dotted paths such as {{{{sources.sales.rows[0].amount}}}} also work. The server resolves one exact typed numeric or date path and formats it with server units and currency. UI prose is literal plain text without Markdown or entity decoding. Separate placeholders from numeric tokens. Raw digits are allowed only in verbatim phrases with adjacent letter-bearing words in server strings predating the turn, or matching applied ISO dates or bucket labels. No identifier exemption. Number words remain unchecked. The server resolves chart columns and refuses ambiguous y choices. No actions, repeats or visibility expressions. At most 100 elements, depth 12 and 64 KiB. The server returns useful text for terminal clients.\n{}", catalog()["prompt"].as_str().unwrap_or("")))
+    DESCRIPTION.get_or_init(|| format!("Show an answer with server-resolved data. Keep the four legacy views, or use view ui with spec and named sources. Sources: dataset (vault_id, kind, properties, filters, group_by, bucket day/week/month/quarter/year, aggregates [{{op count/sum/avg/min/max/median/distinct,property?}}], sort {{property,descending}}, limit at most 500. To show detailed rows and totals, omit aggregates; totals are always computed separately. Aggregate column keys are generated as op_property, or count without a property. Model aliases are refused); metric (metric_eval arguments); scenario (each named source is {{type: scenario, headline: words, scenario: {{vault_id, changes, metrics}}}}; headline belongs INSIDE that source, not at the top level); impact (start_id, headline, reach {{depth, kinds, labels}}, page, zero-based, default zero, sixteen linked items per page with a server total; use reach instead of affected for large selections; follow remaining pages with show_view) and subgraph (existing view arguments). A dataset returns rows, columns, totals, distributions, total_rows, status, truncated and warnings. Totals are nested by returned column key then operation: /totals/amount/sum without aggregates; /totals/sum_amount/sum after sum of amount. total_rows counts output rows or groups before the limit. Omit aggregates for Histogram, Scatter and detail tables: totals and distributions are already supplied from the detailed rows. Bind data with {{\"$state\":\"/sources/sales/rows\"}}. Stat binds a scalar pointer. Legacy blocks bind the whole source. Never send literal numeric props or inline data; bind measured values to sources. x, y and series name columns. In all written text, use bound placeholders for numbers: title \"Rows {{{{/sources/sales/total_rows}}}}\". Dotted paths such as {{{{sources.sales.rows[0].amount}}}} also work. The server resolves one exact typed numeric or date path and formats it with server units and currency. UI prose is literal plain text without Markdown or entity decoding. Separate placeholders from numeric tokens. Raw digits are allowed only in verbatim phrases with adjacent letter-bearing words in server strings predating the turn, or matching applied ISO dates or bucket labels. No identifier exemption. Number words remain unchecked. The server resolves chart columns and refuses ambiguous y choices. No actions, repeats or visibility expressions. At most 100 elements, depth 12 and 64 KiB. The server returns useful text for terminal clients.\n{}", catalog()["prompt"].as_str().unwrap_or("")))
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -116,6 +116,7 @@ fn trusted_number(data: &Value, path: &str) -> bool {
         };
     }
     match source["view"].as_str() {
+        Some("impact") => matches!(rest, ["pagination", "total" | "page" | "page_size"]),
         Some("metric") => matches!(rest, ["metric", "value" | "n_entities"] | ["metric", "series", _, "value" | "n"] | ["metric", "groups", _, "value" | "n_entities"]),
         Some("scenario") => matches!(rest, ["result", "baseline" | "scenario", _, "value" | "delta" | "delta_pct" | "n_entities"] | ["result", "n_changed"]),
         _ => false,
@@ -256,7 +257,7 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, mut spec: Value, sources: BTr
                 let view = match other {
                     Source::Metric { args } => ViewSpec::Metric { args },
                     Source::Scenario { scenario, headline } => ViewSpec::Scenario { scenario, headline },
-                    Source::Impact { start_id, headline, affected } => ViewSpec::Impact { start_id, headline, affected },
+                    Source::Impact { start_id, headline, affected, reach, page } => ViewSpec::Impact { start_id, headline, affected, reach, page },
                     Source::Subgraph { title, entity_ids, relation_ids } => ViewSpec::Subgraph { title, entity_ids, relation_ids },
                     Source::Dataset { .. } => unreachable!(),
                 };
@@ -370,6 +371,7 @@ pub fn sources_schema() -> Value {
             "metric":string,"as_of":string,"group_by_grain":{"type":"boolean"},"allow_unapproved":{"type":"boolean"},"related_to":{"type":"object"},
             "headline":{"type":"string","description":"REQUIRED inside each scenario or impact source"},
             "scenario":{"type":"object","description":"scenario_run arguments: vault_id, changes, metrics, optional as_of, impact_from and depth"},
+            "reach":super::impact::schema(),"page":{"type":"integer","minimum":0,"description":"impact: zero-based page, default 0"},
             "start_id":string,"affected":{"type":"array","items":{"type":"object"}},"title":string,"entity_ids":strings,"relation_ids":strings
         },"required":["type"]
     }})

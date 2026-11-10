@@ -12,6 +12,8 @@
 //! names and kinds from the database, plus [`Shown::text`], a plain rendering for a terminal.
 
 mod decimal;
+pub(crate) mod impact;
+pub use impact::{ImpactReach, ImpactPage};
 pub mod ui;
 use decimal::Decimal;
 
@@ -51,6 +53,10 @@ pub enum ViewSpec {
         headline: String,
         #[serde(default)]
         affected: Vec<AffectedSpec>,
+        #[serde(default)]
+        reach: Option<ImpactReach>,
+        #[serde(default)]
+        page: usize,
     },
     Subgraph {
         title: String,
@@ -103,7 +109,7 @@ pub enum View {
     Ui { spec: serde_json::Value, data: serde_json::Value },
     /// `linked` is false when the start has no saved relation at all: an empty `affected` then means
     /// there was nothing to follow, not that nothing is affected.
-    Impact { start: EntityRef, headline: String, affected: Vec<Affected>, linked: bool },
+    Impact { start: EntityRef, headline: String, affected: Vec<Affected>, linked: bool, #[serde(skip_serializing_if = "Option::is_none")] pagination: Option<ImpactPage> },
     Subgraph { title: String, entities: Vec<EntityRef>, relations: Vec<Step> },
     /// `metric` is the server's own run; `entities` are its `entity_ids` with names, the receipts.
     Metric { metric: MetricEvalOut, entities: Vec<EntityRef> },
@@ -128,7 +134,14 @@ tokio::task_local! {
 pub async fn show(db: &OrgDb, owner: &RecordId, spec: ViewSpec) -> AppResult<Shown> {
     let view = match spec {
         ViewSpec::Ui { spec, sources } => ui::resolve(db, owner, spec, sources, TURN_STARTED.try_with(|start| *start).unwrap_or_default()).await?,
-        ViewSpec::Impact { start_id, headline, affected } => {
+        ViewSpec::Impact { start_id, headline, affected, reach, page } => {
+            if let Some(reach) = reach {
+                if !affected.is_empty() { return Err(AppError::bad_request("use reach or affected, not both")); }
+                let view = impact::resolve(db, owner, &start_id, &headline, reach, page).await?;
+                let text = view.text();
+                return Ok(Shown { view, text });
+            }
+            if page != 0 { return Err(AppError::bad_request("page requires reach")); }
             if affected.len() > MAX_AFFECTED {
                 return Err(AppError::bad_request(format!("an impact view lists at most {MAX_AFFECTED} affected entities")));
             }
@@ -156,7 +169,7 @@ pub async fn show(db: &OrgDb, owner: &RecordId, spec: ViewSpec) -> AppResult<Sho
                 })
                 .collect::<AppResult<Vec<_>>>()?;
             let linked = !affected.is_empty() || has_relation(db, &start).await?;
-            View::Impact { start, headline, affected, linked }
+            View::Impact { start, headline, affected, linked, pagination: None }
         }
         ViewSpec::Subgraph { title, entity_ids, relation_ids } => {
             if entity_ids.len() > MAX_SUBGRAPH_ENTITIES || relation_ids.len() > MAX_SUBGRAPH_RELATIONS {
@@ -339,14 +352,18 @@ impl View {
     pub fn text(&self) -> String {
         match self {
             View::Ui { spec, data } => ui::text(spec, data),
-            View::Impact { start, headline, affected, linked } => {
+            View::Impact { start, headline, affected, linked, pagination } => {
                 let mut out = format!("{headline}\nStarting from {} ({}).", start.name, words(&start.kind));
+                if let Some(p) = pagination {
+                    out.push_str(&format!("\n{} linked items in this selection. Showing {} on page {}.{}", p.total, affected.len(), p.page + 1,
+                        if p.has_more { " More remain: call show_view with the same reach and the next page." } else { "" }));
+                }
                 if !linked {
                     out.push_str(&format!(
                         "\n{} has no saved links to follow, so this cannot show what it affects. Link it to the things it touches (entity_relate), then ask again.",
                         start.name
                     ));
-                } else if affected.is_empty() {
+                } else if affected.is_empty() && pagination.is_none() {
                     out.push_str("\nNothing else is affected.");
                 }
                 for (i, a) in affected.iter().enumerate() {
@@ -572,7 +589,7 @@ mod tests {
                 Affected { entity: shipment, path: vec![carries.clone()], why: "It is on the truck.".into() },
                 Affected { entity: order, path: vec![carries, fulfils], why: "Its shipment is late.".into() },
             ],
-            linked: true,
+            linked: true, pagination: None,
         };
         assert_eq!(
             view.text(),
@@ -585,11 +602,11 @@ mod tests {
     #[test]
     fn an_impact_view_with_no_saved_links_says_so_instead_of_nothing_affected() {
         let start = e("entity:t", "Truck 4", "truck");
-        let bare = View::Impact { start: start.clone(), headline: "Truck 4 is a day late.".into(), affected: vec![], linked: false };
+        let bare = View::Impact { start: start.clone(), headline: "Truck 4 is a day late.".into(), affected: vec![], linked: false, pagination: None };
         let text = bare.text();
         assert!(text.contains("Truck 4 has no saved links to follow") && text.contains("entity_relate"), "{text}");
         assert!(!text.contains("Nothing else is affected"), "{text}");
-        let linked = View::Impact { start, headline: "Truck 4 is a day late.".into(), affected: vec![], linked: true };
+        let linked = View::Impact { start, headline: "Truck 4 is a day late.".into(), affected: vec![], linked: true, pagination: None };
         assert!(linked.text().ends_with("Nothing else is affected."));
     }
 
