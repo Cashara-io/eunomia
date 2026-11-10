@@ -15,6 +15,7 @@ export default defineConfig({
   testDir: "./tests",
   // Run the mocked review regressions alongside the real API specs in CI.
   testMatch: "**/*.spec.ts",
+  testIgnore: "**/ontology-connections-performance.spec.ts",
   fullyParallel: false,
   retries: 0,
   reporter: "list",

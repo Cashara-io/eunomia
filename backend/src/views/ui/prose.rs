@@ -419,12 +419,28 @@ fn chat_spans(text: &str) -> Vec<std::ops::Range<usize>> {
     let suffix = SUFFIX.get_or_init(|| Regex::new(&format!(r"^ *(?:thousand|million|billion|k|m|b)\b(?: *(?:{CURRENCY_CODE}\b|[%‰]))?|^ *(?:per cent|percent|percentage)\b")).unwrap());
     let mut out = Vec::new();
     for mut span in spans(text) {
+        // In ranking prose, "top 5" is a count. TOP is also an ISO currency code.
+        if text[span.clone()].starts_with("top ") { span.start += 4; }
         if out.last().is_some_and(|r: &std::ops::Range<usize>| span.start < r.end) { continue; }
         if let Some(m) = suffix.find(&text[span.end..]) { span.end += m.end(); }
-        out.push(span);
+        // The whole-span scanner deliberately keeps ambiguous arithmetic together. Split only
+        // a simple two-endpoint range here, leaving dates, fractions and exponents untouched.
+        static RANGE: OnceLock<Regex> = OnceLock::new();
+        let range = RANGE.get_or_init(|| Regex::new(&format!(r"^(?P<left>(?:\p{{Sc}}|{CURRENCY_CODE})? *[0-9]+(?:\.[0-9]+)?) *- *(?P<right>[0-9]+(?:\.[0-9]+)?(?: *{CURRENCY_CODE})?)$" )).unwrap());
+        if let Some(c) = range.captures(&text[span.clone()]) {
+            for part in ["left", "right"] {
+                let m = c.name(part).unwrap();
+                out.push(span.start + m.start()..span.start + m.end());
+            }
+        } else { out.push(span); }
     }
     out
 }
+
+fn coordinated(gap: &str) -> bool {
+    matches!(gap.trim(), "and" | "or" | "," | ", and" | ", or" | "to" | "up to" | "-")
+}
+
 impl ChatNumber {
     fn parse(raw: &str, context: &ChatUnit) -> Option<Self> {
         static NUMBER: OnceLock<Regex> = OnceLock::new();
@@ -513,13 +529,81 @@ fn unit_text(unit: &[&mut String]) -> (String, Vec<(usize, std::ops::Range<usize
     (text, origins)
 }
 
+fn opaque_identifier(text: &str) -> bool {
+    static OPAQUE: OnceLock<Regex> = OnceLock::new();
+    OPAQUE.get_or_init(|| Regex::new(r"(?i)^(?:[a-z_][a-z_0-9]*:[^\s]+|[0-9a-f]{32,}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9a-hjkmnp-tv-z]{26})$").unwrap()).is_match(text)
+}
+
+// Scan a measure once, including its unit. Unit digits never become separate claims.
+fn chat_claims(text: &str, context: &ChatUnit, units: &[ChatUnit]) -> Vec<(std::ops::Range<usize>, Option<ChatNumber>)> {
+    static DIGIT_UNIT: OnceLock<Regex> = OnceLock::new();
+    let digit_unit = DIGIT_UNIT.get_or_init(|| Regex::new(r"^ *(?P<unit>per +[0-9]+ +[\p{L}]+|[\p{L}]+(?:\^?[0-9]+)?(?:/[\p{L}]+(?:\^?[0-9]+)?)+|[\p{L}]+\^?[0-9]+)\b").unwrap());
+    // Recognise common physical units even when none of the evidence uses them. Otherwise
+    // a currency prefix could incorrectly turn the unknown suffix in "$3 to 5 kg" into money.
+    // A bare m can also mean million; evidence must identify it as a physical unit.
+    let standard_units: Vec<_> = ["kg", "g", "mg", "t", "lb", "lbs", "oz", "l", "ml", "m", "km", "cm", "mm", "h", "hr", "hrs", "days", "hours"].into_iter().map(ChatUnit::parse).collect();
+    let mut out = Vec::new();
+    for mut span in chat_spans(text) {
+        if out.last().is_some_and(|(r, _): &(std::ops::Range<usize>, Option<ChatNumber>)| span.start < r.end) { continue; }
+        let base_end = spans(&text[span.clone()]).first().map_or(span.end, |r| span.start + r.end);
+        let rest = &text[base_end..];
+        let gap = rest.len() - rest.trim_start().len();
+        let mut matched = digit_unit.captures(rest).map(|c| {
+            (base_end + c.get(0).unwrap().end(), ChatUnit::parse(c.name("unit").unwrap().as_str()))
+        });
+        let decorated = ChatNumber::parse(&text[span.clone()], context).is_some_and(|n| matches!(n.unit, ChatUnit::Money(_) | ChatUnit::Percent));
+        for (unit, known) in units.iter().map(|unit| (unit, true)).chain(standard_units.iter().map(|unit| (unit, false))) {
+            let name = match unit { ChatUnit::Other(s) => s.as_str(), ChatUnit::Ratio => "ratio", _ => continue };
+            let mut forms = vec![name.to_string(), unit_form(name).into(), format!("{}s", unit_form(name))];
+            for alias in ["kg", "kilogram", "kilograms", "g", "gram", "grams", "l", "litre", "litres", "liter", "liters", "m", "metre", "metres", "meter", "meters"] {
+                if unit_form(alias) == unit_form(name) { forms.push(alias.into()); }
+            }
+            for form in forms {
+                if rest[gap..].starts_with(&form) {
+                    let end = base_end + gap + form.len();
+                    // "$5M" is a money scale, while the separate suffix in "$5 kg" conflicts.
+                    if !known && form == "m" && end <= span.end { continue; }
+                    if decorated && end <= span.end { continue; }
+                    if text[end..].chars().next().is_some_and(|c| token(c) && c != '.') { continue; }
+                    if matched.as_ref().is_none_or(|(old, _)| end > *old) { matched = Some((end, unit.clone())); }
+                }
+            }
+        }
+        let number = if let Some((end, unit)) = matched {
+            let n = ChatNumber::parse(&text[span.start..base_end], &unit).filter(|n| n.unit.compatible(&unit));
+            span.end = end;
+            n
+        } else { ChatNumber::parse(&text[span.clone()], context) };
+        out.push((span, number));
+    }
+    // A trailing measure belongs to each bare member of the coordinated group. A typed
+    // member stops propagation of a different unit; punctuation other than a list comma stops it.
+    for i in (0..out.len().saturating_sub(1)).rev() {
+        if !coordinated(&text[out[i].0.end..out[i + 1].0.start]) { continue; }
+        let Some(unit) = out[i + 1].1.as_ref().map(|n| n.unit.clone()).filter(|u| *u != ChatUnit::Plain) else { continue; };
+        if let Some(number) = &mut out[i].1 && number.unit == ChatUnit::Plain { number.unit = unit; }
+    }
+    // A currency prefix also applies forwards, including through an already inherited member.
+    for i in 1..out.len() {
+        if !coordinated(&text[out[i - 1].0.end..out[i].0.start]) { continue; }
+        let Some(ChatUnit::Money(code)) = out[i - 1].1.as_ref().map(|n| &n.unit) else { continue; };
+        let unit = ChatUnit::Money(code.clone());
+        if let Some(number) = &mut out[i].1 && number.unit == ChatUnit::Plain { number.unit = unit; }
+    }
+    out
+}
+
 impl ChatProse {
     fn evidence(&mut self, text: &str, unit: &ChatUnit) {
         let text = normalise(text);
-        for span in chat_spans(&text) {
-            let raw = &text[span];
-            if let Some(n) = ChatNumber::parse(raw, unit) { self.numbers.push(n); }
-            else { self.exact.insert(raw.into()); }
+        static WORD: OnceLock<Regex> = OnceLock::new();
+        let opaque: Vec<_> = WORD.get_or_init(|| Regex::new(r"\S+").unwrap()).find_iter(&text)
+            .filter(|m| opaque_identifier(m.as_str().trim_matches(['(', ')', '[', ']', '{', '}', ',', '.', ';', '\'', '"'])))
+            .map(|m| m.range()).collect();
+        for (span, number) in chat_claims(&text, unit, std::slice::from_ref(unit)) {
+            if opaque.iter().any(|id| id.start < span.end && span.start < id.end) { continue; }
+            if let Some(n) = number { self.numbers.push(n); }
+            else { self.exact.insert(text[span].into()); }
         }
     }
     pub(crate) fn text(&mut self, text: &str) { self.evidence(text, &ChatUnit::Plain); }
@@ -527,10 +611,18 @@ impl ChatProse {
         self.collect(value, &ChatUnit::Plain, &HashMap::new());
         if let Some(sources) = value.pointer("/data/sources").and_then(Value::as_object) { self.sources.extend(sources.clone()); }
     }
+    /// Only server-computed fields are collected. Request echoes stay in the API result but
+    /// their declared paths are absent from this evidence projection. Argument values play no role.
+    pub(crate) fn tool_result(&mut self, name: &str, value: &Value) {
+        if let Some(policy) = crate::tools::registry::evidence::for_tool(name) {
+            self.result(&policy.computed(value));
+        }
+    }
     fn collect(&mut self, value: &Value, unit: &ChatUnit, columns: &HashMap<String,ChatUnit>) {
         match value {
             Value::Number(n) => self.evidence(&n.to_string(), unit),
             Value::String(s) => {
+                if opaque_identifier(s) { return; }
                 self.evidence(s, &ChatUnit::Plain);
                 if let Some(d) = date(&normalise(s)) { self.text(d.split('T').next().unwrap_or(&d)); }
             }
@@ -544,9 +636,11 @@ impl ChatProse {
                     }
                 }
                 for (key,v) in m {
+                    // Column definitions supply units above, never evidence values.
                     // Opaque IDs cannot authorise claims, and counters stay unit-free.
-                    if key == "id" || key == "vault" || key.ends_with("_id") || key.ends_with("_ids") { continue; }
+                    if (key == "unit" && v.is_string()) || (key == "columns" && v.is_array()) || matches!(key.as_str(), "_request" | "id" | "vault" | "cursor" | "next" | "hash" | "sha256" | "checksum" | "url" | "href" | "source" | "target" | "from" | "to" | "path") || (key == "evidence" && m.get("view").and_then(Value::as_str) == Some("metric")) || key == "next_cursor" || key.ends_with("_id") || key.ends_with("_ids") || key.ends_with("_cursor") || key.ends_with("_hash") { continue; }
                     let unit = if matches!(key.as_str(), "count" | "distinct" | "n" | "n_entities" | "total_rows" | "limit" | "offset") { ChatUnit::Plain }
+                        else if key == "delta_pct" { ChatUnit::Percent }
                         else { columns.get(key).cloned().unwrap_or_else(|| own_unit.clone()) };
                     self.collect(v, &unit, &columns);
                 }
@@ -554,41 +648,22 @@ impl ChatProse {
             _ => (),
         }
     }
-    fn supported(&self, raw: &str) -> bool {
-        ChatNumber::parse(raw, &ChatUnit::Plain).map(|shown| self.numbers.iter().any(|n| n.supports(&shown)))
-            .unwrap_or_else(|| self.exact.contains(raw))
-    }
     fn number_spans(&self, text: &str) -> Vec<(std::ops::Range<usize>, bool)> {
-        let mut checked = Vec::new();
-        for mut span in chat_spans(text) {
-            if checked.last().is_some_and(|(r,_): &(std::ops::Range<usize>, bool)| span.start < r.end) { continue; }
-            // Evidence defines arbitrary units. Consume the same text (or a cheap
-            // plural/abbreviation) after the number, with a word boundary.
-            let mut matched = None;
-            for evidence in &self.numbers {
-                let unit = match &evidence.unit {
-                    ChatUnit::Other(unit) => unit.as_str(),
-                    ChatUnit::Ratio => "ratio",
-                    _ => continue,
-                };
-                let mut forms = vec![unit.to_string(), unit_form(unit).into(), format!("{}s", unit_form(unit))];
-                for alias in ["kg", "kilogram", "kilograms", "g", "gram", "grams", "l", "litre", "litres", "liter", "liters", "m", "metre", "metres", "meter", "meters"] {
-                    if unit_form(alias) == unit_form(unit) { forms.push(alias.into()); }
-                }
-                let base_end = spans(&text[span.clone()]).first().map_or(span.end, |r| span.start + r.end);
-                let rest = &text[base_end..];
-                let gap = rest.len() - rest.trim_start().len();
-                for form in forms {
-                    if rest[gap..].starts_with(&form) {
-                        let end = base_end + gap + form.len();
-                        if text[end..].chars().next().is_some_and(|c| c.is_alphanumeric()) { continue; }
-                        if ChatNumber::parse(&text[span.start..base_end], &evidence.unit).is_some_and(|shown| evidence.supports(&shown))
-                            && matched.is_none_or(|old| end > old) { matched = Some(end); }
-                    }
-                }
+        let units: Vec<_> = self.numbers.iter().map(|n| n.unit.clone()).collect();
+        let mut checked: Vec<_> = chat_claims(text, &ChatUnit::Plain, &units).into_iter().map(|(span, shown)| {
+            let supported = shown.map(|shown| self.numbers.iter().any(|n| n.supports(&shown)))
+                .unwrap_or_else(|| self.exact.contains(&text[span.clone()]));
+            (span, supported)
+        }).collect();
+        // If either end fails, also mask the end relying on the rejected trailing unit.
+        let mut start = 0;
+        while start < checked.len() {
+            let mut end = start;
+            while end + 1 < checked.len() && coordinated(&text[checked[end].0.end..checked[end + 1].0.start]) { end += 1; }
+            if end > start && checked[start..=end].iter().any(|(_, ok)| !ok) {
+                for (_, ok) in &mut checked[start..=end] { *ok = false; }
             }
-            let supported = if let Some(end) = matched { span.end = end; true } else { self.supported(&text[span.clone()]) };
-            checked.push((span, supported));
+            start = end + 1;
         }
         checked
     }
@@ -668,12 +743,162 @@ mod tests {
     use super::*;
     use serde_json::json;
     #[test]
+    fn computed_write_receipts_verify_but_request_only_counts_do_not() {
+        for (tool, result, reply) in [
+            ("document_import_rows", json!({"created":6240,"rows":6241,"bad_count":1,"_request":{"limit":999777}}), "Created 6240 entities from 6241 rows with 1 bad cell"),
+            ("document_upload", json!({"filename":"999777.csv","size_bytes":6240,"chunk_count":3,"revision":1}), "Uploaded 6240 bytes in 3 chunks"),
+            ("ontology_automap", json!({"mode":"profile_only","profiles":[{"records":6240,"fields":[{"distinct_count":3}]}],"_request":{"limit":999777}}), "Profiled 6240 records with 3 distinct values"),
+        ] {
+            let mut prose = ChatProse::default();
+            prose.tool_result(tool, &result);
+            assert!(prose.check(reply).is_ok(), "{tool}: {}", prose.safe(reply));
+            assert!(prose.check("Processed 999777 rows").is_err(), "{tool}");
+        }
+    }
+
+    #[test]
+    fn coordinated_numbers_share_trailing_units_and_leading_currency() {
+        let mut prose = ChatProse::default();
+        prose.result(&json!([{"value":3,"unit":"kg"},{"value":4,"unit":"kg"},{"value":5,"unit":"kg"}]));
+        for raw in ["3 and 5 kg", "3, 4 and 5 kg", "3, 4, and 5 kg", "between 3 and 5 kg", "3 to 5 kg", "from 3 up to 5 kg", "3-5 kg", "3 - 5 kg", "3–5 kg", "3 or 5 kg"] {
+            assert!(prose.check(raw).is_ok(), "{raw}: {}", prose.safe(raw));
+        }
+        for raw in ["between 3 and 999 kg", "3, 999 and 5 kg", "There were 3. And 5 kg", "3; 5 kg", "3 m and 5 kg", "3 kg and 5 m", "3 apples and 5 kg"] {
+            assert!(prose.check(raw).is_err(), "{raw}");
+        }
+        let mut money = ChatProse::default();
+        money.result(&json!([{"value":3,"unit":"AUD"},{"value":5,"unit":"AUD"},{"value":14,"unit":"AUD"},{"value":15.1,"unit":"AUD"}]));
+        for raw in ["$3 to 5", "AUD 14 to 15.10", "$3 and 5", "AUD 14-15.10"] { assert!(money.check(raw).is_ok(), "{raw}: {}", money.safe(raw)); }
+        for raw in ["$3 to 999", "AUD 14. Then 15.10", "$3 to 5 kg", "$3 to 5 metres", "$3 to 5 USD"] { assert!(money.check(raw).is_err(), "{raw}"); }
+    }
+
+    #[test]
+    fn argument_digits_do_not_damage_computed_values_or_names() {
+        let mut area = ChatProse::default();
+        area.tool_result("metric_eval", &json!({"value":1000,"unit":"m²","_request":{"top_n":2}}));
+        assert_eq!(area.safe("1000 m²"), "1000 m²");
+        let mut name = ChatProse::default();
+        name.tool_result("entities_get", &json!({"id":"entity:a3b","name":"Store 3","_request":{"entity_id":"entity:a3b"}}));
+        assert_eq!(name.safe("Store 3"), "Store 3");
+    }
+
+    #[test]
+    fn opaque_identifiers_never_supply_numeric_evidence() {
+        let mut prose = ChatProse::default();
+        prose.tool_result("entities_get", &json!({"id":"entity:a3b","next":"cursor987654", "sha256":"999777abcdef999777abcdef999777abcdef999777abcdef999777abcdef999777ab", "values":["entity:x876543", "01ARZ3NDEKTSV4RRFFQ69G5FAV"], "summary":"Read (entity:x876543) for details"}));
+        for raw in ["3", "987654", "876543", "999777", "4", "69", "5"] { assert!(prose.check(raw).is_err(), "{raw}"); }
+    }
+
+    #[test]
+    fn unit_digits_never_become_independent_evidence() {
+        for unit in ["m²", "m³", "CO₂", "km/h²", "per 100 g", "m^2", "CO2"] {
+            for evidence in [json!({"value":1000,"unit":unit}), json!(format!("1000 {unit}"))] {
+                let mut prose = ChatProse::default();
+                prose.result(&evidence);
+                assert!(prose.check(&format!("1000 {unit}")).is_ok(), "{unit}");
+                assert!(prose.check("1000").is_err(), "unit cannot be dropped: {unit}");
+                assert!(prose.check("1000 incorrect²").is_err(), "unit cannot change: {unit}");
+                assert_eq!(prose.safe(&format!("999 {unit}")), format!("{UNVERIFIED}{NUMBER_NOTE}"), "one claim: {unit}");
+                for number in ["2", "3", "100"] {
+                    assert!(prose.check(&format!("There are {number} items")).is_err(), "{unit}: {number}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn echoed_arguments_never_authorise_numbers_for_any_tool() {
+        for (tool, result) in [
+            ("show_view", json!({"pagination":{"reach":{"depth":2,"kinds":["sample999777"]},"total":0},"text":"No results for sample999777"})),
+            ("metric_eval", json!({"filters":[{"value":999777}],"value":null,"n_entities":0,"warnings":["No score above 999777","No score above 999,777","No score above 999.777k"]})),
+            ("scenario_run", json!({"changes":["Scale score by 999777"],"n_changed":0,"scenario":[]})),
+            ("search", json!({"query":"sample999777","limit":876543,"results":[],"error":"No sample999777 records"})),
+            ("unknown_future_tool", json!({"echo":{"amount":999777}})),
+        ] {
+            let mut prose = ChatProse::default();
+            prose.tool_result(tool, &result);
+            for text in ["There are 999777 affected items", "There are 999,777 items", "There are 999.777k items", "There are 876543 items"] {
+                assert!(prose.check(text).is_err(), "{tool}: {text}: {result}");
+                assert!(prose.safe(text).contains(UNVERIFIED));
+            }
+        }
+    }
+
+    #[test]
+    fn shared_range_units_require_both_values_with_the_shared_unit() {
+        for unit in ["AUD", "m²", "CO₂", "km/h²", "per 100 g"] {
+            let mut prose = ChatProse::default();
+            prose.result(&json!([{"value":14,"unit":unit},{"value":15.1,"unit":unit}]));
+            let good = format!("Total goes from 14 to 15.10 {unit}");
+            assert_eq!(prose.safe(&good), good, "{unit}");
+            assert!(prose.check("14").is_err(), "a range does not license dropping the unit");
+            for raw in [format!("999777 to 15.10 {unit}"), format!("14 to 999777 {unit}")] {
+                assert!(prose.check(&raw).is_err(), "{raw}");
+                let safe = prose.safe(&raw);
+                assert!(!safe.contains("14") && !safe.contains("15.10") && !safe.contains("999777"), "{safe}");
+            }
+            let mut count = ChatProse::default();
+            count.result(&json!([14,{"value":15.1,"unit":unit}]));
+            assert!(count.check(&good).is_err(), "a unit-free count is not a value in {unit}");
+        }
+    }
+
+    #[test]
+    fn request_field_names_do_not_taint_independent_computed_columns() {
+        for key in ["top_n", "filters", "query", "reach", "warnings", "unit", "columns"] {
+            let mut prose = ChatProse::default();
+            prose.tool_result("show_view", &json!({"data":{"sources":{"sales":{
+                "parameters":{"top_n":2},"rows":[{key:1000}]
+            }}}}));
+            assert!(prose.check("1000").is_ok(), "{key}");
+            assert!(prose.check("2").is_err(), "{key}");
+        }
+    }
+
+    #[test]
+    fn column_metadata_supplies_units_without_supplying_numbers() {
+        let mut prose = ChatProse::default();
+        prose.tool_result("show_view", &json!({"data":{"sources":{"sales":{
+            "columns":[{"key":"amount_2026","label":"Cost 999777","datatype":"money","unit":"AUD"}],
+            "totals":{"amount_2026":{"sum":31}}
+        }}}}));
+        assert!(prose.check("The total is $31.00").is_ok());
+        for raw in ["2026", "999777", "31"] { assert!(prose.check(raw).is_err(), "{raw}"); }
+    }
+
+    #[test]
+    fn computed_numbers_still_verify_when_the_arguments_contain_them() {
+        for value in [1000, 999777] {
+            let mut prose = ChatProse::default();
+            prose.tool_result("metric_eval", &json!({"filters":[{"property":"score","op":"eq","value":value}],"value":value,"n_entities":1}));
+            assert!(prose.check(&format!("The result is {value}")).is_ok());
+        }
+        let mut scenario = ChatProse::default();
+        scenario.tool_result("scenario_run", &json!({"changes":["Price up 10%"],"scenario":[{"value":110,"unit":"AUD","delta_pct":10}]}));
+        assert!(scenario.check("The result increased 10%").is_ok());
+        let mut rows = ChatProse::default();
+        rows.tool_result("show_view", &json!({"parameters":{"top_n":5},"total_rows":5,"rows":[{}, {}, {}, {}, {}]}));
+        assert!(rows.check("The top 5 rows").is_ok());
+    }
+
+    #[test]
+    fn paging_metadata_cannot_authorise_prose_numbers() {
+        let mut prose = ChatProse::default();
+        prose.result(&json!({"view":"metric","metric":{"value":12},"evidence":{"args":{"top_n":987654,"filters":[{"value":876543}]},"next_cursor":"opaque765432"}}));
+        assert!(prose.check("The result is 12").is_ok());
+        for text in ["The result is 987654", "The result is 876543", "The result is 765432"] {
+            assert!(prose.check(text).is_err(), "{text}");
+        }
+    }
+
+    #[test]
     fn chat_rounds_to_displayed_precision_and_scale() {
         for (evidence, good, bad) in [
             (json!({"value":664.475,"unit":"AUD"}), "$664.48", "$664.47"),
             (json!({"value":34.578125,"unit":"%"}), "34.58%", "34.57%"),
             (json!({"value":615548,"unit":"AUD"}), "$615.5k", "$616.5k"),
             (json!({"value":615548000,"unit":"AUD"}), "$615.5M", "$616.5M"),
+            (json!({"value":615548000}), "615.5M", "616.5M"),
             (json!({"value":615548000000_i64,"unit":"AUD"}), "$615.5 billion", "$616.5 billion"),
             (json!({"value":615548,"unit":"AUD"}), "AUD 615.5 thousand", "AUD 616.5 thousand"),
             (json!({"value":615548000,"unit":"AUD"}), "615.5 million AUD", "616.5 million AUD"),

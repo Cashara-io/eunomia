@@ -96,11 +96,12 @@ const tx = (statements: string[]) => `BEGIN TRANSACTION;\n${statements.join("\n"
 // was built from. Embeddings can be made to hang.
 let llm: http.Server;
 let hangEmbeddings = false;
+let consolidationGate: Promise<void> | undefined;
 function startLlm() {
   llm = http.createServer((req, res) => {
     let body = "";
     req.on("data", (c) => (body += c));
-    req.on("end", () => {
+    req.on("end", async () => {
       res.setHeader("Content-Type", "application/json");
       if (req.url?.endsWith("/models")) {
         // chat-model discovery: nothing listed, so the default model is used
@@ -119,6 +120,7 @@ function startLlm() {
         res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ entities: [], facts: [], relations: [] }) } }] }));
         return;
       }
+      await consolidationGate;
       const current = /Current belief: (.*)\n/.exec(prompt)?.[1] ?? "(none yet)";
       const facts = prompt.split("New raw facts:\n")[1].split("\n").filter((l) => l.startsWith("- ")).map((l) => l.slice(2));
       const belief = [...(current === "(none yet)" ? [] : [current]), ...facts].join("; ");
@@ -126,6 +128,19 @@ function startLlm() {
     });
   });
   return new Promise<void>((r) => llm.listen(0, MOCK_BIND, r));
+}
+
+// Hold mock model replies across a mutation and every assertion about its
+// stale observation. Always release them, including when an assertion fails.
+async function withConsolidationPaused<T>(inspect: () => Promise<T>): Promise<T> {
+  let release = () => {};
+  consolidationGate = new Promise<void>((resolve) => { release = resolve; });
+  try {
+    return await inspect();
+  } finally {
+    consolidationGate = undefined;
+    release();
+  }
 }
 
 const observationOf = (entity: Json) => entity.memory.filter((m: Json) => m.type === "observation");
@@ -208,23 +223,33 @@ test.describe.serial("memory correctness", () => {
     expect(obs.text).toContain("Paris");
     expect(obs.status).toBe("fresh");
 
-    await ok("memory_update", { memory_id: fact, text: "Alice lives in Berlin" });
-    const stale = observationOf(await ok("entities_get", { id: alice }));
-    expect(stale).toHaveLength(1);
-    expect(stale[0].status).toBe("stale");
-    const recalled = await ok("recall", { query: "Alice Mover Paris" });
-    // the stale belief never surfaces; the background reconciler may already have rebuilt the observation (same id, now Berlin)
-    expect(recalled.results.map((r: Json) => r.text)).not.toContain(obs.text);
-    expect(recalled.results.map((r: Json) => r.text)).toContain("Alice lives in Berlin");
+    await withConsolidationPaused(async () => {
+      await ok("memory_update", { memory_id: fact, text: "Alice lives in Berlin" });
+      const stale = observationOf(await ok("entities_get", { id: alice }));
+      expect(stale).toHaveLength(1);
+      expect(stale[0].status).toBe("stale");
+      const recalled = await ok("recall", { query: "Alice Mover Paris" });
+      expect(recalled.results.map((r: Json) => r.id)).not.toContain(obs.id);
+      expect(recalled.results.map((r: Json) => r.text)).not.toContain(obs.text);
+      expect(recalled.results.map((r: Json) => r.text)).toContain("Alice lives in Berlin");
+    });
 
     if (!llmMode) return;
-    expect((await ok("consolidate_observations", { subject_id: alice })).consolidated).toEqual([alice]);
-    const [rebuilt] = observationOf(await ok("entities_get", { id: alice }));
-    expect(rebuilt.text).toBe("Alice lives in Berlin");
-    expect(rebuilt.status).toBe("fresh");
-    expect(rebuilt.source_memories).toEqual([fact]);
+    const result = await ok("consolidate_observations", { subject_id: alice });
+    expect(result.errors).toEqual([]);
+    // The reconciler may finish first, or win the optimistic write while the
+    // tool is awaiting its model. Either caller must leave the same rebuild.
+    expect([...result.consolidated, ...result.skipped]).toEqual([alice]);
+    await expect.poll(async () => observationOf(await ok("entities_get", { id: alice }))).toEqual([
+      expect.objectContaining({
+        id: obs.id,
+        text: "Alice lives in Berlin",
+        status: "fresh",
+        source_memories: [fact],
+      }),
+    ]);
     const again = await ok("recall", { query: "Alice Mover" });
-    expect(again.results.map((r: Json) => r.id)).toContain(rebuilt.id);
+    expect(again.results.map((r: Json) => r.id)).toContain(obs.id);
   });
 
   test("deleting the only supporting fact removes the observation; lineage keeps only surviving facts", async () => {
@@ -241,16 +266,29 @@ test.describe.serial("memory correctness", () => {
     await ok("consolidate_observations", { subject_id: cy });
     expect(observationOf(await ok("entities_get", { id: cy }))[0].source_memories.sort()).toEqual([f1.memory.id, f2.memory.id].sort());
 
-    await ok("memory_delete", { memory_id: f1.memory.id });
-    const [pruned] = observationOf(await ok("entities_get", { id: cy }));
-    expect(pruned.status).toBe("stale");
-    expect(pruned.source_memories).toEqual([f2.memory.id]);
-    expect((await ok("recall", { query: "Cy Pair tea" })).results.map((r: Json) => r.id)).not.toContain(pruned.id);
+    const pruned = await withConsolidationPaused(async () => {
+      await ok("memory_delete", { memory_id: f1.memory.id });
+      const pruned = observationOf(await ok("entities_get", { id: cy }));
+      expect(pruned).toHaveLength(1);
+      expect(pruned[0].status).toBe("stale");
+      expect(pruned[0].source_memories).toEqual([f2.memory.id]);
+      expect((await ok("recall", { query: "Cy Pair tea" })).results.map((r: Json) => r.id)).not.toContain(pruned[0].id);
+      return pruned[0];
+    });
 
     await ok("consolidate_observations", { subject_id: cy });
-    const [rebuilt] = observationOf(await ok("entities_get", { id: cy }));
-    expect(rebuilt.text).toBe("Cy runs marathons");
-    expect(rebuilt.source_memories).toEqual([f2.memory.id]);
+    await expect.poll(async () => observationOf(await ok("entities_get", { id: cy }))).toEqual([
+      expect.objectContaining({
+        id: pruned.id,
+        text: "Cy runs marathons",
+        status: "fresh",
+        source_memories: [f2.memory.id],
+      }),
+    ]);
+    const recalled = await ok("recall", { query: "Cy Pair tea" });
+    expect(recalled.results).toContainEqual(expect.objectContaining({ id: pruned.id, text: "Cy runs marathons" }));
+    expect(recalled.results.map((r: Json) => r.text)).not.toContain("Cy drinks tea");
+    expect(recalled.results.map((r: Json) => r.id)).not.toContain(f1.memory.id);
   });
 
   // -- #68 bounded recall ----------------------------------------------------
@@ -422,34 +460,38 @@ test.describe.serial("memory correctness", () => {
       expect(winnerAfter.relations.map((r: Json) => r.label)).toEqual(["knows"]);
     }
 
-    // the real merge
-    await ok("entity_merge", { winner_id: winner, loser_id: loser });
-    const gone = await call("entities_get", { id: loser });
-    expect(gone.isError || !gone.data || gone.data.error, JSON.stringify(gone.data)).toBeTruthy();
-    const merged = await ok("entities_get", { id: winner });
-    expect(merged.aliases).toContain("Mergy Loser");
-    const obs = observationOf(merged);
-    expect(obs).toHaveLength(1);
-    expect(obs[0].status).toBe("stale");
-    expect(obs[0].text).toContain("Winner belief");
-    expect(obs[0].text).toContain("Loser belief");
-    expect(merged.memory.filter((m: Json) => m.type === "world").map((m: Json) => m.text).sort()).toEqual(["Loser fact", "Winner fact"]);
-    const rels = merged.relations.map((r: Json) => `${r.direction}:${r.label}`).sort();
-    expect(rels).toEqual([`out:${boom}`, "in:mentors", "out:knows"].sort());
-    if (DB_URL) {
-      const [[edges], [orphans]] = await sql(
-        `SELECT count() FROM relates_to WITH NOINDEX WHERE in = ${loser} OR out = ${loser} GROUP ALL; \
-         SELECT count() FROM memory WITH NOINDEX WHERE subject = ${loser} GROUP ALL;`,
-      );
-      expect(edges?.count ?? 0, "dangling edges").toBe(0);
-      expect(orphans?.count ?? 0, "orphaned memories").toBe(0);
-    }
+    const observationId = await withConsolidationPaused(async () => {
+      await ok("entity_merge", { winner_id: winner, loser_id: loser });
+      const gone = await call("entities_get", { id: loser });
+      expect(gone.isError || !gone.data || gone.data.error, JSON.stringify(gone.data)).toBeTruthy();
+      const merged = await ok("entities_get", { id: winner });
+      expect(merged.aliases).toContain("Mergy Loser");
+      const obs = observationOf(merged);
+      expect(obs).toHaveLength(1);
+      expect(obs[0].status).toBe("stale");
+      expect((await ok("recall", { query: "Mergy Winner Mergy Loser" })).results.map((r: Json) => r.id)).not.toContain(obs[0].id);
+      expect(obs[0].text).toContain("Winner belief");
+      expect(obs[0].text).toContain("Loser belief");
+      expect(merged.memory.filter((m: Json) => m.type === "world").map((m: Json) => m.text).sort()).toEqual(["Loser fact", "Winner fact"]);
+      const rels = merged.relations.map((r: Json) => `${r.direction}:${r.label}`).sort();
+      expect(rels).toEqual([`out:${boom}`, "in:mentors", "out:knows"].sort());
+      if (DB_URL) {
+        const [[edges], [orphans]] = await sql(
+          `SELECT count() FROM relates_to WITH NOINDEX WHERE in = ${loser} OR out = ${loser} GROUP ALL; \
+           SELECT count() FROM memory WITH NOINDEX WHERE subject = ${loser} GROUP ALL;`,
+        );
+        expect(edges?.count ?? 0, "dangling edges").toBe(0);
+        expect(orphans?.count ?? 0, "orphaned memories").toBe(0);
+      }
+      return obs[0].id;
+    });
 
     if (llmMode) {
       await ok("consolidate_observations", { subject_id: winner });
-      const [rebuilt] = observationOf(await ok("entities_get", { id: winner }));
-      expect(rebuilt.status).toBe("fresh");
-      expect(rebuilt.text.split("; ").sort()).toEqual(["Loser fact", "Winner fact"]);
+      await expect.poll(async () => {
+        const rebuilt = observationOf(await ok("entities_get", { id: winner }));
+        return rebuilt.map((m: Json) => ({ id: m.id, status: m.status, facts: m.text.split("; ").sort() }));
+      }).toEqual([{ id: observationId, status: "fresh", facts: ["Loser fact", "Winner fact"] }]);
     }
   });
 });

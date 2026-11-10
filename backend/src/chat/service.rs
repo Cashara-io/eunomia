@@ -70,7 +70,11 @@ When the user asks what a change, delay or problem affects: \
 find the entity with `entities_search`, read its vault's `ontology_get` and the entity's `entities_neighbourhood`, \
 and decide from the link labels, the link descriptions and the facts which way the effect travels and what it \
 reaches. Then call `show_view` with `view` \"impact\", `start_id`, `headline` and `affected` (each affected entity \
-with the relation ids from the start to it and a one-sentence why) and reply with a short summary; the app draws the view above your reply. If \
+with the relation ids from the start to it and a one-sentence why). For a complete list selected by saved links, \
+use `reach` instead of `affected`: {depth, kinds, labels}, with endpoint kinds and relation labels from the ontology. \
+The server counts the selection and returns a small page. Repeat the same reach with zero-based `page` to fetch later pages; \
+never count a neighbourhood preview or a page as the total. Explain why the selected links matter, since linked does not imply affected. \
+Reply with a short summary; the app draws the view above your reply. If \
 `show_view` names a bad id, fix it and call it again. \
 Before answering a number or a what-if, call `ontology_coverage` with the user's question. Pass no `vault_id` unless the \
 user named a space: it then checks every space the user can read and returns the one that covers the question best as \
@@ -413,10 +417,19 @@ fn message_out(row: MessageRow, prose: &crate::views::ui::prose::ChatProse) -> M
 // New rows already contain the checked tree and are never reparsed.
 pub(crate) fn messages_out(rows: Vec<MessageRow>) -> Vec<MessageOut> {
     let mut evidence = std::collections::HashMap::<String, crate::views::ui::prose::ChatProse>::new();
+    let mut calls = std::collections::HashMap::<(String, String), String>::new();
     rows.into_iter().map(|row| {
         let prose = evidence.entry(row.thread_id.to_string()).or_default();
-        if row.role == "user" { *prose = Default::default(); prose.text(&row.content); }
-        if row.role == "tool" && let Ok(value) = serde_json::from_str::<Value>(&row.content) { prose.result(&value); }
+        if row.role == "user" { *prose = Default::default(); prose.text(&row.content); calls.retain(|(thread, _), _| thread != &row.thread_id.to_string()); }
+        for call in row.tool_calls.iter().flatten() {
+            if let (Some(id), Some(name)) = (call["id"].as_str(), call["function"]["name"].as_str()) {
+                calls.insert((row.thread_id.to_string(), id.to_string()), name.to_string());
+            }
+        }
+        if row.role == "tool" && let Ok(value) = serde_json::from_str::<Value>(&row.content)
+            && let Some(name) = row.tool_call_id.as_ref().and_then(|id| calls.get(&(row.thread_id.to_string(), id.clone()))) {
+            prose.tool_result(name, &value);
+        }
         message_out(row, prose)
     }).collect()
 }
@@ -615,6 +628,10 @@ fn parse_sse_payloads(buf: &str) -> Vec<&str> {
 /// Appends `user_message` to `thread_id`'s conversation and runs the OpenAI
 /// function-calling loop (executing any tool calls via the shared registry,
 /// persisting every step), sending one [`ChatEvent`] per step over `tx`.
+/// After a disconnect, nothing new is started. A statement that was already
+/// submitted may still commit, as a whole. So the stored history is always at a
+/// complete step: the turn's messages up to the last finished step, with either
+/// the whole final answer or none of it. The next send works from it.
 /// Assumes the caller (the router) has already validated that `thread_id`
 /// exists and is owned by `owner`; this does not re-check.
 pub async fn send_stream(
@@ -646,6 +663,9 @@ struct ModelCall<'a> {
     model: &'a str,
     tools: &'a [Value],
     messages: &'a [Value],
+    tx: &'a mpsc::Sender<ChatEvent>,
+    #[cfg(any(test, feature = "test-support"))]
+    thread_id: &'a RecordId,
 }
 
 impl ModelCall<'_> {
@@ -653,6 +673,7 @@ impl ModelCall<'_> {
     /// buffers the whole stream for prose validation. Returns text and tool calls.
     async fn run(&self, reasoning_off: &mut bool) -> Result<(String, BTreeMap<usize, ToolCallAcc>), Failed> {
         let resp = loop {
+            if self.tx.is_closed() { return Err((ErrorCode::Internal, "Chat disconnected".into())); }
             let mut body = json!({ "model": self.model, "messages": self.messages, "stream": true });
             if !self.tools.is_empty() { body["tools"] = json!(self.tools); }
             else { body["tool_choice"] = json!("none"); }
@@ -698,6 +719,10 @@ impl ModelCall<'_> {
                     for choice in &parsed.choices {
                         // Buffer all text until its complete numeric spans can be checked.
                         apply_delta(&mut content, &mut tool_calls_acc, &choice.delta);
+                        #[cfg(any(test, feature = "test-support"))]
+                        if choice.delta.content.is_some() {
+                            crate::sources::mock::chat_write_checkpoint(self.thread_id, "answer_chunk").await;
+                        }
                     }
                 }
             }
@@ -724,7 +749,9 @@ async fn run_send(
     let mut messages: Vec<Value> = vec![json!({ "role": "system", "content": SYSTEM_PROMPT })];
     messages.extend(existing_rows.iter().map(row_to_api_message));
 
+    if tx.is_closed() { return Ok(()); }
     persist(db, owner, thread_id, "user", user_message, None, None).await.map_err(|e| (e.code, e.message))?;
+    if tx.is_closed() { return Ok(()); }
     if is_first_message {
         touch_thread(db, thread_id, Some(&derive_title(user_message))).await.map_err(|e| (e.code, e.message))?;
     } else {
@@ -755,7 +782,12 @@ async fn run_send(
             messages.push(json!({"role":"system","content":"The tool budget is exhausted. Give your final answer now using only this turn's results. State what you found and explicitly say which parts you could not finish. Do not list planned steps or request more tools."}));
         }
         let offered = if final_turn { &[][..] } else { tools.as_slice() };
-        let call = ModelCall { client: &client, url: &url, bearer: p.bearer(), model: &model, tools: offered, messages: &messages };
+        #[cfg(any(test, feature = "test-support"))]
+        if final_turn { crate::sources::mock::chat_write_checkpoint(thread_id, "final_request").await; }
+        let call = ModelCall { client: &client, url: &url, bearer: p.bearer(), model: &model, tools: offered, messages: &messages, tx,
+            #[cfg(any(test, feature = "test-support"))]
+            thread_id,
+        };
         let (content, tool_calls_acc) = match tokio::time::timeout(limit, call.run(&mut reasoning_off)).await {
             Ok(done) => done?,
             // what was stored so far ends on a user message or a tool result, so the thread takes the next message
@@ -777,8 +809,13 @@ async fn run_send(
         let content = tree::plain_text(&checked);
         let stored = tree::encode(&checked);
         if tool_calls_acc.is_empty() || final_turn {
+            #[cfg(any(test, feature = "test-support"))]
+            crate::sources::mock::chat_write_checkpoint(thread_id, "answer_ready").await;
             if tx.send(ChatEvent::Text { delta: content.clone(), tree: checked.clone() }).await.is_err() { return Ok(()); }
+            if tx.is_closed() { return Ok(()); }
             persist(db, owner, thread_id, "assistant", &stored, None, None).await.map_err(|e| (e.code, e.message))?;
+            #[cfg(any(test, feature = "test-support"))]
+            crate::sources::mock::chat_write_checkpoint(thread_id, "answer_saved").await;
             let _ = tx.send(ChatEvent::Done { reply: content, tree: checked, tool_calls_made }).await;
             return Ok(());
         }
@@ -801,6 +838,7 @@ async fn run_send(
         messages.push(json!({ "role": "assistant", "content": content, "tool_calls": tool_calls_dump }));
 
         for tc in ordered {
+            if tx.is_closed() { return Ok(()); }
             let name = tc.name.clone().unwrap_or_default();
             let _ = tx.send(ChatEvent::ToolCall { id: tc.id.clone(), name: name.clone() }).await;
 
@@ -813,13 +851,14 @@ async fn run_send(
             } else if said.restates(&name, &args) && !resends_stored_text(db, owner, &name, &args).await {
                 json!({ "error": "Not saved: this text repeats a tool result or your own answer. Save only a new fact the user told you.", "code": ErrorCode::ValidationInvalid.as_str() })
             } else {
-                match crate::usage::with_context(crate::usage::Channel::Chat, thread_id.to_string(), registry::call(&state.app, user, &name, args)).await {
+                if tx.is_closed() { return Ok(()); }
+                match crate::usage::with_context(crate::usage::Channel::Chat, thread_id.to_string(), registry::call(&state.app, user, &name, args.clone())).await {
                     Ok(v) => v,
                     Err(e) => e.to_tool_value(),
                 }
             };
             if within_budget { tool_calls_made.push(name.clone()); }
-            prose.result(&result);
+            prose.tool_result(&name, &result);
 
             said.tool_result(&result);
             let result_text = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
@@ -828,6 +867,7 @@ async fn run_send(
             let view = (name == crate::views::TOOL && result.get("error").is_none()).then_some(result);
             let _ = tx.send(ChatEvent::ToolResult { id: tc.id, name, view }).await;
         }
+        if tx.is_closed() { return Ok(()); }
         store::app::CHAT_TOOL_BATCH_CREATE.on(db)
             .bind(("owner", owner.clone())).bind(("thread_id", thread_id.clone()))
             .bind(("messages", batch)).await.map_err(|e| { let e = AppError::from(e); (e.code, e.message) })?;
@@ -1028,6 +1068,21 @@ mod tests {
         let mut acc2: BTreeMap<usize, ToolCallAcc> = BTreeMap::new();
         acc2.insert(0, ToolCallAcc::default());
         assert!(!acc2.is_empty());
+    }
+
+    #[test]
+    fn legacy_history_excludes_call_arguments_from_tool_evidence() {
+        let arguments = json!({"reach":{"kinds":["sample999777"]}}).to_string();
+        let result = json!({"pagination":{"reach":{"kinds":["sample999777"]},"total":0}}).to_string();
+        let rows = vec![
+            row("user", "Find linked items", None, None),
+            row("assistant", "", Some(vec![json!({"id":"call_echo","function":{"name":"show_view","arguments":arguments}})]), None),
+            row("tool", &result, None, Some("call_echo")),
+            row("assistant", "There are 999777 affected items", None, None),
+        ];
+        let out = messages_out(rows);
+        assert!(out.last().unwrap().content.contains("[unverified number]"));
+        assert!(!out.last().unwrap().content.contains("999777"));
     }
 
     #[test]

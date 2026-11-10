@@ -105,8 +105,10 @@ export default function ScenarioView({ view }: { view: Scenario }) {
         </p>
       )}
       {run.reached.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <h4 className="label">{linkedWithin(run.reached)}</h4>
+        <details className="text-[13px]">
+          <summary className="cursor-pointer" style={{ color: "var(--ink-dim)" }}>
+            {linkedWithin(run.reached)} ({run.reached.length}{run.reached_truncated ? "+" : ""}), show linked items
+          </summary>
           <ul className="flex flex-wrap gap-1.5">
             {run.reached.map((r) => (
               <li key={r.entity_id}>
@@ -119,7 +121,8 @@ export default function ScenarioView({ view }: { view: Scenario }) {
               </li>
             ))}
           </ul>
-        </div>
+          {run.reached_truncated && <p>More linked items were in reach than this preview includes.</p>}
+        </details>
       )}
       <MetricWarnings warnings={run.warnings} />
       <p className="text-detail font-medium border-t pt-2.5" style={{ borderColor: "var(--border)" }}>
