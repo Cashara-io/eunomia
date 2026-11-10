@@ -50,6 +50,7 @@ pub mod evidence;
 mod memory;
 mod ontology;
 mod peers;
+mod preflight;
 mod records;
 mod secret_tools;
 pub(crate) mod skills;
@@ -467,6 +468,17 @@ async fn call_inner(app: &AppState, user: &User, name: &str, mut args: Value) ->
         }
     };
 
+    // Refuse before invoking the handler, with no argument summary or replay capsule.
+    // Check resolved selectors too, as before, but scrub any resolved secret from the audit.
+    let selectors = prepared.as_ref().map(|p| &p.args).unwrap_or(&args);
+    if let Err(refusal) = preflight::check(name, &spec, selectors) {
+        let requested = refusal.requested.to_string();
+        let requested = prepared.as_ref().map(|p| p.scrub_text(&requested)).unwrap_or(requested);
+        preflight::record(state, owner, name, &refusal, &requested).await;
+        count_call(app, user, name, true, 0);
+        return Err(refusal.error);
+    }
+
     let vault = args.get("vault_id").and_then(Value::as_str).unwrap_or("personal").to_string();
     let span = tracing::info_span!("tool.call", tool = name, vault = %vault, outcome = Empty, duration_ms = Empty);
     let started = Instant::now();
@@ -604,41 +616,10 @@ async fn record_failure(state: &OrgState, owner: &RecordId, name: &str, args: Va
     crate::capsules::record(&state.control, failure).await;
 }
 
-fn check_vault_selectors(name: &str, spec: &ToolSpec, args: &Value) -> AppResult<()> {
-    // Check an explicit selector before a handler can resolve a global object id or
-    // ignore a selector unused by its chosen operation (for example a subgraph view).
-    // Batches retain their per-item checks: an item's selector overrides the batch's.
-    if name != "memory_write_batch" {
-        for key in VAULT_ARGS {
-            if spec.schema["properties"].get(*key).is_some()
-                && let Some(given) = args.get(*key).and_then(Value::as_str)
-                && let Ok(vault) = crate::rid::parse(given)
-            {
-                authz::check_vault(&vault)?;
-            }
-        }
-        for key in VAULT_LIST_ARGS {
-            if spec.schema["properties"].get(*key).is_some()
-                && let Some(vaults) = args.get(*key).and_then(Value::as_array)
-            {
-                for given in vaults.iter().filter_map(Value::as_str) {
-                    if let Ok(vault) = crate::rid::parse(given) {
-                        authz::check_vault(&vault)?;
-                    }
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 /// Runs the tool with `args` (secret values in, when the call had references) and audits it with
 /// `audited` (the references, never the values).
 async fn run_tool(state: &OrgState, owner: &RecordId, name: &str, spec: &ToolSpec, args: Value, audited: &Value) -> AppResult<Value> {
-    let result = match check_vault_selectors(name, spec, &args) {
-        Ok(()) => (spec.handler)(state, owner, args).await,
-        Err(e) => Err(e),
-    };
+    let result = (spec.handler)(state, owner, args).await;
     if is_read_only(name) && !DISCLOSURE_TOOLS.contains(&name) {
         return result;
     }

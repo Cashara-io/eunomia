@@ -264,3 +264,30 @@ async fn seeded_success_contract_covers_every_registered_tool() {
         if let Some((_, reason)) = exclusion { assert!(!reason.is_empty()); eprintln!("success exclusion: {name}: {reason}"); }
     }
 }
+
+#[tokio::test]
+async fn selector_refusals_never_turn_request_values_into_evidence() {
+    use eunomia_backend::{authz::{self, Actor, Caller}, error::ErrorCode, rid, scopes};
+    let app = TestApp::new().await;
+    let caller = Caller { actor: Actor { kind: "token", id: "api_token:evidence-test".into() },
+        scopes: scopes::ALL.iter().map(|s| s.to_string()).collect(),
+        vault: Some(rid::parse("vault:bound999777").unwrap()), expires_at: None };
+    for (name, spec) in registry::all_tools() {
+        if *name == "memory_write_batch" { continue; }
+        for key in ["vault_id", "vault_id_a", "vault_id_b", "vault_ids"] {
+            if spec.schema["properties"].get(key).is_none() { continue; }
+            let mut args = canary(&spec.schema);
+            for selector in ["vault_id", "vault_id_a", "vault_id_b", "vault_ids"] {
+                if spec.schema["properties"].get(selector).is_some() {
+                    args[selector] = if selector == "vault_ids" { json!(["vault:bound999777"]) } else { json!("vault:bound999777") };
+                }
+            }
+            args[key] = if key == "vault_ids" { json!(["vault:request999777"]) } else { json!("vault:request999777") };
+            let error = authz::with_caller(caller.clone(), registry::call(&app.state, &app.user, name, args)).await.unwrap_err();
+            assert_eq!(error.code, ErrorCode::AuthScope, "{name}/{key}");
+            let result = error.to_tool_value();
+            let computed = evidence::for_tool(name).unwrap().computed(&result);
+            assert!(!has_canary(&computed), "{name}/{key}: refusal registered a request value as evidence");
+        }
+    }
+}
