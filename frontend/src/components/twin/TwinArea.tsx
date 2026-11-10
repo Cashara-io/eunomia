@@ -30,7 +30,7 @@ import Review from "./Review";
 import ReviewSkeleton from "./ReviewSkeleton";
 import Objects from "./Objects";
 import Connections from "./Connections";
-import ConnectionAccess, { ConnectionContent } from "./ConnectionAccess";
+import { ProtectedSpaceContent, useConfirmedSpaceAccess } from "./SpaceAccess";
 import ObjectProfile from "./ObjectProfile";
 
 const views = [
@@ -65,7 +65,7 @@ export default function TwinArea({
   const vault = query.data?.find((v) => v.id === space);
   const cache = useQueryClient();
   const previousConnectionSpace = useRef<string | undefined>(undefined);
-  const connectionSpace = view === "connections" ? vault?.id : undefined;
+  const connectionSpace = vault?.id;
   useEffect(() => {
     const previous = previousConnectionSpace.current;
     previousConnectionSpace.current = connectionSpace;
@@ -88,11 +88,7 @@ export default function TwinArea({
       ) : !query.data ? (
         <LoadingSkeleton label="Loading memory spaces" />
       ) : vault ? (
-        view === "connections" ? (
-          <ConnectionAccess key={vault.id} space={vault.id}>
-            <SelectedSpace vault={vault} view={view} kind={kind} />
-          </ConnectionAccess>
-        ) : <SelectedSpace key={vault.id} vault={vault} view={view} kind={kind} />
+        <SelectedSpace key={vault.id} vault={vault} view={view} kind={kind} />
       ) : (
         <>
           <h1 className="page-title">Ontology</h1>
@@ -157,6 +153,7 @@ function SelectedSpace({
     | "activity";
   kind?: string;
 }) {
+  const confirmed = useConfirmedSpaceAccess();
   const objectView = view === "objects" || view === "object";
   const query = useOntology(vault.id, !objectView);
   const cache = useQueryClient();
@@ -165,7 +162,7 @@ function SelectedSpace({
   const pathname = usePathname();
   const params = useSearchParams();
   useEffect(() => {
-    if (view !== "object") return;
+    if (!confirmed || view !== "object") return;
     try {
       sessionStorage.setItem(
         returnKey(vault.id),
@@ -174,7 +171,7 @@ function SelectedSpace({
     } catch {
       /* Storage may be disabled. */
     }
-  }, [view, vault.id, pathname, params]);
+  }, [confirmed, view, vault.id, pathname, params]);
   const data = query.data;
   const waiting = data
     ? definitions(data).filter((d) => d.item.status === "proposed").length
@@ -187,7 +184,7 @@ function SelectedSpace({
         : pathname;
   return (
     <>
-      <ConnectionContent>
+      <ProtectedSpaceContent>
       <header className={styles.context}>
         <div className={styles.identity}>
           <Link href="/ontology" className={styles.areaName}>
@@ -238,6 +235,7 @@ function SelectedSpace({
           )}
         </div>
       </header>
+      </ProtectedSpaceContent>
       <nav aria-label="Ontology views" className={styles.navigation}>
         {views.map((v) => (
           <Link
@@ -247,7 +245,7 @@ function SelectedSpace({
             href={twinHref(v.path, vault.id)}
           >
             {v.label}
-            {v.label === "Review" && waiting !== null && waiting > 0 && (
+            {confirmed && v.label === "Review" && waiting !== null && waiting > 0 && (
               <MorphText className={styles.navCount}>
                 {waiting.toLocaleString("en-AU")}
               </MorphText>
@@ -285,6 +283,7 @@ function SelectedSpace({
           </div>
         </details>
       </nav>
+      <ProtectedSpaceContent>
       {adding && (
         <section
           id="ontology-add-data"
@@ -305,11 +304,11 @@ function SelectedSpace({
           </Link>
         </section>
       )}
-      </ConnectionContent>
+      </ProtectedSpaceContent>
       {view !== "overview" && (
         <h1 className="sr-only">
           Ontology:{" "}
-          {view === "kind" ? kind : view === "object" ? "Object" : view}
+          {view === "kind" ? "Kind" : view === "object" ? "Object" : view}
         </h1>
       )}
       {view === "connections" ? (
@@ -320,7 +319,9 @@ function SelectedSpace({
         <Objects space={vault.id} />
       ) : view === "object" ? (
         <ObjectProfile key={kind} space={vault.id} id={kind ?? ""} />
-      ) : query.isError ? (
+      ) : view === "review" && data && !query.isError ? (
+        <><Review vault={vault} data={data} /><Activity space={vault.id} compact /></>
+      ) : !confirmed ? null : query.isError ? (
         <ReadState
           error={query.error}
           retry={() => void query.refetch()}
@@ -352,8 +353,6 @@ function SelectedSpace({
           {view === "kind" && (
             <KindDetail vault={vault} data={data} kind={kind ?? ""} />
           )}
-          {view === "review" && <Review vault={vault} data={data} />}
-          {view === "review" && <Activity space={vault.id} compact />}
         </>
       )}
     </>

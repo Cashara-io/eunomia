@@ -41,6 +41,7 @@ import { proposalEvent, useReviewInboxActivity } from "./review-activity";
 import ReviewInboxMeta, { ReviewTypeIcon } from "./ReviewInboxMeta";
 import { useLandscapeTint } from "./landscape-shared";
 import { humanLabel } from "./review-format";
+import { useConfirmedSpaceAccess } from "./SpaceAccess";
 import { isReviewOwner, ownerOnly } from "./review-access";
 
 function describe(d: DefinitionItem) {
@@ -63,6 +64,7 @@ export default function Review({
   data: OntologyOut;
 }) {
   const { tint } = useLandscapeTint();
+  const confirmed = useConfirmedSpaceAccess();
   const { params, update } = useTwinParams();
   const qc = useQueryClient();
   const [checked, setChecked] = useState<DefinitionItem[]>([]);
@@ -108,7 +110,7 @@ export default function Review({
   );
   const page = pageNumber(params.get("page"), rows.length);
   const shown = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const inboxActivity = useReviewInboxActivity(vault.id, params.toString(), shown.length > 0);
+  const inboxActivity = useReviewInboxActivity(vault.id, params.toString(), confirmed && shown.length > 0);
   const selected = all.find((d) => d.id === params.get("selected"));
   const batch = checked.filter((d) => shown.some((row) => row.id === d.id));
   const owner = vault.role === "owner";
@@ -142,7 +144,7 @@ export default function Review({
     }
   }, [selected, returnId]);
   const keyboard = useEffectEvent((e: KeyboardEvent) => {
-    if (ignoreReviewKey(e, reviewRegion.current, true) || busy || hasReviewOverlay()) return;
+    if (!confirmed || ignoreReviewKey(e, reviewRegion.current, true) || busy || hasReviewOverlay()) return;
     if (
       e.key === "Escape" &&
       selected &&
@@ -328,6 +330,7 @@ export default function Review({
     a.click();
     URL.revokeObjectURL(url);
   }
+  if (!confirmed) return null;
   return (
     <div ref={reviewRegion} className={styles.workspace} role="region" aria-label="Ontology review" tabIndex={0}>
       {ownerDenied && <p role="alert" className={styles.notice}>{ownerOnly}</p>}

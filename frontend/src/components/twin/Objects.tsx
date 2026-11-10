@@ -1,4 +1,6 @@
 "use client";
+import { useConfirmedSpaceAccess } from "./SpaceAccess";
+import { rememberObjects, useObjectReturn } from "./use-object-return";
 import { useState } from "react";
 import Link from "next/link";
 import Select from "@/components/Select";
@@ -15,6 +17,7 @@ const words = (value: string) => {
 
 export default function Objects({ space }: { space: string }) {
   const { params, update } = useTwinParams();
+  const confirmed = useConfirmedSpaceAccess();
   const kinds = useObjectKinds(space);
   const kind =
     params.get("kind") ||
@@ -29,12 +32,15 @@ export default function Objects({ space }: { space: string }) {
   const [hidden, setHidden] = useState<string[] | null>(null);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const data = query.data;
+  useObjectReturn(!!data && confirmed);
+  const back = `/ontology/objects?${params.toString()}`;
   const page = Math.max(1, Number(params.get("page")) || 1);
   const selected = params.get("selected");
   const hiddenColumns =
     hidden ?? data?.columns.slice(3).map((c) => c.name) ?? [];
   const columns =
     data?.columns.filter((c) => !hiddenColumns.includes(c.name)) ?? [];
+  if (!confirmed) return null;
   return (
     <div className="flex flex-col gap-4 min-w-0 text-[13px]">
       <div>
@@ -276,7 +282,8 @@ export default function Objects({ space }: { space: string }) {
                         <Link
                           className="link inline-block max-w-44 truncate align-middle"
                           title={row.name}
-                          href={objectHref(row.id, space)}
+                          href={`${objectHref(row.id, space)}&back=${encodeURIComponent(back)}`}
+                          onClick={rememberObjects}
                         >
                           {row.name}
                         </Link>
@@ -295,7 +302,8 @@ export default function Objects({ space }: { space: string }) {
                       <td className="px-4 font-mono">
                         <Link
                           className="link"
-                          href={`${objectHref(row.id, space)}&section=Sources`}
+                          href={`${objectHref(row.id, space)}&section=Sources&back=${encodeURIComponent(back)}`}
+                          onClick={rememberObjects}
                         >
                           {row.source_count}
                         </Link>

@@ -26,6 +26,7 @@ const listSchema = z.object({
 const propertySchema = columnSchema.extend({
   value,
   as_of: z.string().nullable(),
+  recorded_at: z.string().nullable().optional(),
   source: z.string().nullable(),
   source_label: z.string(),
   source_state: z.string(),
@@ -168,13 +169,15 @@ export function useObjects(
   query.set("offset", String((page - 1) * 25));
   const path = `/api/vaults/${encodeURIComponent(space)}/ontology/objects?${query}`;
   return useQuery({
+    retryOnMount: false,
     queryKey: ["objects", space, query.toString()],
     queryFn: ({ signal }) => read(path, listSchema, signal),
     enabled: !!kind,
   });
 }
-export function useObjectProfile(space: string, id: string, offset = 0) {
+export function useObjectProfile(space: string, id: string, offset = 0, enabled = true) {
   return useQuery({
+    retryOnMount: false,
     queryKey: ["object-profile", space, id, offset],
     queryFn: ({ signal }) =>
       read(
@@ -182,12 +185,13 @@ export function useObjectProfile(space: string, id: string, offset = 0) {
         profileSchema,
         signal,
       ),
-    enabled: !!id,
+    enabled: !!id && enabled,
   });
 }
 
 export function useObjectKinds(space: string) {
   return useQuery({
+    retryOnMount: false,
     queryKey: ["object-kinds", space],
     queryFn: ({ signal }) =>
       read(

@@ -8,7 +8,7 @@ import {
   useNeighbourhood,
 } from "@/lib/queries/connections";
 import { ApiError } from "@/lib/api";
-import { ConnectionContent, useConfirmedConnectionAccess, useMissingConnectionObjects } from "./ConnectionAccess";
+import { ProtectedSpaceContent as ConnectionContent, useConfirmedSpaceAccess as useConfirmedConnectionAccess, useMissingSpaceObjects as useMissingConnectionObjects } from "./SpaceAccess";
 import { useTwinParams } from "./controls";
 import { twinHref } from "./model";
 import { humanLabel, plural } from "./overview-format";
@@ -187,10 +187,9 @@ function Objects({ space }: { space: string }) {
     update({ selected: "" });
     focusObject(selected);
   }
-  if (!confirmed) return null;
   return (
     <div>
-      {missing.size > 0 && <p role="status">This object no longer exists</p>}
+      {confirmed && missing.size > 0 && <p role="status">This object no longer exists</p>}
       <form className={styles.search} onSubmit={(e) => e.preventDefault()}>
         <label>
           <span className="label">
@@ -214,6 +213,7 @@ function Objects({ space }: { space: string }) {
           </button>
         )}
       </form>
+      <ConnectionContent>
       {!search.trim() && (
         <>
           {recent.length > 0 && (
@@ -591,6 +591,7 @@ function Objects({ space }: { space: string }) {
           )}
         </>
       )}
+      </ConnectionContent>
     </div>
   );
 }
