@@ -1,4 +1,5 @@
 "use client";
+import { useConfirmedSpaceAccess, useMissingSpaceObjects } from "./SpaceAccess";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import ReceiptAccess from "./ReceiptAccess";
@@ -13,9 +14,8 @@ import ReadState from "./ReadState";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import {
   useObjectProfile,
-  type ObjectColumn,
 } from "@/lib/queries/objects";
-import { formatPropertyNumber } from "@/lib/numbers";
+import { formatted } from "./value-format";
 import { twinHref } from "./model";
 import { useTwinParams } from "./controls";
 import { words as plainWords } from "./DefinitionRows";
@@ -26,24 +26,7 @@ const words = (value: string) => {
 
 export const objectHref = (id: string, space: string) =>
   twinHref(`/ontology/objects/${encodeURIComponent(id)}`, space);
-export function formatted(
-  value: string | number | boolean | null | undefined,
-  column: Pick<ObjectColumn, "datatype" | "unit">,
-): string {
-  if (value === null || value === undefined) return "Missing";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "number")
-    return formatPropertyNumber(value, column.datatype, column.unit);
-  if (column.datatype === "date")
-    return Number.isNaN(Date.parse(value))
-      ? "Unavailable"
-      : new Date(value).toLocaleDateString("en-AU", {
-          dateStyle: "medium",
-          timeZone: "UTC",
-        });
-  if (column.datatype === "datetime") return date(value);
-  return value;
-}
+export { formatted } from "./value-format";
 function date(value: string | null | undefined) {
   if (!value || value === "NONE" || Number.isNaN(Date.parse(value)))
     return "Date not recorded";
@@ -64,7 +47,13 @@ const sections = [
 export default function ObjectProfile(props: { space: string; id: string; compact?: boolean }) {
   return <ReceiptAccess space={props.space}><ProfileContent {...props} /></ReceiptAccess>;
 }
-function ProfileContent({
+function ProfileContent(props: { space: string; id: string; compact?: boolean }) {
+  const missing = useMissingSpaceObjects();
+  const { params } = useTwinParams();
+  if (missing.has(props.id)) return <section className="ledger p-6" aria-label="Object unavailable"><h2 className="section-title">Object unavailable</h2><p className="mt-3">This object could not be found in this space. It may have been removed or belong to another space.</p><Link className="link inline-block mt-4" href={safeReturn(params.get("back"), props.space) ?? twinHref("/ontology/objects", props.space)}>Back to Objects</Link></section>;
+  return <ProfileDetails {...props} />;
+}
+function ProfileDetails({
   space,
   id,
   compact = false,
@@ -74,6 +63,7 @@ function ProfileContent({
   compact?: boolean;
 }) {
   const { params, update } = useTwinParams();
+  const confirmed = useConfirmedSpaceAccess();
   const section = params.get("section") ?? "Properties";
   const selectedValue = params.get("receipt");
   const valueTrigger = useRef<HTMLButtonElement | null>(null);
@@ -97,8 +87,9 @@ function ProfileContent({
     update({ section, receipt: "" });
   };
   const [offset, setOffset] = useState(0);
-  const query = useObjectProfile(space, id, offset);
-  if (query.error instanceof ApiError && query.error.code === "entity.not_found")
+  const query = useObjectProfile(space, id, offset, confirmed);
+  if (!confirmed) return null;
+  if (query.error instanceof ApiError && ["entity.not_found", "resource.not_found", "scope.mismatch"].includes(query.error.code))
     return <section className="ledger p-6" aria-label="Object unavailable"><h2 className="section-title">Object unavailable</h2><p className="mt-3">This object could not be found in this space. It may have been removed or belong to another space.</p><Link className="link inline-block mt-4" href={safeReturn(params.get("back"), space) ?? twinHref("/ontology/objects", space)}>Back to Objects</Link></section>;
   if (query.isError)
     return (
@@ -196,11 +187,6 @@ function ProfileContent({
             )}
             {section === "Properties" && (
               <>
-                <p className="text-[var(--ink-dim)] mb-4">
-                  Stale means the source changed after the value was recorded.
-                  Conflicting means different values share the latest as-of
-                  time.
-                </p>
                 <ValueReceipts data={data} inspect={inspect} selected={selectedValue} />
               </>
             )}

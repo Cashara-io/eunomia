@@ -1,4 +1,5 @@
 "use client";
+import { useConfirmedSpaceAccess } from "./SpaceAccess";
 
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { UserIcon, RobotIcon, GearIcon } from "@phosphor-icons/react";
@@ -63,13 +64,14 @@ function ActivityContent({
   definition?: { type: string; kind: string; name: string };
 }) {
   const { params: routeParams, update } = useTwinParams();
+  const confirmed = useConfirmedSpaceAccess();
   const selectedSubject = routeParams.get("subject");
   const trigger = useRef<HTMLAnchorElement | null>(null);
   const rowRegion = useRef<HTMLDivElement>(null);
   const scrollPosition = useRef(Number(routeParams.get("activityScroll")) || 0);
   useLayoutEffect(() => {
     if (!selectedSubject && rowRegion.current) rowRegion.current.scrollTop = scrollPosition.current;
-  }, [selectedSubject]);
+  }, [selectedSubject, confirmed]);
   const live = useLiveStatus();
   const highlightedKinds = useOverviewHighlight();
   const [now, setNow] = useState<number | null>(null);
@@ -144,6 +146,7 @@ function ActivityContent({
     setPaused(true);
     update({ activityPaused: String(events[0]?.seq ?? 0), activityScroll: String(scrollPosition.current) }, true);
   }
+  if (!confirmed) return null;
   return (
     <section
       aria-label={definition ? "Review history" : "Ontology activity"}
@@ -351,7 +354,7 @@ function ActivityContent({
                               {humanLabel(event.action).toLowerCase()}
                             </strong>{" "}
                             <Link href={subject} onClick={e => {
-                              if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                              if (event.definition_type === "import" || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
                               e.preventDefault();
                               trigger.current = e.currentTarget;
                               if (!paused) pause();

@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { mockReceipts } from "./fixtures/receipts";
 const output = process.env.ONTOLOGY_RECEIPT_SCREENSHOTS;
-const states = ["populated", "source", "duplicate", "record", "unavailable", "loading", "empty", "error", "denied", "missing", "links", "numbers", "activity", "subject", "historical", "paused", "objects", "zoom", "summary", "timeline", "sources", "memories"];
+const states = ["populated", "source", "mismatch", "mismatch-source", "duplicate", "record", "unavailable", "loading", "empty", "error", "denied", "missing", "links", "numbers", "activity", "subject", "historical", "paused", "objects", "zoom", "summary", "timeline", "sources", "memories"];
 for (const state of states) test(`receipt visual ${state}`, async ({ browser }) => {
   test.skip(!output, "Set ONTOLOGY_RECEIPT_SCREENSHOTS to capture paired evidence");
   test.setTimeout(90000);
@@ -14,6 +14,7 @@ for (const state of states) test(`receipt visual ${state}`, async ({ browser }) 
     await page.addInitScript(theme => localStorage.setItem("eunomia-theme", theme), theme);
     const { state: api } = await mockReceipts(page);
     if (["loading", "error", "denied", "missing"].includes(state)) api.mode = state;
+    if (state.startsWith("mismatch")) api.profile.sources[0].document!.row!.cells.unit_cost = "99.00";
     if (state === "empty") { api.profile.properties = []; api.profile.sources = []; api.profile.summary = ""; }
     if (state === "historical") await page.route("**/api/vaults/business/ontology/activity?*", route => route.fulfill({ json: { events: [{ seq: 1, at: "2026-11-10T03:32:00Z", actor: "owner", actor_name: "Alex", actor_type: "user", action: "approved", definition_type: "property", kind: "product", name: "unit_cost", target: "property:cost", revision: 99, reason: "Cost definition reviewed" }], next: 1, more: false } }));
     const activity = ["activity", "subject", "historical", "paused"].includes(state);
@@ -27,7 +28,7 @@ for (const state of states) test(`receipt visual ${state}`, async ({ browser }) 
       if (["subject", "historical"].includes(state)) { await page.locator("main li").filter({ hasText: "Unit cost" }).getByRole("link").first().click(); await expect(page.getByRole("complementary", { name: "Activity subject" })).toBeVisible(); if (state === "historical") await expect(page.getByRole("complementary", { name: "Activity subject" })).toContainText("Historical version unavailable"); }
     } else if (state === "objects") await expect(page.getByRole("table")).toBeVisible();
     else await expect(page.getByRole("heading", { name: "House blend 1kg", exact: true })).toBeVisible();
-    const value = new Map([["source", "Unit cost"], ["duplicate", "Discount"], ["record", "Stock"], ["unavailable", "Freight"]]).get(state);
+    const value = new Map([["source", "Unit cost"], ["mismatch-source", "Unit cost"], ["duplicate", "Discount"], ["record", "Stock"], ["unavailable", "Freight"]]).get(state);
     if (value) { await page.getByRole("button", { name: `Inspect source for ${value}` }).click(); await expect(page.getByRole(width === 390 ? "dialog" : "complementary", { name: "Source inspector" })).toBeVisible(); }
     if (state === "zoom") await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
     await page.evaluate(() => document.fonts.ready);

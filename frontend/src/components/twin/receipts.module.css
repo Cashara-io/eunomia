@@ -63,3 +63,18 @@
 .stack:has(.receipt[data-selected="true"]:hover) .cells > div[data-highlight="true"], .stack:has(.receipt[data-selected="true"]:focus-within) .cells > div[data-highlight="true"] { outline: 1px solid var(--ink); outline-offset: -1px; }
 
 .activityViewport { contain: layout paint; }
+
+.mismatch { grid-column: 1 / -1; padding: 10px 12px; border: 1px solid var(--warning); border-left: 4px solid var(--warning); border-radius: 4px; background: var(--surface); color: var(--ink); font: .8125rem/1.5 var(--font-sans); }
+.receipt[data-mismatch="true"], .cells > div[data-mismatch="true"] { border-left-color: var(--warning); }
+@media (max-width: 700px) {
+  .profile, .body { gap: 12px; }
+  .receipt { grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; padding-block: 12px; }
+  .value { text-align: right; }
+  .hero { padding: 16px; }
+  .keyNumbers { margin-top: 16px; gap: 12px 24px; }
+  .sheet { padding: 16px; }
+  .sheet[open] { gap: 10px; }
+  .sourceTitle { padding-block: 10px; }
+  .cells > div { padding: 8px; }
+  .activitySubject { padding: 16px; gap: 12px; }
+}

@@ -175,7 +175,7 @@ export function useObjects(
     enabled: !!kind,
   });
 }
-export function useObjectProfile(space: string, id: string, offset = 0) {
+export function useObjectProfile(space: string, id: string, offset = 0, enabled = true) {
   return useQuery({
     retryOnMount: false,
     queryKey: ["object-profile", space, id, offset],
@@ -185,7 +185,7 @@ export function useObjectProfile(space: string, id: string, offset = 0) {
         profileSchema,
         signal,
       ),
-    enabled: !!id,
+    enabled: !!id && enabled,
   });
 }
 

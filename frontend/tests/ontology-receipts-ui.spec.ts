@@ -72,7 +72,7 @@ test("entity.not_found confirms membership with protected content hidden", async
   await expect(page.getByRole("heading", { name: "House blend 1kg", exact: true })).toBeVisible();
   state.mode = "missing"; state.membership = "pending";
   await page.getByRole("button", { name: "Refresh ontology" }).click();
-  await expect(page.getByText("Checking space access…", { exact: true })).toBeVisible();
+  await expect(page.getByText("Checking access", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "House blend 1kg", exact: true })).toHaveCount(0);
 });
 test("activity exact definition, unavailable history, pause and scroll survive inspection", async ({ page }) => {

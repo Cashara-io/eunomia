@@ -29,6 +29,7 @@ import KindDetail from "./KindDetail";
 import Review from "./Review";
 import Objects from "./Objects";
 import Connections from "./Connections";
+import ReceiptAccess from "./ReceiptAccess";
 import ConnectionAccess, { ConnectionContent } from "./ConnectionAccess";
 import ObjectProfile from "./ObjectProfile";
 
@@ -64,7 +65,7 @@ export default function TwinArea({
   const vault = query.data?.find((v) => v.id === space);
   const cache = useQueryClient();
   const previousConnectionSpace = useRef<string | undefined>(undefined);
-  const connectionSpace = view === "connections" ? vault?.id : undefined;
+  const connectionSpace = ["connections", "objects", "object", "activity"].includes(view) ? vault?.id : undefined;
   useEffect(() => {
     const previous = previousConnectionSpace.current;
     previousConnectionSpace.current = connectionSpace;
@@ -91,6 +92,8 @@ export default function TwinArea({
           <ConnectionAccess key={vault.id} space={vault.id}>
             <SelectedSpace vault={vault} view={view} kind={kind} />
           </ConnectionAccess>
+        ) : ["objects", "object", "activity"].includes(view) ? (
+          <ReceiptAccess key={vault.id} space={vault.id}><SelectedSpace vault={vault} view={view} kind={kind} /></ReceiptAccess>
         ) : <SelectedSpace key={vault.id} vault={vault} view={view} kind={kind} />
       ) : (
         <>

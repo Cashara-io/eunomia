@@ -6,7 +6,7 @@ PR C keeps each current object value, its unit, state and source together. A sou
 
 | Acceptance check | Implementation and verification |
 | --- | --- |
-| House blend unit cost opens products.csv row 42 in one action | `ValueReceipts` joins `source` to `sources[].id`. `SourceInspector` uses the returned row, not a filename lookup. Mocked Playwright covers three sources, duplicate products.csv names at rows 42 and 9, a source record and an unavailable source. |
+| House blend unit cost opens the current name match at products.csv row 42 in one action | `ValueReceipts` joins `source` to `sources[].id`. `SourceInspector` uses the returned row, not a filename lookup. Mocked Playwright covers three sources, duplicate products.csv names at rows 42 and 9, a source record and an unavailable source. |
 | Back closes source first and restores value focus, then table context | The source is a history entry. Closing or browser Back removes the top layer. The invoking button receives focus. Table URLs retain query, filter and selection. Presentation storage retains scroll positions and the last object section without storing protected text. Playwright covers browser Back, Escape, table query, selection, local horizontal scroll and reopening the last section. |
 | Six value states have different words | Recorded, Zero, Missing, Stale, Conflicting and Source unavailable are distinct. A recorded zero is not missing. No verification badge is added. Unit tests and Playwright check the six labels. |
 | Activity opens its scoped subject and preserves paused position | Inspection stays within the Activity view and uses the current space. Exact property/kind/metric and unambiguous link definitions resolve by their typed identity. Object events with an entity target open that object. Historical revision mismatch and unresolved subjects say Historical version unavailable. Tests cover current and historical definitions, object targets and pause/focus return. |
@@ -41,3 +41,16 @@ Final local checks: lint with all 70 unit tests, TypeScript and production build
 The branch was updated after PR #221 merged into main. The lint list retains both receipt and Connections unit tests. The combined frontend passes all 70 unit tests, typecheck and production build. Connections source and navigation were taken unchanged from main.
 
 After updating to current main, 111 production-browser tests passed across receipt behaviour and visual states, Overview, Connections UI and Connections access. The paired captures were refreshed against that combined build.
+
+
+## Review fixes on 11 November 2026
+
+All CSV row labels now disclose that they are matched by name. Receipt and cell warnings compare typed, unit aware display values through the shared formatter, including money and percent precision. A mismatch uses stale wording when the API marks the value stale. A null row explains duplicate names, removed rows and replacement as possibilities because the API cannot distinguish them. Removed documents remain unavailable.
+
+`SpaceAccess` extracts the Connections state machine. Both entry points pass the space, protected query families and object query families. Receipts also check on entry, focus and membership invalidation. Checking and unknown render no protected DOM text while the stateful owners remain mounted. Ten second checks, backoff, cancellation, attempt generations and space cache eviction are shared. Missing objects are evicted individually after membership confirmation. The space header uses the same gate.
+
+Compact source inspection preserves page and pagination. Import activity navigates to the kind's Objects table because the API offers no import filter. Neutral receipts omit repeated verification prose, mobile values sit beside their labels, and mismatch notices use a labelled text block with a warning border in both themes.
+
+[Issue #231](https://github.com/Cashara-io/eunomia/issues/231) records the remaining backend work. The profile eagerly sends rows and payloads, and `backend/src/documents/mod.rs:465` reads the entire CSV object to return one row. Store row numbers and document revisions during import, then expose a bounded endpoint returning one referenced row on demand. These frontend changes cannot prove historical provenance.
+
+New unit and browser regressions failed before their fixes. Production validation passed typecheck, lint, all 72 unit tests and the build, plus 97 mocked receipt and Connections tests. Connections tests retain their original assertions. The mobile layout regression was also run against the old stylesheet and failed in both themes before passing with the fix. Red and green logs and refreshed screenshots are in `/private/tmp/ontology-design/after/pr-c/`.
