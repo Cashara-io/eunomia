@@ -140,7 +140,10 @@ test("dedicated area, URL filters, kind details, Add data and old links", async 
   await expect(page.getByText("Also called shop", { exact: true })).toBeVisible();
   await choose(page, "Kind section", "Properties");
   await page.getByText("revenue (money, AUD)", { exact: true }).click();
-  await expect(page.getByRole("region", { name: "Source evidence" }).first()).toContainText("stores.csv");
+  const sourceRow = page.getByRole("region", { name: "Source evidence" }).first()
+    .getByText("document", { exact: true }).locator("..");
+  await expect(sourceRow.getByText("document", { exact: true })).toBeVisible();
+  await expect(sourceRow.getByText("stores.csv · revenue", { exact: true })).toBeVisible();
   await choose(page, "Kind section", "Numbers");
   await page
     .locator("summary")

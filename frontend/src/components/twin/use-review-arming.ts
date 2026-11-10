@@ -22,6 +22,7 @@ function clearArm(
   armed.current = null;
   if (region.current?.contains(document.activeElement) &&
       document.activeElement?.hasAttribute("data-review-decision")) {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     heading.current?.focus({ preventScroll: true });
   }
 }
@@ -63,6 +64,8 @@ export function useReviewArming({
   }
 
   return {
+    available,
+    hasShortcut: () => armed.current !== null,
     disarm,
     beginNavigation() {
       transitioning.current = true;

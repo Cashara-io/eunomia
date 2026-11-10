@@ -71,17 +71,18 @@ test("merge support matches kind, property, metric and link decisions", () => {
     expect(supportsMerge(item)).toBe(item.type !== "link");
 });
 
-test("merge receipts report the returned redirect", () => {
+test("merge receipts distinguish confirmed redirects from a returned rejection", () => {
   const model = reviewFixture();
   const property = model.kinds[0].properties[0];
   property.status = "rejected";
+  property.revision = 2;
   property.merge_into = null;
-  expect(savedDecision("merge", definitions(model)[1])).toEqual({
-    sentence: "rejected", label: "Reject without merging",
+  expect(savedDecision("merge", definitions(model)[1], 1, "price")).toMatchObject({
+    confirmed: false, sentence: "rejected", label: "Rejected",
   });
   property.merge_into = "price";
-  expect(savedDecision("merge", definitions(model)[1])).toEqual({
-    sentence: "merged into Price", label: "Reject and redirect",
+  expect(savedDecision("merge", definitions(model)[1], 1, "price")).toEqual({
+    confirmed: true, sentence: "merged into Price", label: "Reject and redirect",
   });
 });
 
@@ -89,8 +90,40 @@ for (const status of ["approved", "rejected", "proposed"]) {
   test(`describe receipt remains describe when status stays ${status}`, () => {
     const model = reviewFixture();
     model.kinds[0].properties[0].status = status;
-    expect(savedDecision("describe", definitions(model)[1])).toEqual({
-      sentence: "description updated", label: "Edit description",
+    model.kinds[0].properties[0].revision = 2;
+    expect(savedDecision("describe", definitions(model)[1], 1)).toEqual({
+      confirmed: true, sentence: "description updated", label: "Edit description",
     });
   });
 }
+
+for (const operation of ["approve", "reject", "merge"]) {
+  test(`${operation} never claims a competing response as this request's decision`, () => {
+    const model = reviewFixture();
+    const item = model.kinds[0].properties[0];
+    item.status = operation === "approve" ? "rejected" : "approved";
+    for (const revision of [2, 3]) {
+      item.revision = revision;
+      const result = savedDecision(operation, definitions(model)[1], 1, "price");
+      expect(result.confirmed).toBe(false);
+      expect(result.message).toContain(`The server returned version ${revision} as ${item.status}.`);
+    }
+  });
+}
+
+test("a matching status on a later revision is not confirmation of this request", () => {
+  const model = reviewFixture();
+  model.kinds[0].properties[0].status = "approved";
+  for (const revision of [1, 3]) {
+    model.kinds[0].properties[0].revision = revision;
+    expect(savedDecision("approve", definitions(model)[1], 1).confirmed).toBe(false);
+  }
+});
+
+test("a different returned merge destination cannot confirm the requested merge", () => {
+  const model = reviewFixture();
+  Object.assign(model.kinds[0].properties[0], { status: "rejected", revision: 2, merge_into: "quantity" });
+  const result = savedDecision("merge", definitions(model)[1], 1, "price");
+  expect(result.confirmed).toBe(false);
+  expect(result.message).toContain("merged into Quantity");
+});

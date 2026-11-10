@@ -285,11 +285,12 @@ export default function Review({
         qc.setQueryData(ontologyKeys.vault(vault.id), saved);
         const updated = definitions(saved).find(item => item.id === d.id);
         if (!updated) throw new Error("The server response did not include this definition. Refresh before deciding again.");
-        haptic("success");
+        const result = savedDecision(confirm, updated, d.item.revision, mergeTarget);
+        haptic(result.confirmed ? "success" : "error");
         results.push({
           id: d.id,
           name: describe(d),
-          result: humanLabel(savedDecision(confirm, updated).sentence),
+          result: result.confirmed ? humanLabel(result.sentence) : result.message,
         });
       } catch (e) {
         haptic("error");
@@ -588,7 +589,7 @@ export default function Review({
       {receipt && (
         <section role="status" className="ledger p-4 flex flex-col gap-3">
           <h3 className="section-title">Batch results</h3>
-          <p className="text-[13px]">Recorded reason: {receipt.reason}</p>
+          <p className="text-[13px]">Submitted reason: {receipt.reason}</p>
           <ul className="text-[13px] max-h-60 overflow-auto">
             {receipt.results.map((r) => {
               const before = stale.find((d) => d.id === r.id);

@@ -57,20 +57,40 @@ export function supportsMerge(d: Definition) {
 
 export type ReviewOperation = "describe" | "approve" | "reject" | "merge";
 
-export function savedDecision(operation: ReviewOperation, after: Definition) {
+type DecisionResult =
+  | { confirmed: true; sentence: string; label: string }
+  | { confirmed: false; sentence: string; label: string; message: string };
+
+export function savedDecision(
+  operation: ReviewOperation,
+  after: Definition,
+  reviewedRevision: number,
+  mergeTarget?: string,
+): DecisionResult {
+  const redirect = after.type !== "link" ? after.item.merge_into : null;
+  const returned = after.item.status === "rejected" && redirect
+    ? { sentence: `merged into ${humanLabel(redirect)}`, label: "Reject and redirect" }
+    : { sentence: after.item.status, label: humanLabel(after.item.status) };
+  const matches = operation === "describe" ||
+    (operation === "approve" && after.item.status === "approved" && !redirect) ||
+    (operation === "reject" && after.item.status === "rejected" && !redirect) ||
+    (operation === "merge" && after.item.status === "rejected" && Boolean(mergeTarget) && redirect === mergeTarget);
+  if (after.item.revision !== reviewedRevision + 1 || !matches) {
+    return {
+      confirmed: false,
+      ...returned,
+      message: `The server returned version ${after.item.revision} as ${returned.sentence}. Your decision could not be confirmed. Check Activity to see what was saved before trying again.`,
+    };
+  }
   switch (operation) {
     case "describe":
-      return { sentence: "description updated", label: "Edit description" };
+      return { confirmed: true, sentence: "description updated", label: "Edit description" };
     case "approve":
-      return { sentence: "approved", label: "Approve" };
+      return { confirmed: true, sentence: "approved", label: "Approve" };
     case "reject":
-      return { sentence: "rejected", label: "Reject without merging" };
-    case "merge": {
-      const redirect = after.type !== "link" ? after.item.merge_into : null;
-      return redirect
-        ? { sentence: `merged into ${humanLabel(redirect)}`, label: "Reject and redirect" }
-        : { sentence: "rejected", label: "Reject without merging" };
-    }
+      return { confirmed: true, sentence: "rejected", label: "Reject without merging" };
+    case "merge":
+      return { confirmed: true, ...returned };
   }
 }
 

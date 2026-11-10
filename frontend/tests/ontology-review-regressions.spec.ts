@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { mockReview, reviewUrl } from "./fixtures/ontology-review";
 
 const region = (page: Page) => page.getByRole("region", { name: "Selected suggestion", exact: true });
-const heading = (page: Page) => region(page).getByRole("heading", { name: /unit cost/i, exact: true });
+const heading = (page: Page) => region(page).getByRole("heading", { name: /^unit cost$/i, exact: true });
 const approve = (page: Page) => page.getByRole("button", { name: /Approve unit cost/i, exact: true });
 async function merge(page: Page) {
   await page.getByText("Merge or edit definition", { exact: true }).click();
@@ -20,14 +20,14 @@ test("links never offer a merge even when another link exists", async ({ page })
   expect(fixture.mutations).toHaveLength(0);
 });
 
-test("merge receipt reports the returned rejection when the server did not redirect", async ({ page }) => {
+test("merge receipt does not confirm a merge when the server returned a rejection", async ({ page }) => {
   const fixture = await mockReview(page, { omitRedirect: true });
   await page.goto(reviewUrl);
   await merge(page);
   await page.getByRole("button", { name: "Confirm merge", exact: true }).click();
-  const receipt = page.getByRole("region", { name: "Saved decision" });
-  await expect(receipt).toContainText("rejected");
-  await expect(receipt).toContainText("Reject without merging");
+  const receipt = page.getByRole("region", { name: "Decision not confirmed", exact: true });
+  await expect(receipt).toContainText("The server returned version 2 as rejected.");
+  await expect(receipt).toContainText("Your decision could not be confirmed.");
   await expect(receipt).not.toContainText("merged into");
   expect(fixture.mutations).toHaveLength(1);
 });
@@ -318,4 +318,114 @@ test("reselecting the displayed queue item still permits a fresh decision", asyn
   await page.keyboard.press("Enter");
   await expect(page.getByRole("region", { name: "Saved decision" })).toBeVisible();
   expect(fixture.mutations).toHaveLength(1);
+});
+
+for (const activation of ["assistive click", "mouse", "Tab Enter", "Tab Space"] as const) {
+  test(`explicit approval using ${activation} submits the displayed revision once`, async ({ page }) => {
+    const fixture = await mockReview(page);
+    await page.goto(reviewUrl);
+    await expect(heading(page)).toBeFocused();
+    const button = approve(page);
+    if (activation === "assistive click") {
+      await button.evaluate((element: HTMLButtonElement) => { element.click(); element.click(); });
+    } else if (activation === "mouse") await button.click();
+    else {
+      for (let i = 0; i < 20 && !(await button.evaluate(element => element === document.activeElement)); i++)
+        await page.keyboard.press("Tab");
+      await expect(button).toBeFocused();
+      await page.keyboard.press(activation === "Tab Space" ? "Space" : "Enter");
+    }
+    await expect(page.getByRole("region", { name: "Saved decision" })).toBeVisible();
+    expect(fixture.mutations).toHaveLength(1);
+    expect(fixture.mutations[0]).toMatchObject({ name: "unit_cost", revision: 1, decision: { action: "approve" } });
+  });
+}
+
+for (const operation of ["reject", "merge"] as const) {
+  test(`click-only ${operation} works without focus or pointer events`, async ({ page }) => {
+    const fixture = await mockReview(page);
+    await page.goto(reviewUrl);
+    if (operation === "merge") await merge(page);
+    await heading(page).focus();
+    await page.getByRole("button", { name: operation === "merge" ? "Confirm merge" : "Reject", exact: true })
+      .evaluate((element: HTMLButtonElement) => element.click());
+    await expect(page.getByRole("region", { name: "Saved decision" })).toBeVisible();
+    expect(fixture.mutations).toHaveLength(1);
+    expect(fixture.mutations[0]).toMatchObject({ name: "unit_cost", revision: 1, decision: {
+      action: "reject", ...(operation === "merge" ? { merge_into: "price" } : {}),
+    } });
+  });
+}
+
+test.describe("touch activation", () => {
+  test.use({ hasTouch: true });
+  test("a tap approves the displayed revision once", async ({ page }) => {
+    const fixture = await mockReview(page);
+    await page.goto(reviewUrl);
+    await approve(page).tap();
+    await expect(page.getByRole("region", { name: "Saved decision" })).toBeVisible();
+    expect(fixture.mutations).toHaveLength(1);
+    expect(fixture.mutations[0]).toMatchObject({ name: "unit_cost", revision: 1, decision: { action: "approve" } });
+  });
+});
+
+test("click-only activation cannot duplicate an in-flight decision", async ({ page }) => {
+  const fixture = await mockReview(page, { mode: "saving" });
+  await page.goto(reviewUrl);
+  await expect(heading(page)).toBeFocused();
+  await approve(page).evaluate((element: HTMLButtonElement) => { element.click(); element.click(); });
+  await expect.poll(() => fixture.mutations.length).toBe(1);
+  await expect(approve(page)).toBeDisabled();
+});
+
+for (const operation of ["approve", "reject", "merge"] as const) {
+  test(`${operation} receipt reports a competing server decision without claiming a save`, async ({ page }) => {
+    const fixture = await mockReview(page, { afterDecision: async () => {
+      const item = fixture.model.kinds[0].properties[0];
+      item.status = operation === "approve" ? "rejected" : "approved";
+      item.merge_into = null;
+      item.revision += 1;
+    } });
+    await page.goto(reviewUrl);
+    if (operation === "merge") {
+      await merge(page);
+      await page.getByRole("button", { name: "Confirm merge", exact: true }).click();
+    } else await page.getByRole("button", { name: operation === "approve" ? /Approve unit cost/i : "Reject", exact: true }).click();
+    const result = page.getByRole("region", { name: "Decision not confirmed", exact: true });
+    await expect(result).toBeVisible();
+    await expect(result.getByRole("heading")).toHaveText("Decision not confirmed.");
+    await expect(result).toContainText(`The server returned version 3 as ${operation === "approve" ? "rejected" : "approved"}.`);
+    await expect(result).toContainText("Check Activity to see what was saved before trying again.");
+    await expect(result).not.toContainText("The server confirmed this decision.");
+    await expect(result).not.toContainText("Alex Morgan");
+    await expect(page.getByRole("status").filter({ hasText: "Decision not confirmed by the server" })).toBeVisible();
+    expect(fixture.mutations).toHaveLength(1);
+  });
+}
+
+test("batch receipts also report the returned state when approval was superseded", async ({ page }) => {
+  const fixture = await mockReview(page, { afterDecision: async () => {
+    const item = fixture.model.kinds[0].properties[0];
+    item.status = "rejected";
+    item.revision += 1;
+  } });
+  await page.goto("/ontology/review?space=business");
+  await page.getByText("Review a batch", { exact: true }).click();
+  await page.getByLabel("Select Unit cost", { exact: true }).check();
+  await page.getByRole("button", { name: "Approve 1 selected", exact: true }).click();
+  await page.getByRole("button", { name: "Approve selected", exact: true }).click();
+  const result = page.getByRole("status").filter({ hasText: "Batch results" });
+  await expect(result).toContainText("The server returned version 3 as rejected.");
+  await expect(result).not.toContainText("Property Unit cost on Stock item: Approved");
+});
+
+test("source evidence keeps source, record type and column path in the same mapping", async ({ page }) => {
+  const fixture = await mockReview(page);
+  fixture.model.kinds[0].properties[0].source_map = [{ source: "document", record_type: "stores.csv", path: "revenue" }];
+  fixture.model.kinds[0].properties[0].reason = "Matched source columns";
+  await page.goto(reviewUrl);
+  const source = page.getByRole("region", { name: "Source evidence", exact: true });
+  const row = source.getByText("document", { exact: true }).locator("..");
+  await expect(row.getByText("document", { exact: true })).toBeVisible();
+  await expect(row.getByText("stores.csv · revenue", { exact: true })).toBeVisible();
 });

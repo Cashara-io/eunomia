@@ -60,6 +60,7 @@ type SaveState =
   | {
       kind: "saved";
       operation: ReviewOperation;
+      result: ReturnType<typeof savedDecision>;
       definition: DefinitionItem;
       reason: string;
     };
@@ -175,7 +176,7 @@ export default function Definition({
     if (action.action === "reject" && action.merge_into && !supportsMerge(d)) return;
     const latest = cache.getQueryData<OntologyOut>(["ontology", data.vault]);
     const latestItem = latest && definitions(latest).find(item => item.id === d.id);
-    if (!arming.consume() || !latestItem || latestItem.item.revision !== d.item.revision) return;
+    if (!arming.available() || !latestItem || latestItem.item.revision !== d.item.revision) return;
     if (!canDecide || inFlight.current) return;
     inFlight.current = true;
     onBusyChange?.(true);
@@ -208,11 +209,11 @@ export default function Definition({
         throw new Error(
           "The server response did not include this definition. Refresh before deciding again.",
         );
-      setState({
-        kind: "saved", definition: updated, reason,
-        operation: action.action === "reject" && action.merge_into ? "merge" : action.action,
-      });
-      haptic("success");
+      const operation = action.action === "reject" && action.merge_into ? "merge" : action.action;
+      const result = savedDecision(operation, updated, d.item.revision,
+        action.action === "reject" ? action.merge_into : undefined);
+      setState({ kind: "saved", definition: updated, reason, operation, result });
+      haptic(result.confirmed ? "success" : "error");
     } catch (e) {
       if (e instanceof ApiError && e.code === "ontology.stale_revision") {
         setState({ kind: "stale", refreshFailed: false });
@@ -239,6 +240,7 @@ export default function Definition({
     const ignored = ignoreReviewKey(event.nativeEvent, reviewRegion.current) || hasReviewOverlay();
     event.preventDefault();
     if (ignored) return;
+    if (arming.hasShortcut() && !arming.consume()) return;
     void decide(action);
   }
   const shortcut = useEffectEvent((e: KeyboardEvent) => {
@@ -263,6 +265,7 @@ export default function Definition({
     if (e.key === "a" || (e.key === "r" && !builtIn)) {
       e.preventDefault();
       (e.key === "a" ? approveButton : rejectButton).current?.focus();
+      arming.arm();
     }
   });
   useEffect(() => {
@@ -273,7 +276,7 @@ export default function Definition({
   }, [queueReview]);
 
   const receiptEvent =
-    state.kind === "saved"
+    state.kind === "saved" && state.result.confirmed
       ? history.data?.events.find(
           (e) =>
             e.revision === state.definition.item.revision &&
@@ -289,12 +292,6 @@ export default function Definition({
       onKeyDownCapture={event => {
         if (event.key === "Escape") arming.disarm();
       }}
-      onFocusCapture={event => {
-        if (event.target.hasAttribute("data-review-decision")) arming.arm();
-      }}
-      onPointerDownCapture={event => {
-        if (event.target instanceof Element && event.target.closest("[data-review-decision]")) arming.arm();
-      }}
       onBlurCapture={event => {
         if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) arming.disarm();
       }}
@@ -306,7 +303,7 @@ export default function Definition({
           </h3>
           <span
             className={styles.suggested}
-            data-saved={state.kind === "saved"}
+            data-saved={state.kind === "saved" && state.result.confirmed}
           >
             {displayed.item.status === "proposed"
               ? "Suggested"
@@ -336,17 +333,21 @@ export default function Definition({
         <>
           <section
             className={`${styles.receipt} ${styles.reveal}`}
-            aria-label="Saved decision"
+            aria-label={state.result.confirmed ? "Saved decision" : "Decision not confirmed"}
           >
             <span className={styles.receiptIcon}>
-              <CheckIcon size={24} weight="duotone" />
+              {state.result.confirmed
+                ? <CheckIcon size={24} weight="duotone" />
+                : <XIcon size={24} weight="duotone" />}
             </span>
             <h4 ref={receiptHeading} tabIndex={-1}>
-              Saved. {humanLabel(d.name)}{" "}
-              {savedDecision(state.operation, state.definition).sentence}
-              .
+              {state.result.confirmed
+                ? `Saved. ${humanLabel(d.name)} ${state.result.sentence}.`
+                : "Decision not confirmed."}
             </h4>
-            <p className={styles.dim}>The server confirmed this decision.</p>
+            <p className={styles.dim}>
+              {state.result.confirmed ? "The server confirmed this decision." : state.result.message}
+            </p>
             <dl>
               <dt>Definition</dt>
               <dd>
@@ -354,18 +355,20 @@ export default function Definition({
               </dd>
               <dt>Reviewed version</dt>
               <dd>{d.item.revision}</dd>
-              <dt>Decision</dt>
+              <dt>{state.result.confirmed ? "Decision" : "Returned state"}</dt>
               <dd>
-                {savedDecision(state.operation, state.definition).label}
+                {state.result.label}
               </dd>
-              <dt>Reason</dt>
+              <dt>{state.result.confirmed ? "Reason" : "Submitted reason"}</dt>
               <dd>{state.reason || "No reason supplied"}</dd>
-              <dt>Recorded by</dt>
-              <dd>
-                {receiptEvent
-                  ? <>{receiptEvent.actor_name} · <ReviewTime at={receiptEvent.at} /></>
-                  : "Actor and time are awaiting the activity record."}
-              </dd>
+              {state.result.confirmed && <>
+                <dt>Recorded by</dt>
+                <dd>
+                  {receiptEvent
+                    ? <>{receiptEvent.actor_name} · <ReviewTime at={receiptEvent.at} /></>
+                    : "Actor and time are awaiting the activity record."}
+                </dd>
+              </>}
             </dl>
             <div className="flex flex-wrap gap-3">
               <Link
@@ -668,7 +671,7 @@ export default function Definition({
         {state.kind === "saving"
           ? "Saving decision"
           : state.kind === "saved"
-            ? "Decision saved by the server"
+            ? state.result.confirmed ? "Decision saved by the server" : "Decision not confirmed by the server"
             : ""}
       </p>
     </article>
