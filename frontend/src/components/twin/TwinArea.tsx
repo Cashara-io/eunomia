@@ -7,6 +7,7 @@ import {
 } from "@phosphor-icons/react";
 import styles from "./overview.module.css";
 import OverviewSkeleton from "./OverviewSkeleton";
+import MorphText from "@/components/ui/MorphText";
 import ReadState from "./ReadState";
 import { returnKey } from "./overview-model";
 
@@ -22,6 +23,7 @@ import AutomapBar from "@/components/vaults/AutomapBar";
 import { definitions, twinHref } from "./model";
 import Activity from "./Activity";
 import Overview from "./Overview";
+import { OverviewHighlight } from "./OverviewHighlight";
 import Structure from "./Structure";
 import KindDetail from "./KindDetail";
 import Review from "./Review";
@@ -217,7 +219,9 @@ function SelectedSpace({
           >
             {v.label}
             {v.label === "Review" && waiting !== null && waiting > 0 && (
-              <span className={styles.navCount}>{waiting}</span>
+              <MorphText className={styles.navCount}>
+                {waiting.toLocaleString("en-AU")}
+              </MorphText>
             )}
           </Link>
         ))}
@@ -303,16 +307,21 @@ function SelectedSpace({
       ) : (
         <>
           {view === "overview" && (
-            <Overview vault={vault} data={data} onAdd={() => setAdding(true)} />
+            <OverviewHighlight>
+              <Overview
+                vault={vault}
+                data={data}
+                onAdd={() => setAdding(true)}
+              />
+              <Activity space={vault.id} compact />
+            </OverviewHighlight>
           )}
           {view === "structure" && <Structure vault={vault} data={data} />}
           {view === "kind" && (
             <KindDetail vault={vault} data={data} kind={kind ?? ""} />
           )}
           {view === "review" && <Review vault={vault} data={data} />}
-          {(view === "review" || view === "overview") && (
-            <Activity space={vault.id} compact />
-          )}
+          {view === "review" && <Activity space={vault.id} compact />}
         </>
       )}
     </>

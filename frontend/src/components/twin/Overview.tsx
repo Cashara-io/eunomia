@@ -11,10 +11,11 @@ import {
 import type { OntologyOut } from "@/lib/queries/ontology";
 import { useObjects, useObjectProfile } from "@/lib/queries/objects";
 import type { Vault } from "@/lib/types";
-import { ReadinessPanel, STATUS, words } from "./DefinitionRows";
+import { ReadinessPanel, STATUS } from "./DefinitionRows";
 import { definitions, twinHref, visibleKind } from "./model";
 import { businessSummary, objectReturn } from "./overview-model";
-import KindSummary from "./KindSummary";
+import KindSummary, { type LandscapePin } from "./KindSummary";
+import { humanLabel, plural } from "./overview-format";
 import ReadState from "./ReadState";
 import styles from "./overview.module.css";
 
@@ -46,6 +47,28 @@ export default function Overview({
   const profile = useObjectProfile(vault.id, resumeId || row?.id || "");
   const object = profile.isError ? undefined : profile.data;
   const stale = object?.properties.filter((p) => p.state === "stale") ?? [];
+  const pins: LandscapePin[] = [
+    ...pending.map((d) => ({
+      kind: d.kind,
+      label: `Review ${humanLabel(d.name)}`,
+      href: twinHref("/ontology/review", vault.id, { selected: d.id }),
+      type: "proposal" as const,
+    })),
+    ...(object && stale.length
+      ? [
+          {
+            kind: object.kind,
+            label: `Inspect stale ${humanLabel(stale[0].name)} on ${object.name}`,
+            href: twinHref(
+              `/ontology/objects/${encodeURIComponent(object.id)}`,
+              vault.id,
+              { section: "Properties" },
+            ),
+            type: "stale" as const,
+          },
+        ]
+      : []),
+  ];
   const groups = [
     { label: "Kinds", items: data.kinds.filter(visibleKind) },
     { label: "Properties", items: data.kinds.flatMap((k) => k.properties) },
@@ -67,7 +90,8 @@ export default function Overview({
                 <span className="font-mono">
                   {total.toLocaleString("en-AU")}
                 </span>{" "}
-                objects · {kinds.length} kinds in {vault.name}
+                {plural("object", total)} · {kinds.length}{" "}
+                {plural("kind", kinds.length)} in {vault.name}
               </>
             ) : (
               "Map your records into kinds and relationships. Then review the suggestions."
@@ -79,7 +103,7 @@ export default function Overview({
             className="btn btn-primary"
             href={twinHref("/ontology/review", vault.id)}
           >
-            Review {pending.length} suggestions{" "}
+            Review {pending.length} {plural("suggestion", pending.length)}{" "}
             <ArrowRightIcon size={16} aria-hidden />
           </Link>
         )}
@@ -109,7 +133,7 @@ export default function Overview({
       ) : (
         <>
           <div className={styles.hero}>
-            <KindSummary data={data} space={vault.id} />
+            <KindSummary data={data} space={vault.id} pins={pins} />
             <section
               aria-labelledby="judgement-title"
               className={styles.judgement}
@@ -120,12 +144,18 @@ export default function Overview({
               </div>
               {pending.slice(0, 2).map((d) => (
                 <article className={styles.issue} key={d.id}>
-                  <span className={styles.tag}>Suggested {d.type}</span>
-                  <h3>{words(d.name)}</h3>
+                  <h3>{humanLabel(d.name)}</h3>
                   <p>
+                    {d.type === "property"
+                      ? `${d.item.values.toLocaleString("en-AU")} recorded values await a definition.`
+                      : d.type === "metric"
+                        ? "Proposed calculation awaits approval before use."
+                        : d.type === "link"
+                          ? "Proposed relationship awaits review."
+                          : "Proposed kind awaits review."}{" "}
                     {vault.role === "owner"
-                      ? "Compare the evidence before deciding."
-                      : "A space owner can decide. You can read the evidence."}
+                      ? "Read the evidence to decide."
+                      : "Read the evidence; a space owner decides."}
                   </p>
                   <Link
                     className="link"
@@ -133,7 +163,7 @@ export default function Overview({
                       selected: d.id,
                     })}
                   >
-                    Read {words(d.name)}{" "}
+                    Read {humanLabel(d.name)}{" "}
                     <ArrowRightIcon aria-hidden size={14} />
                   </Link>
                 </article>
@@ -148,7 +178,7 @@ export default function Overview({
                 <article className={`${styles.issue} ${styles.stale}`}>
                   <span className={styles.tag}>Stale input</span>
                   <h3>
-                    {object.name}: {words(stale[0].name)}
+                    {object.name}: {humanLabel(stale[0].name)}
                   </h3>
                   <p>
                     The current source is out of date. Inspect it before using
@@ -181,14 +211,14 @@ export default function Overview({
           <section className={styles.resume} aria-labelledby="resume-title">
             <div className={styles.sectionHead}>
               <h2 id="resume-title">
-                <ClockCounterClockwiseIcon aria-hidden size={20} /> Pick up
-                where you left off
+                <ClockCounterClockwiseIcon aria-hidden size={20} />{" "}
+                {resume ? "Pick up where you left off" : "Explore an object"}
               </h2>
-              <span className={styles.caption}>
-                {resume
-                  ? "Last object opened in this tab"
-                  : "No previous object in this tab"}
-              </span>
+              {resume && (
+                <span className={styles.caption}>
+                  Last object opened in this tab
+                </span>
+              )}
             </div>
             {list.isError ? (
               <ReadState
@@ -219,15 +249,15 @@ export default function Overview({
                   </span>
                   <h3>{object.name}</h3>
                   <span className={styles.caption}>
-                    {words(object.kind)} · {object.sources.length} sources
-                    returned
+                    {humanLabel(object.kind)} · {object.sources.length}{" "}
+                    {plural("source", object.sources.length)} returned
                   </span>
                 </div>
                 <span
                   className={stale.length ? styles.staleWord : styles.caption}
                 >
                   {stale.length
-                    ? `${words(stale[0].name)} is stale`
+                    ? `${humanLabel(stale[0].name)} is stale`
                     : "Inspect values and sources"}
                 </span>
                 <ArrowUpRightIcon size={22} aria-hidden />
@@ -245,7 +275,7 @@ export default function Overview({
               />
             ) : (
               <p className={styles.caption}>
-                No objects recorded in {words(firstKind)} yet.{" "}
+                No objects recorded in {humanLabel(firstKind)} yet.{" "}
                 <Link
                   className="link"
                   href={twinHref("/ontology/objects", vault.id)}

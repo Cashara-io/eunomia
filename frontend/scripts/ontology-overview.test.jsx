@@ -81,3 +81,50 @@ test("fixture retains the paper's actual totals without creating DOM rows", () =
     18000,
   );
 });
+
+import {
+  overviewLayout,
+  routeLabels,
+} from "../src/components/twin/overview-layout";
+import {
+  humanLabel,
+  plural,
+  relativeTime,
+  activityDay,
+} from "../src/components/twin/overview-format";
+test("landscape has one deterministic form per kind, proportionate heights, and every actual route", () => {
+  const kinds = fixture.ontology.kinds,
+    links = fixture.ontology.links;
+  const layout = overviewLayout(kinds, links);
+  expect(new Set(layout.nodes.map((n) => n.kind.kind)).size).toBe(16);
+  expect(layout.edges).toHaveLength(48);
+  expect(overviewLayout([...kinds].reverse(), links).nodes).toEqual(
+    layout.nodes,
+  );
+  expect(
+    layout.nodes.find((n) => n.kind.kind === "stock_item").height,
+  ).toBeGreaterThan(
+    layout.nodes.find((n) => n.kind.kind === "location").height,
+  );
+  expect(layout.unlinked.map((k) => k.kind)).toEqual([
+    "delivery_route",
+    "warehouse",
+  ]);
+  const labels = routeLabels(layout, layout.edges.slice(0, 3));
+  expect(
+    labels.every(
+      (label) => Number.isFinite(label.x) && Number.isFinite(label.y),
+    ),
+  ).toBe(true);
+});
+test("display formatting keeps identifiers separate, uses human plurals and relative ages", () => {
+  expect(humanLabel("unit_cost")).toBe("Unit cost");
+  expect(humanLabel("stockItem")).toBe("Stock Item");
+  expect(humanLabel("identifier", "API display name")).toBe("API display name");
+  expect(plural("Stock item")).toBe("Stock items");
+  expect(plural("source", 1)).toBe("source");
+  expect(plural("person", 2)).toBe("people");
+  const now = new Date("2026-11-10T03:34:00Z").getTime();
+  expect(relativeTime("2026-11-10T03:32:00Z", now)).toBe("2 min ago");
+  expect(activityDay("2026-11-09T03:32:00Z", now)).toBe("Yesterday");
+});

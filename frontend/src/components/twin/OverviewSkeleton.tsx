@@ -1,44 +1,66 @@
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import styles from "./overview.module.css";
 export default function OverviewSkeleton() {
   return (
-    <div
-      role="status"
-      aria-label="Loading business overview"
-      className={styles.overview}
-    >
-      <span className="sr-only">Loading business overview</span>
+    <LoadingSkeleton label="Loading business overview">
       <div aria-hidden="true" className={styles.skeleton}>
-        <div className={styles.bone} style={{ width: "65%", height: "2rem" }} />
         <div
+          skullet-block=""
           className={styles.bone}
-          style={{ width: "42%", marginTop: "1rem" }}
+          style={{ width: "60%", height: "2rem" }}
         />
-        <div className={styles.hero}>
-          <div className={styles.map}>
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className={styles.bone}
-                style={{ height: "4.5rem", margin: "1rem 0" }}
-              />
+        <div
+          skullet-block=""
+          className={styles.bone}
+          style={{ width: "40%", marginTop: "1rem" }}
+        />
+        <div className={styles.map} style={{ marginTop: "2rem" }}>
+          <div
+            skullet-block=""
+            className={styles.bone}
+            style={{ width: "35%", height: "1.5rem" }}
+          />
+          <div className={styles.skeletonPlane}>
+            {Array.from({ length: 16 }, (_, i) => (
+              <div key={i}>
+                <div
+                  skullet-block=""
+                  className={styles.bone}
+                  style={{
+                    width: "70%",
+                    height: ".75rem",
+                    margin: "0 auto .75rem",
+                  }}
+                />
+                <div
+                  skullet-block=""
+                  className={styles.bone}
+                  style={{ height: `${2 + (i % 3)}rem` }}
+                />
+              </div>
             ))}
           </div>
-          <div>
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className={styles.bone}
-                style={{ height: "5rem", margin: "1.5rem 0" }}
-              />
+          <div className={styles.linkedPanels}>
+            {[0, 1].map((i) => (
+              <div key={i}>
+                {[0, 1, 2, 3].map((j) => (
+                  <div
+                    key={j}
+                    skullet-block=""
+                    className={styles.bone}
+                    style={{ height: "1.5rem", margin: ".75rem 0" }}
+                  />
+                ))}
+              </div>
             ))}
           </div>
         </div>
-        <div className={styles.bone} style={{ height: "6rem" }} />
         <div
+          skullet-block=""
           className={styles.bone}
-          style={{ height: "8rem", marginTop: "2rem" }}
+          style={{ height: "4rem", marginTop: "1.5rem" }}
         />
       </div>
-    </div>
+    </LoadingSkeleton>
   );
 }

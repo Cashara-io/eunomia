@@ -91,7 +91,7 @@ for (const route of routes)
             ).toBeAttached();
           else if (route.name === "overview" && state === "populated")
             await expect(
-              page.getByRole("heading", { name: "House blend 1kg: unit cost" }),
+              page.getByRole("heading", { name: "House blend 1kg: Unit cost" }),
             ).toBeVisible();
           else await page.waitForTimeout(250);
           if (state === "filtered" && route.name === "activity") {

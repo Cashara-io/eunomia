@@ -243,7 +243,7 @@ const pendingViews = [
   ...["", "/schema", "/review"].map((view) => ({
     url: `/ontology${view}?space=${space.id}`,
     api: `/api/vaults/${space.id}/ontology`,
-    label: "Loading the ontology",
+    label: view === "" ? "Loading business overview" : "Loading the ontology",
     image: `skeleton-ontology${view.replace("/", "-")}`,
   })),
   {
@@ -311,7 +311,7 @@ for (const reduced of [false, true])
     await page.goto(
       `/ontology/review?space=${space.id}&selected=${encodeURIComponent(JSON.stringify(["kind", "studio_0"]))}`,
     );
-    const review = page.getByRole("link", { name: /Review \(\s*19\s*\)/ });
+    const review = page.getByRole("link", { name: /^Review\s+19$/ });
     await expect(review).toBeVisible();
     await expect(review.locator("[data-text-morph]")).toHaveAttribute(
       "data-text-morph",
@@ -329,7 +329,7 @@ for (const reduced of [false, true])
       });
     await page.getByRole("button", { name: "Approve", exact: true }).click();
     await expect(
-      page.getByRole("link", { name: /Review \(\s*18\s*\)/ }),
+      page.getByRole("link", { name: /^Review\s+18$/ }),
     ).toBeVisible();
     if (!reduced) {
       await expect

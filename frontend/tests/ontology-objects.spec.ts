@@ -114,7 +114,9 @@ test("typed objects, server pages, sources, scoped numbers and related objects",
     name_column: "product",
   });
   for (const [entity_id, property, value] of [
-    [ids[0], "margin", 0.585], [ids[1], "margin", 0.4461], [ids[2], "price", 0.0049],
+    [ids[0], "margin", 0.585],
+    [ids[1], "margin", 0.4461],
+    [ids[2], "price", 0.0049],
   ] satisfies [string, string, number][]) {
     await tool("entity_set_property", { entity_id, property, value });
   }
@@ -175,14 +177,18 @@ test("typed objects, server pages, sources, scoped numbers and related objects",
     property: "price",
     value: 99,
   });
-  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Refresh ontology", exact: true })
+    .click();
   await expect(page.getByRole("table")).toContainText("AUD 99.00");
   await tool("entity_set_property", {
     entity_id: ids[0],
     property: "price",
     value: 0,
   });
-  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Refresh ontology", exact: true })
+    .click();
   await expect(page.getByRole("table")).toContainText("AUD 0.00");
   await page.getByRole("link", { name: "Basket 00", exact: true }).click();
   await expect(
