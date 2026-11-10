@@ -98,7 +98,7 @@ function ProfileDetails({
   if (!query.data || query.isFetching) return <LoadingSkeleton label="Loading object receipt" layout="rows" rows={4} />;
   const data = query.data;
   return (
-    <div className={styles.profile}>
+    <div className={styles.profile} data-compact={compact}>
       {!compact && (
         <Link
           className="link self-start"

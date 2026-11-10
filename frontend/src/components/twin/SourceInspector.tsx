@@ -34,7 +34,7 @@ export default function SourceInspector({ data, name, space, close, restoreFocus
     {property && <p className={styles.inspectedValue}>{property.state === "unavailable" ? "Unavailable" : formatted(property.value, property)}</p>}
     <div className={styles.sourceTitle}>{allowed ? sourceLabel(source) : "Source unavailable"}</div>
     {!allowed ? <p role="status">This source is unavailable in this space. The document may have been deleted, removed from this space or access may be restricted.</p> : source?.document ? <>
-      <p className={styles.dim}>Current file, matched by name. Original row and revision were not retained.</p>
+      <p className={styles.dim}>Current file. Original row and revision were not retained.</p>
       {source.document.row ? <dl className={styles.cells}>{Object.entries(source.document.row.cells).map(([column, value]) => <div key={column} data-highlight={sourceColumn(column) === name} data-mismatch={sourceColumn(column) === name && !!mismatch}><dt>{humanLabel(column)}</dt><dd>{value || "Missing"}</dd>{sourceColumn(column) === name && mismatch && <dd className={styles.mismatch} role="note">{mismatch}</dd>}</div>)}</dl> : <p role="status">{rowUnavailable}</p>}
       <Link className="link" href={`/documents?id=${encodeURIComponent(source.document.id)}&space=${encodeURIComponent(space)}`}>Open document</Link>
     </> : source?.record ? <><p>{source.record.source} · Exact source record</p><pre className={styles.payload}>{JSON.stringify(source.record.payload, null, 2)}</pre></> : <p>The source record was not retained.</p>}

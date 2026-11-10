@@ -36,9 +36,9 @@ Visual review also found that clipped activity rows contributed invisible page o
 
 ![Unavailable historical definition](assets/ontology-receipts/activity-history-dark.png)
 
-Final local checks: lint with all 70 unit tests, TypeScript and production build passed. The final production build passed 41 receipt behaviour and visual tests. The broader mocked regression run passed 165 tests with 96 optional pre-existing figure cases skipped. A subsequent complete state sweep and receipt capture run passed 74 tests. Both real-backend specs are updated for CI; they were not run against a local backend.
+Before the review fixes, local checks: lint with all 70 unit tests, TypeScript and production build passed. The final production build passed 41 receipt behaviour and visual tests. The broader mocked regression run passed 165 tests with 96 optional pre-existing figure cases skipped. A subsequent complete state sweep and receipt capture run passed 74 tests. Both real-backend specs are updated for CI; they were not run against a local backend.
 
-The branch was updated after PR #221 merged into main. The lint list retains both receipt and Connections unit tests. The combined frontend passes all 70 unit tests, typecheck and production build. Connections source and navigation were taken unchanged from main.
+The branch was updated after PR #221 merged into main. The lint list retains both receipt and Connections unit tests. The combined frontend passes all 70 unit tests, typecheck and production build. At that stage, Connections source and navigation were taken unchanged from main.
 
 After updating to current main, 111 production-browser tests passed across receipt behaviour and visual states, Overview, Connections UI and Connections access. The paired captures were refreshed against that combined build.
 
@@ -54,3 +54,6 @@ Compact source inspection preserves page and pagination. Import activity navigat
 [Issue #231](https://github.com/Cashara-io/eunomia/issues/231) records the remaining backend work. The profile eagerly sends rows and payloads, and `backend/src/documents/mod.rs:465` reads the entire CSV object to return one row. Store row numbers and document revisions during import, then expose a bounded endpoint returning one referenced row on demand. These frontend changes cannot prove historical provenance.
 
 New unit and browser regressions failed before their fixes. Production validation passed typecheck, lint, all 72 unit tests and the build, plus 97 mocked receipt and Connections tests. Connections tests retain their original assertions. The mobile layout regression was also run against the old stylesheet and failed in both themes before passing with the fix. Red and green logs and refreshed screenshots are in `/private/tmp/ontology-design/after/pr-c/`.
+
+
+The final follow-up also applies honest row labels and mismatch notices to the Connections object summary. The compact source panel stacks inside the narrow table inspector. Its bounds regression failed against the previous build before passing with the fix. Final local results: 74 unit tests, 72 tests in the unchanged lint list, typecheck and production build passed. The final production browser run passed 101 receipt and Connections tests. All 25 receipt screenshot cases passed, including compact source and current value mismatches. The earlier full route and visual sweep passed 78 cases.

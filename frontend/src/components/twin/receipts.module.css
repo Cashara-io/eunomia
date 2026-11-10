@@ -78,3 +78,7 @@
   .cells > div { padding: 8px; }
   .activitySubject { padding: 16px; gap: 12px; }
 }
+
+.cells .mismatch { font-family: var(--font-sans); }
+
+.profile[data-compact="true"] .stack[data-open="true"] { grid-template-columns: minmax(0, 1fr); }

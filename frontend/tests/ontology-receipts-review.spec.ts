@@ -115,6 +115,9 @@ test("compact source keeps page two and pagination reachable", async ({ page }) 
   await expect(page).toHaveURL(/page=2/);
   await expect(page.getByRole("navigation",{name:"Object pages"})).toBeVisible();
   await expect(page.getByRole("button",{name:"Previous",exact:true})).toBeEnabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
+  const bounds = await page.getByLabel("Object inspector", {exact:true}).evaluate(el => ({outer:el.getBoundingClientRect().right, source:el.querySelector('[aria-label="Source inspector"]')!.getBoundingClientRect().right}));
+  expect(bounds.source).toBeLessThanOrEqual(bounds.outer);
 });
 test("import activity opens the imported kind Objects", async ({ page }) => {
   await mockReceipts(page);

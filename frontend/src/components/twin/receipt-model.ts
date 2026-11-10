@@ -29,7 +29,7 @@ export function safeReturn(value: string | null, space: string) {
   return url.searchParams.get("space") === space ? url.pathname + url.search : null;
 }
 
-export const rowUnavailable = "No unique current row. Several rows may share this name, or the row may have been removed or the document replaced. The API cannot distinguish these cases.";
+export const rowUnavailable = "No unique current row. Several rows may share this name, or the row may have been removed or the document replaced.";
 export const sourceColumn = (column: string) => column.toLowerCase().replaceAll(" ", "_");
 
 function currentValue(cell: string, property: PropertyReceipt) {
