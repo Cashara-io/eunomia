@@ -273,7 +273,7 @@ fn write_gates() -> &'static Mutex<WriteGates> {
     GATES.get_or_init(Mutex::default)
 }
 
-/// Holds a chat persistence boundary open. Dropping it also releases a waiting worker.
+/// Holds a chat persistence boundary open. Dropping it also releases a waiting request.
 pub struct ChatWriteGate {
     key: (String, &'static str),
     pub entered: Arc<tokio::sync::Notify>,
