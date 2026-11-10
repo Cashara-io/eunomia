@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { mockConnections, neighbourhood } from './fixtures/connections';
+import { protectedValues } from './fixtures/protected-values';
 
 const url = '/ontology/connections?space=business&focus=house';
 
@@ -366,7 +367,7 @@ test('a late membership success cannot reopen a confirmed denial', async ({page}
   await expect.poll(async () => (await cacheKeys(page)).filter(k => k.includes('business'))).toEqual([]);
 });
 
-test('checking and unknown withhold query text and attributes, then restore input', async ({page}) => {
+test('checking and unknown block server text and attributes, then restore input', async ({page}) => {
   await setup(page);
   await page.getByRole('searchbox').fill('House blend 1kg');
   await expect(page.getByLabel('Object search results')).toContainText('House blend 1kg');
@@ -375,16 +376,12 @@ test('checking and unknown withhold query text and attributes, then restore inpu
   await page.route('**/ontology/objects/n0*', r => r.fulfill({status:404,json:{code:'entity.not_found'}}));
   await page.getByLabel('Refresh ontology').click();
   const absent = async () => {
-    await expect.poll(() => page.evaluate(() => {
-      const names = ['House blend 1kg','North Coast Beans','Banksia Coffee','products.csv'];
-      const attributesAndUrl = [location.href,
-        ...Array.from(document.querySelectorAll('*')).flatMap(el => Array.from(el.attributes,a=>a.value))];
-      const values = [document.documentElement.textContent ?? '',...attributesAndUrl.map(value=>decodeURIComponent(value.replaceAll('+',' ')))];
-      return values.filter(value => names.some(name=>value.includes(name)));
-    })).toEqual([]);
+    await expect.poll(() => protectedValues(page, ['House blend 1kg','North Coast Beans','Banksia Coffee','products.csv'])).toEqual([]);
   };
   await expect(page.getByText('Checking access',{exact:true})).toBeVisible();
   await absent();
+  await expect(page.getByRole('searchbox')).toHaveValue('House blend 1kg');
+  await expect(page).toHaveURL(/q=House\+blend\+1kg/);
   await page.clock.fastForward(11_000);
   await expect(page.getByRole('button',{name:'Try again',exact:true})).toBeVisible();
   await absent();

@@ -92,13 +92,15 @@ function comparable(value: Value, column: Column): Comparable | null {
     const key = column.datatype === "date" ? calendarDay(text) : instant(text);
     return key === null ? null : { key, display: column.datatype === "date" ? formatted(key, column) : text };
   }
-  return { key: text.toLowerCase().normalize("NFC"), display: text };
+  return { key: text, display: text };
 }
 
 export function compareReceiptValues(recorded: Value, current: string, column: Column) {
   const left = comparable(recorded, column), right = comparable(current, column);
   if (!left || !right) return { kind: "uncomparable" } as const;
   if (left.key === right.key) return { kind: "match" } as const;
+  if (typeof recorded === "string" && !["number", "integer", "money", "percent", "bool", "boolean", "date", "datetime"].includes(column.datatype)
+    && left.key.toLowerCase().normalize("NFC") === right.key.toLowerCase().normalize("NFC")) return { kind: "case-only" } as const;
   // Show the original precision when ordinary formatting would hide the difference.
   const sameDisplay = left.display === right.display;
   return { kind: "different", recorded: sameDisplay ? String(recorded) : left.display, current: sameDisplay ? current.trim() : right.display } as const;

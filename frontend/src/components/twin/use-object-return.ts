@@ -1,5 +1,19 @@
 import { useEffect } from "react";
 import { z } from "zod";
+import { returnKey } from "./overview-model";
+
+export function clearObjectReturn(space: string) {
+  try {
+    sessionStorage.removeItem(returnKey(space));
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith(`receipt-section:${space}:`)) sessionStorage.removeItem(key);
+      if (!key.startsWith("object-position:")) continue;
+      const url = new URL(key.slice("object-position:".length), window.location.origin);
+      if (url.searchParams.get("space") === space) sessionStorage.removeItem(key);
+    }
+  } catch { /* Storage may be disabled. */ }
+}
+
 const position = z.object({ y: z.number(), x: z.number(), section: z.string().nullable() });
 export function rememberObjects() {
   try {

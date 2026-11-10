@@ -29,6 +29,7 @@ export function safeReturn(value: string | null, space: string) {
   return url.searchParams.get("space") === space ? url.pathname + url.search : null;
 }
 
+export const caseOnlyNote = "The current cell differs only by capital letters.";
 export const rowUnavailable = "No unique current row. Several rows may share this name, or the row may have been removed or the document replaced.";
 export const sourceColumn = (column: string) => column.toLowerCase().replaceAll(" ", "_");
 
@@ -38,6 +39,7 @@ export function sourceMismatch(property: PropertyReceipt, source: SourceReceipt 
   if (cells.length !== 1) return null;
   const comparison = compareReceiptValues(property.value, cells[0][1], property);
   if (comparison.kind === "match") return null;
+  if (comparison.kind === "case-only") return caseOnlyNote;
   if (comparison.kind === "uncomparable") return "Can't compare the current cell with the recorded value. The cell is empty, unparseable or its type is uncertain.";
   return `The file now says ${comparison.current}. The recorded value is ${comparison.recorded}. ${property.state === "stale" ? "The source changed after this value was recorded." : "The file may have changed since this value was recorded."}`;
 }

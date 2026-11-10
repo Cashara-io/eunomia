@@ -6,7 +6,7 @@ import { formatted, objectHref } from "./ObjectProfile";
 import { humanLabel, relativeTime } from "./overview-format";
 import ReadState from "./ReadState";
 import styles from "./connections.module.css";
-import { sourceAvailable, sourceLabel, sourceMismatch } from "./receipt-model";
+import { sourceAvailable, sourceLabel, sourceMismatch, caseOnlyNote } from "./receipt-model";
 import receiptStyles from "./receipts.module.css";
 import shared from "./overview.module.css";
 export default function ConnectionInspector({
@@ -79,7 +79,7 @@ export default function ConnectionInspector({
                     {sourceAvailable(source) && source?.record && (
                       <span> · {source.record.external_id}</span>
                     )}
-                    {mismatch && <p role="note" className={receiptStyles.mismatch}>{mismatch}</p>}
+                    {mismatch && <p role="note" className={mismatch === caseOnlyNote ? receiptStyles.caseNote : receiptStyles.mismatch}>{mismatch}</p>}
                     {p.state === "stale" && !mismatch && (
                       <p>The source changed after this value was recorded.</p>
                     )}

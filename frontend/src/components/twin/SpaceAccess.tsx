@@ -1,9 +1,11 @@
+"use client";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { onlineManager, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { listMembers } from "@/lib/gen";
 import { call } from "@/lib/queries/client";
 import ErrorLine from "@/components/ErrorLine";
 import { objectMissing, spaceDenied } from "./connection-access";
+import { clearObjectReturn } from "./use-object-return";
 
 type Access =
   | { kind: "confirmed" }
@@ -13,7 +15,7 @@ type Access =
 
 const CHECK_DEADLINE_MS = 10_000;
 
-const ConfirmedAccess = createContext(true);
+const ConfirmedAccess = createContext(false);
 export const useConfirmedSpaceAccess = () => useContext(ConfirmedAccess);
 export function ProtectedSpaceContent({ children }: { children: ReactNode }) {
   return useConfirmedSpaceAccess() ? children : null;
@@ -22,20 +24,27 @@ export function ProtectedSpaceContent({ children }: { children: ReactNode }) {
 const MissingObjects = createContext<ReadonlySet<string>>(new Set());
 export const useMissingSpaceObjects = () => useContext(MissingObjects);
 
-// Stateful readers retain their query while the address bar withholds it.
-const WithheldParams = createContext<URLSearchParams | null>(null);
-export const useWithheldSpaceParams = () => useContext(WithheldParams);
-const ActiveSpace = createContext("");
 export type ProtectedQueries = {
   keys: readonly string[];
   objectKeys: readonly string[];
   checkOnMount?: boolean;
 };
+/**
+ * Protected data is anything that came from the server for that space: objects,
+ * names in results, values, sources, rows, file names, counts, activity,
+ * suggestions and recents built from results. It must never be in the DOM
+ * (text or attributes) unless access is CONFIRMED.
+ *
+ * The user's own input is not protected data: the text they typed into a search
+ * box, a filter they chose, or an id they selected. It may stay in the URL and
+ * in the input. A search box may show what the user typed; it may show no results,
+ * suggestions or matches unless access is confirmed.
+ *
+ * The persistent Ontology layout owns one gate for the selected space. Nested
+ * readers share it, including across Back and Forward. A fresh gate distrusts
+ * warm caches: only a successful authorised read in this mount can open it.
+ */
 export default function SpaceAccess({ space, children, queries: protectedQueries }: { space: string; children: ReactNode; queries: ProtectedQueries }) {
-  const parent = useContext(ActiveSpace);
-  return parent === space ? children : <AccessGate key={space} space={space} queries={protectedQueries}>{children}</AccessGate>;
-}
-function AccessGate({ space, children, queries: protectedQueries }: { space: string; children: ReactNode; queries: ProtectedQueries }) {
   const cache = useQueryClient();
   const mounted = useRef(false);
   useEffect(() => {
@@ -52,9 +61,7 @@ function AccessGate({ space, children, queries: protectedQueries }: { space: str
       });
     };
   }, [cache, space, protectedQueries]);
-  const [access, setAccess] = useState<Access>(protectedQueries.checkOnMount ? { kind: "checking", attempt: 1 } : { kind: "confirmed" });
-  const withheld = useRef<{ pathname: string; search: string; hash: string } | null>(null);
-  const [withheldParams, setWithheldParams] = useState<URLSearchParams | null>(null);
+  const [access, setAccess] = useState<Access>({ kind: "checking", attempt: 0 });
   const [missing, setMissing] = useState<ReadonlySet<string>>(new Set());
   const retry = useRef(() => {});
   useEffect(() => {
@@ -68,26 +75,14 @@ function AccessGate({ space, children, queries: protectedQueries }: { space: str
     const queries = cache.getQueryCache();
     const controller = new AbortController();
     const membershipKey: QueryKey = ["receipt-access", space];
+    // An idle key lets every screen request a shared recheck without a mount-time membership read.
+    queries.build(cache, { queryKey: membershipKey });
     const seen = new Set<unknown>();
     const pendingMissing = new Set<string>();
-    let state: Access = { kind: "confirmed" };
+    let state: Access = { kind: "checking", attempt: 0 };
     let generation = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     function transition(next: Access) {
-      if (next.kind === "checking" || next.kind === "unknown") {
-        if (!withheld.current) {
-          withheld.current = { pathname: window.location.pathname, search: window.location.search, hash: window.location.hash };
-          setWithheldParams(new URLSearchParams(withheld.current.search));
-        }
-        // Both Objects and Connections keep only the space ID while access is withheld.
-        window.history.replaceState(null, "", `${window.location.pathname}?${new URLSearchParams({ space })}`);
-      } else {
-        if (next.kind === "confirmed" && withheld.current && window.location.pathname === withheld.current.pathname && new URLSearchParams(window.location.search).get("space") === space) {
-          window.history.replaceState(null, "", withheld.current.pathname + withheld.current.search + withheld.current.hash);
-        }
-        withheld.current = null;
-        setWithheldParams(null);
-      }
       state = next;
       setAccess(next);
       clearTimeout(timer);
@@ -97,6 +92,7 @@ function AccessGate({ space, children, queries: protectedQueries }: { space: str
       generation++;
       transition({ kind: "denied" });
       pendingMissing.clear();
+      clearObjectReturn(space);
       setMissing(new Set());
       const params = new URLSearchParams({ space });
       window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
@@ -106,7 +102,7 @@ function AccessGate({ space, children, queries: protectedQueries }: { space: str
     }
     function confirm(id?: string) {
       if (id) pendingMissing.add(id);
-      if (controller.signal.aborted || state.kind === "checking") return;
+      if (controller.signal.aborted || state.kind === "checking" && state.attempt > 0) return;
       const attempt = state.kind === "unknown" ? state.attempt + 1 : 1;
       const current = ++generation;
       transition({ kind: "checking", attempt });
@@ -118,12 +114,10 @@ function AccessGate({ space, children, queries: protectedQueries }: { space: str
       controller.signal.addEventListener("abort", abortAttempt, { once: true });
       const deadline = setTimeout(abortAttempt, CHECK_DEADLINE_MS);
       const request = (signal = attemptAbort.signal) => call(listMembers({ path: { vault_id: space }, signal }));
-      const read = protectedQueries.checkOnMount
-        ? cache.fetchQuery({ queryKey: membershipKey, queryFn: ({ signal }) => request(AbortSignal.any([signal, attemptAbort.signal])), staleTime: 0, retry: false, networkMode: "always" })
-        : request();
+      const read = cache.fetchQuery({ queryKey: membershipKey, queryFn: ({ signal }) => request(AbortSignal.any([signal, attemptAbort.signal])), staleTime: 0, retry: false, networkMode: "always" });
       void read.then(() => {
         if (controller.signal.aborted || current !== generation) return;
-        if (protectedQueries.checkOnMount && !onlineManager.isOnline()) throw new Error("Offline membership check");
+        if (!onlineManager.isOnline()) throw new Error("Offline membership check");
         const ids = [...pendingMissing];
         pendingMissing.clear();
         setMissing(prev => new Set([...prev, ...ids]));
@@ -159,44 +153,45 @@ function AccessGate({ space, children, queries: protectedQueries }: { space: str
     }
     const unsubscribe = queries.subscribe(event => {
       if (event.type !== "updated") return;
-      if (protectedQueries.checkOnMount && event.query.queryKey[0] === membershipKey[0] && event.query.queryKey[1] === space && event.action.type === "invalidate") {
+      if (event.query.queryKey[0] === membershipKey[0] && event.query.queryKey[1] === space && event.action.type === "invalidate") {
         confirm();
       } else if (event.query.queryKey[0] === "vaults" && event.query.queryKey[1] === "list" && event.action.type === "success") {
         if (state.kind === "denied" || state.kind === "unknown") confirm();
-      } else check(event.query);
+      } else {
+        check(event.query);
+        const initial = state.kind === "checking" && state.attempt === 0;
+        const scoped = protectedQueries.keys.includes(String(event.query.queryKey[0])) && event.query.queryKey[1] === space;
+        // setQueryData is a cache write, not proof of a newly authorised response.
+        if (initial && scoped && event.action.type === "success" && !event.action.manual) transition({ kind: "confirmed" });
+        else if (initial && scoped && event.query.state.fetchFailureReason) confirm();
+      }
     });
     for (const query of queries.getAll()) check(query);
     if (protectedQueries.checkOnMount) confirm();
+    else {
+      // Cached successes from a previous area mount do not authorise this one.
+      timer = setTimeout(() => {
+        transition({ kind: "unknown", attempt: 0 });
+        timer = setTimeout(() => confirm(), 2_000);
+      }, CHECK_DEADLINE_MS);
+      void cache.invalidateQueries({ predicate: q => protectedQueries.keys.includes(String(q.queryKey[0])) && q.queryKey[1] === space }, { cancelRefetch: false });
+    }
     const recheck = () => { if (protectedQueries.checkOnMount) confirm(); };
-    const withholdNavigation = () => {
-      if (state.kind !== "checking" && state.kind !== "unknown") return;
-      if (window.location.pathname !== withheld.current?.pathname || new URLSearchParams(window.location.search).get("space") !== space) return;
-      const safeQuery = `?${new URLSearchParams({ space })}`;
-      if (window.location.search !== safeQuery || window.location.hash) {
-        withheld.current = { pathname: window.location.pathname, search: window.location.search, hash: window.location.hash };
-        setWithheldParams(new URLSearchParams(withheld.current.search));
-        window.history.replaceState(null, "", window.location.pathname + safeQuery);
-      }
-    };
-    window.addEventListener("popstate", withholdNavigation);
     window.addEventListener("focus", recheck);
     window.addEventListener("offline", recheck);
     window.addEventListener("online", recheck);
     return () => {
-      window.removeEventListener("popstate", withholdNavigation);
       window.removeEventListener("focus", recheck);
       window.removeEventListener("offline", recheck);
       window.removeEventListener("online", recheck);
       unsubscribe();
       clearTimeout(timer);
       controller.abort();
-      if (protectedQueries.checkOnMount) void cache.cancelQueries({ queryKey: membershipKey });
+      void cache.cancelQueries({ queryKey: membershipKey });
     };
   }, [cache, space, protectedQueries]);
   return (
-    <ActiveSpace.Provider value={space}>
     <ConfirmedAccess.Provider value={access.kind === "confirmed"}>
-    <WithheldParams.Provider value={withheldParams}>
       {access.kind === "denied" ? (
         <ErrorLine action={<button className="btn btn-sm" onClick={() => retry.current()}>Retry space access</button>}>
           This information is unavailable to you in this space. Ask a space owner for access.
@@ -212,8 +207,6 @@ function AccessGate({ space, children, queries: protectedQueries }: { space: str
           <MissingObjects.Provider value={missing}>{children}</MissingObjects.Provider>
         </>
       )}
-    </WithheldParams.Provider>
     </ConfirmedAccess.Provider>
-    </ActiveSpace.Provider>
   );
 }

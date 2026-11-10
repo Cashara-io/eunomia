@@ -1,6 +1,5 @@
 "use client";
 import { useConfirmedSpaceAccess } from "./SpaceAccess";
-import ReceiptAccess from "./ReceiptAccess";
 import { rememberObjects, useObjectReturn } from "./use-object-return";
 import { useState } from "react";
 import Link from "next/link";
@@ -17,9 +16,6 @@ const words = (value: string) => {
 };
 
 export default function Objects({ space }: { space: string }) {
-  return <ReceiptAccess space={space}><ObjectsContent space={space} /></ReceiptAccess>;
-}
-function ObjectsContent({ space }: { space: string }) {
   const { params, update } = useTwinParams();
   const confirmed = useConfirmedSpaceAccess();
   const kinds = useObjectKinds(space);

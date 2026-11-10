@@ -12,7 +12,6 @@ import { z } from "zod";
 import Link from "next/link";
 import { API_URL, ApiError } from "@/lib/api";
 import { useLiveStatus } from "@/lib/queries/live";
-import ReceiptAccess from "./ReceiptAccess";
 import ActivitySubject from "./ActivitySubject";
 import { useTwinParams } from "./controls";
 import ReadState from "./ReadState";
@@ -52,7 +51,7 @@ const pageSchema = z.object({
 });
 
 export default function Activity(props: { space: string; compact?: boolean; definition?: { type: string; kind: string; name: string } }) {
-  return <ReceiptAccess space={props.space}><ActivityContent {...props} /></ReceiptAccess>;
+  return <ActivityContent {...props} />;
 }
 function ActivityContent({
   space,

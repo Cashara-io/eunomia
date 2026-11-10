@@ -55,8 +55,8 @@ const comparisons = [
   ["currency suffix", "money", "AUD", 1200, "1,200.00 aud", null],
   ["different currency", "money", "AUD", 1200, "USD 1,200", "Can't compare"],
   ["empty current cell", "money", "AUD", 12, "  ", "Can't compare"],
-  ["case and spaces", "text", null, " Hello ", "hello", null],
-  ["Unicode text", "text", null, "CAFÉ", " cafe\u0301 ", null],
+  ["case and spaces", "text", null, " Hello ", "hello", "differs only by capital letters"],
+  ["Unicode text", "text", null, "CAFÉ", " CAFE\u0301 ", null],
   ["different text", "text", null, "Hello", "Goodbye", "The file now says"],
   ["boolean yes", "boolean", null, true, " YES ", null],
   ["boolean one", "bool", null, "true", "1", null],
@@ -90,4 +90,14 @@ test.each(comparisons)("typed source comparison: %s", async (_name, datatype, un
     expect(message).toContain("12.002");
     expect(message).toContain("12.001");
   }
+});
+
+test("case-sensitive business codes have a mild note rather than a match or mismatch", async () => {
+  const {compareReceiptValues} = await import("../src/components/twin/receipt-comparison");
+  const {sourceMismatch} = await import("../src/components/twin/receipt-model");
+  expect(compareReceiptValues("Paris", "paris", {datatype:"text",unit:null}).kind).toBe("case-only");
+  const data = receiptFixture();
+  const property = {...data.properties[0],name:"unit_cost",datatype:"text",value:"SKU-AbC"};
+  data.sources[0].document.row.cells.unit_cost="SKU-ABC";
+  expect(sourceMismatch(property,data.sources[0])).toBe("The current cell differs only by capital letters.");
 });

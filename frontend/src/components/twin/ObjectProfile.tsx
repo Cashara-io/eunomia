@@ -2,7 +2,6 @@
 import { useConfirmedSpaceAccess, useMissingSpaceObjects } from "./SpaceAccess";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import ReceiptAccess from "./ReceiptAccess";
 import ValueReceipts from "./ValueReceipts";
 import ObjectHero from "./ObjectHero";
 import SourceInspector from "./SourceInspector";
@@ -45,9 +44,6 @@ const sections = [
   "Related memories",
 ];
 export default function ObjectProfile(props: { space: string; id: string; compact?: boolean }) {
-  return <ReceiptAccess space={props.space}><ProfileContent {...props} /></ReceiptAccess>;
-}
-function ProfileContent(props: { space: string; id: string; compact?: boolean }) {
   const missing = useMissingSpaceObjects();
   const confirmed = useConfirmedSpaceAccess();
   const { params } = useTwinParams();

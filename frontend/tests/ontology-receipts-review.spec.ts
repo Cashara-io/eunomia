@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { mockReceipts } from "./fixtures/receipts";
+import { protectedValues } from "./fixtures/protected-values";
 const profile = "/ontology/objects/house?space=business&section=Properties";
 async function cacheAction(page: Page, action: string): Promise<unknown[][]> {
   return page.locator("main").evaluate((el, action) => {
@@ -146,16 +147,11 @@ for (const theme of ["light", "dark"]) test(`mobile receipts keep values beside 
 
 async function noProtectedValues(page: Page) {
   const names = ["House blend 1kg", "products.csv", "AUD 12.00"];
-  await expect.poll(() => page.evaluate(names => {
-    const attributesAndUrl = [location.href,
-      ...Array.from(document.querySelectorAll("*")).flatMap(el => Array.from(el.attributes, a => a.value))];
-    const values = [document.documentElement.textContent ?? "", ...attributesAndUrl.map(value => decodeURIComponent(value.replaceAll("+", " ")))];
-    return values.filter(value => names.some(name => value.includes(name)));
-  }, names)).toEqual([]);
+  await expect.poll(() => protectedValues(page, names)).toEqual([]);
 }
-test("checking and unknown withhold table query text everywhere and restore confirmed input", async ({ page }) => {
+test("checking and unknown block server data while retaining the user query", async ({ page }) => {
   const { state } = await mockReceipts(page);
-  const query = new URLSearchParams({space:"business",kind:"product",search:"House blend 1kg",selected:"House blend 1kg",focus:"House blend 1kg",q:"House blend 1kg",filter:"House blend 1kg",value:"House blend 1kg"});
+  const query = new URLSearchParams({space:"business",kind:"product",search:"My typed query",selected:"My typed query",focus:"My typed query",q:"My typed query",filter:"My typed query",value:"My typed query"});
   state.membership = "pending";
   await page.clock.install();
   await page.goto(`/ontology/objects?${query}`);
@@ -166,12 +162,12 @@ test("checking and unknown withhold table query text everywhere and restore conf
   await noProtectedValues(page);
   state.membership = "ok";
   await page.getByRole("button", {name:"Try again",exact:true}).click();
-  await expect(page.getByLabel("Search objects")).toHaveValue("House blend 1kg");
+  await expect(page.getByLabel("Search objects")).toHaveValue("My typed query");
   await expect.poll(() => page.evaluate(() => location.search)).toBe(`?${query}`);
 });
 test("missing object fallback cannot leak its Back query during checking or unknown", async ({ page }) => {
   const { state } = await mockReceipts(page);
-  const back = "/ontology/objects?space=business&search=House+blend+1kg&selected=house";
+  const back = "/ontology/objects?space=business&search=My+typed+query&selected=house";
   await page.goto(`${profile}&back=${encodeURIComponent(back)}`);
   await expect(page.getByRole("heading", {name:"House blend 1kg",exact:true})).toBeVisible();
   state.mode = "missing";
@@ -189,10 +185,10 @@ test("missing object fallback cannot leak its Back query during checking or unkn
   await page.getByRole("button", {name:"Try again",exact:true}).click();
   await expect(page.getByRole("link", {name:"Back to Objects"})).toHaveAttribute("href", back);
 });
-test("browser Back cannot reveal a previous search while access is unknown", async ({ page }) => {
+test("browser Back may restore user input while blocking server data", async ({ page }) => {
   const { state } = await mockReceipts(page);
-  await page.goto("/ontology/objects?space=business&kind=product&search=House+blend+1kg");
-  await expect(page.getByLabel("Search objects")).toHaveValue("House blend 1kg");
+  await page.goto("/ontology/objects?space=business&kind=product&search=My+typed+query");
+  await expect(page.getByLabel("Search objects")).toHaveValue("My typed query");
   await page.evaluate(() => history.pushState(null, "", "?space=business&kind=product&search=Other+search"));
   await expect(page.getByLabel("Search objects")).toHaveValue("Other search");
   await page.clock.install();
@@ -207,5 +203,5 @@ test("browser Back cannot reveal a previous search while access is unknown", asy
   await noProtectedValues(page);
   state.membership = "ok";
   await page.getByRole("button", {name:"Try again",exact:true}).click();
-  await expect(page.getByLabel("Search objects")).toHaveValue("House blend 1kg");
+  await expect(page.getByLabel("Search objects")).toHaveValue("My typed query");
 });
