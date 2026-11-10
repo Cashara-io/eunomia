@@ -221,7 +221,13 @@ async fn walk_bound_token(team_bound: bool, admin: bool) {
             let mut foreign = args.clone();
             foreign["vault_id"] = team.clone().into();
             let refused = call(&app,&token,name,foreign).await;
-            assert_eq!(refused["code"], "auth.scope", "foreign {name}: {refused}");
+            // A batch tool reports the refusal per item: nothing written, every item refused.
+            if let Some(results) = refused["results"].as_array() {
+                assert_eq!(refused["written"], 0, "foreign {name}: {refused}");
+                assert!(!results.is_empty() && results.iter().all(|r| r["code"] == "auth.scope"), "foreign {name}: {refused}");
+            } else {
+                assert_eq!(refused["code"], "auth.scope", "foreign {name}: {refused}");
+            }
         }
         let value = call(&app,&token,name,args).await;
         if matches!(name,"secret_transform"|"http_request") {
