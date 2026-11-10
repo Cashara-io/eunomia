@@ -46,14 +46,14 @@ export const useReadiness = (vaultId: string, enabled = true) =>
   useQuery({
     queryKey: ontologyKeys.readiness(vaultId),
     enabled,
-    queryFn: () =>
-      call(getVaultOntologyReadiness({ path: { vault_id: vaultId } })),
+    queryFn: ({ signal }) =>
+      call(getVaultOntologyReadiness({ path: { vault_id: vaultId }, signal })),
   });
 
 export const useOntology = (vaultId: string, enabled = true) =>
   useQuery({
     queryKey: ontologyKeys.vault(vaultId),
-    queryFn: () => call(getVaultOntology({ path: { vault_id: vaultId } })),
+    queryFn: ({ signal }) => call(getVaultOntology({ path: { vault_id: vaultId }, signal })),
     enabled,
   });
 

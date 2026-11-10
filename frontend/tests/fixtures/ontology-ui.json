@@ -1,0 +1,3644 @@
+{
+  "ontology": {
+    "vault": "business",
+    "strict": true,
+    "kinds": [
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "product",
+        "built_in": false,
+        "entities": 1240,
+        "description": "An item sold by Banksia Coffee.",
+        "samples": [
+          "House blend 1kg",
+          "Single origin 250g",
+          "Decaf 1kg"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "price",
+            "datatype": "money",
+            "unit": "AUD",
+            "description": "A typed value from business records.",
+            "values": 1240,
+            "samples": [
+              "20.00",
+              "24.50"
+            ],
+            "source_map": [
+              {
+                "source": "products.csv",
+                "record_type": "csv",
+                "path": "unit_cost"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "unit_cost",
+            "datatype": "money",
+            "unit": "AUD",
+            "description": "The recorded cost for one unit.",
+            "values": 1240,
+            "samples": [
+              "AUD 12.00",
+              "AUD 13.20"
+            ],
+            "source_map": [
+              {
+                "source": "products.csv",
+                "record_type": "csv",
+                "path": "unit_cost"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "units_sold",
+            "datatype": "integer",
+            "unit": null,
+            "description": "A typed value from business records.",
+            "values": 1240,
+            "samples": [
+              "20.00",
+              "24.50"
+            ],
+            "source_map": [
+              {
+                "source": "products.csv",
+                "record_type": "csv",
+                "path": "unit_cost"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "margin",
+            "datatype": "percent",
+            "unit": null,
+            "description": "A typed value from business records.",
+            "values": 1240,
+            "samples": [
+              "20.00",
+              "24.50"
+            ],
+            "source_map": [
+              {
+                "source": "products.csv",
+                "record_type": "csv",
+                "path": "unit_cost"
+              }
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "gross_profit",
+            "expr": {
+              "agg": "sum",
+              "property": "price"
+            },
+            "expr_words": "Sum of units sold \u00d7 (price minus unit cost)",
+            "description": "Calculated from the latest recorded values.",
+            "unit": "AUD"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "supplier",
+        "built_in": false,
+        "entities": 184,
+        "description": "A supplier recorded by Banksia Coffee.",
+        "samples": [
+          "North Coast Beans",
+          "Fitzroy store"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "supplier_code",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded supplier code for this supplier.",
+            "values": 184,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "supplier.csv",
+                "record_type": "csv",
+                "path": "supplier_code"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "lead_days",
+            "datatype": "integer",
+            "unit": null,
+            "description": "The recorded lead days for this supplier.",
+            "values": 184,
+            "samples": [
+              "12",
+              "24"
+            ],
+            "source_map": [
+              {
+                "source": "supplier.csv",
+                "record_type": "csv",
+                "path": "lead_days"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "payment_terms",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded payment terms for this supplier.",
+            "values": 184,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "supplier.csv",
+                "record_type": "csv",
+                "path": "payment_terms"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "country",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded country for this supplier.",
+            "values": 184,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "supplier.csv",
+                "record_type": "csv",
+                "path": "country"
+              }
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "total_value",
+            "expr": {
+              "agg": "sum",
+              "property": "price"
+            },
+            "expr_words": "Sum of recorded price",
+            "description": "Calculated from the latest recorded values.",
+            "unit": "AUD"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "order",
+        "built_in": false,
+        "entities": 4200,
+        "description": "A order recorded by Banksia Coffee.",
+        "samples": [
+          "North Coast Beans",
+          "Fitzroy store"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "order_number",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded order number for this order.",
+            "values": 4200,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "order.csv",
+                "record_type": "csv",
+                "path": "order_number"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "order_date",
+            "datatype": "date",
+            "unit": null,
+            "description": "The recorded order date for this order.",
+            "values": 4200,
+            "samples": [
+              "2026-11-09",
+              "2026-11-10"
+            ],
+            "source_map": [
+              {
+                "source": "order.csv",
+                "record_type": "csv",
+                "path": "order_date"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "total",
+            "datatype": "money",
+            "unit": "AUD",
+            "description": "The recorded total for this order.",
+            "values": 4200,
+            "samples": [
+              "AUD 240.00",
+              "AUD 680.00"
+            ],
+            "source_map": [
+              {
+                "source": "order.csv",
+                "record_type": "csv",
+                "path": "total"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "status",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded status for this order.",
+            "values": 4200,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "order.csv",
+                "record_type": "csv",
+                "path": "status"
+              }
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "total_value",
+            "expr": {
+              "agg": "sum",
+              "property": "price"
+            },
+            "expr_words": "Sum of recorded price",
+            "description": "Calculated from the latest recorded values.",
+            "unit": "AUD"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "customer",
+        "built_in": false,
+        "entities": 2100,
+        "description": "A customer recorded by Banksia Coffee.",
+        "samples": [
+          "North Coast Beans",
+          "Fitzroy store"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "customer_code",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded customer code for this customer.",
+            "values": 2100,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "customer.csv",
+                "record_type": "csv",
+                "path": "customer_code"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "email",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded email for this customer.",
+            "values": 2100,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "customer.csv",
+                "record_type": "csv",
+                "path": "email"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "segment",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded segment for this customer.",
+            "values": 2100,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "customer.csv",
+                "record_type": "csv",
+                "path": "segment"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "country",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded country for this customer.",
+            "values": 2100,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "customer.csv",
+                "record_type": "csv",
+                "path": "country"
+              }
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "total_value",
+            "expr": {
+              "agg": "sum",
+              "property": "price"
+            },
+            "expr_words": "Sum of recorded price",
+            "description": "Calculated from the latest recorded values.",
+            "unit": "AUD"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "stock_item",
+        "built_in": false,
+        "entities": 6000,
+        "description": "A stock item recorded by Banksia Coffee.",
+        "samples": [
+          "North Coast Beans",
+          "Fitzroy store"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "quantity",
+            "datatype": "integer",
+            "unit": null,
+            "description": "The recorded quantity for this stock item.",
+            "values": 6000,
+            "samples": [
+              "12",
+              "24"
+            ],
+            "source_map": [
+              {
+                "source": "stock_item.csv",
+                "record_type": "csv",
+                "path": "quantity"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "reorder_level",
+            "datatype": "integer",
+            "unit": null,
+            "description": "The recorded reorder level for this stock item.",
+            "values": 6000,
+            "samples": [
+              "12",
+              "24"
+            ],
+            "source_map": [
+              {
+                "source": "stock_item.csv",
+                "record_type": "csv",
+                "path": "reorder_level"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "price",
+            "datatype": "money",
+            "unit": "AUD",
+            "description": "The recorded price for this stock item.",
+            "values": 6000,
+            "samples": [
+              "AUD 240.00",
+              "AUD 680.00"
+            ],
+            "source_map": [
+              {
+                "source": "stock_item.csv",
+                "record_type": "csv",
+                "path": "price"
+              }
+            ]
+          },
+          {
+            "status": "proposed",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "unit_cost",
+            "datatype": "money",
+            "unit": "AUD",
+            "description": "The recorded unit cost for this stock item.",
+            "values": 0,
+            "samples": [
+              "AUD 12.00",
+              "AUD 13.20"
+            ],
+            "source_map": [
+              {
+                "source": "stock_item.csv",
+                "record_type": "csv",
+                "path": "unit_cost"
+              }
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "total_value",
+            "expr": {
+              "agg": "sum",
+              "property": "price"
+            },
+            "expr_words": "Sum of recorded price",
+            "description": "Calculated from the latest recorded values.",
+            "unit": "AUD"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "location",
+        "built_in": false,
+        "entities": 24,
+        "description": "A location recorded by Banksia Coffee.",
+        "samples": [
+          "North Coast Beans",
+          "Fitzroy store"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "address",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded address for this location.",
+            "values": 24,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "location.csv",
+                "record_type": "csv",
+                "path": "address"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "postcode",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded postcode for this location.",
+            "values": 24,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "location.csv",
+                "record_type": "csv",
+                "path": "postcode"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "store_code",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded store code for this location.",
+            "values": 24,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "location.csv",
+                "record_type": "csv",
+                "path": "store_code"
+              }
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "total_value",
+            "expr": {
+              "agg": "sum",
+              "property": "price"
+            },
+            "expr_words": "Sum of recorded price",
+            "description": "Calculated from the latest recorded values.",
+            "unit": "AUD"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "invoice",
+        "built_in": false,
+        "entities": 1800,
+        "description": "A invoice recorded by Banksia Coffee.",
+        "samples": [
+          "North Coast Beans",
+          "Fitzroy store"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "invoice_number",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded invoice number for this invoice.",
+            "values": 1800,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "invoice.csv",
+                "record_type": "csv",
+                "path": "invoice_number"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "amount",
+            "datatype": "money",
+            "unit": "AUD",
+            "description": "The recorded amount for this invoice.",
+            "values": 1800,
+            "samples": [
+              "AUD 240.00",
+              "AUD 680.00"
+            ],
+            "source_map": [
+              {
+                "source": "invoice.csv",
+                "record_type": "csv",
+                "path": "amount"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "due_date",
+            "datatype": "date",
+            "unit": null,
+            "description": "The recorded due date for this invoice.",
+            "values": 1800,
+            "samples": [
+              "2026-11-09",
+              "2026-11-10"
+            ],
+            "source_map": [
+              {
+                "source": "invoice.csv",
+                "record_type": "csv",
+                "path": "due_date"
+              }
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "total_value",
+            "expr": {
+              "agg": "sum",
+              "property": "price"
+            },
+            "expr_words": "Sum of recorded price",
+            "description": "Calculated from the latest recorded values.",
+            "unit": "AUD"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "payment",
+        "built_in": false,
+        "entities": 1200,
+        "description": "A payment recorded by Banksia Coffee.",
+        "samples": [
+          "North Coast Beans",
+          "Fitzroy store"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "amount",
+            "datatype": "money",
+            "unit": "AUD",
+            "description": "The recorded amount for this payment.",
+            "values": 1200,
+            "samples": [
+              "AUD 240.00",
+              "AUD 680.00"
+            ],
+            "source_map": [
+              {
+                "source": "payment.csv",
+                "record_type": "csv",
+                "path": "amount"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "paid_at",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded paid at for this payment.",
+            "values": 1200,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "payment.csv",
+                "record_type": "csv",
+                "path": "paid_at"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "method",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded method for this payment.",
+            "values": 1200,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "payment.csv",
+                "record_type": "csv",
+                "path": "method"
+              }
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "total_value",
+            "expr": {
+              "agg": "sum",
+              "property": "price"
+            },
+            "expr_words": "Sum of recorded price",
+            "description": "Calculated from the latest recorded values.",
+            "unit": "AUD"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "employee",
+        "built_in": false,
+        "entities": 120,
+        "description": "A employee recorded by Banksia Coffee.",
+        "samples": [
+          "North Coast Beans",
+          "Fitzroy store"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "role",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded role for this employee.",
+            "values": 120,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "employee.csv",
+                "record_type": "csv",
+                "path": "role"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "start_date",
+            "datatype": "date",
+            "unit": null,
+            "description": "The recorded start date for this employee.",
+            "values": 120,
+            "samples": [
+              "2026-11-09",
+              "2026-11-10"
+            ],
+            "source_map": [
+              {
+                "source": "employee.csv",
+                "record_type": "csv",
+                "path": "start_date"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "store_code",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded store code for this employee.",
+            "values": 120,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "employee.csv",
+                "record_type": "csv",
+                "path": "store_code"
+              }
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "total_value",
+            "expr": {
+              "agg": "sum",
+              "property": "price"
+            },
+            "expr_words": "Sum of recorded price",
+            "description": "Calculated from the latest recorded values.",
+            "unit": "AUD"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "shipment",
+        "built_in": false,
+        "entities": 480,
+        "description": "A shipment recorded by Banksia Coffee.",
+        "samples": [
+          "North Coast Beans",
+          "Fitzroy store"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "tracking_number",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded tracking number for this shipment.",
+            "values": 480,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "shipment.csv",
+                "record_type": "csv",
+                "path": "tracking_number"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "expected_date",
+            "datatype": "date",
+            "unit": null,
+            "description": "The recorded expected date for this shipment.",
+            "values": 480,
+            "samples": [
+              "2026-11-09",
+              "2026-11-10"
+            ],
+            "source_map": [
+              {
+                "source": "shipment.csv",
+                "record_type": "csv",
+                "path": "expected_date"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "status",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded status for this shipment.",
+            "values": 480,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "shipment.csv",
+                "record_type": "csv",
+                "path": "status"
+              }
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "status": "proposed",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "total_value",
+            "expr": {
+              "agg": "sum",
+              "property": "price"
+            },
+            "expr_words": "Sum of recorded price",
+            "description": "Calculated from the latest recorded values.",
+            "unit": "AUD"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "purchase_order",
+        "built_in": false,
+        "entities": 300,
+        "description": "A purchase order recorded by Banksia Coffee.",
+        "samples": [
+          "North Coast Beans",
+          "Fitzroy store"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "order_number",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded order number for this purchase order.",
+            "values": 300,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "purchase_order.csv",
+                "record_type": "csv",
+                "path": "order_number"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "total",
+            "datatype": "money",
+            "unit": "AUD",
+            "description": "The recorded total for this purchase order.",
+            "values": 300,
+            "samples": [
+              "AUD 240.00",
+              "AUD 680.00"
+            ],
+            "source_map": [
+              {
+                "source": "purchase_order.csv",
+                "record_type": "csv",
+                "path": "total"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "expected_date",
+            "datatype": "date",
+            "unit": null,
+            "description": "The recorded expected date for this purchase order.",
+            "values": 300,
+            "samples": [
+              "2026-11-09",
+              "2026-11-10"
+            ],
+            "source_map": [
+              {
+                "source": "purchase_order.csv",
+                "record_type": "csv",
+                "path": "expected_date"
+              }
+            ]
+          }
+        ],
+        "metrics": []
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "sale",
+        "built_in": false,
+        "entities": 220,
+        "description": "A sale recorded by Banksia Coffee.",
+        "samples": [
+          "North Coast Beans",
+          "Fitzroy store"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "quantity",
+            "datatype": "integer",
+            "unit": null,
+            "description": "The recorded quantity for this sale.",
+            "values": 220,
+            "samples": [
+              "12",
+              "24"
+            ],
+            "source_map": [
+              {
+                "source": "sale.csv",
+                "record_type": "csv",
+                "path": "quantity"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "sale_date",
+            "datatype": "date",
+            "unit": null,
+            "description": "The recorded sale date for this sale.",
+            "values": 220,
+            "samples": [
+              "2026-11-09",
+              "2026-11-10"
+            ],
+            "source_map": [
+              {
+                "source": "sale.csv",
+                "record_type": "csv",
+                "path": "sale_date"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "revenue",
+            "datatype": "money",
+            "unit": "AUD",
+            "description": "The recorded revenue for this sale.",
+            "values": 220,
+            "samples": [
+              "AUD 240.00",
+              "AUD 680.00"
+            ],
+            "source_map": [
+              {
+                "source": "sale.csv",
+                "record_type": "csv",
+                "path": "revenue"
+              }
+            ]
+          }
+        ],
+        "metrics": []
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "contract",
+        "built_in": false,
+        "entities": 96,
+        "description": "A contract recorded by Banksia Coffee.",
+        "samples": [
+          "North Coast Beans",
+          "Fitzroy store"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "contract_number",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded contract number for this contract.",
+            "values": 96,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "contract.csv",
+                "record_type": "csv",
+                "path": "contract_number"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "renewal_date",
+            "datatype": "date",
+            "unit": null,
+            "description": "The recorded renewal date for this contract.",
+            "values": 96,
+            "samples": [
+              "2026-11-09",
+              "2026-11-10"
+            ],
+            "source_map": [
+              {
+                "source": "contract.csv",
+                "record_type": "csv",
+                "path": "renewal_date"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "annual_value",
+            "datatype": "money",
+            "unit": "AUD",
+            "description": "The recorded annual value for this contract.",
+            "values": 96,
+            "samples": [
+              "AUD 240.00",
+              "AUD 680.00"
+            ],
+            "source_map": [
+              {
+                "source": "contract.csv",
+                "record_type": "csv",
+                "path": "annual_value"
+              }
+            ]
+          }
+        ],
+        "metrics": []
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "delivery",
+        "built_in": false,
+        "entities": 36,
+        "description": "A delivery recorded by Banksia Coffee.",
+        "samples": [
+          "North Coast Beans",
+          "Fitzroy store"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "delivery_number",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded delivery number for this delivery.",
+            "values": 36,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "delivery.csv",
+                "record_type": "csv",
+                "path": "delivery_number"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "expected_date",
+            "datatype": "date",
+            "unit": null,
+            "description": "The recorded expected date for this delivery.",
+            "values": 36,
+            "samples": [
+              "2026-11-09",
+              "2026-11-10"
+            ],
+            "source_map": [
+              {
+                "source": "delivery.csv",
+                "record_type": "csv",
+                "path": "expected_date"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "status",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded status for this delivery.",
+            "values": 36,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "delivery.csv",
+                "record_type": "csv",
+                "path": "status"
+              }
+            ]
+          }
+        ],
+        "metrics": []
+      },
+      {
+        "status": "proposed",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "warehouse",
+        "built_in": false,
+        "entities": 0,
+        "description": "A warehouse recorded by Banksia Coffee.",
+        "samples": [
+          "North Coast Beans",
+          "Fitzroy store"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "address",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded address for this warehouse.",
+            "values": 0,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "warehouse.csv",
+                "record_type": "csv",
+                "path": "address"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "capacity",
+            "datatype": "integer",
+            "unit": null,
+            "description": "The recorded capacity for this warehouse.",
+            "values": 0,
+            "samples": [
+              "12",
+              "24"
+            ],
+            "source_map": [
+              {
+                "source": "warehouse.csv",
+                "record_type": "csv",
+                "path": "capacity"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "warehouse_code",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded warehouse code for this warehouse.",
+            "values": 0,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "warehouse.csv",
+                "record_type": "csv",
+                "path": "warehouse_code"
+              }
+            ]
+          }
+        ],
+        "metrics": []
+      },
+      {
+        "status": "proposed",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "kind": "delivery_route",
+        "built_in": false,
+        "entities": 0,
+        "description": "A delivery route recorded by Banksia Coffee.",
+        "samples": [
+          "North Coast Beans",
+          "Fitzroy store"
+        ],
+        "properties": [
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "route_code",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded route code for this delivery route.",
+            "values": 0,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "delivery_route.csv",
+                "record_type": "csv",
+                "path": "route_code"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "distance",
+            "datatype": "integer",
+            "unit": null,
+            "description": "The recorded distance for this delivery route.",
+            "values": 0,
+            "samples": [
+              "12",
+              "24"
+            ],
+            "source_map": [
+              {
+                "source": "delivery_route.csv",
+                "record_type": "csv",
+                "path": "distance"
+              }
+            ]
+          },
+          {
+            "status": "approved",
+            "origin": "agent",
+            "revision": 1,
+            "synonyms": [],
+            "merge_into": null,
+            "reason": "Matched the business records and reviewed column mapping.",
+            "name": "description",
+            "datatype": "string",
+            "unit": null,
+            "description": "The recorded description for this delivery route.",
+            "values": 0,
+            "samples": [
+              "Active",
+              "Standard"
+            ],
+            "source_map": [
+              {
+                "source": "delivery_route.csv",
+                "record_type": "csv",
+                "path": "description"
+              }
+            ]
+          }
+        ],
+        "metrics": []
+      }
+    ],
+    "links": [
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "supplier",
+        "to_kind": "product",
+        "label": "supplies",
+        "description": "Recorded supplier supplies product.",
+        "count": 120,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "supplier.csv",
+            "record_type": "csv",
+            "path": "supplies"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "product",
+        "to_kind": "supplier",
+        "label": "supplied_by",
+        "description": "Recorded product supplied by supplier.",
+        "count": 137,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "product.csv",
+            "record_type": "csv",
+            "path": "supplied_by"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "order",
+        "to_kind": "product",
+        "label": "contains",
+        "description": "Recorded order contains product.",
+        "count": 154,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "order.csv",
+            "record_type": "csv",
+            "path": "contains"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "order",
+        "to_kind": "customer",
+        "label": "placed_by",
+        "description": "Recorded order placed by customer.",
+        "count": 171,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "order.csv",
+            "record_type": "csv",
+            "path": "placed_by"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "order",
+        "to_kind": "location",
+        "label": "recorded_at",
+        "description": "Recorded order recorded at location.",
+        "count": 188,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "order.csv",
+            "record_type": "csv",
+            "path": "recorded_at"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "stock_item",
+        "to_kind": "product",
+        "label": "describes",
+        "description": "Recorded stock item describes product.",
+        "count": 205,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "stock_item.csv",
+            "record_type": "csv",
+            "path": "describes"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "stock_item",
+        "to_kind": "location",
+        "label": "stored_at",
+        "description": "Recorded stock item stored at location.",
+        "count": 222,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "stock_item.csv",
+            "record_type": "csv",
+            "path": "stored_at"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "invoice",
+        "to_kind": "customer",
+        "label": "billed_to",
+        "description": "Recorded invoice billed to customer.",
+        "count": 239,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "invoice.csv",
+            "record_type": "csv",
+            "path": "billed_to"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "invoice",
+        "to_kind": "order",
+        "label": "for_order",
+        "description": "Recorded invoice for order order.",
+        "count": 256,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "invoice.csv",
+            "record_type": "csv",
+            "path": "for_order"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "payment",
+        "to_kind": "invoice",
+        "label": "settles",
+        "description": "Recorded payment settles invoice.",
+        "count": 273,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "payment.csv",
+            "record_type": "csv",
+            "path": "settles"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "employee",
+        "to_kind": "location",
+        "label": "works_at",
+        "description": "Recorded employee works at location.",
+        "count": 290,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "employee.csv",
+            "record_type": "csv",
+            "path": "works_at"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "shipment",
+        "to_kind": "order",
+        "label": "fulfils",
+        "description": "Recorded shipment fulfils order.",
+        "count": 307,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "shipment.csv",
+            "record_type": "csv",
+            "path": "fulfils"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "shipment",
+        "to_kind": "supplier",
+        "label": "from",
+        "description": "Recorded shipment from supplier.",
+        "count": 324,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "shipment.csv",
+            "record_type": "csv",
+            "path": "from"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "shipment",
+        "to_kind": "location",
+        "label": "to",
+        "description": "Recorded shipment to location.",
+        "count": 341,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "shipment.csv",
+            "record_type": "csv",
+            "path": "to"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "purchase_order",
+        "to_kind": "supplier",
+        "label": "sent_to",
+        "description": "Recorded purchase order sent to supplier.",
+        "count": 358,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "purchase_order.csv",
+            "record_type": "csv",
+            "path": "sent_to"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "purchase_order",
+        "to_kind": "product",
+        "label": "contains",
+        "description": "Recorded purchase order contains product.",
+        "count": 375,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "purchase_order.csv",
+            "record_type": "csv",
+            "path": "contains"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "sale",
+        "to_kind": "product",
+        "label": "includes",
+        "description": "Recorded sale includes product.",
+        "count": 392,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "sale.csv",
+            "record_type": "csv",
+            "path": "includes"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "sale",
+        "to_kind": "location",
+        "label": "recorded_at",
+        "description": "Recorded sale recorded at location.",
+        "count": 409,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "sale.csv",
+            "record_type": "csv",
+            "path": "recorded_at"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "sale",
+        "to_kind": "employee",
+        "label": "made_by",
+        "description": "Recorded sale made by employee.",
+        "count": 426,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "sale.csv",
+            "record_type": "csv",
+            "path": "made_by"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "contract",
+        "to_kind": "supplier",
+        "label": "with",
+        "description": "Recorded contract with supplier.",
+        "count": 443,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "contract.csv",
+            "record_type": "csv",
+            "path": "with"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "delivery",
+        "to_kind": "purchase_order",
+        "label": "fulfils",
+        "description": "Recorded delivery fulfils purchase order.",
+        "count": 460,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "delivery.csv",
+            "record_type": "csv",
+            "path": "fulfils"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "delivery",
+        "to_kind": "location",
+        "label": "to",
+        "description": "Recorded delivery to location.",
+        "count": 477,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "delivery.csv",
+            "record_type": "csv",
+            "path": "to"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "supplier",
+        "to_kind": "employee",
+        "label": "has_contact",
+        "description": "Recorded supplier has contact employee.",
+        "count": 494,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "supplier.csv",
+            "record_type": "csv",
+            "path": "has_contact"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "customer",
+        "to_kind": "invoice",
+        "label": "has_invoice",
+        "description": "Recorded customer has invoice invoice.",
+        "count": 511,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "customer.csv",
+            "record_type": "csv",
+            "path": "has_invoice"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "location",
+        "to_kind": "stock_item",
+        "label": "has_stock",
+        "description": "Recorded location has stock stock item.",
+        "count": 528,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "location.csv",
+            "record_type": "csv",
+            "path": "has_stock"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "product",
+        "to_kind": "order",
+        "label": "on_order",
+        "description": "Recorded product on order order.",
+        "count": 545,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "product.csv",
+            "record_type": "csv",
+            "path": "on_order"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "supplier",
+        "to_kind": "shipment",
+        "label": "ships",
+        "description": "Recorded supplier ships shipment.",
+        "count": 562,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "supplier.csv",
+            "record_type": "csv",
+            "path": "ships"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "purchase_order",
+        "to_kind": "invoice",
+        "label": "has_invoice",
+        "description": "Recorded purchase order has invoice invoice.",
+        "count": 579,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "purchase_order.csv",
+            "record_type": "csv",
+            "path": "has_invoice"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "payment",
+        "to_kind": "customer",
+        "label": "made_by",
+        "description": "Recorded payment made by customer.",
+        "count": 596,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "payment.csv",
+            "record_type": "csv",
+            "path": "made_by"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "employee",
+        "to_kind": "location",
+        "label": "manages",
+        "description": "Recorded employee manages location.",
+        "count": 613,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "employee.csv",
+            "record_type": "csv",
+            "path": "manages"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "contract",
+        "to_kind": "product",
+        "label": "covers",
+        "description": "Recorded contract covers product.",
+        "count": 630,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "contract.csv",
+            "record_type": "csv",
+            "path": "covers"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "shipment",
+        "to_kind": "product",
+        "label": "contains",
+        "description": "Recorded shipment contains product.",
+        "count": 647,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "shipment.csv",
+            "record_type": "csv",
+            "path": "contains"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "order",
+        "to_kind": "payment",
+        "label": "paid_by",
+        "description": "Recorded order paid by payment.",
+        "count": 664,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "order.csv",
+            "record_type": "csv",
+            "path": "paid_by"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "location",
+        "to_kind": "delivery",
+        "label": "receives",
+        "description": "Recorded location receives delivery.",
+        "count": 681,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "location.csv",
+            "record_type": "csv",
+            "path": "receives"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "customer",
+        "to_kind": "product",
+        "label": "buys",
+        "description": "Recorded customer buys product.",
+        "count": 698,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "customer.csv",
+            "record_type": "csv",
+            "path": "buys"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "sale",
+        "to_kind": "payment",
+        "label": "paid_by",
+        "description": "Recorded sale paid by payment.",
+        "count": 715,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "sale.csv",
+            "record_type": "csv",
+            "path": "paid_by"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "supplier",
+        "to_kind": "contract",
+        "label": "under_contract",
+        "description": "Recorded supplier under contract contract.",
+        "count": 732,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "supplier.csv",
+            "record_type": "csv",
+            "path": "under_contract"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "product",
+        "to_kind": "location",
+        "label": "stocked_at",
+        "description": "Recorded product stocked at location.",
+        "count": 749,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "product.csv",
+            "record_type": "csv",
+            "path": "stocked_at"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "invoice",
+        "to_kind": "location",
+        "label": "issued_at",
+        "description": "Recorded invoice issued at location.",
+        "count": 766,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "invoice.csv",
+            "record_type": "csv",
+            "path": "issued_at"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "purchase_order",
+        "to_kind": "employee",
+        "label": "requested_by",
+        "description": "Recorded purchase order requested by employee.",
+        "count": 783,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "purchase_order.csv",
+            "record_type": "csv",
+            "path": "requested_by"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "delivery",
+        "to_kind": "product",
+        "label": "contains",
+        "description": "Recorded delivery contains product.",
+        "count": 800,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "delivery.csv",
+            "record_type": "csv",
+            "path": "contains"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "location",
+        "to_kind": "order",
+        "label": "fulfils",
+        "description": "Recorded location fulfils order.",
+        "count": 817,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "location.csv",
+            "record_type": "csv",
+            "path": "fulfils"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "contract",
+        "to_kind": "employee",
+        "label": "managed_by",
+        "description": "Recorded contract managed by employee.",
+        "count": 834,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "contract.csv",
+            "record_type": "csv",
+            "path": "managed_by"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "stock_item",
+        "to_kind": "shipment",
+        "label": "received_in",
+        "description": "Recorded stock item received in shipment.",
+        "count": 851,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "stock_item.csv",
+            "record_type": "csv",
+            "path": "received_in"
+          }
+        ]
+      },
+      {
+        "status": "approved",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "product",
+        "to_kind": "purchase_order",
+        "label": "appears_on",
+        "description": "Recorded product appears on purchase order.",
+        "count": 868,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "product.csv",
+            "record_type": "csv",
+            "path": "appears_on"
+          }
+        ]
+      },
+      {
+        "status": "proposed",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "order",
+        "to_kind": "location",
+        "label": "delivered_to",
+        "description": "Recorded order delivered to location.",
+        "count": 885,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "order.csv",
+            "record_type": "csv",
+            "path": "delivered_to"
+          }
+        ]
+      },
+      {
+        "status": "proposed",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "supplier",
+        "to_kind": "invoice",
+        "label": "invoices",
+        "description": "Recorded supplier invoices invoice.",
+        "count": 902,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "supplier.csv",
+            "record_type": "csv",
+            "path": "invoices"
+          }
+        ]
+      },
+      {
+        "status": "proposed",
+        "origin": "agent",
+        "revision": 1,
+        "synonyms": [],
+        "merge_into": null,
+        "reason": "Matched the business records and reviewed column mapping.",
+        "from_kind": "customer",
+        "to_kind": "location",
+        "label": "collects_at",
+        "description": "Recorded customer collects at location.",
+        "count": 919,
+        "samples": [
+          {
+            "from": "House blend 1kg",
+            "to": "North Coast Beans"
+          }
+        ],
+        "source_map": [
+          {
+            "source": "customer.csv",
+            "record_type": "csv",
+            "path": "collects_at"
+          }
+        ]
+      }
+    ]
+  },
+  "profile": {
+    "id": "house",
+    "name": "House blend 1kg",
+    "kind": "product",
+    "summary": "Our everyday espresso blend, supplied by North Coast Beans and sold at Fitzroy and Carlton.",
+    "kind_approved": true,
+    "properties": [
+      {
+        "name": "price",
+        "datatype": "money",
+        "unit": "AUD",
+        "value": 20,
+        "as_of": "2026-11-10T03:32:00Z",
+        "source": "row-42",
+        "source_label": "products.csv \u00b7 row 42",
+        "source_state": "available",
+        "state": "recorded"
+      },
+      {
+        "name": "unit_cost",
+        "datatype": "money",
+        "unit": "AUD",
+        "value": 12,
+        "as_of": "2026-11-10T03:32:00Z",
+        "source": "row-42",
+        "source_label": "products.csv \u00b7 row 42",
+        "source_state": "available",
+        "state": "stale"
+      },
+      {
+        "name": "units_sold",
+        "datatype": "integer",
+        "unit": null,
+        "value": 100,
+        "as_of": "2026-11-10T03:32:00Z",
+        "source": "row-42",
+        "source_label": "products.csv \u00b7 row 42",
+        "source_state": "available",
+        "state": "recorded"
+      },
+      {
+        "name": "margin",
+        "datatype": "percent",
+        "unit": null,
+        "value": null,
+        "as_of": "2026-11-10T03:32:00Z",
+        "source": null,
+        "source_label": "products.csv \u00b7 row 42",
+        "source_state": "available",
+        "state": "missing"
+      }
+    ],
+    "numbers": [
+      {
+        "name": "gross_profit",
+        "definition": "Units sold \u00d7 (price minus unit cost)",
+        "result": {
+          "run": {
+            "value": 800,
+            "unit": "AUD",
+            "expr_words": "100 \u00d7 (20 - 12)",
+            "as_of": "2026-11-10T03:32:00Z",
+            "n_entities": 1,
+            "input_properties": [
+              "price",
+              "unit_cost",
+              "units_sold"
+            ],
+            "entity_ids": [
+              "house"
+            ],
+            "warnings": [
+              "Unit cost is stale. Inspect the current source before relying on this result."
+            ],
+            "truncated": false
+          }
+        }
+      }
+    ],
+    "links": [
+      {
+        "id": "link-1",
+        "label": "supplied_by",
+        "from_id": "house",
+        "from_name": "House blend 1kg",
+        "to_id": "north",
+        "to_name": "North Coast Beans",
+        "recorded_at": "2026-11-10T03:32:00Z"
+      }
+    ],
+    "link_counts": [
+      {
+        "label": "supplied_by",
+        "outgoing": true,
+        "total": 1
+      }
+    ],
+    "history": [
+      {
+        "id": "h1",
+        "property": "unit_cost",
+        "value_num": 12,
+        "as_of": "2026-11-10T03:32:00Z",
+        "recorded_at": "2026-11-10T03:32:00Z",
+        "source": "row-42"
+      }
+    ],
+    "history_total": 1,
+    "sources": [
+      {
+        "id": "row-42",
+        "state": "available",
+        "record": null,
+        "document": {
+          "id": "products",
+          "filename": "products.csv",
+          "row": {
+            "line": 42,
+            "cells": {
+              "product": "House blend 1kg",
+              "price": "20.00",
+              "unit_cost": "12.00",
+              "units_sold": "100"
+            }
+          },
+          "note": "Exact imported row. Source updated after this value was recorded."
+        }
+      }
+    ],
+    "memories": [
+      {
+        "id": "m1",
+        "type": "observation",
+        "text": "Review the unit cost with North Coast Beans before the summer order.",
+        "recorded_at": "2026-11-10T03:32:00Z"
+      }
+    ],
+    "more": {
+      "history": false,
+      "links": false,
+      "memories": false
+    },
+    "offset": 0,
+    "warnings": [
+      "Unit cost is stale. Margin is missing."
+    ]
+  },
+  "events": [
+    {
+      "seq": 100,
+      "at": "2026-11-10T03:32:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "You",
+      "actor_type": "user",
+      "action": "approved",
+      "definition_type": "kind",
+      "kind": "product",
+      "name": "product",
+      "target": "",
+      "revision": 1,
+      "reason": "Matches our product catalogue."
+    },
+    {
+      "seq": 99,
+      "at": "2026-11-10T03:31:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "proposed",
+      "definition_type": "property",
+      "kind": "product",
+      "name": "unit_cost",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 98,
+      "at": "2026-11-10T03:30:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "imported",
+      "definition_type": "import",
+      "kind": "product",
+      "name": "1240 products",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 97,
+      "at": "2026-11-10T03:29:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "You",
+      "actor_type": "user",
+      "action": "approved",
+      "definition_type": "kind",
+      "kind": "product",
+      "name": "product",
+      "target": "",
+      "revision": 1,
+      "reason": "Matches our product catalogue."
+    },
+    {
+      "seq": 96,
+      "at": "2026-11-10T03:28:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "proposed",
+      "definition_type": "property",
+      "kind": "product",
+      "name": "unit_cost",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 95,
+      "at": "2026-11-10T03:27:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "imported",
+      "definition_type": "import",
+      "kind": "product",
+      "name": "1240 products",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 94,
+      "at": "2026-11-10T03:26:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "You",
+      "actor_type": "user",
+      "action": "approved",
+      "definition_type": "kind",
+      "kind": "product",
+      "name": "product",
+      "target": "",
+      "revision": 1,
+      "reason": "Matches our product catalogue."
+    },
+    {
+      "seq": 93,
+      "at": "2026-11-10T03:25:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "proposed",
+      "definition_type": "property",
+      "kind": "product",
+      "name": "unit_cost",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 92,
+      "at": "2026-11-10T03:24:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "imported",
+      "definition_type": "import",
+      "kind": "product",
+      "name": "1240 products",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 91,
+      "at": "2026-11-10T03:23:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "You",
+      "actor_type": "user",
+      "action": "approved",
+      "definition_type": "kind",
+      "kind": "product",
+      "name": "product",
+      "target": "",
+      "revision": 1,
+      "reason": "Matches our product catalogue."
+    },
+    {
+      "seq": 90,
+      "at": "2026-11-10T03:22:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "proposed",
+      "definition_type": "property",
+      "kind": "product",
+      "name": "unit_cost",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 89,
+      "at": "2026-11-10T03:21:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "imported",
+      "definition_type": "import",
+      "kind": "product",
+      "name": "1240 products",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 88,
+      "at": "2026-11-10T03:20:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "You",
+      "actor_type": "user",
+      "action": "approved",
+      "definition_type": "kind",
+      "kind": "product",
+      "name": "product",
+      "target": "",
+      "revision": 1,
+      "reason": "Matches our product catalogue."
+    },
+    {
+      "seq": 87,
+      "at": "2026-11-10T03:19:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "proposed",
+      "definition_type": "property",
+      "kind": "product",
+      "name": "unit_cost",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 86,
+      "at": "2026-11-10T03:18:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "imported",
+      "definition_type": "import",
+      "kind": "product",
+      "name": "1240 products",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 85,
+      "at": "2026-11-10T03:17:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "You",
+      "actor_type": "user",
+      "action": "approved",
+      "definition_type": "kind",
+      "kind": "product",
+      "name": "product",
+      "target": "",
+      "revision": 1,
+      "reason": "Matches our product catalogue."
+    },
+    {
+      "seq": 84,
+      "at": "2026-11-10T03:16:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "proposed",
+      "definition_type": "property",
+      "kind": "product",
+      "name": "unit_cost",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 83,
+      "at": "2026-11-10T03:15:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "imported",
+      "definition_type": "import",
+      "kind": "product",
+      "name": "1240 products",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 82,
+      "at": "2026-11-10T03:14:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "You",
+      "actor_type": "user",
+      "action": "approved",
+      "definition_type": "kind",
+      "kind": "product",
+      "name": "product",
+      "target": "",
+      "revision": 1,
+      "reason": "Matches our product catalogue."
+    },
+    {
+      "seq": 81,
+      "at": "2026-11-10T03:13:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "proposed",
+      "definition_type": "property",
+      "kind": "product",
+      "name": "unit_cost",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 80,
+      "at": "2026-11-10T03:12:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "imported",
+      "definition_type": "import",
+      "kind": "product",
+      "name": "1240 products",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 79,
+      "at": "2026-11-10T03:11:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "You",
+      "actor_type": "user",
+      "action": "approved",
+      "definition_type": "kind",
+      "kind": "product",
+      "name": "product",
+      "target": "",
+      "revision": 1,
+      "reason": "Matches our product catalogue."
+    },
+    {
+      "seq": 78,
+      "at": "2026-11-10T03:10:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "proposed",
+      "definition_type": "property",
+      "kind": "product",
+      "name": "unit_cost",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 77,
+      "at": "2026-11-10T03:09:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "imported",
+      "definition_type": "import",
+      "kind": "product",
+      "name": "1240 products",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 76,
+      "at": "2026-11-10T03:08:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "You",
+      "actor_type": "user",
+      "action": "approved",
+      "definition_type": "kind",
+      "kind": "product",
+      "name": "product",
+      "target": "",
+      "revision": 1,
+      "reason": "Matches our product catalogue."
+    },
+    {
+      "seq": 75,
+      "at": "2026-11-10T03:07:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "proposed",
+      "definition_type": "property",
+      "kind": "product",
+      "name": "unit_cost",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 74,
+      "at": "2026-11-10T03:06:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "imported",
+      "definition_type": "import",
+      "kind": "product",
+      "name": "1240 products",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 73,
+      "at": "2026-11-10T03:05:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "You",
+      "actor_type": "user",
+      "action": "approved",
+      "definition_type": "kind",
+      "kind": "product",
+      "name": "product",
+      "target": "",
+      "revision": 1,
+      "reason": "Matches our product catalogue."
+    },
+    {
+      "seq": 72,
+      "at": "2026-11-10T03:04:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "proposed",
+      "definition_type": "property",
+      "kind": "product",
+      "name": "unit_cost",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 71,
+      "at": "2026-11-10T03:03:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "imported",
+      "definition_type": "import",
+      "kind": "product",
+      "name": "1240 products",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 70,
+      "at": "2026-11-10T03:02:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "You",
+      "actor_type": "user",
+      "action": "approved",
+      "definition_type": "kind",
+      "kind": "product",
+      "name": "product",
+      "target": "",
+      "revision": 1,
+      "reason": "Matches our product catalogue."
+    },
+    {
+      "seq": 69,
+      "at": "2026-11-10T03:01:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "proposed",
+      "definition_type": "property",
+      "kind": "product",
+      "name": "unit_cost",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 68,
+      "at": "2026-11-10T03:00:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "imported",
+      "definition_type": "import",
+      "kind": "product",
+      "name": "1240 products",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    },
+    {
+      "seq": 67,
+      "at": "2026-11-10T02:59:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "You",
+      "actor_type": "user",
+      "action": "approved",
+      "definition_type": "kind",
+      "kind": "product",
+      "name": "product",
+      "target": "",
+      "revision": 1,
+      "reason": "Matches our product catalogue."
+    },
+    {
+      "seq": 66,
+      "at": "2026-11-10T02:58:00.000Z",
+      "actor": "fixture-agent",
+      "actor_name": "Claude Code",
+      "actor_type": "token",
+      "action": "proposed",
+      "definition_type": "property",
+      "kind": "product",
+      "name": "unit_cost",
+      "target": "",
+      "revision": 1,
+      "reason": null
+    }
+  ]
+}

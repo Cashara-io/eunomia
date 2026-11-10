@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import Link from "next/link";
-import { API_URL } from "@/lib/api";
+import { API_URL, ApiError } from "@/lib/api";
 import { useLiveStatus } from "@/lib/queries/live";
-import ErrorLine, { failure } from "@/components/ErrorLine";
+import ReadState from "./ReadState";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import { words } from "./DefinitionRows";
 import { twinHref } from "./model";
 
@@ -31,7 +32,7 @@ export default function Activity({ space, compact = false, definition }: {
   const before = cursor.at(-1);
   const query = useQuery({
     queryKey: ["ontology-activity", space, { actor, action, type, kind, before, definition }],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams({ newest: "true", limit: compact ? "5" : "30" });
       if (type) params.set("definition_type", type);
       if (actor) params.set("actor_type", actor);
@@ -39,8 +40,8 @@ export default function Activity({ space, compact = false, definition }: {
       if (definition?.kind || kind) params.set("kind", definition?.kind || kind);
       if (definition) { params.set("review_only", "true"); params.set("definition_type", definition.type); params.set("name", definition.name); }
       if (before !== undefined) params.set("before", String(before));
-      const response = await fetch(`${API_URL}/api/vaults/${encodeURIComponent(space)}/ontology/activity?${params}`, { credentials: "include" });
-      if (!response.ok) throw new Error("Could not load activity. Try again.");
+      const response = await fetch(`${API_URL}/api/vaults/${encodeURIComponent(space)}/ontology/activity?${params}`, { credentials: "include", signal });
+      if (!response.ok) throw new ApiError(response.status, `http.${response.status}`, "Could not load activity.");
       return pageSchema.parse(await response.json());
     },
     refetchInterval: live === "live" || paused ? false : 12000,
@@ -55,7 +56,7 @@ export default function Activity({ space, compact = false, definition }: {
   function pause() { setAnchor({ key, events: shown }); setSeen(events[0]?.seq ?? 0); setPaused(true); }
   return <section aria-label={definition ? "Review history" : "Ontology activity"} className="ledger p-4 flex flex-col gap-3 min-w-0">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <h2 className="section-title">{definition ? "Review history" : compact ? "See it happen" : "Activity"}</h2>
+      <h2 className="section-title">{definition ? "Review history" : compact ? "Latest activity" : "Activity"}</h2>
       <span className="label">{paused ? "View paused" : live === "live" ? "Live" : "Reconnecting"}</span>
       {!definition && <button className="btn btn-ghost btn-sm" onClick={() => { if (paused) { setPaused(false); setAnchor(null); setSeen(null); } else pause(); }}>{paused ? "Follow activity" : "Pause view"}</button>}
     </div>
@@ -71,15 +72,15 @@ export default function Activity({ space, compact = false, definition }: {
       </select></label>
       <label>Kind<input className="field p-2 ml-2" value={kind} placeholder="All kinds" onChange={e => { setKind(e.target.value); browse(); }} /></label>
     </div>}
-    {query.isError && <ErrorLine error={failure(query.error, "Could not load activity.")} />}
+    {query.isError ? <ReadState error={query.error} retry={() => void query.refetch()} subject="activity" /> : query.isPending ? <LoadingSkeleton label="Loading activity" layout="rows" rows={3} /> : <>
     <div className="max-h-96 overflow-auto" onScroll={e => { if (!paused && e.currentTarget.scrollTop > 16) pause(); }}>
       <ol className="hairline-rows text-[13px]">
         {shown.map(event => <li key={event.seq} className="py-3 [overflow-wrap:anywhere]">
           <p><span className="font-medium">{event.actor_name}</span> {words(event.action).toLowerCase()} {words(event.name)} <span className="label">{words(event.definition_type)}{event.kind && event.definition_type !== "kind" && event.definition_type !== "link" ? ` · ${words(event.kind)}` : ""}</span></p>
           <time dateTime={event.at} className="text-[12px]" style={{ color: "var(--ink-dim)" }}>{new Date(event.at).toLocaleString("en-AU")}</time>
-          {event.reason && <p className="mt-1">{event.reason}</p>}
+          {!compact && event.reason && <p className="mt-1">{event.reason}</p>}
         </li>)}
-        {shown.length === 0 && <li className="py-3">{query.isPending ? "Loading activity…" : "No activity recorded for these filters."}</li>}
+        {shown.length === 0 && <li className="py-3">{actor || action || type || kind ? "No activity recorded for these filters." : "No activity recorded yet."}</li>}
       </ol>
     </div>
     {unseen > 0 && <button className="btn btn-sm self-start" onClick={() => { setAnchor(null); setSeen(null); setPaused(false); }}>{unseen} new events</button>}
@@ -87,6 +88,7 @@ export default function Activity({ space, compact = false, definition }: {
       <button className="btn btn-sm" disabled={cursor.length === 0} onClick={() => setCursor(cursor.slice(0, -1))}>Newer</button>
       <button className="btn btn-sm" disabled={!query.data?.more} onClick={() => { if (query.data) setCursor([...cursor, query.data.next]); }}>Older</button>
     </div>}
+    </>}
     {compact && !definition && <Link className="link self-start text-[13px]" href={twinHref("/ontology/activity", space)}>Open all activity</Link>}
   </section>;
 }
