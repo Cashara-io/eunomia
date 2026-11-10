@@ -285,7 +285,7 @@ async fn peer_hello(State(state): State<AppState>, Path(org): Path<String>) -> R
 async fn peer_join(State(state): State<AppState>, Path(org): Path<String>, Json(body): Json<Value>) -> Response {
     let Some(st) = peer_org(&state, &org).await else { return refuse(404, "unknown") };
     let Ok(req) = serde_json::from_value::<peers::JoinRequest>(body) else {
-        return peers::refuse_join(&st, None, peers::JoinRefusal::Malformed).await.into_response();
+        return peers::refuse_join(&st, peers::JoinRefusal::Malformed).await.into_response();
     };
     match peers::accept_join(&st, req).await {
         Ok(out) => Json(out).into_response(),

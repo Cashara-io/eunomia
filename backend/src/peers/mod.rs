@@ -347,18 +347,16 @@ pub(crate) enum JoinRefusal {
     Malformed,
 }
 
-pub(crate) async fn refuse_join(state: &OrgState, user: Option<&RecordId>, reason: JoinRefusal) -> AppError {
-    // Unknown codes still belong in this host workspace's log. Do not trust the claimed guest
-    // identity, and do not put anonymous rows in every workspace's audit feed.
+pub(crate) async fn refuse_join(state: &OrgState, reason: JoinRefusal) -> AppError {
+    // Every refusal resolves the host owner then writes the audit, regardless of whether the
+    // share exists. Never use a share creator to choose the work on this unauthenticated path.
     #[derive(serde::Deserialize, surrealdb::types::SurrealValue)]
     struct Owner { user: RecordId }
-    let owner = if user.is_none() {
-        match store::control::ORG_FIRST_OWNER.on(&state.control).bind(("org", state.db.org().record())).await {
-            Ok(mut res) => res.take::<Vec<Owner>>(0).ok().and_then(|rows| rows.into_iter().next()).map(|row| row.user),
-            Err(_) => None,
-        }
-    } else { None };
-    if let Some(user) = user.or(owner.as_ref()) {
+    let owner = match store::control::ORG_FIRST_OWNER.on(&state.control).bind(("org", state.db.org().record())).await {
+        Ok(mut res) => res.take::<Vec<Owner>>(0).ok().and_then(|rows| rows.into_iter().next()).map(|row| row.user),
+        Err(_) => None,
+    };
+    if let Some(user) = owner.as_ref() {
         let detail = match reason {
             JoinRefusal::Expired => "why=expired",
             JoinRefusal::Used => "why=used",
@@ -374,20 +372,20 @@ pub(crate) async fn refuse_join(state: &OrgState, user: Option<&RecordId>, reaso
 
 pub async fn accept_join(state: &OrgState, req: JoinRequest) -> AppResult<JoinResponse> {
     if !valid_key(&req.share) || req.nonce_g.len() > 64 || req.guest_name.len() > 200 || req.guest_instance.len() > 64 || req.guest_org.len() > 64 {
-        return Err(refuse_join(state, None, JoinRefusal::Malformed).await);
+        return Err(refuse_join(state, JoinRefusal::Malformed).await);
     }
     let share: Option<ShareRow> = store::get(&state.db, &share_rid(&req.share)).await?;
-    let Some(share) = share else { return Err(refuse_join(state, None, JoinRefusal::Malformed).await) };
+    let Some(share) = share else { return Err(refuse_join(state, JoinRefusal::Malformed).await) };
     if share.used_at.is_some() {
-        return Err(refuse_join(state, Some(&share.created_by), JoinRefusal::Used).await);
+        return Err(refuse_join(state, JoinRefusal::Used).await);
     }
     if share.expires_at.into_inner() <= chrono::Utc::now() {
-        return Err(refuse_join(state, Some(&share.created_by), JoinRefusal::Expired).await);
+        return Err(refuse_join(state, JoinRefusal::Expired).await);
     }
-    let Some(enc) = share.secret_enc.as_deref() else { return Err(refuse_join(state, Some(&share.created_by), JoinRefusal::Malformed).await) };
+    let Some(enc) = share.secret_enc.as_deref() else { return Err(refuse_join(state, JoinRefusal::Malformed).await) };
     let secret = hex::decode(crate::connectors::crypto::decrypt_exact(&state.settings.encryption_key, enc)?.trim()).map_err(|_| AppError::internal("share secret is not hex"))?;
     if !crypto::verify_mac(&secret, &refs(&req.parts()), &req.mac) {
-        return Err(refuse_join(state, Some(&share.created_by), JoinRefusal::Malformed).await);
+        return Err(refuse_join(state, JoinRefusal::Malformed).await);
     }
     let link = crypto::random_id();
     // only one join wins a code
@@ -399,7 +397,7 @@ pub async fn accept_join(state: &OrgState, req: JoinRequest) -> AppResult<JoinRe
         let reason = if current.as_ref().is_some_and(|row| row.used_at.is_some()) { JoinRefusal::Used }
             else if current.as_ref().is_some_and(|row| row.expires_at.into_inner() <= chrono::Utc::now()) { JoinRefusal::Expired }
             else { JoinRefusal::Malformed };
-        return Err(refuse_join(state, Some(&share.created_by), reason).await);
+        return Err(refuse_join(state, reason).await);
     }
     let nonce_h = crypto::random_id();
     let key = crypto::link_key(&secret, &link, &req.nonce_g, &nonce_h);

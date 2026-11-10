@@ -5,6 +5,9 @@
 mod common;
 
 use common::{sys, TestApp};
+use axum::{body::Body, http::{Request, StatusCode}};
+use http_body_util::BodyExt;
+use tower::ServiceExt;
 use eunomia_backend::peers::{self, sync};
 use eunomia_backend::rid::RecordIdExt;
 use eunomia_backend::state::OrgState;
@@ -449,6 +452,7 @@ fn join_refusals_are_generic_but_host_audit_reasons_are_distinct() {
         for (reason, body) in [
             ("malformed", json!({"share":"bad"})),
             ("malformed", json!({"share":"not-a-key", "guest_instance":"untrusted", "nonce_g":"n", "mac":"bad"})),
+            ("malformed", json!({"share": "00000000000000000000000000000000", "guest_instance":"untrusted", "nonce_g":"n", "mac":"bad"})),
             ("malformed", request.clone()),
             ("expired", request.clone()),
             ("used", request.clone()),
@@ -458,12 +462,17 @@ fn join_refusals_are_generic_but_host_audit_reasons_are_distinct() {
             } else if reason == "used" {
                 host.app.db().await.test_raw().query("UPDATE $id SET used_at = time::now(), secret_enc = NONE").bind(("id", RecordId::new("peer_share", share.clone()))).await.unwrap().check().unwrap();
             }
-            let reply = host.app.http("POST", &path, Some(body), false).await;
-            assert_eq!(reply.0, axum::http::StatusCode::FORBIDDEN);
-            let mut public = reply.1;
-            // Trace ids identify requests, rather than exposing anything about the code.
-            public.as_object_mut().unwrap().remove("trace_id");
-            replies.push((reply.0, public));
+            // The same caller trace makes byte equality meaningful, including all headers.
+            let req = Request::builder().method("POST").uri(&path)
+                .header("content-type", "application/json")
+                .header("traceparent", "00-11111111111111111111111111111111-2222222222222222-01")
+                .body(Body::from(body.to_string())).unwrap();
+            let reply = host.app.router.clone().oneshot(req).await.unwrap();
+            assert_eq!(reply.status(), StatusCode::FORBIDDEN);
+            let status = reply.status();
+            let headers = reply.headers().clone();
+            let bytes = reply.into_body().collect().await.unwrap().to_bytes();
+            replies.push((status, headers, bytes));
             let (_, audit) = host.app.http("GET", "/api/admin/audit?category=sharing", None, true).await;
             let rows = audit["results"].as_array().unwrap();
             let refused = rows.iter().find(|r| r["action"] == "peer.join" && r["ok"] == false).expect("host refusal is audited");
@@ -478,7 +487,7 @@ fn join_refusals_are_generic_but_host_audit_reasons_are_distinct() {
         assert!(replies.windows(2).all(|pair| pair[0] == pair[1]));
         let mut result = host.app.state.control.test_raw().query("SELECT actor_kind, actor_id, target, detail FROM audit_event WHERE action = 'peer.join'").await.unwrap();
         let rows: Vec<Value> = result.take(0).unwrap();
-        assert_eq!(rows.len(), 5);
+        assert_eq!(rows.len(), 6);
         for row in rows {
             assert_eq!(row["actor_kind"], "anonymous");
             assert_eq!(row["actor_id"], "");
@@ -500,4 +509,19 @@ fn mcp_share_codes_default_to_read_and_allow_explicit_edit() {
         let edit = app.tool("vault_share_code", json!({"vault_id":vault, "role":"edit"})).await;
         assert_eq!(edit["role"], "edit");
     });
+}
+
+#[test]
+fn refusal_audit_work_does_not_depend_on_share_existence() {
+    let source = include_str!("../src/peers/mod.rs");
+    let refusal = source.split("pub(crate) async fn refuse_join").nth(1).unwrap()
+        .split("pub async fn accept_join").next().unwrap();
+    assert!(!refusal.contains("user: Option"), "never select the audit path from share ownership");
+    assert!(!refusal.contains("user.is_none()"));
+    assert_eq!(refusal.matches("ORG_FIRST_OWNER.on").count(), 1);
+    assert_eq!(refusal.matches("crate::audit::record(").count(), 1);
+    assert!(refusal.find("ORG_FIRST_OWNER.on").unwrap() < refusal.find("crate::audit::record(").unwrap());
+    let calls: Vec<_> = source.lines().filter(|line| line.contains("refuse_join(state,")).collect();
+    assert!(calls.len() >= 6);
+    assert!(calls.iter().all(|line| !line.contains("created_by") && !line.contains("None,")));
 }
