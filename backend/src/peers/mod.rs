@@ -458,7 +458,11 @@ async fn accept_join_checked(state: &OrgState, mut req: JoinRequest, mut malform
     let key = if valid_key(&req.share) { &req.share } else { DUMMY_SHARE_KEY };
     let share: Option<ShareRow> = store::get(&state.db, &share_rid(key)).await?;
     join_step("lookup", 0);
-    let live = share.as_ref().filter(|s| s.used_at.is_none() && s.expires_at.into_inner() > chrono::Utc::now());
+    // Read the clock and compare the expiry for every code, so no state skips that work.
+    let now = chrono::Utc::now();
+    let unexpired = share.as_ref().map(|s| s.expires_at.into_inner() > now);
+    let unused = share.as_ref().map(|s| s.used_at.is_none());
+    let live = share.as_ref().filter(|_| (unused == Some(true)) & (unexpired == Some(true)));
     // Encrypt the same dummy on EVERY request, then decrypt exactly one equal-length envelope.
     // Unavailable codes never decrypt a stored secret, including expired codes that retain it.
     let dummy = crate::connectors::crypto::encrypt(&state.settings.encryption_key, DUMMY_SECRET_HEX);
@@ -473,7 +477,7 @@ async fn accept_join_checked(state: &OrgState, mut req: JoinRequest, mut malform
         else { match share.as_ref() {
             None => Some(JoinRefusal::Unknown),
             Some(s) if s.used_at.is_some() => Some(JoinRefusal::Used),
-            Some(s) if s.expires_at.into_inner() <= chrono::Utc::now() => Some(JoinRefusal::Expired),
+            Some(_) if unexpired != Some(true) => Some(JoinRefusal::Expired),
             Some(_) if stored.is_none() || secret.is_none() => Some(JoinRefusal::Malformed),
             Some(_) if !mac_ok => Some(JoinRefusal::WrongMac),
             Some(_) => None,
@@ -589,7 +593,8 @@ pub async fn join(state: &OrgState, user: &RecordId, code: &str, my_addrs: Vec<S
         guest_instance: me,
         guest_org: state.db.org().key(),
         guest_name: name.chars().take(200).collect(),
-        guest_addrs: my_addrs,
+        // The host refuses more than MAX_JOIN_ADDRS, so send only that many (before signing).
+        guest_addrs: my_addrs.into_iter().take(MAX_JOIN_ADDRS).collect(),
         nonce_g: crypto::random_id(),
         mac: String::new(),
     };
