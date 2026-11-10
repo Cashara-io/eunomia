@@ -213,6 +213,15 @@ pub const EDGES_TOUCHING: Stmt = Stmt::at(
        RETURN array::concat($outs, $ins);"#,
     2, // two LETs, then the RETURN
 );
+/// One indexed direction at a time, so sparse lists leave the budget for busier nodes.
+pub const EDGES_IN_DIRECTION: Stmt = Stmt::new(
+    "entities.edges_in_direction",
+    r#"RETURN IF $outgoing {
+        (SELECT id, in, out, label, in.vault AS from_vault, out.vault AS to_vault FROM relates_to WHERE in = $id LIMIT $limit)
+    } ELSE {
+        (SELECT id, in, out, label, in.vault AS from_vault, out.vault AS to_vault FROM relates_to WHERE out = $id LIMIT $limit)
+    };"#,
+);
 /// Whether `$id` has any relation, either way, to an entity in its own vault `$vault`.
 pub const HAS_RELATION: Stmt = Stmt::at(
     "entities.has_relation",
@@ -335,6 +344,7 @@ pub const ALL: &[&Stmt] = &[
     &MEMORIES_OF,
     &EDGES_AMONG,
     &EDGES_TOUCHING,
+    &EDGES_IN_DIRECTION,
     &HAS_RELATION,
     &NODES_BY_ID,
     &RELATIONS_BY_ID,

@@ -220,3 +220,33 @@ async fn metric_evidence_cursor_reaches_all_contributors() {
     }
     assert_eq!(seen.len(), 1240);
 }
+
+#[tokio::test]
+async fn uneven_frontier_keeps_every_node_when_the_graph_fits_the_budget() {
+    assert_eq!(common::test_settings().surreal_url, "mem://");
+    let app = TestApp::new().await;
+    let start = entity(&app, "Root", "sample").await;
+    let mut hub = String::new();
+    for i in 0..32 {
+        let child = entity(&app, &format!("Child {i}"), "sample").await;
+        ok(app.tool("entity_relate", json!({"from_id":start,"to_id":child,"label":"touches"})).await);
+        if i == 0 { hub = child; }
+    }
+    for i in 0..100 {
+        let leaf = entity(&app, &format!("Leaf {i}"), "sample").await;
+        ok(app.tool("entity_relate", json!({"from_id":hub,"to_id":leaf,"label":"touches"})).await);
+    }
+    use eunomia_backend::entities::neighbourhood::FETCHED_EDGE_ROWS;
+    FETCHED_EDGE_ROWS.scope(std::cell::Cell::new(0), async {
+        let near = ok(app.tool("entities_neighbourhood", json!({"entity_id":start,"depth":2})).await);
+        assert_eq!(near["nodes"].as_array().unwrap().len(), 133);
+        assert_eq!(near["truncated"], false);
+        assert!(FETCHED_EDGE_ROWS.with(std::cell::Cell::get) <= 2400);
+    }).await;
+    let impact = ok(app.tool("show_view", json!({"view":"impact","start_id":start,"headline":"Linked items","reach":{"depth":2}})).await);
+    assert_eq!(impact["pagination"]["total"], 132);
+    assert_eq!(impact["pagination"]["total_partial"], false);
+    let scenario = ok(app.tool("scenario_run", json!({"changes":[{"remove":{"entity_id":start}}],"metrics":[],"impact_from":[start],"depth":2})).await);
+    assert_eq!(scenario["reached"].as_array().unwrap().len(), 132, "{scenario}");
+    assert_eq!(scenario["reached_truncated"], false);
+}

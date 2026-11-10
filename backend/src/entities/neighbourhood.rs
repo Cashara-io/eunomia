@@ -209,38 +209,36 @@ pub(crate) async fn walk_bounded(
     'walk: for hop in 1..=depth {
         if frontier.is_empty() { break; }
         let mut next = Vec::new();
-        // Each query has two lists per entity. Their LIMITs must sum to no more than
-        // the remaining fetch budget, including duplicates and cross-vault rows.
-        for batch in frontier.chunks(32) {
-            let remaining = max_fetch.saturating_sub(fetched);
-            let limit = (remaining / (2 * batch.len())).min(edge_limit.saturating_add(1));
-            if limit == 0 { truncated = true; break 'walk; }
-            let mut res = q::EDGES_TOUCHING.on(db).bind(("ids", batch.to_vec())).bind(("limit", limit)).await?;
-            let lists: Vec<Vec<EdgeRow>> = res.take(q::EDGES_TOUCHING.slot)?;
-            let count: usize = lists.iter().map(Vec::len).sum();
-            fetched += count;
-            #[cfg(feature = "test-support")]
-            let _ = FETCHED_EDGE_ROWS.try_with(|n| n.set(n.get() + count));
-            let mut touching = Vec::new();
-            for mut list in lists {
-                // At the fetch limit there may be more. Conservatively report partial.
-                truncated |= list.len() == limit;
+        // Allocate against actual rows fetched, not an equal share of a batch. An empty
+        // direction spends nothing, leaving its whole allowance for the next direction.
+        for id in &frontier {
+            for outgoing in [true, false] {
+                let remaining = max_fetch.saturating_sub(fetched);
+                if remaining == 0 { truncated = true; break 'walk; }
+                let limit = remaining.min(edge_limit.saturating_add(1));
+                let mut res = q::EDGES_IN_DIRECTION.on(db).bind(("id", id.clone()))
+                    .bind(("outgoing", outgoing)).bind(("limit", limit)).await?;
+                let mut list: Vec<EdgeRow> = res.take(0)?;
+                let count = list.len();
+                fetched += count;
+                #[cfg(feature = "test-support")]
+                let _ = FETCHED_EDGE_ROWS.try_with(|n| n.set(n.get() + count));
+                truncated |= count > edge_limit || (count == limit && fetched == max_fetch);
                 list.truncate(edge_limit);
-                touching.extend(list);
-            }
-            for e in touching.into_iter().filter(|e| e.from_vault.as_ref() == Some(vault) && e.to_vault.as_ref() == Some(vault)) {
-                if (!labels.is_empty() && !labels.contains(&e.label)) || edge_ids.contains(&e.id.to_string()) { continue; }
-                if edges.len() >= max_edges { truncated = true; break 'walk; }
-                let new_end = [&e.from, &e.to].into_iter().find(|end| !seen.contains_key(&end.to_string()));
-                if let Some(end) = new_end {
-                    if seen.len() >= max_nodes { truncated = true; continue; }
-                    seen.insert(end.to_string(), hop);
-                    via.insert(end.to_string(), e.clone());
-                    order.push(end.clone());
-                    next.push(end.clone());
+                for e in list.into_iter().filter(|e| e.from_vault.as_ref() == Some(vault) && e.to_vault.as_ref() == Some(vault)) {
+                    if (!labels.is_empty() && !labels.contains(&e.label)) || edge_ids.contains(&e.id.to_string()) { continue; }
+                    if edges.len() >= max_edges { truncated = true; break 'walk; }
+                    let new_end = [&e.from, &e.to].into_iter().find(|end| !seen.contains_key(&end.to_string()));
+                    if let Some(end) = new_end {
+                        if seen.len() >= max_nodes { truncated = true; continue; }
+                        seen.insert(end.to_string(), hop);
+                        via.insert(end.to_string(), e.clone());
+                        order.push(end.clone());
+                        next.push(end.clone());
+                    }
+                    edge_ids.insert(e.id.to_string());
+                    edges.push(e);
                 }
-                edge_ids.insert(e.id.to_string());
-                edges.push(e);
             }
         }
         frontier = next;
