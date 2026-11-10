@@ -148,9 +148,19 @@ impl Allowed {
         // Treat a rendered binding as one indivisible token, including its unit.
         // Check its outer boundary even when the numeric scanner stops before a custom unit.
         for (range, value) in &bindings {
+            let suffix = &text[range.end..];
+            let ordinal_value = value.strip_prefix('-').or_else(|| value.strip_prefix('+')).unwrap_or(value);
+            let ordinal = ordinal_value.chars().all(|c| c.is_ascii_digit())
+                && ["st", "nd", "rd", "th"].iter().any(|ending| suffix.strip_prefix(ending)
+                    .is_some_and(|rest| !following_token(rest)));
+            // Unit operators remain attached even across whitespace. Plain following words
+            // keep main's existing behaviour, including the scale-word gaps tracked in #226.
+            let continuation = suffix.trim_start().chars().next().is_some_and(|c|
+                currency(c) || matches!(c, '/' | '\u{2044}' | '%' | '‰' | '^' | '·' | '⋅' | '×' | '÷' | '∕' | '*' | '+' | '-'));
             if text.get(range.clone()) != Some(value.as_str())
                 || display(&text[..range.start]).chars().next_back().is_some_and(char::is_alphanumeric)
-                || display(&text[range.end..]).chars().next().is_some_and(char::is_alphanumeric)
+                || (!ordinal && suffix.chars().next().is_some_and(char::is_alphanumeric))
+                || continuation
             {
                 return Err(bad(format!("bound value must be a complete token in {path}")));
             }
@@ -758,6 +768,120 @@ impl ChatProse {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    // Snapshot of Allowed::check at origin/main 04ee4397. The scanner and string
+    // permissions are unchanged, so both rules run the same inputs below.
+    fn main_check(allowed: &Allowed, raw: &str, substitutions: &[(std::ops::Range<usize>, String)], path: &str) -> AppResult<()> {
+        let text = normalise(raw);
+        let numeric = spans(&text);
+        let bindings: Vec<_> = substitutions.iter().map(|(range, value)| {
+            (normalise(&raw[..range.start]).len()..normalise(&raw[..range.end]).len(), normalise(value))
+        }).collect();
+        let mut server_ranges: HashMap<std::ops::Range<usize>, HashSet<usize>> = HashMap::new();
+        for (source, server) in allowed.strings.iter().enumerate() {
+            let server = normalise(server);
+            let server_spans = spans(&server);
+            for phrase in phrases(&server) {
+                for (source_start, _) in server.match_indices(&phrase) {
+                    for (start, _) in text.match_indices(&phrase) {
+                        let end = start + phrase.len();
+                        if text[..start].chars().next_back().is_some_and(token) || following_token(&text[end..]) { continue; }
+                        for span in &server_spans {
+                            if span.start >= source_start && span.end <= source_start + phrase.len() {
+                                let range = start + span.start - source_start..start + span.end - source_start;
+                                server_ranges.entry(range).or_default().insert(source);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for span in &numeric {
+            let overlaps: Vec<_> = bindings.iter().filter(|(range, _)| range.start < span.end && span.start < range.end).collect();
+            let authorised = if !overlaps.is_empty() {
+                // A binding cannot borrow even one connector from prose or another binding.
+                overlaps.len() == 1 && overlaps[0].0 == *span && overlaps[0].1 == text[span.clone()]
+            } else if iso_span(&text[span.clone()]).is_some() {
+                !text[..span.start].chars().next_back().is_some_and(token)
+                    && !following_token(&text[span.end..])
+                    && iso_span(&text[span.clone()]).is_some_and(|dates| dates.iter().all(|d| allowed.dates.contains(d)))
+            } else {
+                server_ranges.get(span).is_some_and(|sources| sources.len() == 1)
+            };
+            if !authorised {
+                return Err(bad(format!("unsupported raw digits or combined numeric span in {path}: {raw:?}; use one bound placeholder for the complete formatted number. Raw digits require one verbatim letter-bearing phrase in a server string predating the turn, or a matching applied ISO date or bucket label. Number words are unchecked.")));
+            }
+        }
+        Ok(())
+    }
+    #[test]
+    fn boundary_probe_matches_main_except_intentional_tightening_and_custom_units() {
+        // prefix, bound token, suffix, main acceptance, required acceptance.
+        let cases = [
+            ("", "5 m", "illion customers", false, false),
+            ("", "5 m", "/s", false, false),
+            ("", "12", "0", false, false),
+            ("", "12", ".5", false, false),
+            ("", "12", ",000", false, false),
+            ("", "3", "k", true, false),
+            ("", "3", " k", true, true),
+            ("", "3", " thousand", true, true),
+            ("", "3", "%", false, false),
+            ("-", "3", "", false, false),
+            ("(", "3", ")", true, true),
+            ("x", "12", "", true, false),
+            ("", "12", "x 10", false, false),
+            ("", "12", " x 10", false, false),
+            ("", "12", " times ten", true, true),
+            ("", "12", "e6", false, false),
+            ("", "5 m", " long", false, true),
+            ("", "5", " million", true, true),
+            ("", "12", ".", true, true),
+            ("", "12", ",", true, true),
+            ("", "12", ")", true, true),
+            ("", "12", ":", true, true),
+            ("(", "12", " items)", true, true),
+            ("", "12", "-item", false, false),
+            ("", "12", "th", true, true),
+            ("", "42 orders", " today", false, true),
+            ("客", "12", "", true, false),
+            ("", "5 m", "%", false, false),
+            ("-", "5 m", "", false, false),
+        ];
+        for (prefix, value, suffix, main_expected, expected) in cases {
+            let raw = format!("{prefix}{value}{suffix}");
+            let subs = [(prefix.len()..prefix.len() + value.len(), value.to_string())];
+            let allowed = Allowed::default();
+            assert_eq!(main_check(&allowed, &raw, &subs, "probe").is_ok(), main_expected, "main: {raw}");
+            assert_eq!(allowed.check(&raw, &subs, "probe").is_ok(), expected, "current: {raw}");
+        }
+        let subs = [(0..2, "12".into()), (2..4, "34".into())];
+        assert!(main_check(&Allowed::default(), "1234", &subs, "probe").is_err());
+        assert!(Allowed::default().check("1234", &subs, "probe").is_err());
+        for value in ["12", "-12", "+12"] {
+          for suffix in ["st", "nd", "rd", "th", "st.", "nd,", "rd)", "th item"] {
+            let raw = format!("{value}{suffix}");
+            let subs = [(0..value.len(), value.into())];
+            assert!(main_check(&Allowed::default(), &raw, &subs, "probe").is_ok());
+            assert!(Allowed::default().check(&raw, &subs, "probe").is_ok(), "{raw}");
+          }
+        }
+        for suffix in ["/s", "%", "²", "³", "^2", "/per second", " / s", " %", "·s", "*s"] {
+            let raw = format!("5 m{suffix}");
+            assert!(Allowed::default().check(&raw, &[(0..3, "5 m".into())], "probe").is_err(), "{raw}");
+            assert!(Allowed::default().check(&raw, &[(0..raw.len(), raw.clone())], "probe").is_ok(), "complete: {raw}");
+        }
+    }
+    #[test]
+    fn catalogue_without_diagrams_or_bindings_is_identical_to_main() {
+        let allowed = Allowed::from_data(&data());
+        for raw in ["Monthly sales", "Twelve items", "ISO 27001", "Scope 3", "Scope 3 thousand", "Scope 3 k", "As at 2026-01-01", "12", "12th", "12-item", "5 m/s", "5 m%", "x12", "Revenue 12%", "2026-02-30"] {
+            assert_eq!(allowed.check(raw, &[], "text").is_ok(), main_check(&allowed, raw, &[], "text").is_ok(), "{raw}");
+            for field in ["title", "summary", "text", "label", "headline", "note", "reason", "caption", "legend", "why"] {
+                assert_eq!(resolve(&json!({field: raw}), &data()).is_ok(), main_check(&allowed, raw, &[], field).is_ok(), "{field}: {raw}");
+            }
+        }
+    }
     #[test]
     fn bound_values_are_complete_tokens_including_their_custom_units() {
         let placeholder = "{{/sources/graph/diagram/nodes/0/metrics/0/value}}";
