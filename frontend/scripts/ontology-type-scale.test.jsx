@@ -20,10 +20,14 @@ function offScale(source) {
     }
     failures.push(raw);
   };
+  const colour = /^(?:var\()?--(?:ink|accent|surface|border|warning)[\w-]*\)?$/;
   for (const match of source.matchAll(/\btext-\[([^\]]+)\]/g)) {
-    const value = match[1].replace(/^length:/, "");
-    if (/^var\(--(?:ink|accent|surface|border|warning)[\w-]*\)$/.test(value)) continue;
-    check(value);
+    if (match[1].startsWith("length:")) check(match[1].slice(7));
+    else if (!colour.test(match[1])) check(match[1]);
+  }
+  for (const match of source.matchAll(/\btext-\(([^)]+)\)/g)) {
+    if (match[1].startsWith("length:")) check(`var(${match[1].slice(7)})`);
+    else if (!colour.test(match[1])) failures.push(match[0]);
   }
   for (const match of source.matchAll(/\bfont-size\s*:\s*([^;\n}]+)/g)) check(match[1]);
   for (const match of source.matchAll(/\bfont\s*:\s*([^;\n}]+)/g)) {
@@ -81,6 +85,9 @@ for (const source of [
   '<text font-size="11">',
   '--label-size: 11px; font-size: var(--label-size);',
   'font-size: calc(12px + 13px);',
+  '--ink-label: 11px; className="text-[length:var(--ink-label)]"',
+  '--label-size: 11px; className="text-(length:--label-size)"',
+  'className="text-(--label-size)"',
 ]) test(`typography guard rejects ${source}`, () => {
   expect(offScale(source).length).toBeGreaterThan(0);
 });
@@ -89,6 +96,7 @@ for (const source of [
   'fontSize: `13px`',
   '<MetricNumber run={result} size={24} />',
   'font: 14px/18px sans-serif;',
+  'className="text-[length:var(--type-detail)] text-(length:--type-body) text-(--ink-dim)"',
 ]) test(`typography guard accepts ${source}`, () => {
   expect(offScale(source)).toEqual([]);
 });
