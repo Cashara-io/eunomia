@@ -13,7 +13,7 @@ use crate::peers;
 
 pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
     fn default_role() -> String {
-        peers::ROLE_EDIT.to_string()
+        peers::ROLE_READ.to_string()
     }
 
     #[derive(serde::Deserialize)]
@@ -32,7 +32,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
             "type": "object",
             "properties": {
                 "vault_id": {"type": "string", "description": "the vault to share (an id or its name); you must own it"},
-                "role": {"type": "string", "enum": ["edit", "read"], "description": "edit (default): the other Eunomia can add and change; read: it only receives"},
+                "role": {"type": "string", "enum": ["read", "edit"], "default": "read", "description": "read (default): the other Eunomia only receives; explicit edit lets it add and change"},
                 "expires_in_hours": {"type": "integer", "description": "how long the code works, default 168 (7 days), at most 720"},
             },
             "required": ["vault_id"],

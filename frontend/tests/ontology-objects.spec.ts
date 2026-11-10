@@ -16,7 +16,7 @@ test("typed objects, server pages, sources, scoped numbers and related objects",
     })
   ).json();
   const { token } = await (
-    await page.request.post("/api/auth/tokens", { data: { name: "Fixture" } })
+    await page.request.post("/api/auth/tokens", { data: { name: "Fixture", vault_id: vault.id } })
   ).json();
   async function tool(name: string, args: object) {
     const res = await page.request.post("/mcp", {

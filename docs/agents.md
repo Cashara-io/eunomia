@@ -39,6 +39,39 @@ cd eunomia
 - ChatGPT and Claude.ai (web/desktop) need a public `https://` URL. Add them
   by hand (below).
 
+## API token defaults
+
+New tokens expire after 90 days, use your Personal memory space, and grant
+`memory:read` and `memory:write`. This applies to Settings, the Advanced guide,
+and scripts that post only a name to `POST /api/auth/tokens`. Renew the token
+before it expires. Personal-only tokens cannot access team spaces, create
+spaces or change account settings. Minimal scopes cannot manage spaces or
+connected sources.
+
+For a new token, omitted `vault_id` means Personal; explicit `vault_id: null`
+means all your memory spaces. Omitted `expires_at` means 90 days; explicit
+`expires_at: null` means no expiry. A future RFC 3339 timestamp sets the expiry
+explicitly. Empty strings are invalid. Omitted or null `scopes` grants only
+read and write memory. Request elevated scopes by listing them explicitly;
+a creating credential cannot grant more scopes or a longer lifetime than it holds.
+
+For example, an account automation that needs every space and connector
+management can deliberately request:
+
+```json
+{
+  "name": "Account automation",
+  "vault_id": null,
+  "expires_at": "2027-06-01T00:00:00Z",
+  "scopes": ["memory:read", "memory:write", "connectors"]
+}
+```
+
+Settings keeps all-space access, unlimited lifetime and elevated scopes as
+visible choices. If Personal cannot be loaded, minting waits for a resolved
+destination. Already issued tokens keep their existing expiry, space and
+scopes. There is no revocation, narrowing or data backfill.
+
 ## Connecting one agent by hand
 
 The onboarding wizard's **Connect your AI app** step, and the app picker on

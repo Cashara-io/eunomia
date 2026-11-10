@@ -406,3 +406,98 @@ fn review209_peer_redirect_is_stripped_and_host_extraction_keeps_jordan_separate
         }
     });
 }
+
+#[test]
+fn share_role_defaults_preserve_existing_edit_codes_and_links() {
+    run(|| async {
+        let (host, guest) = (Node::new("defaults-host").await, Node::new("defaults-guest").await);
+        let vault = host.vault("Defaults").await;
+        // Stored before creating any code with the new API defaults.
+        let old_code = host.code(&vault, "edit").await;
+        let (copy, old_link) = guest.join(&old_code).await;
+        let path = format!("/api/vaults/{}/share-codes", vault.to_string());
+        let (status, read) = host.app.http("POST", &path, Some(json!({})), true).await;
+        assert_eq!(status, axum::http::StatusCode::OK);
+        assert_eq!(read["role"], "read");
+        let (status, edit) = host.app.http("POST", &path, Some(json!({"role":"edit"})), true).await;
+        assert_eq!(status, axum::http::StatusCode::OK);
+        assert_eq!(edit["role"], "edit");
+        assert_eq!(guest.link(&old_link).await.role, "edit");
+        guest.fact(&copy, "Legacy", "still writes").await;
+        guest.sync(&old_link).await;
+        assert!(names(&host.find(&vault, "Legacy").await).contains(&"Legacy".to_string()));
+        for (made, expected) in [(edit, "edit"), (read, "read")] {
+            // The API advertises real host addresses. Route only to our in-process fixture.
+            let mut body = peers::decode_code(made["code"].as_str().unwrap()).unwrap();
+            body.addrs = vec![host.base.clone()];
+            let (_, link) = guest.join(&peers::encode_code(&body)).await;
+            assert_eq!(guest.link(&link).await.role, expected);
+        }
+    });
+}
+
+#[test]
+fn join_refusals_are_generic_but_host_audit_reasons_are_distinct() {
+    run(|| async {
+        let host = Node::new("audit-host").await;
+        let vault = host.vault("Audit").await;
+        let code = host.code(&vault, "edit").await;
+        let share = peers::decode_code(&code).unwrap().share;
+        let path = format!("/api/peer/v1/{}/join", host.app.user.org.key());
+        let request = json!({"share":share, "guest_instance":"untrusted", "nonce_g":"n", "mac":"bad"});
+        let mut replies = vec![];
+        for (reason, body) in [
+            ("malformed", json!({"share":"bad"})),
+            ("malformed", json!({"share":"not-a-key", "guest_instance":"untrusted", "nonce_g":"n", "mac":"bad"})),
+            ("malformed", request.clone()),
+            ("expired", request.clone()),
+            ("used", request.clone()),
+        ] {
+            if reason == "expired" {
+                host.app.db().await.test_raw().query("UPDATE $id SET expires_at = time::now() - 1d").bind(("id", RecordId::new("peer_share", share.clone()))).await.unwrap().check().unwrap();
+            } else if reason == "used" {
+                host.app.db().await.test_raw().query("UPDATE $id SET used_at = time::now(), secret_enc = NONE").bind(("id", RecordId::new("peer_share", share.clone()))).await.unwrap().check().unwrap();
+            }
+            let reply = host.app.http("POST", &path, Some(body), false).await;
+            assert_eq!(reply.0, axum::http::StatusCode::FORBIDDEN);
+            let mut public = reply.1;
+            // Trace ids identify requests, rather than exposing anything about the code.
+            public.as_object_mut().unwrap().remove("trace_id");
+            replies.push((reply.0, public));
+            let (_, audit) = host.app.http("GET", "/api/admin/audit?category=sharing", None, true).await;
+            let rows = audit["results"].as_array().unwrap();
+            let refused = rows.iter().find(|r| r["action"] == "peer.join" && r["ok"] == false).expect("host refusal is audited");
+            let expected = match reason {
+                "expired" => "The share code had expired",
+                "used" => "The share code had already been used",
+                _ => "The share code was malformed or did not match",
+            };
+            assert_eq!(refused["reason"], expected);
+            assert_eq!(refused["actor_email"], "", "never attribute an anonymous request to the share owner");
+        }
+        assert!(replies.windows(2).all(|pair| pair[0] == pair[1]));
+        let mut result = host.app.state.control.test_raw().query("SELECT actor_kind, actor_id, target, detail FROM audit_event WHERE action = 'peer.join'").await.unwrap();
+        let rows: Vec<Value> = result.take(0).unwrap();
+        assert_eq!(rows.len(), 5);
+        for row in rows {
+            assert_eq!(row["actor_kind"], "anonymous");
+            assert_eq!(row["actor_id"], "");
+            assert_eq!(row["target"], "");
+            assert!(["why=malformed", "why=expired", "why=used"].contains(&row["detail"].as_str().unwrap()));
+        }
+    });
+}
+
+#[test]
+fn mcp_share_codes_default_to_read_and_allow_explicit_edit() {
+    run(|| async {
+        let mut settings = common::test_settings();
+        settings.public_url = "https://peer-tool-fixture.example.test".into();
+        let app = TestApp::with_settings(settings).await;
+        let vault = app.tool("vault_create", json!({"name":"MCP roles", "kind":"org"})).await["id"].clone();
+        let read = app.tool("vault_share_code", json!({"vault_id":vault})).await;
+        assert_eq!(read["role"], "read");
+        let edit = app.tool("vault_share_code", json!({"vault_id":vault, "role":"edit"})).await;
+        assert_eq!(edit["role"], "edit");
+    });
+}

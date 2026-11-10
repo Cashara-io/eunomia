@@ -2505,7 +2505,7 @@ export type ShareCodeRequest = {
      */
     expires_in_hours?: number | null;
     /**
-     * `edit` (the other Eunomia can add and change; the default) or `read`.
+     * `read` by default. Explicit `edit` lets the other Eunomia add and change.
      */
     role?: string;
 };
@@ -2745,17 +2745,18 @@ export type ThreadOut = {
 
 export type TokenCreate = {
     /**
-     * RFC 3339 timestamp in the future. Omit for a token that never expires.
+     * RFC 3339 timestamp in the future. Omit for 90 days. Explicit null never expires.
      */
     expires_at?: string | null;
     name: string;
     /**
      * Any of `memory:read`, `memory:write`, `vaults:admin`, `connectors`. Defaults
-     * to all of them. Cannot exceed the creating credential's own scopes.
+     * to read and write memory when omitted or null. Cannot exceed the creating credential's own scopes.
      */
     scopes?: Array<string> | null;
     /**
-     * Restrict the token to one vault you belong to.
+     * Omit for your Personal space. Explicit null allows all your spaces.
+     * A string restricts the token to one vault you belong to.
      */
     vault_id?: string | null;
 };

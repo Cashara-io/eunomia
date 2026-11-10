@@ -10,6 +10,7 @@ import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { KeyIcon } from "@phosphor-icons/react/ssr";
+import { useVaults } from "@/lib/queries/vaults";
 import { useCreateToken } from "@/lib/queries/auth";
 import CopyButton from "@/components/bits/CopyButton";
 import DecryptReveal from "@/components/bits/DecryptReveal";
@@ -76,6 +77,8 @@ export default function ConnectAgents({ onToken, initialClient }: { onToken?: ()
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
   const createToken = useCreateToken();
+  const vaultsQuery = useVaults();
+  const personal = vaultsQuery.isSuccess ? vaultsQuery.data.find((v) => v.is_default && v.id) : undefined;
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const current = CLIENTS.find((c) => c.id === client) ?? null;
@@ -84,11 +87,16 @@ export default function ConnectAgents({ onToken, initialClient }: { onToken?: ()
   const local = isPrivateHost(host);
 
   async function mint() {
-    if (!current || !client) return;
+    if (!current || !client || !personal) return;
     setBusy(true);
     setError(null);
     try {
-      const res = await createToken.mutateAsync({ name: current.token });
+      const res = await createToken.mutateAsync({
+        name: current.token,
+        scopes: ["memory:read", "memory:write"],
+        vault_id: personal.id,
+        expires_at: new Date(Date.now() + 90 * 86_400_000).toISOString(),
+      });
       setTokens((t) => ({ ...t, [client]: res.token }));
       onToken?.();
     } catch (err) {
@@ -122,11 +130,15 @@ export default function ConnectAgents({ onToken, initialClient }: { onToken?: ()
           <CopyButton value={token} label="Copy token" className="shrink-0" />
         </div>
       ) : (
-        <button onClick={mint} disabled={busy} aria-busy={busy} className="btn btn-primary self-start">
+        <button onClick={mint} disabled={busy || !personal} aria-busy={busy} className="btn btn-primary self-start">
           <KeyIcon weight="duotone" size={14} aria-hidden />
           {busy ? "Creating…" : "Generate a token"}
         </button>
       )}
+      {!token && !personal && (
+        <Hint>{vaultsQuery.isPending ? "Loading your Personal memory space…" : "Your Personal memory space could not be loaded. Reload to try again."}</Hint>
+      )}
+      <Hint>Reads and saves memories in Personal. Expires in 90 days. Choose other permissions or a lifetime in Settings, API tokens.</Hint>
       <Hint>
         Named &ldquo;{current.token}&rdquo; under{" "}
         <Link href="/settings?tab=tokens" className="link">

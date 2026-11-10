@@ -345,6 +345,9 @@ const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.failed"
 /// The exact cause a failed attempt recorded in its detail (`why=...`), when it recorded one.
 fn why_words(detail: &str) -> Option<&'static str> {
     match detail.split_whitespace().find_map(|kv| kv.strip_prefix("why="))? {
+        "expired" => Some("The share code had expired"),
+        "used" => Some("The share code had already been used"),
+        "malformed" => Some("The share code was malformed or did not match"),
         "no_account" => Some("No account has that email yet"),
         "member" => Some("Already a member"),
         "pending" => Some("Already invited, not answered yet"),
@@ -479,6 +482,8 @@ async fn get_workspace_audit(State(state): State<AppState>, user: User, Query(q)
         .map(|r| {
             let ok = r.outcome == "ok";
             let actor_email = match r.email.filter(|e| !e.is_empty()) {
+                // A refused peer request is anonymous. `user` only scopes its ledger row.
+                Some(_) if r.actor_kind == "anonymous" => String::new(),
                 Some(e) => e,
                 // a failed password sign-in keeps the email that was tried in its detail
                 None if r.user.is_none() && r.action == "auth.login" => r.detail.clone(),
