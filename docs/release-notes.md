@@ -18,6 +18,9 @@ This release also improves large CSV imports, preserves ontology identity during
 merges, fixes stale memory rebuilds and adds private diagnostic downloads in
 Settings. It includes the Next.js security updates already on main.
 
+Backup verification now stops counting at the next table schema, so nested
+schema definitions cannot be mistaken for saved rows and block a future update.
+
 Update from Settings, Updates. Tenant migrations 0040 to 0042 run at start-up.
 There are no required new environment settings. Back up before updating, and use
 the pre-update backup if rolling back to 2.2.0.

@@ -135,12 +135,17 @@ EOF
 # global regex walks the file: whole comment lines (`--` at a line start, so quotes in them are inert),
 # whole quoted strings and ids ('..', "..", `..`, ⟨..⟩: skipped, so braces inside values never count,
 # and they may span lines: 2.x exports keep raw newlines inside strings), and the brackets in between.
+# Each TABLE header ends the previous data section before the next schema is read.
 # A nested object or array is deeper than 1. perl is in every Debian image (perl-base is essential).
 dump_counts() {
   perl -0777 -ne '
     my (%c, $t, $d);
     while (/^(--[^\n]*)|(\x27[^\x27\\]*(?:\\.[^\x27\\]*)*\x27|"[^"\\]*(?:\\.[^"\\]*)*"|`[^`\\]*(?:\\.[^`\\]*)*`|\xe2\x9f\xa8(?:[^\\\xe2]|\\.|\xe2(?!\x9f\xa9))*\xe2\x9f\xa9)|([\[\]{}])/gm) {
-      if (defined $1) { if ($1 =~ /^-- TABLE DATA: (.*)$/) { $t = $1; $c{$t} += 0; $d = 0 } next }
+      if (defined $1) {
+        if ($1 =~ /^-- TABLE DATA: (.*)$/) { $t = $1; $c{$t} += 0; $d = 0 }
+        elsif ($1 =~ /^-- TABLE:/) { undef $t; $d = 0 }
+        next
+      }
       next if defined $2 or not defined $t;
       if ($3 eq "{") { $c{$t}++ if $d == 1; $d++ } elsif ($3 eq "[") { $d++ } else { $d-- }
     }
