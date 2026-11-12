@@ -1,6 +1,30 @@
 # Release notes
 
-## Unreleased
+## 2.3.0
+
+### Ontology, chat diagrams and Composio
+
+The Ontology workspace now includes a landscape overview, object directory and
+profiles, a connections canvas, owner review and saved activity with receipts.
+Chat can display server-resolved ontology diagrams alongside its checked numbers
+and charts. The shared type scale applies across these screens.
+
+Composio lets each person sign in, select supported app accounts and sync their
+content into the chosen space. Sync progress reports partial results and rate
+limits. Disconnect revokes and deletes the saved tokens. Projects, shared spaces,
+the change log and CLI tools remain part of the same installation.
+
+This release also improves large CSV imports, preserves ontology identity during
+merges, fixes stale memory rebuilds and adds private diagnostic downloads in
+Settings. It includes the Next.js security updates already on main.
+
+Update from Settings, Updates. Tenant migrations 0040 to 0043 run at start-up.
+There are no required new environment settings. Back up before updating, and use
+the pre-update backup if rolling back to 2.2.0.
+
+The chat turn ordering and number scale fixes in open PRs #238 and #236 are not
+included in this release.
+
 
 ### What changed for scripts
 

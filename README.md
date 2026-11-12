@@ -55,9 +55,10 @@ It installs Docker if it's missing, starts Eunomia and creates your account.
 Watch the launch film (with sound) in [1080p](docs/media/eunomia-launch-film.mp4)
 (27 MB) or [720p](docs/media/eunomia-launch-film-720p.mp4) (4 MB).
 
-**New in 2.2.0:** a project ontology. Your AI proposes the kinds of things your business has, their typed
-properties, links and certified metrics; you approve them. Then chat, MCP and Claude Code can answer number
-questions from your data, show what a change affects, and run what-ifs that save nothing.
+**New in 2.3.0:** the Ontology workspace brings your business model, objects, connections,
+review queue and activity together. Chat can show diagrams from saved ontology evidence.
+Composio connects selected Gmail, Google Drive and other supported app accounts to your memory.
+Projects, shared spaces and the command-line tools are included in the same install.
 Every release is described on the [releases page](https://github.com/Cashara-io/eunomia/releases).
 
 ---
