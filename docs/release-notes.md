@@ -18,7 +18,7 @@ This release also improves large CSV imports, preserves ontology identity during
 merges, fixes stale memory rebuilds and adds private diagnostic downloads in
 Settings. It includes the Next.js security updates already on main.
 
-Update from Settings, Updates. Tenant migrations 0040 to 0043 run at start-up.
+Update from Settings, Updates. Tenant migrations 0040 to 0042 run at start-up.
 There are no required new environment settings. Back up before updating, and use
 the pre-update backup if rolling back to 2.2.0.
 
