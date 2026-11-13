@@ -1,0 +1,58 @@
+//! Access reviews (`routers/access_reviews.rs`, tenant migration 0044). A completed review is
+//! frozen by the schema's events: no statement here can change it afterwards.
+
+use super::Stmt;
+
+pub const ALL: &[&Stmt] = &[&REVIEW_CREATE, &REVIEW_LIST, &REVIEW_GET, &REVIEW_DECISIONS, &REVIEW_DECIDE, &REVIEW_COMPLETE, &VAULT_ACCESS];
+
+/// Opens a review. The unique `open_slot` index refuses a second open review.
+pub const REVIEW_CREATE: Stmt = Stmt::new(
+    "access_reviews.create",
+    "CREATE access_review SET status = 'open', open_slot = 'open', started_by = $by, started_by_email = $email, \
+     started_at = time::now(), snapshot = $snapshot, snapshot_hash = $snapshot_hash RETURN id",
+);
+
+/// The newest reviews first.
+pub const REVIEW_LIST: Stmt = Stmt::new(
+    "access_reviews.list",
+    "SELECT id, status, started_by_email, started_at, completed_by_email, completed_at, result_hash, summary, \
+     array::len(snapshot.people) AS people FROM access_review ORDER BY started_at DESC LIMIT $limit",
+);
+
+pub const REVIEW_GET: Stmt = Stmt::new(
+    "access_reviews.get",
+    "SELECT id, status, started_by, started_by_email, started_at, completed_by, completed_by_email, completed_at, \
+     snapshot, snapshot_hash, result_hash, summary FROM access_review WHERE id = $id",
+);
+
+pub const REVIEW_DECISIONS: Stmt = Stmt::new(
+    "access_reviews.decisions",
+    "SELECT subject, subject_email, decision, note, reviewer, reviewer_email, decided_at FROM access_review_decision \
+     WHERE review = $review ORDER BY subject_email, subject",
+);
+
+/// One decision per person per review (`$id` is derived from both); deciding again replaces it
+/// while the review is open.
+pub const REVIEW_DECIDE: Stmt = Stmt::new(
+    "access_reviews.decide",
+    "UPSERT $id SET review = $review, subject = $subject, subject_email = $subject_email, decision = $decision, note = $note, \
+     reviewer = $reviewer, reviewer_email = $reviewer_email, decided_at = time::now() RETURN NONE",
+);
+
+/// Completes an open review. Returns nothing when it was not open, or when its decisions changed
+/// since the caller read them (`$count` decisions, the newest at `$latest`): the hash would be stale.
+pub const REVIEW_COMPLETE: Stmt = Stmt::new(
+    "access_reviews.complete",
+    "UPDATE $id SET status = 'completed', open_slot = NONE, completed_by = $by, completed_by_email = $email, \
+     completed_at = $at, result_hash = $result_hash, summary = $summary WHERE status = 'open' \
+     AND ((SELECT count() AS n FROM access_review_decision WHERE review = $id GROUP ALL)[0].n ?? 0) = $count \
+     AND ((SELECT count() AS n FROM access_review_decision WHERE review = $id AND decided_at > $latest GROUP ALL)[0].n ?? 0) = 0 \
+     RETURN id",
+);
+
+/// Every space membership of `$ids`, with the space's name and kind.
+pub const VAULT_ACCESS: Stmt = Stmt::new(
+    "access_reviews.vault_access",
+    "SELECT user, role, status, vault AS vault_id, vault.name AS vault_name, vault.kind AS vault_kind FROM vault_member \
+     WHERE user IN $ids ORDER BY vault_name, vault_id",
+);

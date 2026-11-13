@@ -58,6 +58,11 @@ pub enum ErrorCode {
     ValidationInvalid,
     OntologyRejected,
     OntologyStaleRevision,
+    AccessReviewNotFound,
+    AccessReviewOpen,
+    AccessReviewCompleted,
+    AccessReviewSelf,
+    AccessReviewIncomplete,
     DbConflict,
     DbDuplicate,
     JobNoHandler,
@@ -109,6 +114,11 @@ impl ErrorCode {
         ErrorCode::ValidationInvalid,
         ErrorCode::OntologyRejected,
         ErrorCode::OntologyStaleRevision,
+        ErrorCode::AccessReviewNotFound,
+        ErrorCode::AccessReviewOpen,
+        ErrorCode::AccessReviewCompleted,
+        ErrorCode::AccessReviewSelf,
+        ErrorCode::AccessReviewIncomplete,
         ErrorCode::DbConflict,
         ErrorCode::DbDuplicate,
         ErrorCode::JobNoHandler,
@@ -160,6 +170,11 @@ impl ErrorCode {
             ErrorCode::ValidationInvalid => "validation.invalid",
             ErrorCode::OntologyRejected => "ontology.rejected",
             ErrorCode::OntologyStaleRevision => "ontology.stale_revision",
+            ErrorCode::AccessReviewNotFound => "access_review.not_found",
+            ErrorCode::AccessReviewOpen => "access_review.open_exists",
+            ErrorCode::AccessReviewCompleted => "access_review.completed",
+            ErrorCode::AccessReviewSelf => "access_review.self_review",
+            ErrorCode::AccessReviewIncomplete => "access_review.incomplete",
             ErrorCode::DbConflict => "db.conflict",
             ErrorCode::DbDuplicate => "db.duplicate",
             ErrorCode::JobNoHandler => "job.no_handler",
@@ -174,7 +189,8 @@ impl ErrorCode {
             ErrorCode::AuthUnauthorized | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired => StatusCode::UNAUTHORIZED,
             ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled
             | ErrorCode::SecretHostDenied
-            | ErrorCode::SecretOutboundBlocked => StatusCode::FORBIDDEN,
+            | ErrorCode::SecretOutboundBlocked
+            | ErrorCode::AccessReviewSelf => StatusCode::FORBIDDEN,
             ErrorCode::SecretOutboundFailed => StatusCode::BAD_GATEWAY,
             ErrorCode::SecretRequestClosed => StatusCode::CONFLICT,
             ErrorCode::RateLimited | ErrorCode::ExtensionBufferFull => StatusCode::TOO_MANY_REQUESTS,
@@ -183,7 +199,8 @@ impl ErrorCode {
             ErrorCode::DocumentUnsupportedType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             ErrorCode::ChangesResync => StatusCode::GONE,
             ErrorCode::TenantProvisioningDisabled => StatusCode::NOT_IMPLEMENTED,
-            ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision => StatusCode::CONFLICT,
+            ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision
+            | ErrorCode::AccessReviewOpen | ErrorCode::AccessReviewCompleted | ErrorCode::AccessReviewIncomplete => StatusCode::CONFLICT,
             ErrorCode::AuthNotFound
             | ErrorCode::VaultNotFound
             | ErrorCode::EntityNotFound
@@ -195,7 +212,8 @@ impl ErrorCode {
             | ErrorCode::ToolNotFound
             | ErrorCode::TenantNotFound
             | ErrorCode::ResourceNotFound
-            | ErrorCode::DocumentNotFound => StatusCode::NOT_FOUND,
+            | ErrorCode::DocumentNotFound
+            | ErrorCode::AccessReviewNotFound => StatusCode::NOT_FOUND,
             ErrorCode::ConnectorNotConnected | ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected => StatusCode::BAD_REQUEST,
             ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked | ErrorCode::Internal => {
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -382,6 +400,7 @@ mod tests {
                 | ErrorCode::ResourceNotFound | ErrorCode::DocumentNotFound | ErrorCode::DocumentTooLarge
                 | ErrorCode::DocumentUnsupportedType | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable | ErrorCode::SecretRequestClosed | ErrorCode::SecretHostDenied
                 | ErrorCode::SecretOutboundBlocked | ErrorCode::SecretOutboundFailed | ErrorCode::ChangesResync | ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected | ErrorCode::OntologyStaleRevision | ErrorCode::DbConflict
+                | ErrorCode::AccessReviewNotFound | ErrorCode::AccessReviewOpen | ErrorCode::AccessReviewCompleted | ErrorCode::AccessReviewSelf | ErrorCode::AccessReviewIncomplete
                 | ErrorCode::DbDuplicate | ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked
                 | ErrorCode::Internal => {}
             }
