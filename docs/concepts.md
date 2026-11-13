@@ -260,8 +260,8 @@ results that several arms agree on and recent ones:
    records, then one hop along their relations: the relations themselves (a hit
    of kind `relation`, e.g. "Ada works at Acme") and the neighbours' newest
    facts, only inside the vault being searched
-6. **temporal**: with an explicit `time_range` and nothing else to rank by
-   (an empty query, or no match in the range), the newest items in the range
+6. **temporal**: with an explicit `time_range` and an empty query, the newest
+   items in the range (a query that matches nothing in the range returns nothing)
 7. **relation**: relations joining two entities the question names ("how is
    Ada connected to Acme"), counted as their own signal
 
@@ -273,11 +273,15 @@ neighbour never rides in on rank alone.
 
 A fact can carry when it happened: `memory_write` takes `occurred_at` (a fact
 written today about last March). A `time_range` is a filter, not a boost: only
-items dated inside it come back (a memory by `occurred_at`, else when it was
-last written; a synced record by its date; a relation by when it was recorded),
-ranked by relevance to the query, newest first among equal scores. Results from
-all your vaults are ranked together, so a strong match in one vault outranks a
-weak one in another. Superseded facts are left
+items dated inside it come back, ranked by relevance to the query, newest first
+among equal scores. Both ends are inclusive, and a bare date is the whole day
+in UTC (`["2026-03-01", "2026-03-31"]` is all of March). An item's date: a
+memory's `occurred_at`, else its last write (`updated_at`, else `created_at`);
+a synced record's own date; a relation's date if it has one, else when it was
+written. Observations summarise current belief rather than record an event, so
+a range leaves them out unless `types` includes `observation` (then they are
+dated by their last update). Results from all your vaults are ranked together,
+so a strong match in one vault outranks a weak one in another. Superseded facts are left
 out unless `include_history` is true, which returns them marked
 `status: "superseded"`.
 

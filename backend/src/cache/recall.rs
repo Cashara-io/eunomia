@@ -42,11 +42,14 @@
 //! `time_range` restricts by date, and then it is a filter: only items whose date falls in the range
 //! are eligible, ranked by relevance to the query, newest first among equal scores. An item's date
 //! (the `occurred_at` it reports) is, for a memory, when it happened if its writer said so
-//! (`memory.occurred_at`), else when it was last written (`updated_at`, which starts as `created_at`);
-//! for a synced record its own `occurred_at` (a record with none is in no range); for a relation when
-//! it was recorded (`created_at`). With a range and nothing for the relevance arms to go on (an empty
-//! query, or one that matches nothing in the range), the newest items in the range are returned: the
-//! date arm is only a way to find candidates then, never an equal arm beside a real match.
+//! (`memory.occurred_at`), else when it was last written (`updated_at`, else `created_at`); for an
+//! observation (a summary of current belief, not an event) its last update, and under a range it is
+//! only eligible when the caller's `types` names observations; for a synced record its own
+//! `occurred_at` (a record with none is in no range); for a relation its own `occurred_at` if it
+//! has one, else when it was recorded (`created_at`). Both ends of a range are inclusive, and a bare
+//! date covers its whole day (`cache::search::parse_range`). With a range and an empty query
+//! ("what happened that week") the newest items in the range are returned; a non-empty query that
+//! matches nothing in the range returns nothing, never the range's newest items as if they matched.
 //!
 //! The graph arm's entity matching queries the
 //! `person`/`organisation`/`location`/`repository`/`file`/`symbol` tables
@@ -92,27 +95,58 @@ pub(crate) const MIN_SIMILARITY: f64 = 0.15;
 const NAME_WORDS: usize = 6;
 const MAX_NAME_WORDS: usize = 64;
 
-/// A memory's date in recall (see the module docs): what `time_range` filters on and what the hit
-/// reports as `occurred_at`.
+/// A fact's date in recall (see the module docs): what `time_range` filters on and what the hit
+/// reports as `occurred_at`. `store::cache::MEMORIES_IN_RANGE` spells the same expressions out.
 const MEMORY_DATE: &str = "(occurred_at ?? updated_at ?? created_at)";
+/// An observation's date: its last update. It summarises current belief, it is not an event.
+const OBSERVATION_DATE: &str = "(updated_at ?? created_at)";
 
-/// An explicit date range, `(since, until)`, both inclusive.
-type Window = Option<(Datetime, Datetime)>;
+/// An explicit date range, both ends inclusive, and whether observations are eligible in it (only
+/// when the caller's `types` names them).
+#[derive(Clone, Copy)]
+struct Span {
+    since: Datetime,
+    until: Datetime,
+    observations: bool,
+}
+type Window = Option<Span>;
 
 /// The `memory` predicate for `window` (empty without one); [`bind_window`] binds it.
 fn memory_window_sql(window: Window) -> String {
+    let fact = format!("type != \"observation\" AND {MEMORY_DATE} >= $since AND {MEMORY_DATE} <= $until");
     match window {
-        Some(_) => format!(" AND {MEMORY_DATE} >= $since AND {MEMORY_DATE} <= $until"),
         None => String::new(),
+        Some(Span { observations: false, .. }) => format!(" AND {fact}"),
+        Some(Span { observations: true, .. }) => format!(
+            " AND (({fact}) OR (type = \"observation\" AND {OBSERVATION_DATE} >= $since AND {OBSERVATION_DATE} <= $until))"
+        ),
     }
+}
+
+/// `span` widened to whole seconds (`since` a second early, `until` up to the next whole second),
+/// for the queries on `cache_record.occurred_at`, which the planner answers from the
+/// `cache_record_occurred` index. On SurrealDB 3.3.5 that index's range scan compares datetimes as
+/// text: a bound of `23:59:59.999999999Z` misses a stored `23:59:59.999Z` (`'Z' > '9'`), though the
+/// same comparison without the index is right. With whole-second bounds the scan returns a superset,
+/// and recall's exact check after hydration ([`in_range`]) drops the extra.
+fn index_safe(span: &Span) -> (Datetime, Datetime) {
+    use chrono::{DurationRound, TimeDelta};
+    let second = TimeDelta::seconds(1);
+    let since = to_chrono(span.since);
+    let since = since.duration_trunc(second).unwrap_or(since) - second;
+    let until = to_chrono(span.until);
+    let whole = until.duration_trunc(second).unwrap_or(until);
+    let until = if whole == until { until } else { whole + second };
+    (since.into(), until.into())
 }
 
 fn bind_window(q: store::Q<'_>, window: Window) -> store::Q<'_> {
     match window {
-        Some((since, until)) => q.bind(("since", since)).bind(("until", until)),
+        Some(w) => q.bind(("since", w.since)).bind(("until", w.until)),
         None => q,
     }
 }
+
 
 // recency boost floor/ceiling; see `boost` below.
 const RECENCY_FLOOR: f64 = 0.5;
@@ -453,26 +487,39 @@ async fn nearest_memories_in(
         #[surreal(default)]
         sim: f64,
     }
-    let ef = (limit * 2).max(64);
-    let in_window = memory_window_sql(window);
-    // dynamic: the KNN `<|K,EF|>` operator needs literal integers.
-    let knn = format!(
-        "SELECT id, vector::similarity::cosine(embedding, $vec) AS sim FROM memory \
-         WHERE vault = $vault AND embedding_spec = $spec{in_window} AND embedding <|{limit},{ef}|> $vec ORDER BY sim DESC"
-    );
     let bind = |sql: String, name: &'static str| {
         bind_window(
             store::dynamic(db, name, sql).bind(("vault", vault.clone())).bind(("spec", spec.to_string())).bind(("vec", vector.to_vec())),
             window,
         )
     };
-    let mut rows: Vec<SimRow> = bind(knn, "cache.memory_semantic").await?.take(0)?;
-    if rows.len() < limit {
+    // A range: one exact scan of the vault's memories in it, no HNSW. With a predicate besides the
+    // vector, SurrealDB 3.3.5 searches the HNSW graph filtered (it returned all 50 in-range rows of
+    // 5,000, not K-then-filter) and that was the slowest plan measured (debug build, loaded machine,
+    // 5,000 memories, 50 in range: windowed KNN 29 s, exact scan 9 to 14 s; `exact_scan_cost` in
+    // tests/recall_ranking.rs). The scan reads every memory of the vault to test its date (there is
+    // no date index), so its cost grows with the vault; the arm's deadline ([`ARM_DEADLINE`]) bounds
+    // it, past which the arm contributes nothing and the other arms still answer.
+    if window.is_some() {
+        let in_window = memory_window_sql(window);
         let exact = format!(
             "SELECT id, vector::similarity::cosine(embedding, $vec) AS sim FROM memory \
              WHERE vault = $vault AND embedding_spec = $spec{in_window} ORDER BY sim DESC LIMIT $limit"
         );
-        rows = bind(exact, "cache.memory_semantic_exact").bind(("limit", limit as i64)).await?.take(0)?;
+        let rows: Vec<SimRow> = bind(exact, "cache.memory_semantic_window").bind(("limit", limit as i64)).await?.take(0)?;
+        return Ok(rows.into_iter().filter(|r| r.sim >= MIN_SIMILARITY).map(|r| (r.id, r.sim)).collect());
+    }
+    let ef = (limit * 2).max(64);
+    // dynamic: the KNN `<|K,EF|>` operator needs literal integers.
+    let knn = format!(
+        "SELECT id, vector::similarity::cosine(embedding, $vec) AS sim FROM memory \
+         WHERE vault = $vault AND embedding_spec = $spec AND embedding <|{limit},{ef}|> $vec ORDER BY sim DESC"
+    );
+    let mut rows: Vec<SimRow> = bind(knn, "cache.memory_semantic").await?.take(0)?;
+    if rows.len() < limit {
+        let exact = "SELECT id, vector::similarity::cosine(embedding, $vec) AS sim FROM memory \
+                     WHERE vault = $vault AND embedding_spec = $spec ORDER BY sim DESC LIMIT $limit";
+        rows = bind(exact.to_string(), "cache.memory_semantic_exact").bind(("limit", limit as i64)).await?.take(0)?;
     }
     Ok(rows.into_iter().filter(|r| r.sim >= MIN_SIMILARITY).map(|r| (r.id, r.sim)).collect())
 }
@@ -588,9 +635,10 @@ fn record_key(id: &RecordId) -> String {
 /// The newest `limit` records of `scope` in the range (`occurred_at`), newest first, with their
 /// dates: the records half of the date fallback (see [`newest_in_window`]).
 async fn temporal_records(db: &OrgDb, scope: &cs::RecordScope, window: Window, limit: usize) -> AppResult<Vec<(Datetime, String)>> {
-    let Some((since, until)) = window else {
+    let Some(span) = window else {
         return Ok(Vec::new());
     };
+    let (since, until) = index_safe(&span);
     #[derive(Deserialize, SurrealValue)]
     struct CacheRow {
         id: RecordId,
@@ -605,7 +653,7 @@ async fn temporal_records(db: &OrgDb, scope: &cs::RecordScope, window: Window, l
 /// their dates: the memories half of the date fallback. Ordered and limited in the database, so a
 /// broad range never loads the whole range.
 async fn temporal_memories(db: &OrgDb, vault: &RecordId, window: Window, limit: usize) -> AppResult<Vec<(Datetime, String)>> {
-    let Some((since, until)) = window else {
+    let Some(Span { since, until, observations }) = window else {
         return Ok(Vec::new());
     };
     #[derive(Deserialize, SurrealValue)]
@@ -619,8 +667,13 @@ async fn temporal_memories(db: &OrgDb, vault: &RecordId, window: Window, limit: 
         .bind(("since", since))
         .bind(("until", until))
         .bind(("limit", limit as i64))
+        .bind(("obs", observations))
         .await?;
-    let rows: Vec<MemRow> = res.take(0)?;
+    // facts, then (only when asked for) observations
+    let mut rows: Vec<MemRow> = res.take(0)?;
+    rows.extend(res.take::<Vec<MemRow>>(1)?);
+    rows.sort_by(|a, b| b.at.cmp(&a.at));
+    rows.truncate(limit);
     Ok(rows.into_iter().map(|r| (r.at, format!("memory:{}", r.id.to_string()))).collect())
 }
 
@@ -756,7 +809,11 @@ async fn hydrate(
                 kind: "memory",
                 text: row.text,
                 source: row.source.map(|s| cs::caller_id(&s, scope.owner())),
-                occurred_at: Some(to_chrono(row.occurred_at.or(row.updated_at).unwrap_or(row.created_at))),
+                occurred_at: Some(to_chrono(if row.mem_type == "observation" {
+                    row.updated_at.unwrap_or(row.created_at)
+                } else {
+                    row.occurred_at.or(row.updated_at).unwrap_or(row.created_at)
+                })),
                 mem_type: row.mem_type,
                 document: None,
                 status: row.status.filter(|s| s == "superseded"),
@@ -787,6 +844,10 @@ async fn hydrate_relations(db: &OrgDb, vault: &RecordId, keys: &[&String], out: 
         #[surreal(default)]
         b: String,
         created_at: Datetime,
+        /// When the relation held, if it carries one (none do yet); else it is dated when written.
+        #[serde(default)]
+        #[surreal(default)]
+        occurred_at: Option<Datetime>,
     }
     let mut res = store::cache::RELATIONS_FOR_RECALL.on(db).bind(("ids", ids)).bind(("vault", vault.clone())).await?;
     let rows: Vec<RelRow> = res.take(0)?;
@@ -799,7 +860,7 @@ async fn hydrate_relations(db: &OrgDb, vault: &RecordId, keys: &[&String], out: 
                 kind: "relation",
                 text: format!("{} {label} {}", row.a, row.b),
                 source: None,
-                occurred_at: Some(to_chrono(row.created_at)),
+                occurred_at: Some(to_chrono(row.occurred_at.unwrap_or(row.created_at))),
                 mem_type: String::new(),
                 document: None,
                 status: None,
@@ -913,7 +974,8 @@ pub async fn recall(
     vault_ids: &[RecordId],
     history: bool,
 ) -> AppResult<Vec<RecallItem>> {
-    let window = validate(query, time_range, limit, max_tokens)?;
+    let observations = types.is_some_and(|t| t.contains(&MemoryType::Observation));
+    let window = validate(query, time_range, limit, max_tokens)?.map(|(since, until)| Span { since, until, observations });
     let pool = limit.saturating_mul(4).max(40);
     let started = std::time::Instant::now();
 
@@ -942,8 +1004,10 @@ pub async fn recall(
     let memory_semantic = by_similarity(passes.iter_mut().map(|p| std::mem::take(&mut p.semantic)), pool);
     let mut arms = [records.semantic.clone(), records.keyword.clone(), graph, Vec::new(), memory, memory_semantic, relation];
 
-    // With a range and nothing to rank by relevance, the newest items in the range.
-    if window.is_some() && arms.iter().all(Vec::is_empty) {
+    // An empty query with a range ("what happened that week"): the newest items in the range. A
+    // query that matches nothing in the range gets nothing, never the range's newest items dressed
+    // up as an answer.
+    if window.is_some() && query.trim().is_empty() {
         let mut lists = vec![arm("temporal", false, temporal_records(db, &scope, window, pool)).await?];
         for (vault, p) in rs.vaults.iter().zip(&mut passes) {
             let mems = arm("temporal", false, temporal_memories(db, vault, window, pool)).await?;
@@ -991,7 +1055,7 @@ pub async fn recall(
     }
 
     let now = Utc::now();
-    let range = window.map(|(a, b)| (to_chrono(a), to_chrono(b)));
+    let range = window.map(|w| (to_chrono(w.since), to_chrono(w.until)));
     let mut scored: Vec<(RecallItem, Option<DateTime<Utc>>)> = Vec::new();
     for (key, base_score) in &rrf {
         let Some((item, vault)) = hydrated.remove(key) else {
@@ -1006,6 +1070,10 @@ pub async fn recall(
         // every arm already searched inside the range; this also covers what the graph arm reached
         // without a date in its query (linked records, relations)
         if !in_range(item.occurred_at, range) {
+            continue;
+        }
+        // an observation is a summary of current belief, not an event: in a range only when asked for
+        if range.is_some() && !observations && item.kind == "memory" && item.mem_type == "observation" {
             continue;
         }
         let arms_hit = arms.iter().filter(|arm| arm.contains(key)).count();
@@ -1084,7 +1152,9 @@ async fn record_arms(
     window: Window,
     pool: usize,
 ) -> AppResult<RecordArms> {
-    let filter = cs::RecordFilter { since: window.map(|w| w.0), until: window.map(|w| w.1), ..Default::default() };
+    // whole-second bounds for the occurred_at index (see `index_safe`); recall's exact check follows
+    let bounds = window.as_ref().map(index_safe);
+    let filter = cs::RecordFilter { since: bounds.map(|b| b.0), until: bounds.map(|b| b.1), ..Default::default() };
     let keys = |ids: Vec<RecordId>| ids.iter().map(record_key).collect::<Vec<_>>();
     let keyword = arm("keyword", false, async { Ok(keys(cs::keyword_ids(db, scope, query, &filter, pool).await?)) });
     let (qv, keyword) = tokio::join!(query_vector(db, settings, scope.owner(), query), keyword);
@@ -1205,6 +1275,17 @@ mod tests {
         assert_eq!(boost_in(1, Some(now - Duration::days(599)), now, true), boost_in(1, Some(now - Duration::days(301)), now, true));
         assert!(boost_in(2, Some(now), now, true) > boost_in(1, Some(now), now, true));
         assert_eq!(boost_in(2, Some(now), now, false), boost(2, Some(now), now));
+    }
+
+    #[test]
+    fn index_bounds_widen_to_whole_seconds() {
+        let d = |s: &str| Datetime::from(chrono::DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc));
+        let span = Span { since: d("2026-03-01T00:00:00.5Z"), until: d("2026-03-31T23:59:59.999999999Z"), observations: false };
+        let (a, b) = index_safe(&span);
+        assert_eq!(to_chrono(a).to_rfc3339(), "2026-02-28T23:59:59+00:00");
+        assert_eq!(to_chrono(b).to_rfc3339(), "2026-04-01T00:00:00+00:00");
+        let span = Span { since: d("2026-03-01T00:00:00Z"), until: d("2026-03-31T12:00:00Z"), observations: false };
+        assert_eq!(to_chrono(index_safe(&span).1).to_rfc3339(), "2026-03-31T12:00:00+00:00");
     }
 
     #[test]

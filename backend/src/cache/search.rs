@@ -494,13 +494,21 @@ pub(crate) fn parse_datetime(field: &str, s: &str) -> AppResult<chrono::DateTime
 
 type Utc = chrono::DateTime<chrono::Utc>;
 
+/// An inclusive end: a full timestamp exactly, a bare `YYYY-MM-DD` the whole of that day (UTC, its
+/// last nanosecond), so `until: "2026-03-31"` keeps what happened on 31 March.
+fn parse_until(s: &str) -> AppResult<Utc> {
+    let day_only = chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").is_ok();
+    let at = parse_datetime("until", s)?;
+    Ok(if day_only { at + chrono::Duration::days(1) - chrono::Duration::nanoseconds(1) } else { at })
+}
+
 /// A `since`/`until` pair, each optional; a reversed range is an error.
 pub(crate) fn parse_range(
     since: Option<&str>,
     until: Option<&str>,
 ) -> AppResult<(Option<Utc>, Option<Utc>)> {
     let since = since.map(|s| parse_datetime("since", s)).transpose()?;
-    let until = until.map(|s| parse_datetime("until", s)).transpose()?;
+    let until = until.map(|s| parse_until(s)).transpose()?;
     if let (Some(a), Some(b)) = (since, until)
         && a > b
     {
@@ -1097,6 +1105,13 @@ mod tests {
     #[test]
     fn parse_range_validates_dates_and_order() {
         assert!(parse_range(Some("2024-01-01"), Some("2024-02-01T10:00:00Z")).is_ok());
+        // a date-only end is the whole day (inclusive), a date-only start its first instant; timestamps are exact
+        let (a, b) = parse_range(Some("2026-03-01"), Some("2026-03-31")).unwrap();
+        assert_eq!(a.unwrap().to_rfc3339(), "2026-03-01T00:00:00+00:00");
+        assert_eq!(b.unwrap().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true), "2026-03-31T23:59:59.999999999Z");
+        let (_, b) = parse_range(None, Some("2026-03-31T12:00:00Z")).unwrap();
+        assert_eq!(b.unwrap().to_rfc3339(), "2026-03-31T12:00:00+00:00");
+        assert!(parse_range(Some("2026-03-31"), Some("2026-03-31")).is_ok(), "one whole day");
         assert!(parse_range(Some("2024-03-01"), Some("2024-02-01")).is_err());
         assert!(parse_range(Some("yesterday"), None).is_err());
         assert_eq!(parse_range(None, None).unwrap(), (None, None));

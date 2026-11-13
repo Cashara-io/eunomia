@@ -248,9 +248,15 @@ also form their own ranked list (the relation arm). Dates come only from an expl
 filter: every arm searches inside it, and anything dated outside it (or undated)
 is dropped after hydration. A memory is dated by `occurred_at` (when it
 happened, if its writer said) or else when it was last written (`updated_at`), a
-synced record by its `occurred_at`, a relation by when it was recorded. With a
-range and no relevance candidates (an empty query, or nothing in the range
-matches), the newest items in the range are returned instead (the temporal list).
+synced record by its `occurred_at`, a relation by its own date if it has one,
+else when it was written; an observation by its last update, and under a range
+only when `types` includes observations. Both ends are inclusive and a bare
+date covers its whole day (UTC). With a range and an empty query the newest
+items in the range are returned (the temporal list); a non-empty query that
+matches nothing in the range returns nothing. Under a range the memory
+semantic arm is one exact cosine scan of the vault's in-range memories instead
+of an HNSW search. There is no date index, so it reads the whole vault. The
+arm's 4-second deadline bounds it: past that the arm adds nothing.
 
 Candidates from every vault of the recall are ranked together: the record arms
 run once over all of them, and the memory arms' per-vault lists are merged into

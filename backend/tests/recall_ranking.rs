@@ -181,3 +181,182 @@ async fn a_strong_match_in_one_vault_outranks_a_weak_match_in_another() {
         Ok(out) => panic!("a non-member read Team: {out}"),
     }
 }
+
+async fn raw(app: &TestApp, sql: &str) {
+    app.db().await.test_raw().query(sql).await.unwrap().check().unwrap();
+}
+
+/// A query that matches nothing inside the range gets nothing back: not the range's newest items
+/// scored 1.0 as if they were the answer. Only an empty query asks for "what happened then".
+#[tokio::test]
+async fn a_query_matching_nothing_in_the_range_returns_nothing() {
+    let app = TestApp::new().await;
+    write(&app, "Kitchen", "location", "Bought a new kettle for the office", json!({"occurred_at": "2026-03-28"})).await;
+    record(&app, "march_note", "Standup", "Standup moved to ten", "2026-03-12T09:00:00Z").await;
+    // matches, but only outside the range
+    write(&app, "Acme Corp", "organisation", "Acme signed the renewal", json!({"occurred_at": "2026-05-02"})).await;
+
+    // words that match nothing at all (no embeddings either: every arm is empty)
+    assert!(recall(&app, json!({"query": "zebra xylophone", "time_range": MARCH})).await.is_empty());
+    // words that match only outside the range
+    let hits = recall(&app, json!({"query": "Did Acme sign the renewal?", "time_range": MARCH})).await;
+    assert!(hits.is_empty(), "{hits:?}");
+    // the same question without the range finds it, and an empty query lists the range
+    assert!(!recall(&app, json!({"query": "Did Acme sign the renewal?"})).await.is_empty());
+    assert_eq!(recall(&app, json!({"query": "  ", "time_range": MARCH})).await.len(), 2);
+}
+
+/// `["2026-03-01", "2026-03-31"]` is the whole of March: both ends inclusive, a bare date its whole
+/// day in UTC; a full timestamp is exact.
+#[tokio::test]
+async fn a_date_only_range_covers_whole_days_and_timestamps_are_exact() {
+    let app = TestApp::new().await;
+    for (key, at) in [
+        ("feb_last", "2026-02-28T23:59:59.999Z"),
+        ("mar_first", "2026-03-01T00:00:00Z"),
+        ("mar_last_evening", "2026-03-31T18:00:00Z"),
+        ("mar_last_instant", "2026-03-31T23:59:59.999Z"),
+        ("apr_first", "2026-04-01T00:00:00Z"),
+    ] {
+        record(&app, key, &format!("Gadget log {key}"), "gadget calibration", at).await;
+    }
+    write(&app, "Lab", "location", "Gadget calibration finished late", json!({"occurred_at": "2026-03-31T22:30:00Z"})).await;
+
+    let ids = |hits: &[Value]| hits.iter().map(|h| h["id"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+    let hits = recall(&app, json!({"query": "gadget calibration", "time_range": ["2026-03-01", "2026-03-31"]})).await;
+    let got = ids(&hits);
+    for want in ["mar_first", "mar_last_evening", "mar_last_instant"] {
+        assert!(got.contains(&want.to_string()), "{want}: {got:?}");
+    }
+    assert!(texts(&hits).iter().any(|t| t.contains("finished late")), "{hits:?}");
+    for not in ["feb_last", "apr_first"] {
+        assert!(!got.contains(&not.to_string()), "{not}: {got:?}");
+    }
+    // the same with an empty query (the newest-in-range list)
+    let got = ids(&recall(&app, json!({"query": "", "time_range": ["2026-03-01", "2026-03-31"]})).await);
+    assert!(got.contains(&"mar_last_instant".to_string()) && !got.contains(&"apr_first".to_string()), "{got:?}");
+    // a timestamp end is exact and inclusive
+    let got = ids(&recall(&app, json!({"query": "gadget calibration", "time_range": ["2026-03-01", "2026-03-31T18:00:00Z"]})).await);
+    assert!(got.contains(&"mar_last_evening".to_string()) && !got.contains(&"mar_last_instant".to_string()), "{got:?}");
+    // one whole day
+    let got = ids(&recall(&app, json!({"query": "gadget calibration", "time_range": ["2026-03-31", "2026-03-31"]})).await);
+    assert_eq!(got.len(), 3, "{got:?}");
+}
+
+/// Observations summarise current belief: under a range they are left out unless `types` asks for
+/// them, and then dated by their last update (not by any `occurred_at`).
+#[tokio::test]
+async fn observations_join_a_range_only_when_asked_for_and_are_dated_by_their_last_update() {
+    let app = TestApp::new().await;
+    write(&app, "Ada Lovelace", "person", "Ada moved the budget review to Friday", json!({"occurred_at": "2026-03-12"})).await;
+    let obs = write(&app, "Ada Lovelace", "person", "Ada owns the budget review", json!({"type": "observation"})).await;
+    let obs_id = obs["memory"]["id"].as_str().unwrap();
+    raw(&app, &format!("UPDATE {obs_id} SET updated_at = d'2026-03-20T10:00:00Z', occurred_at = d'2024-01-01T00:00:00Z'")).await;
+
+    let q = "budget review";
+    let has_obs = |hits: &[Value]| texts(hits).iter().any(|t| t == "Ada owns the budget review");
+    let hits = recall(&app, json!({"query": q, "time_range": MARCH})).await;
+    assert!(!has_obs(&hits), "an observation is not an event: {hits:?}");
+    assert!(texts(&hits).iter().any(|t| t.contains("Friday")), "{hits:?}");
+    assert!(!has_obs(&recall(&app, json!({"query": "", "time_range": MARCH})).await), "nor in the newest-in-range list");
+
+    let hits = recall(&app, json!({"query": q, "time_range": MARCH, "types": ["observation", "world"]})).await;
+    let o = hits.iter().find(|h| h["text"] == "Ada owns the budget review").unwrap_or_else(|| panic!("asked for: {hits:?}"));
+    assert!(o["occurred_at"].as_str().unwrap().starts_with("2026-03-20"), "dated by its last update: {o}");
+    assert!(has_obs(&recall(&app, json!({"query": "", "time_range": MARCH, "types": ["observation"]})).await));
+    // dated by its update, so a range around its occurred_at does not find it
+    assert!(!has_obs(&recall(&app, json!({"query": q, "time_range": ["2024-01-01", "2024-01-01"], "types": ["observation"]})).await));
+    // no range: observations as before
+    assert!(has_obs(&recall(&app, json!({"query": q})).await));
+}
+
+/// A relation is dated by when it held if it carries such a date (a field no relation has yet; the
+/// test defines it), else by when it was written.
+#[tokio::test]
+async fn a_relation_is_dated_by_its_own_date_when_it_has_one() {
+    let app = TestApp::new().await;
+    let ada = write(&app, "Ada Lovelace", "person", "Ada prefers async updates", json!({"occurred_at": "2026-03-05"})).await;
+    let acme = write(&app, "Acme Corp", "organisation", "Acme renewed their contract", json!({"occurred_at": "2026-03-06"})).await;
+    let (ada, acme) = (ada["entity"]["id"].as_str().unwrap(), acme["entity"]["id"].as_str().unwrap());
+    raw(&app, "DEFINE FIELD IF NOT EXISTS occurred_at ON relates_to TYPE option<datetime>").await;
+    raw(&app, &format!("RELATE {ada}->relates_to->{acme} SET label = 'works_at', occurred_at = d'2026-03-09T00:00:00Z'")).await;
+
+    let q = "How is Ada Lovelace connected to Acme Corp?";
+    let hits = recall(&app, json!({"query": q, "time_range": MARCH})).await;
+    let rel = hits.iter().find(|h| h["kind"] == "relation").unwrap_or_else(|| panic!("{hits:?}"));
+    assert!(rel["occurred_at"].as_str().unwrap().starts_with("2026-03-09"), "{rel}");
+    let hits = recall(&app, json!({"query": q, "time_range": ["2026-11-01", "2999-01-01"]})).await;
+    assert!(!hits.iter().any(|h| h["kind"] == "relation"), "not by when it was written: {hits:?}");
+}
+
+/// Cost of the memory semantic arm under a narrow range. Not a CI test: `BENCH_N=5000 cargo test
+/// --test recall_ranking exact_scan_cost -- --ignored --nocapture`. Times the exact scan recall runs
+/// under a range against the windowed HNSW search it replaced, on N memories with vectors, few of
+/// them in range. Observed (debug build, machine loaded by other builds, N=5000, 50 in range): exact
+/// scan 8.8 to 13.8 s; windowed KNN K=40 28.6 s, K=400 39 to 47 s; plain KNN K=400 10 to 55 s.
+#[tokio::test]
+#[ignore]
+async fn exact_scan_cost() {
+    let n: usize = std::env::var("BENCH_N").ok().and_then(|v| v.parse().ok()).unwrap_or(5000);
+    let in_range: usize = std::env::var("BENCH_IN_RANGE").ok().and_then(|v| v.parse().ok()).unwrap_or(50);
+    let app = TestApp::new().await;
+    let first = write(&app, "Bench", "organisation", "seed", json!({})).await;
+    let id = first["memory"]["id"].as_str().unwrap().to_string();
+    let db = app.db().await;
+    let mut seed: u64 = 7;
+    let mut vector = || -> Vec<f32> {
+        (0..1536)
+            .map(|_| {
+                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                ((seed >> 33) as f32 / u32::MAX as f32) - 0.25
+            })
+            .collect()
+    };
+    let started = std::time::Instant::now();
+    for chunk in (0..n).collect::<Vec<_>>().chunks(250) {
+        let rows: Vec<Value> = chunk
+            .iter()
+            .map(|i| {
+                let at = if *i < in_range { "2026-03-15T00:00:00Z" } else { "2024-06-01T00:00:00Z" };
+                json!({"text": format!("bench fact {i}"), "embedding": vector(), "at": at})
+            })
+            .collect();
+        db.test_raw()
+            .query(format!(
+                "LET $m = (SELECT * FROM ONLY {id}); FOR $r IN $rows {{ CREATE memory SET owner = $m.owner, vault = $m.vault, \
+                 subject = $m.subject, type = 'world', text = $r.text, embedding = $r.embedding, embedding_spec = 'bench', \
+                 occurred_at = <datetime>$r.at }};"
+            ))
+            .bind(("rows", rows))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+    }
+    println!("seeded {n} memories ({in_range} in range) in {:?}", started.elapsed());
+    let vault: Value = db.test_raw().query(format!("SELECT VALUE vault FROM ONLY {id}")).await.unwrap().take::<Option<Value>>(0).unwrap().unwrap();
+    let _ = vault;
+    let window = " AND type != \"observation\" AND (occurred_at ?? updated_at ?? created_at) >= $since AND (occurred_at ?? updated_at ?? created_at) <= $until";
+    let exact = format!(
+        "LET $v = (SELECT VALUE vault FROM ONLY {id}); SELECT id, vector::similarity::cosine(embedding, $vec) AS sim FROM memory \
+         WHERE vault = $v AND embedding_spec = 'bench'{window} ORDER BY sim DESC LIMIT 40"
+    );
+    let knn_windowed = format!(
+        "LET $v = (SELECT VALUE vault FROM ONLY {id}); SELECT id FROM memory \
+         WHERE vault = $v AND embedding_spec = 'bench'{window} AND embedding <|40,80|> $vec"
+    );
+    let q = vector();
+    for (name, sql, stmt) in [("exact scan (shipped)", &exact, 1), ("windowed knn (rejected)", &knn_windowed, 1), ("exact scan (shipped)", &exact, 1)] {
+        let t = std::time::Instant::now();
+        let mut res = db
+            .test_raw()
+            .query(sql.as_str())
+            .bind(("vec", q.clone()))
+            .bind(("since", surrealdb::types::Datetime::from(chrono::DateTime::parse_from_rfc3339("2026-03-01T00:00:00Z").unwrap().with_timezone(&chrono::Utc))))
+            .bind(("until", surrealdb::types::Datetime::from(chrono::DateTime::parse_from_rfc3339("2026-03-31T23:59:59Z").unwrap().with_timezone(&chrono::Utc))))
+            .await
+            .unwrap();
+        let rows: Vec<Value> = res.take(stmt).unwrap();
+        println!("{name}: {} rows in {:?}", rows.len(), t.elapsed());
+    }
+}
