@@ -110,11 +110,13 @@ still holds, and anything merely old. When unsure, list nothing. Return strict J
 }
 
 /// The model's `{fact, by}` pairs -> `(fact to mark, fact that replaced it)`. `facts` is oldest first. A
-/// pair counts only when `fact` is listed (and told) before `by`, exactly one of the two is new, the two
-/// were not drawn from the same source record (one record tells both at the same moment, so neither is
-/// later), and neither is out of range; anything else is ignored. So a fact told earlier never replaces
-/// one told later, whatever order they were written in. (Two new facts are not compared here.)
-fn pick(pairs: &[Value], facts: &[(String, String, bool)], ids: &[RecordId], sources: &[Option<RecordId>]) -> Vec<(RecordId, RecordId)> {
+/// pair counts only when `fact` is listed (and told) before `by`, exactly one of the two is new, and
+/// neither is out of range; anything else is ignored. So a fact told earlier never replaces one told
+/// later, whatever order they were written in. Two new facts (one extraction pass, which tells them at
+/// the same moment) are not compared here. Two facts from one record across two passes (a re-synced
+/// record whose statement changed) are decided like any pair: by when each was told, and on a tie (a
+/// record whose date did not move) by the later write.
+fn pick(pairs: &[Value], facts: &[(String, String, bool)], ids: &[RecordId]) -> Vec<(RecordId, RecordId)> {
     let mut seen = HashSet::new();
     pairs
         .iter()
@@ -122,8 +124,7 @@ fn pick(pairs: &[Value], facts: &[(String, String, bool)], ids: &[RecordId], sou
             let fact = (p.get("fact")?.as_u64()? as usize).checked_sub(1)?;
             let by = (p.get("by")?.as_u64()? as usize).checked_sub(1)?;
             let (f, b) = (facts.get(fact)?, facts.get(by)?);
-            let same_record = matches!((sources.get(fact), sources.get(by)), (Some(Some(a)), Some(Some(b))) if a == b);
-            (fact < by && b.2 != f.2 && f.0 <= b.0 && !same_record).then(|| Some((ids.get(fact)?.clone(), ids.get(by)?.clone()))).flatten()
+            (fact < by && b.2 != f.2 && f.0 <= b.0).then(|| Some((ids.get(fact)?.clone(), ids.get(by)?.clone()))).flatten()
         })
         .filter(|(id, _)| seen.insert(id.to_string()))
         .collect()
@@ -288,10 +289,9 @@ async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &Record
     };
     let facts: Vec<(String, String, bool)> = rows.iter().map(|(w, r, n)| (date(w), text(r), *n)).collect();
     let ids: Vec<RecordId> = rows.iter().map(|(_, r, _)| r.id.clone()).collect();
-    let sources: Vec<Option<RecordId>> = rows.iter().map(|(_, r, _)| r.source.clone()).collect();
     let version = |id: &RecordId| rows.iter().find(|(_, r, _)| &r.id == id).map_or(1, |(_, r, _)| r.version);
     let mut marked = Vec::new();
-    for (fact, by) in pick(&call_llm(db, settings, owner, build_prompt(&facts)).await?, &facts, &ids, &sources) {
+    for (fact, by) in pick(&call_llm(db, settings, owner, build_prompt(&facts)).await?, &facts, &ids) {
         // only if neither fact changed while the model was deciding: an edit made meanwhile is decided
         // by its own check (the subject's other writers can conflict too: retried)
         let mark = || async {
@@ -375,22 +375,22 @@ mod tests {
             ],
             &f,
             &ids,
-            &[],
         );
         assert_eq!(got, vec![(ids[0].clone(), ids[2].clone())], "the replaced fact and the fact that replaced it");
     }
 
     #[test]
-    fn pick_never_pairs_two_facts_from_one_record() {
-        let ids: Vec<RecordId> = ["memory:a", "memory:b", "memory:c"].iter().map(|s| crate::rid::parse(s).unwrap()).collect();
-        let rec = Some(crate::rid::parse("cache_record:r").unwrap());
-        let other = Some(crate::rid::parse("cache_record:s").unwrap());
-        let f = facts();
-        // a and c from one record ("formerly VP, now CTO"): never decided between them
-        assert!(pick(&[json!({"fact": 1, "by": 3})], &f, &ids, &[rec.clone(), None, rec.clone()]).is_empty());
-        // from different records, or one with no record: decided as usual
-        assert_eq!(pick(&[json!({"fact": 1, "by": 3})], &f, &ids, &[rec.clone(), None, other]).len(), 1);
-        assert_eq!(pick(&[json!({"fact": 1, "by": 3})], &f, &ids, &[rec, None, None]).len(), 1);
+    fn a_tie_on_when_told_goes_to_the_later_write() {
+        // a record re-synced with a changed statement, its date unchanged: both told at the record's date
+        let mut rows = vec![
+            ((at("2025-01-01T09:00:00Z"), at("2026-11-13T10:00:00Z")), "Meeting is on Wednesday", true),
+            ((at("2025-01-01T09:00:00Z"), at("2026-11-01T10:00:00Z")), "Meeting is on Tuesday", false),
+        ];
+        oldest_first(&mut rows);
+        assert_eq!(rows.iter().map(|r| r.1).collect::<Vec<_>>(), ["Meeting is on Tuesday", "Meeting is on Wednesday"]);
+        let ids: Vec<RecordId> = ["memory:tue", "memory:wed"].iter().map(|s| crate::rid::parse(s).unwrap()).collect();
+        let f = list(&[("2025-01-01 09:00", "Meeting is on Tuesday", false), ("2025-01-01 09:00", "Meeting is on Wednesday", true)]);
+        assert_eq!(pick(&[json!({"fact": 1, "by": 2})], &f, &ids), vec![(ids[0].clone(), ids[1].clone())], "the later write wins the tie");
     }
 
     #[test]
@@ -402,17 +402,17 @@ mod tests {
             ("2024-01-01 10:00", "Ada mentors two interns", true),
             ("2025-06-01 10:00", "Ada is a senior engineer", false),
         ]);
-        assert_eq!(pick(&[json!({"fact": 1, "by": 3})], &f, &ids, &[]), vec![(ids[0].clone(), ids[2].clone())]);
+        assert_eq!(pick(&[json!({"fact": 1, "by": 3})], &f, &ids), vec![(ids[0].clone(), ids[2].clone())]);
         // the reverse pair would let the older-dated fact replace the newer one: refused
-        assert!(pick(&[json!({"fact": 3, "by": 1})], &f, &ids, &[]).is_empty());
+        assert!(pick(&[json!({"fact": 3, "by": 1})], &f, &ids).is_empty());
         // two new facts are not compared here
-        assert!(pick(&[json!({"fact": 1, "by": 2})], &f, &ids, &[]).is_empty());
+        assert!(pick(&[json!({"fact": 1, "by": 2})], &f, &ids).is_empty());
     }
 
     #[test]
     fn pick_rejects_a_replacement_dated_before_the_fact() {
         let ids: Vec<RecordId> = ["memory:a", "memory:b"].iter().map(|s| crate::rid::parse(s).unwrap()).collect();
         let f = list(&[("2026-10-09 10:00", "later old fact", false), ("2026-10-01 10:00", "earlier new fact", true)]);
-        assert!(pick(&[json!({"fact": 1, "by": 2})], &f, &ids, &[]).is_empty());
+        assert!(pick(&[json!({"fact": 1, "by": 2})], &f, &ids).is_empty());
     }
 }

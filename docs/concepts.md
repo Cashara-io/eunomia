@@ -103,9 +103,14 @@ This is the one definition; recall and supersession both follow it.
 
   Only `asserted_at` decides which fact is current: the fact we were told most
   recently replaces the earlier one, never the other way round, and two facts
-  told at the same moment go to the later write. Two facts from the same record
-  are never decided between. A check marks a fact only if neither fact changed
-  while it was deciding. A replaced fact keeps the id of the fact that replaced
+  told at the same moment go to the later write. When a synced record changes,
+  a changed statement is a new fact from that record, decided against the old
+  one like any pair: it is told at the record's new date, or, when the record's
+  date did not move, at the same moment as the old one and wins as the later
+  write. Two facts written by one extraction pass are both new and are not
+  compared with each other. A statement that simply disappears from a changed
+  record, with nothing contradicting it, is not retracted yet. A check marks a
+  fact only if neither fact changed while it was deciding. A replaced fact keeps the id of the fact that replaced
   it (`superseded_by`); deleting that fact makes it current again (only the
   direct one: a fact further down a chain stays replaced), and it is checked
   again.

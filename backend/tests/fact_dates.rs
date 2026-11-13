@@ -540,17 +540,45 @@ async fn deleting_the_replacing_fact_restores_only_the_fact_it_replaced() {
 
 // ---- two facts from one record ----------------------------------------------------------------
 
+/// Two contradicting facts written by one extraction pass are both new: they are never paired (the
+/// check decides between a new fact and an older one only).
 #[tokio::test]
-async fn two_facts_from_one_record_never_replace_each_other() {
+async fn two_facts_from_one_extraction_pass_are_not_paired() {
     let answers = Answers::default();
     *answers.pairs.lock().unwrap() = both_ways();
     let app = app(answers.clone()).await;
     extract_record(&app, &answers, "notes:promo", "2025-05-01T09:00:00+00:00", "people", "Ada Lovelace", &["Ada was VP", "Ada is now CTO"]).await;
     let (ada, vp) = fact_by_text(&app, "Ada was VP").await;
     let (_, cto) = fact_by_text(&app, "Ada is now CTO").await;
-    check(&app, &ada, std::slice::from_ref(&cto)).await;
-    check(&app, &ada, std::slice::from_ref(&vp)).await;
-    assert!(!superseded(&app, &vp).await && !superseded(&app, &cto).await, "one record told both at once");
+    // as consolidation checks a pass: both facts new together
+    check(&app, &ada, &[vp.clone(), cto.clone()]).await;
+    assert!(!superseded(&app, &vp).await && !superseded(&app, &cto).await, "one pass told both at once");
+}
+
+/// A record re-synced with a changed statement replaces the old fact with the new one: by when each was
+/// told when the record's date moved, and by the later write when it did not.
+#[tokio::test]
+async fn a_changed_statement_in_a_resynced_record_replaces_the_old_one() {
+    let answers = Answers::default();
+    *answers.pairs.lock().unwrap() = both_ways();
+    let app = app(answers.clone()).await;
+    for (record, first, second) in [
+        // the event was moved: the record's date moved with it
+        ("notes:moved", "2025-01-06T09:00:00+00:00", "2025-01-07T09:00:00+00:00"),
+        // a record whose date does not move on edit: both statements told at the same moment
+        ("notes:fixed", "2025-01-06T09:00:00+00:00", "2025-01-06T09:00:00+00:00"),
+    ] {
+        let subject = format!("Sync {record}");
+        let (tue, wed) = (format!("{subject} meets on Tuesday"), format!("{subject} meets on Wednesday"));
+        extract_record(&app, &answers, record, first, "organisations", &subject, &[&tue]).await;
+        extract_record(&app, &answers, record, second, "organisations", &subject, &[&wed]).await;
+        let (s, old) = fact_by_text(&app, &tue).await;
+        let (_, new) = fact_by_text(&app, &wed).await;
+        check(&app, &s, std::slice::from_ref(&new)).await;
+        assert!(superseded(&app, &old).await, "{record}: the old statement is replaced");
+        assert!(!superseded(&app, &new).await, "{record}: the changed statement is current");
+        assert_eq!(dates(&app, &old).await["by"], json!(new.to_string()), "{record}");
+    }
 }
 
 // ---- vault copy keeps the dates and the replacements --------------------------------------
