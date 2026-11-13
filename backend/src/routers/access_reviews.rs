@@ -699,6 +699,11 @@ struct AccessReviewExport {
     snapshot_hash_matches: bool,
     /// The completion's place in the hash-chained security log, once sealed.
     audit_event: Option<AccessReviewAuditLink>,
+    /// True when the chained completion event commits to this review as it is now: its detail
+    /// names this `result` document's hash and the chain holds that detail's plain SHA-256. False
+    /// means the review was changed after it was completed (even if `result_hash` was recomputed).
+    /// The offline verifier checks the same: `verify-audit-export.py LOG.json --review THIS.json`.
+    chain_matches: bool,
     decisions: Vec<AccessReviewDecision>,
 }
 
@@ -708,6 +713,9 @@ struct AccessReviewAuditLink {
     seq: Option<i64>,
     hash: Option<String>,
     created_at: Option<String>,
+    /// The event's detail as written (`result=<hash> keep=.. remove=.. suspend=.. not_reviewed=..`).
+    /// Its SHA-256 is the event's `detail_digest` in the chain.
+    detail: String,
 }
 
 #[utoipa::path(
@@ -742,6 +750,15 @@ async fn export(State(state): State<AppState>, user: User, Path(review_id): Path
         #[surreal(default)]
         hash: Option<String>,
         created_at: Option<Datetime>,
+        #[serde(default)]
+        #[surreal(default)]
+        detail: String,
+        #[serde(default)]
+        #[surreal(default)]
+        detail_digest: Option<String>,
+        #[serde(default)]
+        #[surreal(default)]
+        digest_key: Option<String>,
     }
     let found: Vec<Found> = store::control::AUDIT_EVENT_FIND
         .on(&state.control)
@@ -750,7 +767,17 @@ async fn export(State(state): State<AppState>, user: User, Path(review_id): Path
         .bind(("ledger", ledger.clone()))
         .await?
         .take(0)?;
-    let audit_event = found.into_iter().next().map(|f| AccessReviewAuditLink { ledger, seq: f.seq, hash: f.hash, created_at: opt_time(&f.created_at) });
+    let current_hash = sha256_hex(canonical_json(&result));
+    let chain_matches = found.first().is_some_and(|f| {
+        f.seq.is_some()
+            && f.digest_key.as_deref() == Some(chain::PLAIN)
+            && f.detail_digest.as_deref() == Some(sha256_hex(&f.detail).as_str())
+            && f.detail.split_whitespace().any(|w| w == format!("result={current_hash}"))
+    });
+    let audit_event = found
+        .into_iter()
+        .next()
+        .map(|f| AccessReviewAuditLink { ledger, seq: f.seq, hash: f.hash, created_at: opt_time(&f.created_at), detail: f.detail });
     let snapshot = row.snapshot.clone();
     let snapshot_hash = row.snapshot_hash.clone();
     let key = crate::rid::key_string(row.id.key()).unwrap_or_default();
@@ -762,6 +789,7 @@ async fn export(State(state): State<AppState>, user: User, Path(review_id): Path
         snapshot,
         snapshot_hash,
         audit_event,
+        chain_matches,
         decisions: view(row, decisions, &user).decisions,
     };
     let name = format!("eunomia-access-review-{key}.json");

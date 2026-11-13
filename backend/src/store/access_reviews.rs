@@ -52,9 +52,12 @@ pub const REVIEW_COMPLETE: Stmt = Stmt::new(
      completed_at = $at, result_hash = $result_hash, summary = $summary WHERE status = 'open' AND org = $org AND (rev ?? 0) = $rev RETURN id",
 );
 
-/// Every space membership of `$ids`, with the space's name and kind.
+/// Every space membership of `$ids` in a space one of `$ids` owns, with the space's name and kind.
+/// `$ids` are this org's people, so only this org's spaces count, even with several orgs in one
+/// database (tests/isolation.rs, shared-database mode).
 pub const VAULT_ACCESS: Stmt = Stmt::new(
     "access_reviews.vault_access",
     "SELECT user, role, status, vault AS vault_id, vault.name AS vault_name, vault.kind AS vault_kind FROM vault_member \
-     WHERE user IN $ids ORDER BY vault_name, vault_id",
+     WHERE user IN $ids AND vault IN (SELECT VALUE vault FROM vault_member WHERE role = 'owner' AND user IN $ids) \
+     ORDER BY vault_name, vault_id",
 );
