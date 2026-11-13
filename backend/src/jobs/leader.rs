@@ -51,6 +51,10 @@ pub async fn run(state: AppState, cfg: WorkerConfig, mut shutdown: watch::Receiv
 /// One scheduler pass. `n` counts the passes this leader has made.
 pub async fn tick(state: &AppState, n: u64) {
     reconcile_tenant_migrations(state).await;
+    // the audit chain's durable replay: queued writes, then anything written but not sealed
+    if let Err(e) = crate::audit::chain::replay(&state.control).await {
+        tracing::warn!(error = %e.message, "audit replay failed");
+    }
     for org in ready_orgs(state).await {
         let Ok(org_state) = state.org(&org).await else { continue }; // not ready or behind: the migration job handles it
         reconcile_syncs(&org_state).await;
@@ -69,10 +73,13 @@ pub async fn tick(state: &AppState, n: u64) {
             crate::changes::prune_due(&org_state.db).await;
         }
     }
-    if n.is_multiple_of(SLOW_EVERY)
-        && let Err(e) = housekeeping(&state.control).await
-    {
-        tracing::warn!(error = %e.message, "job housekeeping failed");
+    if n.is_multiple_of(SLOW_EVERY) {
+        if let Err(e) = housekeeping(&state.control).await {
+            tracing::warn!(error = %e.message, "job housekeeping failed");
+        }
+        if let Err(e) = crate::audit::chain::checkpoint_due(&state.control, chrono::TimeDelta::hours(1)).await {
+            tracing::warn!(error = %e.message, "audit checkpoint failed");
+        }
     }
 }
 
