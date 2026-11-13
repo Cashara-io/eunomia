@@ -3104,8 +3104,8 @@
         },
         {
           "path": "backend/src/routers/auth.rs",
-          "line_start": 386,
-          "line_end": 391,
+          "line_start": 379,
+          "line_end": 384,
           "inventory_id": "E02",
           "summary": "A correct password yields a challenge cookie, not a session, for an account with MFA or while MFA is required."
         },
