@@ -547,6 +547,8 @@ async fn two_facts_from_one_extraction_pass_are_not_paired() {
     let answers = Answers::default();
     *answers.pairs.lock().unwrap() = both_ways();
     let app = app(answers.clone()).await;
+    // an older live fact, so the check has something to compare with and the model's pairs reach `pick`
+    write(&app, "Ada Lovelace", "Ada likes tea", None).await;
     extract_record(&app, &answers, "notes:promo", "2025-05-01T09:00:00+00:00", "people", "Ada Lovelace", &["Ada was VP", "Ada is now CTO"]).await;
     let (ada, vp) = fact_by_text(&app, "Ada was VP").await;
     let (_, cto) = fact_by_text(&app, "Ada is now CTO").await;
