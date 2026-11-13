@@ -267,6 +267,14 @@ struct CallbackQuery {
     iss: Option<String>,
 }
 
+/// The existing account a verified sign-in would link to, while the person is asked first.
+struct AskToLink {
+    user: surrealdb::types::RecordId,
+    email: String,
+    issuer: String,
+    subject: String,
+}
+
 /// Why the callback did not sign anyone in: the `oidc_error` code, an audit outcome and a reason for the log.
 enum Fail {
     State(&'static str),
@@ -280,7 +288,7 @@ enum Fail {
     Invitation(&'static str, String),
     /// Not a failure: the verified email belongs to an account with a password, so the person is asked
     /// before linking ([`ask_before_linking`]).
-    AskToLink { user: surrealdb::types::RecordId, email: String, issuer: String, subject: String },
+    AskToLink(Box<AskToLink>),
     Internal(AppError),
 }
 
@@ -295,7 +303,7 @@ impl Fail {
             Fail::EmailUnverified => "email_unverified",
             Fail::SignupClosed => "signup_closed",
             Fail::Invitation(code, _) => code,
-            Fail::AskToLink { .. } => "link",
+            Fail::AskToLink(_) => "link",
             Fail::Internal(_) => "unavailable",
         }
     }
@@ -303,7 +311,7 @@ impl Fail {
     fn outcome(&self) -> ErrorCode {
         match self {
             Fail::State(_) | Fail::Denied(_) | Fail::Token(_) => ErrorCode::AuthUnauthorized,
-            Fail::NoEmail | Fail::EmailUnverified | Fail::SignupClosed | Fail::Invitation(..) | Fail::AskToLink { .. } => ErrorCode::AuthForbidden,
+            Fail::NoEmail | Fail::EmailUnverified | Fail::SignupClosed | Fail::Invitation(..) | Fail::AskToLink(_) => ErrorCode::AuthForbidden,
             Fail::Provider(_) | Fail::Internal(_) => ErrorCode::Internal,
         }
     }
@@ -316,7 +324,7 @@ impl Fail {
             Fail::EmailUnverified => "an account has this email but the provider did not verify it".into(),
             Fail::SignupClosed => "signup is not open to this email".into(),
             Fail::Invitation(_, why) => why.clone(),
-            Fail::AskToLink { .. } => "an account with a password has this email: asking before linking".into(),
+            Fail::AskToLink(_) => "an account with a password has this email: asking before linking".into(),
             Fail::Internal(e) => e.source.clone().unwrap_or_else(|| e.message.clone()),
         }
     }
@@ -395,7 +403,8 @@ async fn callback(State(state): State<AppState>, https: Option<Extension<Forward
             let session = session_cookie_header(&token, &state.settings.public_url, https);
             Ok(no_store((AppendHeaders([(header::SET_COOKIE, session), (header::SET_COOKIE, clear)]), Redirect::to(&target)).into_response()))
         }
-        Err(Fail::AskToLink { user, email, issuer, subject }) => {
+        Err(Fail::AskToLink(ask)) => {
+            let AskToLink { user, email, issuer, subject } = *ask;
             let pending = PendingLink { purpose: LINK_PURPOSE.into(), user: user.to_string(), email, issuer, subject, next, exp: Utc::now().timestamp() + FLOW_TTL_SECS };
             let token = encode(&Header::new(Algorithm::HS256), &pending, &EncodingKey::from_secret(state.settings.jwt_secret.as_bytes())).map_err(|e| AppError::internal(e.to_string()))?;
             let cookie = set_cookie(LINK_COOKIE, &token, FLOW_TTL_SECS, &state, https);
@@ -500,7 +509,7 @@ async fn map_identity(state: &AppState, cfg: &OidcConfig, id: &Identity, invite:
                 return Err(Fail::EmailUnverified);
             }
             if ask_before_linking(db, &user.id).await? {
-                return Err(Fail::AskToLink { user: user.id, email, issuer: id.issuer.clone(), subject: id.subject.clone() });
+                return Err(Fail::AskToLink(Box::new(AskToLink { user: user.id, email, issuer: id.issuer.clone(), subject: id.subject.clone() })));
             }
             match models_user::link_identity(db, &user.id, &id.issuer, &id.subject, &email).await {
                 Ok(()) => {
