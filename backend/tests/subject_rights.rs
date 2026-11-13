@@ -438,7 +438,7 @@ async fn erasure_removes_every_category_and_proves_it() {
         control_rows(&app.state, "SELECT VALUE id FROM erasure WHERE requested_by = 'reapply' AND status = 'done'", ("x", json!(null))).await.len() == 2
     })
     .await;
-    let left = rows_naming(&app.state, &db, &needles[..1].to_vec(), &[]).await;
+    let left = rows_naming(&app.state, &db, &needles[..1], &[]).await;
     assert!(left.is_empty(), "rows still naming the restored person:\n{}", left.join("\n"));
 }
 
