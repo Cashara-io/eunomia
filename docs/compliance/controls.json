@@ -2019,10 +2019,9 @@
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. Full subject export job (archive with manifest, every inventory category, third-party redaction) for the person and for an admin; prose mentions of unreadable spaces are not detected and live operation is unmeasured. E09.",
+      "finding": "Partial. Personal-vault JSON only, with omitted categories. E09.",
       "evidence": [
-        "EV-C21-1",
-        "EV-C21-2"
+        "EV-C21-1"
       ],
       "mappings": [
         {
@@ -2069,17 +2068,16 @@
     {
       "id": "C22",
       "name": "Verified erasure, retention, legal holds and restore suppression",
-      "status": "Partial",
+      "status": "Missing",
       "owner": "shared",
       "track": [
         "code",
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. Subject-level erasure with confirmation, legal hold, post-check proof and tombstones (resync stand-down, restore carry-over and re-apply); backups are not rewritten and a hold does not pause retention. E08-E09,E24.",
+      "finding": "Missing as a complete subject-level workflow. Item deletes and log pruning are not this capability. E08-E09,E24.",
       "evidence": [
-        "EV-C22-1",
-        "EV-C22-2"
+        "EV-C22-1"
       ],
       "mappings": [
         {
@@ -4625,58 +4623,6 @@
     },
     {
       "schema_version": "1.0.0",
-      "id": "EV-C21-2",
-      "capability_id": "C21",
-      "kind": "source-inspection",
-      "owner": "Eunomia",
-      "source": "Eunomia",
-      "operation": "unknown",
-      "implementation": "Partial",
-      "captured_on": "2026-11-13",
-      "subject": {
-        "repository": "Cashara-io/eunomia",
-        "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
-        "scope": "Compliance PR08 branch (compliance/08-export-erasure): subject export job, routes, Settings > Data and People, and backend/tests/subject_rights.rs."
-      },
-      "references": [
-        {
-          "path": "backend/src/subject/export.rs",
-          "line_start": 204,
-          "line_end": 350,
-          "inventory_id": "E09",
-          "summary": "The subject export archive: account, identities, org memberships, spaces, authored entities, facts, relations, skills, documents with their files, synced records, chat, tool log, sources, recordings, extensions, tokens, sessions and connected apps by name, audit events and usage, with a manifest of categories, counts, redactions and what is left out."
-        },
-        {
-          "path": "backend/src/routers/subject.rs",
-          "line_start": 36,
-          "line_end": 75,
-          "inventory_id": "E09",
-          "summary": "Self-service export (any credential with the account scope) and the admin export for a person in the admin's workspace (browser session); the download is limited to the person and the requester."
-        },
-        {
-          "path": "docs/privacy/subject-rights.md",
-          "line_start": 113,
-          "line_end": 130,
-          "inventory_id": "E09",
-          "summary": "Approved scope and third-party redaction: spaces the person can no longer read are left out, only authored content from shared spaces, chat naming an unreadable space replaced (#230), other people's emails in audit events replaced; what is not redacted is stated."
-        },
-        {
-          "path": "backend/tests/subject_rights.rs",
-          "line_start": 467,
-          "line_end": 543,
-          "inventory_id": "E09",
-          "summary": "Real-database test: every category in the manifest, a left space and other members' facts excluded, a chat message naming a left space replaced, other emails redacted, no token hash, the document file included, a stranger cannot download."
-        }
-      ],
-      "limitations": [
-        "Source inspection of the compliance PR08 branch plus the named real-database tests run locally; no deployed installation assessed.",
-        "release_sha is the catalogue snapshot because check-compliance.py requires every record to carry it; the line ranges refer to the PR08 tree and must be re-captured at the merge commit.",
-        "Assistant prose that repeats a name from an unreadable space without its id is not detected; archives above EUNOMIA_EXPORT_MAX_MB fail; no live identity-verification measurement."
-      ],
-      "summary": "Full subject export job with manifest and third-party redaction, for the person and for an admin, tested against the real database. Live operation unmeasured."
-    },
-    {
-      "schema_version": "1.0.0",
       "id": "EV-C22-1",
       "capability_id": "C22",
       "kind": "source-inspection",
@@ -4760,72 +4706,6 @@
         "Missing means no end-to-end workflow found in the inspected routes, schema, Settings navigation and docs."
       ],
       "summary": "Missing as a complete subject-level workflow. Item deletes and log pruning are not this capability. E08-E09,E24."
-    },
-    {
-      "schema_version": "1.0.0",
-      "id": "EV-C22-2",
-      "capability_id": "C22",
-      "kind": "source-inspection",
-      "owner": "Eunomia",
-      "source": "Eunomia",
-      "operation": "unknown",
-      "implementation": "Partial",
-      "captured_on": "2026-11-13",
-      "subject": {
-        "repository": "Cashara-io/eunomia",
-        "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
-        "scope": "Compliance PR08 branch (compliance/08-export-erasure): erasure workflow, post-check, tombstones, restore carry-over, legal hold and backend/tests/subject_rights.rs."
-      },
-      "references": [
-        {
-          "path": "backend/src/subject/mod.rs",
-          "line_start": 120,
-          "line_end": 217,
-          "inventory_id": "E08",
-          "summary": "Erasure request: confirmation, legal hold, last-owner and first-account refusals, immediate suspension and sign-out, the erasure row and its job owned by a remaining owner."
-        },
-        {
-          "path": "backend/src/subject/erase.rs",
-          "line_start": 148,
-          "line_end": 219,
-          "inventory_id": "E08",
-          "summary": "The erasure job and post-check across every org the person belongs to and the control database; residue fails the job and keeps the record failed."
-        },
-        {
-          "path": "backend/src/store/subject.rs",
-          "line_start": 238,
-          "line_end": 279,
-          "inventory_id": "E08",
-          "summary": "The post-check counts every org table that can name a user (and the email in fact text); CONTROL_RESIDUE does the same for control tables."
-        },
-        {
-          "path": "backend/scripts/backup/eunomia-backup.sh",
-          "line_start": 274,
-          "line_end": 286,
-          "inventory_id": "E24",
-          "summary": "Restore carries the live erasure records over (INSERT IGNORE after control is restored); the scheduler leader re-applies them at start (subject::reapply_erasures)."
-        },
-        {
-          "path": "backend/tests/subject_rights.rs",
-          "line_start": 278,
-          "line_end": 393,
-          "inventory_id": "E08",
-          "summary": "Real-database test: a person seeded in every inventory category is erased through the route and job; no row in any table names them, bucket files are gone, shared content is reassigned, the completion record is clean, resync stands down and a restored copy is erased again."
-        },
-        {
-          "path": "backend/tests/subject_rights.rs",
-          "line_start": 396,
-          "line_end": 416,
-          "inventory_id": "E08",
-          "summary": "Mutation check: removing the chat message delete makes the post-check report chat_message."
-        }
-      ],
-      "limitations": [
-        "Source inspection of the compliance PR08 branch plus the named real-database tests run locally; no deployed installation assessed.",
-        "release_sha is the catalogue snapshot because check-compliance.py requires every record to carry it; the line ranges refer to the PR08 tree and must be re-captured at the merge commit.",
-        "Backups are not rewritten; a backup restored by other means than eunomia-backup loses the tombstones taken after it. Resync suppression covers the person's own sources only. A legal hold blocks erasure but does not pause retention windows. Restore carry-over was checked against a shim and a local SurrealDB 3.3.1, not in the restore drill."
-      ],
-      "summary": "Subject-level erasure with confirmation, legal hold, shared-space reassignment, post-check proof, tombstones for resync and restore re-apply, tested against the real database. Live operation unmeasured."
     },
     {
       "schema_version": "1.0.0",
