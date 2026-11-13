@@ -8,6 +8,8 @@ Eunomia supports two-step verification for password accounts with an authenticat
 
 Signing in then takes two steps: your email and password, then a code from the app (or a recovery code). You can make new recovery codes or turn two-step verification off from the same Settings section; both need a current code.
 
+**Agent setup with two-step verification on.** Scripts that sign in with an email and password (`scripts/connect-agents.sh --email/--password`, `create-eunomia` with a password) cannot finish a sign-in that needs a code. Create a token in Settings > API tokens and pass it instead (`--token`). `create-eunomia --token` then uses that token as it is, because a token can't mint another one for an account with two-step verification.
+
 ## For server operators
 
 **Settings > Two-step verification > Require for everyone** is one switch for the whole server, every organisation on it included. Only the server's operator sees it: the account that set up the server, or an email listed in `EUNOMIA_ADMIN_EMAILS`. Admins granted in Settings > People do not, because those rights are given within one organisation and this setting reaches all of them. The count shown before switching covers every organisation. Before you can turn it on, your own account must have two-step verification on, or sign in only through single sign-on, so you cannot lock yourself out.
@@ -27,7 +29,9 @@ Turning the switch on or off is recorded in the operator's activity log, as are 
 
 ## Single sign-on
 
-An account that set up its own authenticator passes it on every sign-in route, single sign-on included. When a single sign-on sign-in reaches such an account (for example one linked to a password account by its verified email) and the ID token does not say a second factor was used, the person gets the same pending second step as after a password: no session until the code. If the ID token does assert one (the `amr`/`acr` rules below), they go straight in and the session counts as verified. Accounts without their own authenticator are unchanged: the provider owns their second factor, unless `OIDC_REQUIRE_MFA` is set.
+An account that set up its own authenticator passes it on every sign-in route, single sign-on included, **even when the ID token says the provider used a second factor**: that factor proves who holds the provider identity, not who owns the Eunomia account. The person gets the same pending second step as after a password: no session until the code. The only exception is an operator's explicit choice that the provider owns MFA for this server, `OIDC_REQUIRE_MFA=true`, whose claim check the token must pass anyway; then it goes straight in and the session counts as verified.
+
+Nothing irreversible happens before the second step. When a single sign-on identity would be linked to an existing account by its verified email, and that account has its own authenticator, the link (which also ends the account's other sessions) waits until the code passes. A wrong or abandoned second step leaves the account exactly as it was. Accounts without their own authenticator are unchanged: they are linked at once and the provider owns their second factor, unless `OIDC_REQUIRE_MFA` is set.
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -43,9 +47,11 @@ Check that your provider sends `amr` (or the `acr` you list) before turning `OID
 - Codes are six digits, 30-second steps, one step of clock skew either way, compared in constant time. Each step is accepted once per account, so a code cannot be replayed in its window.
 - Recovery codes have 50 random bits each. Only their SHA-256 is stored, and each is spent atomically.
 - A correct password gives a pending sign-in, not a session: a random token in an `HttpOnly`, `SameSite=Strict` cookie scoped to `/api/auth/mfa`, only its hash stored, valid for 5 minutes. It can only finish the second step (or enrol, when required). Five wrong codes end it.
-- Every code tried counts per account: 10 in 15 minutes and every attempt, even a correct one, is refused with `rate.limited`. A right code starts the window over. Each attempt, on the account and on the sign-in challenge, is reserved with a conditional UPDATE in the control database **before** the code is checked, so parallel requests cannot get more guesses and every replica shares the same budget. Within one process an account's attempts also run one at a time.
+- Every authenticator code tried counts per account: 10 in 15 minutes and every authenticator attempt, even a correct one, is refused with `rate.limited`. A right code starts the window over. Recovery codes have a separate counter of 50 per 15 minutes (they carry 50 random bits, so this is not a guessing budget): an authenticator lockout never blocks a recovery code, and a right recovery code ends the lockout. Each attempt, on the account and on the sign-in challenge, is reserved with a conditional UPDATE in the control database **before** the code is checked, so parallel requests cannot get more guesses and every replica shares the same budget. Within one process an account's attempts also run one at a time.
 - Setting up an authenticator signs out the account's other browser sessions that never passed a second factor.
-- Creating an API token from a browser session, approving an OAuth app on the consent page, and the operator switch need a second factor from the last 10 minutes when your account has two-step verification. The web app asks for a code when needed (`auth.step_up_required`). Making new recovery codes and turning two-step verification off need a code every time.
+- Creating an API token from a browser session, approving an OAuth app on the consent page, and the operator switch need a second factor from the last 10 minutes when your account has two-step verification.
+- For an account with two-step verification, or while the server requires it, an API token cannot create another API token: new tokens come from Settings, where you confirm with a code. Tokens and connected apps that already exist keep working; the screen after setup lists them with their creation dates and a Revoke button each, because a token made before you turned two-step verification on keeps working without a code. Nothing is revoked for you.
+- The password you type again before setup is limited to 10 wrong tries per 15 minutes per account, counted in the control database (every replica). The web app asks for a code when needed (`auth.step_up_required`). Making new recovery codes and turning two-step verification off need a code every time.
 
 ## Upgrading
 
@@ -54,10 +60,9 @@ Control migration 0009 (`mfa`) adds optional fields to accounts and sessions and
 ## Not yet, and known limits
 
 - Passkeys (WebAuthn), a second PR under C02.
-- Step-up for tokens minting tokens, and for other sensitive actions (C06).
 - Account recovery by an admin when someone loses both their app and their recovery codes. Today an operator clears `mfa_secret_enc` and the account's `mfa_recovery_code` rows in the control database.
-- Forced enrolment trusts the first sign-in: while MFA is required, whoever holds a not-yet-enrolled account's password can enrol their own authenticator. There is no email confirmation (Eunomia sends no mail). The `auth.mfa_enrol` event is in the activity log.
-- Anyone with the password can keep the owner locked out by using up the 10 attempts every 15 minutes. That is the cost of the limit. Change the password (an operator task today) to stop it.
+- **Forced enrolment trusts whoever has the password.** While MFA is required, whoever holds a not-yet-enrolled account's password can enrol their own authenticator first. This stays true until email verification or operator-assisted enrolment exists (Eunomia sends no mail). The `auth.mfa_enrol` event is in the activity log.
+- **A password holder can push the owner onto recovery codes.** Ten wrong authenticator codes every 15 minutes keep the authenticator locked. The owner can still sign in with a recovery code (separate counter), which ends that lockout. There is no self-service password change yet; changing a password is an operator task.
 - Turning the switch on takes effect at once on the replica that served it. Other replicas keep a verified-credential cache for up to 20 seconds.
-- Within one process an account's attempts are serialised. Across replicas, two simultaneous correct answers rely on the database's write-conflict check for the replay and single-use guarantees.
+- In the rare case that the database fails between spending a correct code and consuming the sign-in challenge, the code is spent and no session starts (counter resets after that point are best effort and cannot stop the sign-in).
 - No per-organisation policy.

@@ -139,7 +139,7 @@ export function EnrolSteps({
 }
 
 /** The recovery codes, shown once, with one way to keep them. Continue only after saying they're saved. */
-export function RecoveryCodes({ codes, onDone, doneLabel = "Done" }: { codes: string[]; onDone: () => void; doneLabel?: string }) {
+export function RecoveryCodes({ codes, onDone, doneLabel = "Done", children }: { codes: string[]; onDone: () => void; doneLabel?: string; children?: React.ReactNode }) {
   const [saved, setSaved] = useState(false);
   return (
     <div className="flex flex-col gap-4" data-testid="mfa-recovery-codes">
@@ -159,6 +159,7 @@ export function RecoveryCodes({ codes, onDone, doneLabel = "Done" }: { codes: st
           I&apos;ve saved my recovery codes
         </label>
       </div>
+      {children}
       <button type="button" disabled={!saved} onClick={onDone} className="btn btn-primary self-start">
         {doneLabel}
       </button>

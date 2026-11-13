@@ -23,6 +23,9 @@ test.describe("Two-step verification", () => {
     test.setTimeout(90_000);
     const email = uniqueEmail("mfa");
     await registerAndOnboard(page, email, PASSWORD);
+    // a token from before two-step verification: listed after setup, with a way to revoke it
+    const made = await page.request.post("/api/auth/tokens", { data: { name: "made-before-mfa" } });
+    expect(made.ok()).toBeTruthy();
 
     await page.goto("/settings?tab=security");
     await expect(page.getByRole("heading", { name: "Two-step verification" })).toBeVisible();
@@ -48,6 +51,11 @@ test.describe("Two-step verification", () => {
     await expect(list).toBeVisible();
     const codes = (await list.locator("li").allInnerTexts()).map((c) => c.trim());
     expect(codes).toHaveLength(10);
+    const existing = page.getByTestId("mfa-existing-access");
+    await expect(existing).toContainText("made-before-mfa");
+    await expect(existing).toContainText("API token · created");
+    await existing.getByRole("button", { name: "Revoke api token made-before-mfa" }).click();
+    await expect(existing).toHaveCount(0);
     await page.getByLabel("I've saved my recovery codes").check();
     await page.getByRole("button", { name: "Done" }).click();
     await expect(page.getByRole("status").filter({ hasText: "On · 10 recovery codes left" })).toBeVisible();

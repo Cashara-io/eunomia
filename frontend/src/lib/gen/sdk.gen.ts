@@ -403,7 +403,7 @@ export const listTokens = <ThrowOnError extends boolean = false>(options?: Optio
 /**
  * Create an API token
  *
- * From a browser session of an account with two-step verification, the last second factor must be under 10 minutes old or `mfa_code` must carry a current code (`auth.step_up_required`).
+ * From a browser session of an account with two-step verification, the last second factor must be under 10 minutes old or `mfa_code` must carry a current code (`auth.step_up_required`). An API token cannot create another token for an account with two-step verification, or while the server requires it (`auth.step_up_required`): create it in Settings.
  */
 export const createToken = <ThrowOnError extends boolean = false>(options: Options<CreateTokenData, ThrowOnError>): RequestResult<CreateTokenResponses, CreateTokenErrors, ThrowOnError> => (options.client ?? client).post<CreateTokenResponses, CreateTokenErrors, ThrowOnError>({
     security: [{

@@ -2643,7 +2643,7 @@ export type SignInOut = AuthOut | MfaPendingOut;
 
 export type SignupPolicy = {
     /**
-     * The emails that may sign up when `mode` is `invite`.
+     * The emails that may sign up when `mode` is `invite`. Empty unless you are the server's operator.
      */
     allowlist: Array<string>;
     /**
@@ -2651,7 +2651,7 @@ export type SignupPolicy = {
      */
     mode: string;
     /**
-     * Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`).
+     * Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`). Empty unless you are the server's operator.
      */
     operators: Array<string>;
     /**

@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { CodeField, EnrolSteps, RecoveryCodes, type Enrolment } from "@/components/mfa/Mfa";
+import { ExistingAccess } from "@/components/mfa/ExistingAccess";
 import { useConfirmChallengeEnrolment, useStartChallengeEnrolment, useVerifyChallenge } from "@/lib/queries/mfa";
 
 const EXPIRED = "auth.mfa_challenge_expired";
@@ -124,7 +125,7 @@ function EnrolStep({ onDone, onRestart }: { onDone: () => void; onRestart: (why:
           </p>
         )}
       </div>
-      {codes ? <RecoveryCodes codes={codes} onDone={onDone} doneLabel="Continue" /> : <EnrolSteps start={begin} confirm={finish} onCodes={setCodes} />}
+      {codes ? <RecoveryCodes codes={codes} onDone={onDone} doneLabel="Continue"><ExistingAccess /></RecoveryCodes> : <EnrolSteps start={begin} confirm={finish} onCodes={setCodes} />}
     </div>
   );
 }

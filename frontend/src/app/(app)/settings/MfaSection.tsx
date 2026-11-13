@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { ShieldCheckIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { CodeField, EnrolSteps, RecoveryCodes, type Enrolment } from "@/components/mfa/Mfa";
+import { ExistingAccess } from "@/components/mfa/ExistingAccess";
 import { useMe } from "@/lib/queries/auth";
 import {
   useConfirmEnrolment,
@@ -24,6 +25,8 @@ export function MfaSection() {
   const status = statusQuery.data;
   const [mode, setMode] = useState<Mode>("idle");
   const [codes, setCodes] = useState<string[] | null>(null);
+  // the codes screen right after setup (not after "New recovery codes") also lists the access that already exists
+  const [justEnrolled, setJustEnrolled] = useState(false);
   // setup starts with the account password, so a stolen session alone can't add an authenticator
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState<Failure | null>(null);
@@ -127,6 +130,7 @@ export function MfaSection() {
             onCodes={(c) => {
               setCodes(c);
               setEnrolment(null);
+              setJustEnrolled(true);
               setMode("codes");
             }}
           />
@@ -139,7 +143,9 @@ export function MfaSection() {
               setCodes(null);
               setMode("idle");
             }}
-          />
+          >
+            {justEnrolled && <ExistingAccess />}
+          </RecoveryCodes>
         )}
 
         {status?.enabled && status.unreadable && mode === "idle" && (
@@ -168,6 +174,7 @@ export function MfaSection() {
             onCancel={() => setMode("idle")}
             onCodes={(c) => {
               setCodes(c);
+              setJustEnrolled(false);
               setMode("codes");
             }}
             onDone={() => setMode("idle")}
