@@ -747,3 +747,208 @@ async fn an_access_review_is_recorded_completed_frozen_and_exported() {
     let (status, _) = as_session(&app, &bob_cookie, "PUT", &format!("/api/admin/access-reviews/{open}/decisions/{}", chain::rid(&app.user.id)), Some(json!({ "decision": "keep" }))).await;
     assert_eq!(status, StatusCode::OK);
 }
+
+// ---------------------------------------------------------------- review round 2
+
+/// Runs the offline verifier on `doc` (and `review`), as an auditor would. `None` when python3 is
+/// not installed.
+fn offline(doc: &Value, extra: &[&str], review: Option<&Value>) -> Option<(Option<i32>, String)> {
+    if std::process::Command::new("python3").arg("--version").output().is_err() {
+        eprintln!("python3 not found: offline verifier not run");
+        return None;
+    }
+    let script = concat!(env!("CARGO_MANIFEST_DIR"), "/../scripts/audit/verify-audit-export.py");
+    let dir = std::env::temp_dir().join(format!("audit-offline-{}", uuid::Uuid::new_v4().simple()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("export.json");
+    std::fs::write(&path, doc.to_string()).unwrap();
+    let mut cmd = std::process::Command::new("python3");
+    cmd.arg("-I").arg(script).arg(&path).args(extra);
+    if let Some(r) = review {
+        let rpath = dir.join("review.json");
+        std::fs::write(&rpath, r.to_string()).unwrap();
+        cmd.arg("--review").arg(rpath);
+    }
+    let out = cmd.output().unwrap();
+    std::fs::remove_dir_all(&dir).ok();
+    Some((out.status.code(), String::from_utf8_lossy(&out.stdout).to_string()))
+}
+
+async fn org_root(app: &common::TestApp, org: &eunomia_backend::pool::OrgId) -> surrealdb::Surreal<surrealdb::engine::any::Any> {
+    let mut res = app.control().test_raw().query("SELECT VALUE db FROM tenant WHERE org = $o").bind(("o", org.record())).await.unwrap();
+    let names: Vec<String> = res.take(0).unwrap();
+    app.state.provisioner.as_ref().unwrap().session_on(&names[0]).await.unwrap()
+}
+
+#[tokio::test]
+async fn an_export_with_events_but_no_head_reports_the_break_and_fails_offline() {
+    let _g = serial().await;
+    let app = common::TestApp::new().await;
+    ten_events(&app).await;
+    sql(app.control(), "DELETE audit_head WHERE ledger = $l", json!({ "l": ledger(&app) })).await;
+    let doc = chain::export(app.control(), &ledger(&app), None, None).await.unwrap();
+    assert!(!doc.ok && doc.events.is_empty(), "nothing exported, and not a valid-looking empty file");
+    assert_eq!(doc.broken.as_ref().unwrap().kind, "head");
+    let doc = serde_json::to_value(&doc).unwrap();
+    if let Some((code, out)) = offline(&doc, &[], None) {
+        assert_eq!(code, Some(1), "{out}");
+        assert!(out.contains("reported this log as broken"), "{out}");
+    }
+    // a ledger that really is empty: honest, but only accepted when the auditor says so
+    let empty = serde_json::to_value(chain::export(app.control(), "org:00000000000000000000000000000000", None, None).await.unwrap()).unwrap();
+    assert_eq!(empty["ok"], true);
+    if let Some((code, out)) = offline(&empty, &[], None) {
+        assert_eq!(code, Some(1), "{out}");
+        assert_eq!(offline(&empty, &["--expect-empty"], None).unwrap().0, Some(0));
+    }
+}
+
+#[tokio::test]
+async fn an_access_review_rewritten_after_completion_no_longer_matches_the_chain() {
+    let _g = serial().await;
+    let app = common::TestApp::new().await;
+    let bob = common::register(&app.state, "bob@example.com").await;
+    let me = login(&app, &app.user.email).await;
+    let (_, review) = as_session(&app, &me, "POST", "/api/admin/access-reviews", None).await;
+    let id = review["id"].as_str().unwrap().to_string();
+    let (status, _) = as_session(&app, &me, "PUT", &format!("/api/admin/access-reviews/{id}/decisions/{}", chain::rid(&bob.id)), Some(json!({ "decision": "keep" }))).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = as_session(&app, &me, "POST", &format!("/api/admin/access-reviews/{id}/complete"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, honest) = app.http("GET", &format!("/api/admin/access-reviews/{id}/export"), None, true).await;
+    assert_eq!((honest["result_hash_matches"].clone(), honest["chain_matches"].clone()), (json!(true), json!(true)), "{honest}");
+    let (_, log) = app.http("GET", "/api/admin/audit/export", None, true).await;
+    if let Some((code, out)) = offline(&log, &[], Some(&honest)) {
+        assert_eq!(code, Some(0), "{out}");
+        assert!(out.contains("is the one the log recorded"), "{out}");
+    }
+
+    // someone with database access lifts the freeze, changes a decision and recomputes the hash
+    let root = org_root(&app, &app.user.org).await;
+    let rid = eunomia_backend::rid::parse(&id).unwrap();
+    root.query("REMOVE EVENT access_review_frozen ON access_review; REMOVE EVENT access_review_decision_frozen ON access_review_decision; \
+                UPDATE access_review_decision SET decision = 'remove' WHERE review = $id")
+        .bind(("id", rid.clone()))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    let (_, changed) = app.http("GET", &format!("/api/admin/access-reviews/{id}/export"), None, true).await;
+    assert_eq!(changed["result_hash_matches"], false);
+    let forged = chain::sha256_hex(eunomia_backend::routers::access_reviews::canonical_json(&changed["result"]));
+    root.query("UPDATE $id SET result_hash = $h").bind(("id", rid)).bind(("h", forged)).await.unwrap().check().unwrap();
+    let (_, rewritten) = app.http("GET", &format!("/api/admin/access-reviews/{id}/export"), None, true).await;
+    assert_eq!(rewritten["result_hash_matches"], true, "the forger recomputed the review's own hash");
+    assert_eq!(rewritten["chain_matches"], false, "but the chain still holds the original: {rewritten}");
+    let (_, log) = app.http("GET", "/api/admin/audit/export", None, true).await;
+    if let Some((code, out)) = offline(&log, &[], Some(&rewritten)) {
+        assert_eq!(code, Some(1), "{out}");
+        assert!(out.contains("records another result"), "{out}");
+    }
+}
+
+#[tokio::test]
+async fn an_org_past_a_missing_migration_is_not_served_until_repaired() {
+    let _g = serial().await;
+    let app = common::TestApp::new().await;
+    let p = app.state.provisioner.as_ref().unwrap();
+    assert!(p.find_migration_gaps(app.control()).await.unwrap().is_empty());
+    // as if this org were migrated by a build that lacked tenant 0030
+    let root = org_root(&app, &app.user.org).await;
+    root.query("DELETE _migration WHERE version = 30").await.unwrap().check().unwrap();
+    app.state.pool.evict(&app.user.org);
+    let gaps = p.find_migration_gaps(app.control()).await.unwrap();
+    assert_eq!(gaps, vec![(app.user.org, vec![30])]);
+    eunomia_backend::state::guard_skipped_migrations(p, app.control(), &app.state.pool, false).await.unwrap();
+    let refused = app.state.pool.for_org(&app.user.org).await.err().expect("not served");
+    assert_eq!(refused.code.as_str(), "tenant.schema_behind");
+    assert!(refused.message.contains("0030"), "{}", refused.message);
+    // the operator's repair applies it and serves the org again
+    eunomia_backend::state::guard_skipped_migrations(p, app.control(), &app.state.pool, true).await.unwrap();
+    assert!(app.state.pool.for_org(&app.user.org).await.is_ok());
+    assert!(p.find_migration_gaps(app.control()).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn one_failing_ledger_does_not_stop_the_replay_or_retention_of_the_others() {
+    let _g = serial().await;
+    let app = common::TestApp::new().await;
+    let other = common::register_personal(&app.state, "other@example.com").await;
+    chain::seal(app.control(), &ledger(&app)).await.unwrap();
+    chain::SKIP_INLINE_SEAL.store(true, std::sync::atomic::Ordering::SeqCst);
+    for i in 0..3 {
+        emit(app.control(), &app.user.id, "test.stuck", &format!("n={i}")).await;
+        emit(app.control(), &other.id, "test.fine", &format!("n={i}")).await;
+    }
+    chain::SKIP_INLINE_SEAL.store(false, std::sync::atomic::Ordering::SeqCst);
+    *chain::FAIL_SEAL_LEDGER.lock().unwrap() = Some(ledger(&app));
+    let failures = chain::SEAL_FAILURES.load(std::sync::atomic::Ordering::SeqCst);
+    let pass = chain::replay(app.control()).await;
+    *chain::FAIL_SEAL_LEDGER.lock().unwrap() = None;
+    assert!(pass.is_ok(), "the replay carries on past a failing ledger");
+    assert!(chain::SEAL_FAILURES.load(std::sync::atomic::Ordering::SeqCst) > failures, "and counts the failure");
+    let pending = |l: String| {
+        let control = app.control().clone();
+        async move { sql(&control, "SELECT id FROM audit_event WHERE pending = true AND ledger = $l", json!({ "l": l })).await.len() }
+    };
+    assert_eq!(pending(chain::org_ledger(&other.org)).await, 0, "the other ledger was sealed");
+    assert_eq!(pending(ledger(&app)).await, 3, "the failing one waits");
+    // retention runs too, and the failed ledger is left alone for a while, then sealed
+    chain::prune(app.control(), chrono::Utc::now() - chrono::TimeDelta::days(365)).await.unwrap();
+    chain::replay(app.control()).await.unwrap();
+    assert_eq!(pending(ledger(&app)).await, 3, "backed off");
+    tokio::time::sleep(Duration::from_millis(2100)).await;
+    chain::replay(app.control()).await.unwrap();
+    assert_eq!(pending(ledger(&app)).await, 0, "and sealed once its back-off passed");
+    assert!(verify(&app).await.ok);
+}
+
+#[tokio::test]
+async fn an_access_review_lists_only_this_orgs_spaces_in_a_shared_database() {
+    // The isolation suite's shared-database mode: every org in one database, so only the app's own
+    // filters keep them apart. A membership row pointing an alpha user at a beta space must not put
+    // beta's space into alpha's review.
+    let _g = serial().await;
+    let state = common::bare_state().await;
+    let alpha = common::register_personal(&state, "alpha@example.com").await;
+    let mut res = state.control.test_raw().query("SELECT db, db_pass_enc FROM ONLY $t").bind(("t", alpha.org.tenant_record())).await.unwrap();
+    let row: Value = res.take::<Option<Value>>(0).unwrap().unwrap();
+    let pass = eunomia_backend::connectors::crypto::decrypt(&state.settings.encryption_key, row["db_pass_enc"].as_str().unwrap()).unwrap();
+    state.pool.set_shared_database(row["db"].as_str().unwrap(), "app", &pass);
+    let beta = common::register_personal(&state, "beta@example.com").await;
+    const CANARY: &str = "BETA_SPACE_CANARY_41c9";
+    let made = common::sys(eunomia_backend::tools::registry::call(&state, &beta, "vault_create", json!({ "name": CANARY, "kind": "org" }))).await.unwrap();
+    let beta_vault = eunomia_backend::rid::parse(made["id"].as_str().unwrap()).unwrap();
+    let shared = state.pool.for_org(&alpha.org).await.unwrap();
+    shared.test_raw().query("CREATE vault_member SET vault = $v, user = $u, role = 'member'").bind(("v", beta_vault)).bind(("u", alpha.id.clone())).await.unwrap().check().unwrap();
+    let router = eunomia_backend::app(state.clone());
+    let ((status, _), cookie) =
+        common::http(&router, "POST", "/api/auth/login", Some(json!({ "email": "alpha@example.com", "password": common::PASSWORD })), None, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let cookie = cookie.unwrap().split(';').next().unwrap().to_string();
+    let ((status, review), _) = common::http(&router, "POST", "/api/admin/access-reviews", None, None, Some(&cookie)).await;
+    assert_eq!(status, StatusCode::OK, "{review}");
+    assert!(!review.to_string().contains(CANARY), "another org's space in this org's review: {review}");
+    assert!(review["snapshot"]["people"][0]["spaces"].as_array().is_some_and(|s| !s.is_empty()), "alpha's own spaces are listed");
+}
+
+#[tokio::test]
+async fn sealing_never_waits_on_the_locks_request_paths_share() {
+    // Every stripe of the shared `tx::lock` (sign-up, job claims) is held elsewhere: a seal must
+    // still finish, because the sealer has locks of its own.
+    let _g = serial().await;
+    let app = common::TestApp::new().await;
+    chain::SKIP_INLINE_SEAL.store(true, std::sync::atomic::Ordering::SeqCst);
+    emit(app.control(), &app.user.id, "test.locked_out", "").await;
+    chain::SKIP_INLINE_SEAL.store(false, std::sync::atomic::Ordering::SeqCst);
+    let mut held = Vec::new();
+    for i in 0..2000 {
+        if let Ok(Some(g)) = tokio::time::timeout(Duration::from_millis(2), eunomia_backend::tx::lock(&format!("stripe-{i}"))).await {
+            held.push(g);
+        }
+    }
+    assert!(held.len() >= 64, "every stripe is taken ({})", held.len());
+    let sealed = tokio::time::timeout(Duration::from_secs(10), chain::seal(app.control(), &ledger(&app))).await;
+    drop(held);
+    assert!(matches!(sealed, Ok(Ok(n)) if n >= 1), "the seal ran while every shared stripe was held: {sealed:?}");
+}
