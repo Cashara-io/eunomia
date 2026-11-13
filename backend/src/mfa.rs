@@ -9,8 +9,9 @@
 //! - Recovery codes are random, stored as SHA-256 only, and spent atomically.
 //! - A password that checks out yields a [`Challenge`], not a session: an HttpOnly cookie scoped to
 //!   `/api/auth/mfa` that can only finish the second step (or enrol, when MFA is required). It expires after
-//!   [`CHALLENGE_TTL_SECS`] and is deleted after [`CHALLENGE_MAX_FAILS`] wrong codes; wrong codes also count
-//!   per account in the shared fail throttle ([`MFA_FAILS`] per 15 minutes).
+//!   [`CHALLENGE_TTL_SECS`] and is deleted after [`CHALLENGE_MAX_FAILS`] wrong codes. Every code also takes
+//!   one of the account's [`MFA_FAILS`] attempts per 15 minutes. Both are reserved in the database before
+//!   the code is checked ([`verify_attempt`]), so parallel requests cannot exceed them.
 
 use axum::{extract::Extension, http::{header, HeaderMap}};
 use rand::Rng;
@@ -34,8 +35,8 @@ pub const MFA_COOKIE: &str = "eunomia_mfa";
 pub const CHALLENGE_TTL_SECS: i64 = 300;
 /// Wrong codes one challenge takes before it is deleted (the person signs in again).
 pub const CHALLENGE_MAX_FAILS: i64 = 5;
-/// Wrong codes per account, across challenges and Settings, before every attempt is refused for the
-/// rest of the 15-minute window (`ratelimit::FailThrottle`).
+/// Codes per account in a 15-minute window, across challenges, Settings and step-up, before every attempt
+/// is refused for the rest of the window. A right code starts the window over.
 pub const MFA_FAILS: u32 = 10;
 /// A sensitive action within this long of passing a second factor needs no new code.
 pub const STEP_UP_SECS: i64 = 600;
@@ -191,6 +192,9 @@ pub struct MfaStatus {
     pub required: bool,
     /// False for an account that signs in only through single sign-on: the provider handles its second factor.
     pub available: bool,
+    /// True when the stored authenticator can no longer be read (`ENCRYPTION_KEY` changed): sign in with a
+    /// recovery code, turn it off and set it up again.
+    pub unreadable: bool,
 }
 
 pub async fn status(control: &ControlDb, user: &RecordId) -> AppResult<MfaStatus> {
@@ -201,6 +205,7 @@ pub async fn status(control: &ControlDb, user: &RecordId) -> AppResult<MfaStatus
         recovery_codes_left: recovery_left(control, user).await?,
         required: require_mfa(control).await?,
         available: row.has_password,
+        unreadable: false,
     })
 }
 
@@ -245,14 +250,17 @@ pub async fn set_require_mfa(control: &ControlDb, on: bool, by: &RecordId) -> Ap
     Ok(())
 }
 
-/// A session that did not pass a second factor, of a password account, while MFA is required: refused.
-/// Sessions from single sign-on (`via = oidc`) are left to the provider.
+/// A session that did not pass a second factor, while MFA is required, is refused. Exempt: single sign-on
+/// sessions (`via = oidc`) of accounts without their own authenticator (the provider owns their second
+/// factor), and single sign-on accounts' sessions from before sessions recorded how they signed in. An
+/// account with its own authenticator passes it on every route, single sign-on included
+/// (`routers/oidc.rs`), and its unverified sessions end when it enrols ([`confirm_enrolment`]).
 pub async fn session_allowed(control: &ControlDb, user: &RecordId, mfa_at: Option<&Datetime>, via: Option<&str>) -> AppResult<()> {
-    if mfa_at.is_some() || via == Some("oidc") || !require_mfa(control).await? {
+    if mfa_at.is_some() || !require_mfa(control).await? {
         return Ok(());
     }
-    if !state_row(control, user).await?.has_password && via.is_none() {
-        // a single sign-on account's session from before sessions recorded how they signed in
+    let row = state_row(control, user).await?;
+    if (via == Some("oidc") && row.mfa_secret_enc.is_none()) || (!row.has_password && via.is_none()) {
         return Ok(());
     }
     Err(AppError::coded(ErrorCode::AuthMfaRequired, "This server now requires two-step verification. Sign in again to set it up."))
@@ -276,13 +284,35 @@ impl Factor {
     }
 }
 
+/// The stored secret no longer decrypts (`ENCRYPTION_KEY` changed without moving it). Not the person's
+/// mistake and not a 500: they sign in with a recovery code and set the authenticator up again.
+fn unreadable() -> AppError {
+    AppError::coded(
+        ErrorCode::AuthMfaUnreadable,
+        "Your authenticator can't be checked because this server's encryption key changed. Sign in with a recovery code, then set up two-step verification again in Settings.",
+    )
+}
+
+/// Decrypts a stored TOTP secret; a value the current key cannot read is [`unreadable`].
+fn open_secret(state: &AppState, enc: &str) -> AppResult<String> {
+    crypto::decrypt(&state.settings.encryption_key, enc).map_err(|e| {
+        tracing::warn!(error = %e.message, "a stored TOTP secret does not decrypt with the current ENCRYPTION_KEY");
+        unreadable()
+    })
+}
+
+/// True when the account's confirmed secret cannot be decrypted with the current key.
+pub async fn secret_unreadable(state: &AppState, user: &RecordId) -> AppResult<bool> {
+    Ok(state_row(&state.control, user).await?.mfa_secret_enc.is_some_and(|enc| open_secret(state, &enc).is_err()))
+}
+
 /// Checks `code` (an authenticator code or a recovery code) for the account and spends it. `None`: wrong,
 /// replayed, or the account has no MFA.
 async fn spend(state: &AppState, user: &RecordId, code: &str) -> AppResult<Option<Factor>> {
     let row = state_row(&state.control, user).await?;
     let Some(enc) = row.mfa_secret_enc else { return Ok(None) };
     if is_totp_shaped(code) {
-        let secret = crypto::decrypt(&state.settings.encryption_key, &enc)?;
+        let secret = open_secret(state, &enc)?;
         let Some(step) = check_code(&secret, code, now_secs())? else { return Ok(None) };
         let accepted: Vec<serde_json::Value> = stmt::MFA_STEP_ACCEPT
             .on(&state.control)
@@ -299,26 +329,71 @@ async fn spend(state: &AppState, user: &RecordId, code: &str) -> AppResult<Optio
     Ok((!spent.is_empty()).then_some(Factor::Recovery))
 }
 
-fn throttle_key(user: &RecordId) -> String {
-    format!("mfa-fail:{}", crate::rid::RecordIdExt::to_string(user))
-}
-
 fn invalid() -> AppError {
     AppError::coded(ErrorCode::AuthMfaInvalid, "That code didn't work. Check your authenticator app (or the recovery code) and try again.")
 }
 
-/// [`spend`] behind the per-account fail throttle, with the audit trail: a wrong code is counted and
-/// recorded (`auth.mfa_failed`), a recovery code that worked is recorded (`auth.mfa_recovery_used`).
-/// `place` says where the code was typed (`sign-in`, `settings`) for the log.
-pub async fn verify(state: &AppState, user: &RecordId, code: &str, place: &str) -> AppResult<Factor> {
-    let key = throttle_key(user);
-    if let Err(wait) = state.fail_throttle.check(&key, MFA_FAILS) {
-        return Err(AppError::coded(ErrorCode::RateLimited, format!("Too many wrong codes. Try again in {} minutes.", wait.div_ceil(60))));
+fn locked_out(wait_secs: i64) -> AppError {
+    let minutes = (wait_secs.max(1) + 59) / 60;
+    AppError::coded(ErrorCode::RateLimited, format!("Too many codes tried. Try again in {minutes} minute{}.", if minutes == 1 { "" } else { "s" }))
+}
+
+/// Takes one of the account's [`MFA_FAILS`] attempts for the current 15-minute window, before any code is
+/// checked: a conditional UPDATE in the control database, so parallel requests and other replicas share
+/// one budget. Refused (`rate.limited`) once the window's attempts are used.
+async fn reserve_attempt(state: &AppState, user: &RecordId) -> AppResult<()> {
+    let taken: Vec<serde_json::Value> =
+        stmt::MFA_ATTEMPT_RESERVE.on(&state.control).bind(("id", user.clone())).bind(("max", i64::from(MFA_FAILS))).await?.take(0)?;
+    if !taken.is_empty() {
+        return Ok(());
+    }
+    let since: Option<Datetime> = stmt::MFA_ATTEMPT_WAIT.on(&state.control).bind(("id", user.clone())).await?.take(0)?;
+    let ends = since.as_ref().and_then(crate::sources::base::datetime_to_chrono).map(|t| t + chrono::Duration::minutes(15));
+    Err(locked_out(ends.map_or(60, |e| (e - chrono::Utc::now()).num_seconds())))
+}
+
+/// Takes one of the challenge's [`CHALLENGE_MAX_FAILS`] attempts before its code is checked. `None` when
+/// it is used up, expired or already finished; otherwise how many it has used, this one included.
+async fn reserve_challenge(control: &ControlDb, c: &Challenge) -> AppResult<Option<i64>> {
+    #[derive(Deserialize, SurrealValue)]
+    struct Row {
+        failures: i64,
+    }
+    let rows: Vec<Row> = stmt::MFA_CHALLENGE_RESERVE.on(control).bind(("id", c.id.clone())).bind(("max", CHALLENGE_MAX_FAILS)).await?.take(0)?;
+    Ok(rows.first().map(|r| r.failures))
+}
+
+fn challenge_over() -> AppError {
+    AppError::coded(ErrorCode::AuthMfaChallengeExpired, "Too many wrong codes. Enter your email and password again.")
+}
+
+/// One second-factor attempt, in this order: hold the account's lock (one attempt at a time per account in
+/// this process), reserve an account attempt, reserve a challenge attempt (sign-in only), then check and
+/// spend the code. A right code resets the account's window; a wrong one stays counted. A challenge whose
+/// last attempt was wrong is deleted. Audited: `auth.mfa_failed`, `auth.mfa_recovery_used`,
+/// `auth.mfa_secret_unreadable`. `place` says where the code was typed, for the log.
+pub async fn verify_attempt(state: &AppState, user: &RecordId, code: &str, place: &str, challenge: Option<&Challenge>) -> AppResult<Factor> {
+    let _one_at_a_time = crate::tx::lock(&format!("mfa:{}", crate::rid::RecordIdExt::to_string(user))).await;
+    reserve_attempt(state, user).await?;
+    let mut used = None;
+    if let Some(c) = challenge {
+        match reserve_challenge(&state.control, c).await? {
+            Some(n) => used = Some(n),
+            None => {
+                stmt::MFA_ATTEMPT_REFUND.on(&state.control).bind(("id", user.clone())).await?.check()?;
+                return Err(AppError::coded(ErrorCode::AuthMfaChallengeExpired, "Your sign-in has expired. Enter your email and password again."));
+            }
+        }
     }
     let actor = Actor { kind: "user", id: crate::rid::RecordIdExt::to_string(user) };
-    match spend(state, user, code).await? {
-        Some(factor) => {
-            state.fail_throttle.clear(&key);
+    match spend(state, user, code).await {
+        Ok(Some(factor)) => {
+            stmt::MFA_ATTEMPT_RESET.on(&state.control).bind(("id", user.clone())).await?.check()?;
+            // spent while the account's lock is held: a racing answer on the same challenge finds it gone
+            // before it can spend a code of its own
+            if let Some(c) = challenge {
+                stmt::MFA_CHALLENGE_TAKE.on(&state.control).bind(("id", c.id.clone())).await?.check()?;
+            }
             if factor == Factor::Recovery {
                 let left = recovery_left(&state.control, user).await.unwrap_or(0);
                 let detail = format!("where={place} left={left}");
@@ -326,14 +401,35 @@ pub async fn verify(state: &AppState, user: &RecordId, code: &str, place: &str) 
             }
             Ok(factor)
         }
-        None => {
-            state.fail_throttle.fail(&key);
+        Ok(None) => {
             let detail = format!("where={place}");
             let outcome = ErrorCode::AuthMfaInvalid.as_str();
             audit::record(&state.control, Event { user: Some(user), actor: &actor, action: "auth.mfa_failed", target: "", outcome, detail: &detail }).await;
+            if let (Some(c), Some(n)) = (challenge, used)
+                && n >= CHALLENGE_MAX_FAILS
+            {
+                stmt::MFA_CHALLENGE_TAKE.on(&state.control).bind(("id", c.id.clone())).await?.check()?;
+                return Err(challenge_over());
+            }
             Err(invalid())
         }
+        Err(e) if e.code == ErrorCode::AuthMfaUnreadable => {
+            // no code was checked: the attempts are given back
+            stmt::MFA_ATTEMPT_REFUND.on(&state.control).bind(("id", user.clone())).await?.check()?;
+            if let Some(c) = challenge {
+                stmt::MFA_CHALLENGE_REFUND.on(&state.control).bind(("id", c.id.clone())).await?.check()?;
+            }
+            let detail = format!("where={place}");
+            audit::record(&state.control, Event { user: Some(user), actor: &actor, action: "auth.mfa_secret_unreadable", target: "", outcome: e.code.as_str(), detail: &detail }).await;
+            Err(e)
+        }
+        Err(e) => Err(e),
     }
+}
+
+/// [`verify_attempt`] outside a sign-in challenge (Settings, step-up).
+pub async fn verify(state: &AppState, user: &RecordId, code: &str, place: &str) -> AppResult<Factor> {
+    verify_attempt(state, user, code, place, None).await
 }
 
 // ------------------------------------------------------------------ enrolment
@@ -357,13 +453,12 @@ pub async fn begin_enrolment(state: &AppState, user: &RecordId) -> AppResult<Enr
     enrolment(&secret, &row.email)
 }
 
-/// Confirms enrolment with a code from the new secret: MFA turns on and fresh recovery codes are
-/// returned (shown once).
-pub async fn confirm_enrolment(state: &AppState, user: &RecordId, code: &str) -> AppResult<Vec<String>> {
-    let key = throttle_key(user);
-    if let Err(wait) = state.fail_throttle.check(&key, MFA_FAILS) {
-        return Err(AppError::coded(ErrorCode::RateLimited, format!("Too many wrong codes. Try again in {} minutes.", wait.div_ceil(60))));
-    }
+/// Confirms enrolment with a code from the new secret: MFA turns on and fresh recovery codes are returned
+/// (shown once). The attempt is reserved like any other code ([`verify_attempt`]), and against the
+/// sign-in challenge when enrolling during sign-in. `current_sid` (Settings) is marked verified; every
+/// other browser session of the account that never passed a second factor is signed out.
+pub async fn confirm_enrolment(state: &AppState, user: &RecordId, code: &str, challenge: Option<&Challenge>, current_sid: Option<&str>) -> AppResult<Vec<String>> {
+    let _one_at_a_time = crate::tx::lock(&format!("mfa:{}", crate::rid::RecordIdExt::to_string(user))).await;
     let row = state_row(&state.control, user).await?;
     if row.mfa_secret_enc.is_some() {
         return Err(AppError::coded(ErrorCode::DbConflict, "Two-step verification is already on."));
@@ -372,11 +467,36 @@ pub async fn confirm_enrolment(state: &AppState, user: &RecordId, code: &str) ->
     let (Some(enc), true) = (row.mfa_pending_enc, fresh) else {
         return Err(AppError::bad_request("That setup has expired. Start again to get a new QR code."));
     };
-    let secret = crypto::decrypt(&state.settings.encryption_key, &enc)?;
+    reserve_attempt(state, user).await?;
+    let mut used = None;
+    if let Some(c) = challenge {
+        match reserve_challenge(&state.control, c).await? {
+            Some(n) => used = Some(n),
+            None => {
+                stmt::MFA_ATTEMPT_REFUND.on(&state.control).bind(("id", user.clone())).await?.check()?;
+                return Err(AppError::coded(ErrorCode::AuthMfaChallengeExpired, "Your sign-in has expired. Enter your email and password again."));
+            }
+        }
+    }
+    let secret = match open_secret(state, &enc) {
+        Ok(s) => s,
+        Err(e) => {
+            stmt::MFA_ATTEMPT_REFUND.on(&state.control).bind(("id", user.clone())).await?.check()?;
+            if let Some(c) = challenge {
+                stmt::MFA_CHALLENGE_REFUND.on(&state.control).bind(("id", c.id.clone())).await?.check()?;
+            }
+            return Err(e);
+        }
+    };
     let Some(step) = check_code(&secret, code, now_secs())? else {
-        state.fail_throttle.fail(&key);
         let actor = Actor { kind: "user", id: crate::rid::RecordIdExt::to_string(user) };
         audit::record(&state.control, Event { user: Some(user), actor: &actor, action: "auth.mfa_failed", target: "", outcome: ErrorCode::AuthMfaInvalid.as_str(), detail: "where=setup" }).await;
+        if let (Some(c), Some(n)) = (challenge, used)
+            && n >= CHALLENGE_MAX_FAILS
+        {
+            stmt::MFA_CHALLENGE_TAKE.on(&state.control).bind(("id", c.id.clone())).await?.check()?;
+            return Err(challenge_over());
+        }
         return Err(invalid());
     };
     let done: Vec<serde_json::Value> = stmt::MFA_CONFIRM
@@ -389,7 +509,15 @@ pub async fn confirm_enrolment(state: &AppState, user: &RecordId, code: &str) ->
     if done.is_empty() {
         return Err(AppError::coded(ErrorCode::DbConflict, "Setup changed in another window. Start again."));
     }
-    state.fail_throttle.clear(&key);
+    stmt::MFA_ATTEMPT_RESET.on(&state.control).bind(("id", user.clone())).await?.check()?;
+    if let Some(c) = challenge {
+        stmt::MFA_CHALLENGE_TAKE.on(&state.control).bind(("id", c.id.clone())).await?.check()?;
+    }
+    if let Some(sid) = current_sid {
+        stmt::MFA_SESSION_MARK.on(&state.control).bind(("sid", sid.to_string())).bind(("owner", user.clone())).await?.check()?;
+    }
+    stmt::MFA_REVOKE_UNVERIFIED_SESSIONS.on(&state.control).bind(("owner", user.clone())).await?.check()?;
+    state.credentials.forget_user(user);
     let codes = replace_recovery_codes(&state.control, user).await?;
     audit::record_as_caller(&state.control, user, "auth.mfa_enrol", "", "ok").await;
     Ok(codes)
@@ -498,19 +626,6 @@ pub async fn find_challenge(control: &ControlDb, headers: &HeaderMap, purpose: &
         .ok_or_else(expired)?;
     let rows: Vec<Challenge> = stmt::MFA_CHALLENGE_FIND.on(control).bind(("hash", models_user::hash_token(&token))).await?.take(0)?;
     rows.into_iter().find(|c| c.purpose == purpose).ok_or_else(expired)
-}
-
-/// Counts a wrong code against the challenge. `false` once it is used up (deleted).
-pub async fn challenge_failed(control: &ControlDb, c: &Challenge) -> AppResult<bool> {
-    let mut res = stmt::MFA_CHALLENGE_FAIL.on(control).bind(("id", c.id.clone())).bind(("max", CHALLENGE_MAX_FAILS)).await?;
-    let deleted: Vec<serde_json::Value> = res.take(1)?;
-    Ok(deleted.is_empty())
-}
-
-/// Spends the challenge. `false` if another request already did (a race): that request got the session.
-pub async fn take_challenge(control: &ControlDb, c: &Challenge) -> AppResult<bool> {
-    let gone: Vec<serde_json::Value> = stmt::MFA_CHALLENGE_TAKE.on(control).bind(("id", c.id.clone())).await?.take(0)?;
-    Ok(!gone.is_empty())
 }
 
 pub fn challenge_cookie(token: &str, public_url: &str, https: Option<Extension<ForwardedHttps>>) -> String {

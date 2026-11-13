@@ -90,7 +90,14 @@ pub const ALL: &[&ControlStmt] = &[
     &MFA_RECOVERY_LEFT,
     &MFA_CHALLENGE_CREATE,
     &MFA_CHALLENGE_FIND,
-    &MFA_CHALLENGE_FAIL,
+    &MFA_CHALLENGE_RESERVE,
+    &MFA_CHALLENGE_REFUND,
+    &MFA_ATTEMPT_RESERVE,
+    &MFA_ATTEMPT_RESET,
+    &MFA_ATTEMPT_REFUND,
+    &MFA_ATTEMPT_WAIT,
+    &MFA_REVOKE_UNVERIFIED_SESSIONS,
+    &ADMIN_WITHOUT_MFA_ALL,
     &MFA_CHALLENGE_TAKE,
     &MFA_CHALLENGE_PRUNE,
     &MFA_SESSION_MARK,
@@ -562,10 +569,50 @@ pub const MFA_CHALLENGE_FIND: ControlStmt = ControlStmt::new(
      WHERE token_hash = $hash AND expires_at > time::now() LIMIT 1",
 );
 
-/// Counts a wrong code; past `$max` the challenge is deleted and the person must sign in again.
-pub const MFA_CHALLENGE_FAIL: ControlStmt = ControlStmt::new(
-    "control.mfa_challenge_fail",
-    "UPDATE $id SET failures += 1 RETURN failures; DELETE $id WHERE failures >= $max RETURN BEFORE",
+/// Reserves one attempt on a live challenge before its code is checked; empty once `$max` are used or it expired.
+pub const MFA_CHALLENGE_RESERVE: ControlStmt = ControlStmt::new(
+    "control.mfa_challenge_reserve",
+    "UPDATE $id SET failures += 1 WHERE failures < $max AND expires_at > time::now() RETURN failures",
+);
+
+/// Gives back a challenge attempt that never checked a code.
+pub const MFA_CHALLENGE_REFUND: ControlStmt =
+    ControlStmt::new("control.mfa_challenge_refund", "UPDATE $id SET failures = math::max([failures - 1, 0]) RETURN NONE");
+
+/// Reserves one second-factor attempt for an account before the code is checked: the window restarts after
+/// 15 minutes; empty when `$max` attempts are already used in it. One conditional single-record UPDATE.
+pub const MFA_ATTEMPT_RESERVE: ControlStmt = ControlStmt::new(
+    "control.mfa_attempt_reserve",
+    "UPDATE $id SET \
+       mfa_attempts = IF mfa_attempts_since = NONE OR mfa_attempts_since < time::now() - 15m THEN 1 ELSE (mfa_attempts ?? 0) + 1 END, \
+       mfa_attempts_since = IF mfa_attempts_since = NONE OR mfa_attempts_since < time::now() - 15m THEN time::now() ELSE mfa_attempts_since END \
+     WHERE mfa_attempts_since = NONE OR mfa_attempts_since < time::now() - 15m OR (mfa_attempts ?? 0) < $max RETURN mfa_attempts",
+);
+
+/// A right code: the account's window starts over.
+pub const MFA_ATTEMPT_RESET: ControlStmt =
+    ControlStmt::new("control.mfa_attempt_reset", "UPDATE $id SET mfa_attempts = NONE, mfa_attempts_since = NONE RETURN NONE");
+
+/// Gives back one reserved attempt that never checked a code (the server could not read the secret).
+pub const MFA_ATTEMPT_REFUND: ControlStmt = ControlStmt::new(
+    "control.mfa_attempt_refund",
+    "UPDATE $id SET mfa_attempts = math::max([(mfa_attempts ?? 1) - 1, 0]) RETURN NONE",
+);
+
+/// When the account's attempt window started (it ends 15 minutes later).
+pub const MFA_ATTEMPT_WAIT: ControlStmt =
+    ControlStmt::new("control.mfa_attempt_wait", "SELECT VALUE mfa_attempts_since FROM ONLY $id");
+
+/// Turning MFA on ends the account's browser sessions that never passed a second factor.
+pub const MFA_REVOKE_UNVERIFIED_SESSIONS: ControlStmt = ControlStmt::new(
+    "control.mfa_revoke_unverified_sessions",
+    "UPDATE session SET revoked = true WHERE owner = $owner AND mfa_at = NONE AND revoked = false RETURN id",
+);
+
+/// Password accounts on the whole instance (every org) that would have to enrol: active, with a password, no MFA.
+pub const ADMIN_WITHOUT_MFA_ALL: ControlStmt = ControlStmt::new(
+    "control.admin_without_mfa_all",
+    "SELECT count() FROM user WHERE password_hash != NONE AND mfa_secret_enc = NONE AND suspended_at = NONE GROUP ALL",
 );
 
 /// Single use: the first successful second step deletes the challenge; a racing second finds nothing.

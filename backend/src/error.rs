@@ -30,6 +30,7 @@ pub enum ErrorCode {
     AuthMfaInvalid,
     AuthMfaChallengeExpired,
     AuthStepUpRequired,
+    AuthMfaUnreadable,
     RateLimited,
     TenantDenied,
     TenantNotFound,
@@ -85,6 +86,7 @@ impl ErrorCode {
         ErrorCode::AuthMfaInvalid,
         ErrorCode::AuthMfaChallengeExpired,
         ErrorCode::AuthStepUpRequired,
+        ErrorCode::AuthMfaUnreadable,
         ErrorCode::RateLimited,
         ErrorCode::TenantDenied,
         ErrorCode::TenantNotFound,
@@ -140,6 +142,7 @@ impl ErrorCode {
             ErrorCode::AuthMfaInvalid => "auth.mfa_invalid",
             ErrorCode::AuthMfaChallengeExpired => "auth.mfa_challenge_expired",
             ErrorCode::AuthStepUpRequired => "auth.step_up_required",
+            ErrorCode::AuthMfaUnreadable => "auth.mfa_unreadable",
             ErrorCode::RateLimited => "rate.limited",
             ErrorCode::TenantDenied => "tenant.denied",
             ErrorCode::TenantNotFound => "tenant.not_found",
@@ -195,7 +198,7 @@ impl ErrorCode {
             ErrorCode::DocumentUnsupportedType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             ErrorCode::ChangesResync => StatusCode::GONE,
             ErrorCode::TenantProvisioningDisabled => StatusCode::NOT_IMPLEMENTED,
-            ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision => StatusCode::CONFLICT,
+            ErrorCode::AuthMfaUnreadable | ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision => StatusCode::CONFLICT,
             ErrorCode::AuthNotFound
             | ErrorCode::VaultNotFound
             | ErrorCode::EntityNotFound
@@ -387,7 +390,7 @@ mod tests {
             match c {
                 ErrorCode::AuthUnauthorized | ErrorCode::AuthForbidden | ErrorCode::AuthEmailTaken | ErrorCode::AuthNotFound
                 | ErrorCode::AuthScope | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::RateLimited
-                | ErrorCode::AuthMfaRequired | ErrorCode::AuthMfaInvalid | ErrorCode::AuthMfaChallengeExpired | ErrorCode::AuthStepUpRequired
+                | ErrorCode::AuthMfaRequired | ErrorCode::AuthMfaInvalid | ErrorCode::AuthMfaChallengeExpired | ErrorCode::AuthStepUpRequired | ErrorCode::AuthMfaUnreadable
                 | ErrorCode::TenantDenied | ErrorCode::TenantNotFound | ErrorCode::TenantSchemaBehind
                 | ErrorCode::TenantProvisioningDisabled | ErrorCode::VaultNotFound | ErrorCode::VaultForbidden | ErrorCode::VaultNameTaken | ErrorCode::EntityNotFound
                 | ErrorCode::MemoryNotFound | ErrorCode::ChatThreadNotFound | ErrorCode::ConnectorNotFound
