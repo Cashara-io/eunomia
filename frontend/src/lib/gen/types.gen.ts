@@ -545,6 +545,11 @@ export type ConsentClient = {
 
 export type ConsentDecision = AuthzParams & {
     approve: boolean;
+    /**
+     * A current authenticator or recovery code, when your account has two-step verification and its last
+     * second factor is older than 10 minutes (`auth.step_up_required`). Only needed to approve.
+     */
+    mfa_code?: string | null;
 };
 
 export type ConsentInfo = {
@@ -702,6 +707,14 @@ export type DocumentOut = {
      * The vault (memory space) the document is in.
      */
     vault: string;
+};
+
+export type EnrolIn = {
+    /**
+     * Your account password: setting up an authenticator from Settings needs it, so a stolen session alone
+     * cannot put an attacker's authenticator on the account.
+     */
+    password?: string | null;
 };
 
 export type EnrolledOut = {
@@ -1745,6 +1758,11 @@ export type MfaStatus = {
      * An admin requires two-step verification for every password account on this server.
      */
     required: boolean;
+    /**
+     * True when the stored authenticator can no longer be read (`ENCRYPTION_KEY` changed): sign in with a
+     * recovery code, turn it off and set it up again.
+     */
+    unreadable: boolean;
 };
 
 export type ModelsOut = {
@@ -2486,8 +2504,8 @@ export type Rule = {
 
 export type SecurityChange = {
     /**
-     * A current authenticator or recovery code, when the admin's own account has two-step verification and
-     * its last second factor is older than 10 minutes (`auth.step_up_required`).
+     * A current authenticator or recovery code, when your own account has two-step verification and its
+     * last second factor is older than 10 minutes (`auth.step_up_required`).
      */
     mfa_code?: string | null;
     require_mfa: boolean;
@@ -2495,18 +2513,19 @@ export type SecurityChange = {
 
 export type SecurityOut = {
     /**
-     * Every password account must pass two-step verification before it gets a session. Accounts that
-     * sign in through single sign-on are left to the identity provider.
+     * Every password account on this server, in every organisation, must pass two-step verification before
+     * it gets a session. Accounts that sign in through single sign-on are left to the identity provider
+     * unless they set up their own authenticator.
      */
     require_mfa: boolean;
     updated_at?: string | null;
     /**
-     * Email of the admin who last changed it.
+     * Email of the operator who last changed it.
      */
     updated_by?: string | null;
     /**
-     * Password accounts in the workspace without two-step verification yet (they must set it up at their
-     * next sign-in while it is required).
+     * Active password accounts on the whole server (every organisation) without two-step verification yet:
+     * while it is required they are signed out and must set it up at their next sign-in.
      */
     without_mfa: number;
 };
@@ -2748,6 +2767,13 @@ export type StatusCounts = {
     observed: number;
     proposed: number;
     rejected: number;
+};
+
+export type StatusOut = MfaStatus & {
+    /**
+     * You may require two-step verification for the whole server (`/api/admin/security`): the server's operator.
+     */
+    can_require: boolean;
 };
 
 export type StrictBody = {
@@ -3522,7 +3548,7 @@ export type GetMfaErrors = {
 export type GetMfaError = GetMfaErrors[keyof GetMfaErrors];
 
 export type GetMfaResponses = {
-    200: MfaStatus;
+    200: StatusOut;
 };
 
 export type GetMfaResponse = GetMfaResponses[keyof GetMfaResponses];
@@ -3616,7 +3642,7 @@ export type DisableMfaResponses = {
 export type DisableMfaResponse = DisableMfaResponses[keyof DisableMfaResponses];
 
 export type StartMfaEnrolmentData = {
-    body?: never;
+    body: EnrolIn;
     path?: never;
     query?: never;
     url: '/api/auth/mfa/enrol';

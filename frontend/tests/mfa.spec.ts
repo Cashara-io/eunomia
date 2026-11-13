@@ -27,6 +27,12 @@ test.describe("Two-step verification", () => {
     await page.goto("/settings?tab=security");
     await expect(page.getByRole("heading", { name: "Two-step verification" })).toBeVisible();
     await page.getByRole("button", { name: "Set up two-step verification" }).click();
+    // a wrong password stops it; the right one shows the QR code
+    await page.getByLabel("Your password").fill("not-my-password");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page.getByText("That password isn't right.")).toBeVisible();
+    await page.getByLabel("Your password").fill(PASSWORD);
+    await page.getByRole("button", { name: "Continue" }).click();
     const secret = (await page.getByTestId("mfa-secret").innerText()).trim();
     expect(secret).toMatch(/^[A-Z2-7]{32}$/);
     await expect(page.getByAltText("QR code for your authenticator app")).toBeVisible();

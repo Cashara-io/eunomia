@@ -290,7 +290,7 @@ Older installs ran with an empty `ENCRYPTION_KEY`, so their stored connector cre
 
 An install whose existing key is shorter than 16 characters keeps working: it boots with a loud error in the log and `/readyz` carries a `warning`, because refusing would lock the owner out of data written under it (a new install with a short key is refused). Moving to a strong key is a key change, so the next paragraph applies: nothing re-encrypts for you.
 
-Changing a real key later has no such fallback: values written under the old key stop decrypting, so reconnect the connectors, re-enter the OpenAI key, and expect org databases to be unreachable until their users are redefined (see [architecture/tenancy.md](architecture/tenancy.md)). Do not change it casually.
+Changing a real key later has no such fallback: values written under the old key stop decrypting, so reconnect the connectors, re-enter the OpenAI key, and expect org databases to be unreachable until their users are redefined (see [architecture/tenancy.md](architecture/tenancy.md)). Do not change it casually. Two-step verification secrets are encrypted under the key too: after a change, an authenticator code answers `auth.mfa_unreadable` (409, never a 500, no attempt counted, audited as `auth.mfa_secret_unreadable`). The person signs in with a recovery code, turns two-step verification off in Settings with another recovery code (allowed even while it is required) and sets it up again. With `ENCRYPTION_KEY_LEGACY_EMPTY=1` a secret written under the empty key still decrypts. See [security/mfa.md](security/mfa.md).
 
 ## Backups
 

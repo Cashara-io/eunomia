@@ -14,6 +14,8 @@ import SecondStep from "./SecondStep";
 const noSubscribe = () => () => {};
 /** `?email=` from "Sign in instead" on the register page. */
 const emailFromUrl = () => new URLSearchParams(window.location.search).get("email") ?? "";
+/** `?mfa=verify` from single sign-on into an account with its own authenticator: the second step is waiting. */
+const pendingFromUrl = () => (new URLSearchParams(window.location.search).get("mfa") === "verify" ? "verify" : "");
 
 export default function LoginPage() {
   const router = useRouter();
@@ -29,7 +31,10 @@ export default function LoginPage() {
   const [error, setError] = useState<Failure | null>(null);
   const [busy, setBusy] = useState(false);
   // a correct password that still needs its second step (a code, or setting up an authenticator first)
-  const [second, setSecond] = useState<"verify" | "enrol" | null>(null);
+  const [typedSecond, setSecond] = useState<"verify" | "enrol" | null | undefined>(undefined);
+  const fromSso = useSyncExternalStore(noSubscribe, pendingFromUrl, () => "");
+  // the URL's pending step counts until the person goes back to the password (null)
+  const second = typedSecond === undefined ? (fromSso === "verify" ? "verify" : null) : typedSecond;
   // a suspended account is not a mistake the person made: it reads as a calm notice, and the fields stay valid
   const suspended = error?.code === "auth.suspended";
   const invalid = error && !suspended ? true : undefined;

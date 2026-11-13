@@ -8,6 +8,7 @@ import { call } from "@/lib/queries/client";
 import { useConsent, useDecideConsent } from "@/lib/queries/oauth";
 import EunomiaMark from "@/components/EunomiaMark";
 import { InputModeTracker } from "@/components/bits/motion";
+import { CodeField } from "@/components/mfa/Mfa";
 
 // Each permission in plain words: what the app can do, and what that means for you.
 const SCOPE_WORDS: Record<string, { title: string; detail: string }> = {
@@ -24,6 +25,9 @@ export default function ConsentPage() {
   const [error, setError] = useState<Failure | null>(null);
   const [busy, setBusy] = useState<"allow" | "deny" | null>(null);
   const [logoFailed, setLogoFailed] = useState(false);
+  // two-step verification: connecting an app needs a recent second factor; the server asks and we show a code field
+  const [stepUp, setStepUp] = useState(false);
+  const [mfaCode, setMfaCode] = useState("");
   const decideConsent = useDecideConsent();
   // Read on the client only; until then the query stays disabled and the skeleton shows.
   const params = typeof window === "undefined" ? null : Object.fromEntries(new URLSearchParams(window.location.search));
@@ -49,10 +53,14 @@ export default function ConsentPage() {
     setBusy(approve ? "allow" : "deny");
     setError(null);
     try {
-      const { redirect_to } = await decideConsent.mutateAsync({ params: params ?? {}, approve });
+      const code = approve && stepUp ? mfaCode.trim() : undefined;
+      const { redirect_to } = await decideConsent.mutateAsync({ params: params ?? {}, approve, mfa_code: code });
       window.location.assign(redirect_to);
     } catch (e) {
-      setError(failure(e, "Could not complete the request. Start it again from the app."));
+      const f = failure(e, "Could not complete the request. Start it again from the app.");
+      if (f.code === "auth.step_up_required") setStepUp(true);
+      else setError(f);
+      setMfaCode("");
       setBusy(null);
     }
   }
@@ -150,10 +158,19 @@ export default function ConsentPage() {
                 </div>
               )}
 
+              {stepUp && (
+                <div className="flex flex-col gap-2">
+                  <p role="status" className="text-body" style={{ color: "var(--ink)" }}>
+                    Confirm it&apos;s you: enter the code from your authenticator app (or a recovery code) to connect this app.
+                  </p>
+                  <CodeField id="consent-mfa-code" label="Code" recovery value={mfaCode} onChange={setMfaCode} />
+                </div>
+              )}
+
               {error && <ErrorLine error={error} />}
 
               <div className="flex flex-wrap gap-2">
-                <button onClick={() => decide(true)} disabled={busy !== null} aria-busy={busy === "allow"} className="btn btn-primary min-h-11 px-5">
+                <button onClick={() => decide(true)} disabled={busy !== null || (stepUp && !mfaCode.trim())} aria-busy={busy === "allow"} className="btn btn-primary min-h-11 px-5">
                   {busy === "allow" && <CircleNotchIcon weight="duotone" size={14} className="animate-spin" aria-hidden />}
                   Allow
                 </button>

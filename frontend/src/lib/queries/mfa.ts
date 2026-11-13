@@ -27,7 +27,7 @@ function useMfaChange<V, R>(fn: (v: V) => Promise<R>) {
   return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: mfaKeys.status() }) });
 }
 
-export const useStartEnrolment = () => useMutation({ mutationFn: () => call(startMfaEnrolment()) });
+export const useStartEnrolment = () => useMutation({ mutationFn: (password: string) => call(startMfaEnrolment({ body: { password } })) });
 export const useConfirmEnrolment = () => useMfaChange((code: string) => call(confirmMfaEnrolment({ body: { code } })));
 export const useDisableMfa = () => useMfaChange((code: string) => call(disableMfa({ body: { code } })));
 export const useRegenerateCodes = () => useMfaChange((code: string) => call(regenerateRecoveryCodes({ body: { code } })));

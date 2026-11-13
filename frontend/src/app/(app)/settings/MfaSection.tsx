@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { ShieldCheckIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
-import { CodeField, EnrolSteps, RecoveryCodes } from "@/components/mfa/Mfa";
+import { CodeField, EnrolSteps, RecoveryCodes, type Enrolment } from "@/components/mfa/Mfa";
 import { useMe } from "@/lib/queries/auth";
 import {
   useConfirmEnrolment,
@@ -16,7 +16,7 @@ import {
 } from "@/lib/queries/mfa";
 import { ICON, PanelHead, StatusLine } from "./shared";
 
-type Mode = "idle" | "enrol" | "codes" | "regenerate" | "disable";
+type Mode = "idle" | "password" | "enrol" | "codes" | "regenerate" | "disable";
 
 export function MfaSection() {
   const me = useMe().data;
@@ -24,10 +24,30 @@ export function MfaSection() {
   const status = statusQuery.data;
   const [mode, setMode] = useState<Mode>("idle");
   const [codes, setCodes] = useState<string[] | null>(null);
+  // setup starts with the account password, so a stolen session alone can't add an authenticator
+  const [password, setPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<Failure | null>(null);
+  const [enrolment, setEnrolment] = useState<Enrolment | null>(null);
   const start = useStartEnrolment().mutateAsync;
   const confirm = useConfirmEnrolment().mutateAsync;
 
-  const begin = useCallback(() => start(), [start]);
+  async function checkPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPasswordError(null);
+    try {
+      setEnrolment(await start(password));
+      setPassword("");
+      setMode("enrol");
+    } catch (err) {
+      setPasswordError(failure(err, "Could not start the setup. Try again."));
+      setPassword("");
+    }
+  }
+
+  const begin = useCallback(async () => {
+    if (!enrolment) throw new Error("Start again: enter your password first.");
+    return enrolment;
+  }, [enrolment]);
   const finish = useCallback(async (code: string) => (await confirm(code)).recovery_codes, [confirm]);
 
   const tone = status?.enabled ? "good" : status?.available === false ? "off" : status?.required ? "warning" : "off";
@@ -61,10 +81,43 @@ export function MfaSection() {
                 Your admin requires two-step verification. You&apos;ll be asked to set it up at your next sign-in.
               </p>
             )}
-            <button type="button" className="btn btn-primary" onClick={() => setMode("enrol")}>
+            <button type="button" className="btn btn-primary" onClick={() => setMode("password")}>
               Set up two-step verification
             </button>
           </div>
+        )}
+
+        {mode === "password" && (
+          <form onSubmit={checkPassword} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="mfa-password" className="text-[14px] font-semibold">
+                Your password
+              </label>
+              <input
+                id="mfa-password"
+                type="password"
+                autoComplete="current-password"
+                autoFocus
+                required
+                className="field h-11 px-3 text-reading w-full max-w-[320px]"
+                aria-invalid={passwordError ? true : undefined}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+                Confirm it&apos;s you before adding an authenticator.
+              </p>
+            </div>
+            {passwordError && <ErrorLine error={passwordError} />}
+            <div className="flex gap-2">
+              <button type="submit" disabled={!password} className="btn btn-primary">
+                Continue
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={() => { setMode("idle"); setPassword(""); setPasswordError(null); }}>
+                Cancel
+              </button>
+            </div>
+          </form>
         )}
 
         {mode === "enrol" && (
@@ -73,6 +126,7 @@ export function MfaSection() {
             confirm={finish}
             onCodes={(c) => {
               setCodes(c);
+              setEnrolment(null);
               setMode("codes");
             }}
           />
@@ -88,12 +142,19 @@ export function MfaSection() {
           />
         )}
 
+        {status?.enabled && status.unreadable && mode === "idle" && (
+          <p className="text-body" style={{ color: "var(--warning)" }}>
+            Your authenticator can&apos;t be checked any more because this server&apos;s encryption key changed. Sign-in works with a recovery
+            code. Turn two-step verification off with a recovery code, then set it up again.
+          </p>
+        )}
+
         {status?.enabled && mode === "idle" && (
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn btn-ghost" onClick={() => setMode("regenerate")}>
               New recovery codes
             </button>
-            {!status.required && (
+            {(!status.required || status.unreadable) && (
               <button type="button" className="btn btn-ghost" onClick={() => setMode("disable")}>
                 Turn off
               </button>
@@ -114,7 +175,7 @@ export function MfaSection() {
         )}
       </div>
 
-      {me?.is_admin && <RequireMfa />}
+      {status?.can_require && <RequireMfa />}
     </div>
   );
 }
@@ -208,15 +269,16 @@ function RequireMfa() {
         title="Require for everyone"
         status={s && <StatusLine tone={s.require_mfa ? "good" : "off"}>{s.require_mfa ? "Required" : "Optional"}</StatusLine>}
       >
-        Every account that signs in with a password must use two-step verification. People who sign in with single sign-on are
-        left to your identity provider. API tokens and connected apps keep working.
+        Every account on this server, in every organisation, that signs in with a password must use two-step verification.
+        People who sign in with single sign-on are left to your identity provider unless they set up their own authenticator.
+        API tokens and connected apps keep working. Only the server&apos;s operator sees this.
       </PanelHead>
       {security.isError && <ErrorLine error={failure(security.error, "Could not load the server's security settings.")} />}
       {s && (
         <>
           {s.without_mfa > 0 && (
             <p className="text-body" style={{ color: "var(--ink-dim)" }}>
-              {s.without_mfa} password account{s.without_mfa === 1 ? " hasn't" : "s haven't"} set it up yet.
+              {s.without_mfa} password account{s.without_mfa === 1 ? " on this server hasn't" : "s on this server haven't"} set it up yet.
               {s.require_mfa ? " They'll be asked at their next sign-in." : " Turning this on signs them out until they do."}
             </p>
           )}

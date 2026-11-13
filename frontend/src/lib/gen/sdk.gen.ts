@@ -115,7 +115,7 @@ export const revokePersonToken = <ThrowOnError extends boolean = false>(options:
 });
 
 /**
- * Server security settings: whether two-step verification is required (admin only)
+ * Server security settings: whether two-step verification is required (server operators only)
  */
 export const getServerSecurity = <ThrowOnError extends boolean = false>(options?: Options<GetServerSecurityData, ThrowOnError>): RequestResult<GetServerSecurityResponses, GetServerSecurityErrors, ThrowOnError> => (options?.client ?? client).get<GetServerSecurityResponses, GetServerSecurityErrors, ThrowOnError>({
     security: [{
@@ -128,9 +128,9 @@ export const getServerSecurity = <ThrowOnError extends boolean = false>(options?
 });
 
 /**
- * Require two-step verification for every password account, or stop (admin only, browser session)
+ * Require two-step verification for every password account on the server, or stop (server operators only, browser session)
  *
- * Instance-wide. Turning it on needs your own account protected first (two-step verification on, or single sign-on only). While on, a password sign-in without two-step verification must set it up before it gets a session, and browser sessions that never passed a second factor are signed out. API tokens and app connections keep working.
+ * Server-wide: it affects every organisation on the host. Only the account that set up the server or an email in `EUNOMIA_ADMIN_EMAILS` may change it; admins granted in Settings > People may not. Turning it on needs your own account protected first (two-step verification on, or single sign-on only). While on, a password sign-in without two-step verification must set it up before it gets a session, and browser sessions that never passed a second factor are signed out. API tokens and app connections keep working.
  */
 export const setServerSecurity = <ThrowOnError extends boolean = false>(options: Options<SetServerSecurityData, ThrowOnError>): RequestResult<SetServerSecurityResponses, SetServerSecurityErrors, ThrowOnError> => (options.client ?? client).put<SetServerSecurityResponses, SetServerSecurityErrors, ThrowOnError>({
     security: [{
@@ -248,7 +248,7 @@ export const confirmMfaChallengeEnrolment = <ThrowOnError extends boolean = fals
 /**
  * Finish signing in with an authenticator or recovery code
  *
- * The second step after `/api/auth/login` answered `mfa_required: verify`. Reads the `eunomia_mfa` cookie that answer set. A wrong code counts against the sign-in (5 and it ends) and the account (10 in 15 minutes and every attempt is refused).
+ * The second step after `/api/auth/login` answered `mfa_required: verify`. Reads the `eunomia_mfa` cookie that answer set. Each code counts against the sign-in (5 and it ends) and the account (10 in 15 minutes and every attempt is refused), reserved before it is checked.
  */
 export const verifyMfaChallenge = <ThrowOnError extends boolean = false>(options: Options<VerifyMfaChallengeData, ThrowOnError>): RequestResult<VerifyMfaChallengeResponses, VerifyMfaChallengeErrors, ThrowOnError> => (options.client ?? client).post<VerifyMfaChallengeResponses, VerifyMfaChallengeErrors, ThrowOnError>({
     url: '/api/auth/mfa/challenge/verify',
@@ -262,7 +262,7 @@ export const verifyMfaChallenge = <ThrowOnError extends boolean = false>(options
 /**
  * Turn off two-step verification
  *
- * Needs a current authenticator code or an unused recovery code, every time. Refused while an admin requires two-step verification.
+ * Needs a current authenticator code or an unused recovery code, every time. Refused while an admin requires two-step verification, unless the stored authenticator can no longer be read (`auth.mfa_unreadable`, after an `ENCRYPTION_KEY` change): then a recovery code turns it off so it can be set up again.
  */
 export const disableMfa = <ThrowOnError extends boolean = false>(options: Options<DisableMfaData, ThrowOnError>): RequestResult<DisableMfaResponses, DisableMfaErrors, ThrowOnError> => (options.client ?? client).post<DisableMfaResponses, DisableMfaErrors, ThrowOnError>({
     security: [{
@@ -281,16 +281,20 @@ export const disableMfa = <ThrowOnError extends boolean = false>(options: Option
 /**
  * Start setting up an authenticator app
  *
- * Returns a new secret, its `otpauth://` URI and a QR code. Nothing changes until a code from the app confirms it (`/api/auth/mfa/enrol/confirm`). The secret is never shown again.
+ * Needs the account password (10 wrong passwords per account in 15 minutes and it is refused, like login). Returns a new secret, its `otpauth://` URI and a QR code. Nothing changes until a code from the app confirms it (`/api/auth/mfa/enrol/confirm`). The secret is never shown again. Accounts that sign in only through single sign-on cannot enrol here: their provider handles the second factor.
  */
-export const startMfaEnrolment = <ThrowOnError extends boolean = false>(options?: Options<StartMfaEnrolmentData, ThrowOnError>): RequestResult<StartMfaEnrolmentResponses, StartMfaEnrolmentErrors, ThrowOnError> => (options?.client ?? client).post<StartMfaEnrolmentResponses, StartMfaEnrolmentErrors, ThrowOnError>({
+export const startMfaEnrolment = <ThrowOnError extends boolean = false>(options: Options<StartMfaEnrolmentData, ThrowOnError>): RequestResult<StartMfaEnrolmentResponses, StartMfaEnrolmentErrors, ThrowOnError> => (options.client ?? client).post<StartMfaEnrolmentResponses, StartMfaEnrolmentErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
         }],
     url: '/api/auth/mfa/enrol',
-    ...options
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
 });
 
 /**
@@ -1398,6 +1402,8 @@ export const getOauthConsent = <ThrowOnError extends boolean = false>(options?: 
 
 /**
  * Approve or deny an authorization request
+ *
+ * Approving connects a long-lived app credential, so for an account with two-step verification the session's last second factor must be under 10 minutes old or `mfa_code` must carry a current code (`auth.step_up_required`). Denying never asks.
  */
 export const decideOauthConsent = <ThrowOnError extends boolean = false>(options: Options<DecideOauthConsentData, ThrowOnError>): RequestResult<DecideOauthConsentResponses, DecideOauthConsentErrors, ThrowOnError> => (options.client ?? client).post<DecideOauthConsentResponses, DecideOauthConsentErrors, ThrowOnError>({
     security: [{
