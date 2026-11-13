@@ -85,6 +85,16 @@ export type ActivityPage = {
     next_before?: string | null;
 };
 
+/**
+ * A row of the person's own activity about their data.
+ */
+export type ActivityRow = {
+    action: string;
+    created_at?: string | null;
+    detail?: string;
+    outcome: string;
+};
+
 export type AdminChange = {
     /**
      * `true` makes the person an admin, `false` takes admin rights away.
@@ -749,10 +759,6 @@ export type EraseMe = {
      */
     close_workspace?: boolean;
     /**
-     * Your email, typed again: the confirmation for an account that signs in only with single sign-on.
-     */
-    confirm_email?: string | null;
-    /**
      * Your password, typed again. Required when the account has one.
      */
     password?: string | null;
@@ -760,15 +766,19 @@ export type EraseMe = {
 
 export type ErasePerson = {
     /**
-     * Confirms closing any workspace whose only member the person is.
+     * With `scope: account`: confirms closing any workspace whose only member the person is.
      */
     close_workspace?: boolean;
-    confirm_email?: string | null;
     /**
-     * Your own password, typed again (an admin who signs in only with single sign-on types the
-     * person's email in `confirm_email` instead).
+     * Your own password, typed again (an admin who signs in only with single sign-on confirms with a
+     * sign-in from the last 10 minutes instead).
      */
     password?: string | null;
+    /**
+     * `workspace` (default): the person is erased from this workspace only. `account`: the whole
+     * account in every workspace (server operators only).
+     */
+    scope?: string | null;
 };
 
 /**
@@ -793,16 +803,20 @@ export type ErasureRecord = {
     };
     requested_at: string;
     /**
-     * `self`, `admin` or `reapply` (a restore brought the account back and it was erased again).
+     * `self`, `admin`, `operator` or `reapply` (a restore brought the person back and they were erased again).
      */
     requested_by: string;
     /**
-     * Mentions of the person's email left in content other people wrote, for review (not counted as
-     * residue: that content is theirs).
+     * Mentions of the person's email left in content other people wrote, for review, and for a
+     * workspace erasure whether the account was kept.
      */
     review?: {
         [key: string]: unknown;
     };
+    /**
+     * `account` or `workspace`.
+     */
+    scope?: string;
     status: string;
     /**
      * The keyed hash of the erased account's id (never the id or the email).
@@ -817,7 +831,11 @@ export type ErasureTicket = {
     id: string;
     requested_at: string;
     /**
-     * `pending`, `running`, `held`, `done` or `failed`.
+     * `account` (every workspace and the account) or `workspace` (one workspace).
+     */
+    scope?: string;
+    /**
+     * `pending`, `running`, `held`, `done`, `failed` or `cancelled`.
      */
     status: string;
 };
@@ -878,6 +896,10 @@ export type ExportRow = {
         [key: string]: unknown;
     };
     requested_by?: string | null;
+    /**
+     * `self` (the person's own, every workspace) or `organisation` (an admin's, one workspace).
+     */
+    scope?: string;
     size_bytes?: number;
     /**
      * `pending`, `ready` or `failed`.
@@ -3187,6 +3209,28 @@ export type WorkspaceAuditPage = {
     results: Array<WorkspaceAuditEntry>;
 };
 
+export type MyDataActivityData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/account/activity';
+};
+
+export type MyDataActivityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type MyDataActivityError = MyDataActivityErrors[keyof MyDataActivityErrors];
+
+export type MyDataActivityResponses = {
+    200: Array<ActivityRow>;
+};
+
+export type MyDataActivityResponse = MyDataActivityResponses[keyof MyDataActivityResponses];
+
 export type EraseMyAccountData = {
     body: EraseMe;
     path?: never;
@@ -3284,6 +3328,30 @@ export type ReapplyErasuresResponses = {
 };
 
 export type ReapplyErasuresResponse = ReapplyErasuresResponses[keyof ReapplyErasuresResponses];
+
+export type CancelErasureData = {
+    body?: never;
+    path: {
+        erasure_id: string;
+    };
+    query?: never;
+    url: '/api/admin/erasures/{erasure_id}/cancel';
+};
+
+export type CancelErasureErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type CancelErasureError = CancelErasureErrors[keyof CancelErasureErrors];
+
+export type CancelErasureResponses = {
+    200: Array<ErasureRecord>;
+};
+
+export type CancelErasureResponse = CancelErasureResponses[keyof CancelErasureResponses];
 
 export type ListPeopleData = {
     body?: never;
@@ -5272,13 +5340,7 @@ export type DownloadSubjectExportData = {
          */
         export_id: string;
     };
-    query?: {
-        /**
-         * Required when an admin downloads someone else's export (allowed only while that account is
-         * suspended): why. Recorded in both people's activity.
-         */
-        reason?: string;
-    };
+    query?: never;
     url: '/api/export/subject/{export_id}';
 };
 

@@ -74,14 +74,14 @@ test("People: an admin exports, holds and deletes someone's data from their row"
       return route.fulfill({ json: { legal_hold_at: person.legal_hold_at, erasure_open: false } });
     }
     if (req.url().endsWith("/erasure")) {
-      // the admin confirms with their own password, never the person's email
-      const body = req.postDataJSON() as { password?: string; confirm_email?: string };
-      if (body.confirm_email !== undefined || body.password !== PASSWORD)
+      // the admin confirms with their own password, and the erasure is scoped to this workspace
+      const body = req.postDataJSON() as { password?: string; scope?: string };
+      if (body.scope === "account" || body.password !== PASSWORD)
         return route.fulfill({ status: 403, json: { code: "subject.confirmation_failed", detail: "That isn't your password. Type your own password to confirm. Nothing was deleted." } });
-      return route.fulfill({ json: { id: "erasure:x", status: "pending", requested_at: new Date().toISOString() } });
+      return route.fulfill({ json: { id: "erasure:x", status: "pending", scope: "workspace", requested_at: new Date().toISOString() } });
     }
     return route.fulfill({
-      json: { id: "subject_export:x", subject: "user:target", requested_by: "user:me", status: "pending", manifest: {}, size_bytes: 0, created_at: new Date().toISOString(), expires_at: new Date().toISOString() },
+      json: { id: "subject_export:x", subject: "user:target", requested_by: "user:me", scope: "organisation", status: "pending", manifest: {}, size_bytes: 0, created_at: new Date().toISOString(), expires_at: new Date().toISOString() },
     });
   });
 
@@ -91,17 +91,16 @@ test("People: an admin exports, holds and deletes someone's data from their row"
   await row.getByRole("button", { name: `Data of ${person.email}` }).click();
   const panel = page.getByTestId(`person-data-${person.email}`);
   await panel.getByRole("button", { name: "Export their data" }).click();
-  await expect(panel.getByText("Export started. It is delivered to them")).toBeVisible();
-  await expect(panel.getByRole("button", { name: "Make workspace owner" })).toBeVisible();
+  await expect(panel.getByText("Export started: this workspace's data about them")).toBeVisible();
 
   await panel.getByRole("button", { name: "Place legal hold" }).click();
   await expect(panel.getByText("Legal hold placed.")).toBeVisible();
   await expect(row.getByText("Legal hold")).toBeVisible();
-  await expect(panel.getByRole("button", { name: "Delete account and data" })).toBeDisabled();
+  await expect(panel.getByRole("button", { name: "Remove from this workspace and erase" })).toBeDisabled();
   await panel.getByRole("button", { name: "Lift legal hold" }).click();
   await expect(panel.getByText("Legal hold lifted.")).toBeVisible();
 
-  await panel.getByRole("button", { name: "Delete account and data" }).click();
+  await panel.getByRole("button", { name: "Remove from this workspace and erase" }).click();
   await panel.getByLabel("Your password").fill("not-my-password");
   await panel.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByText("That isn't your password.")).toBeVisible();

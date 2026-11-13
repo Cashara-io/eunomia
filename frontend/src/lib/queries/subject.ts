@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  cancelErasure,
+  myDataActivity,
   eraseMyAccount,
   erasePerson,
   listErasures,
@@ -17,6 +19,7 @@ import { adminKeys } from "./admin";
 /** Data-subject rights (docs/privacy/subject-rights.md): full exports, erasure, legal holds. */
 export const subjectKeys = {
   exports: () => ["subject", "exports"] as const,
+  activity: () => ["subject", "activity"] as const,
   erasures: () => [...adminKeys.all, "erasures"] as const,
 };
 
@@ -36,12 +39,15 @@ export function useStartExport() {
   });
 }
 
-/** Deletes your account: the server checks the password (or, for single sign-on only, the email).
- * `close_workspace` confirms closing a workspace you are the only member of. */
+/** Deletes your account: the server checks the password (an account with single sign-on only needs a
+ * sign-in from the last 10 minutes). `close_workspace` confirms closing a workspace you are the only member of. */
 export const useEraseMe = () =>
   useMutation({
-    mutationFn: (body: { password?: string; confirm_email?: string; close_workspace?: boolean }) => call(eraseMyAccount({ body })),
+    mutationFn: (body: { password?: string; close_workspace?: boolean }) => call(eraseMyAccount({ body })),
   });
+
+/** What has been done about your data: exports an admin made, erasure requests, holds, admin actions on your account. */
+export const useMyDataActivity = () => useQuery({ queryKey: subjectKeys.activity(), queryFn: () => call(myDataActivity()) });
 
 export function useStartPersonExport() {
   const qc = useQueryClient();
@@ -54,9 +60,9 @@ export function useStartPersonExport() {
 export function useErasePerson() {
   const qc = useQueryClient();
   return useMutation({
-    // the admin's own password (an admin with single sign-on only types the person's email instead)
-    mutationFn: ({ user_id, password, confirm_email }: { user_id: string; password?: string; confirm_email?: string }) =>
-      call(erasePerson({ path: { user_id }, body: { password, confirm_email } })),
+    // the admin's own password (an admin with single sign-on only needs a sign-in from the last 10 minutes);
+    // it erases the person from this workspace only
+    mutationFn: ({ user_id, password }: { user_id: string; password?: string }) => call(erasePerson({ path: { user_id }, body: { password } })),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: adminKeys.people() });
       void qc.invalidateQueries({ queryKey: subjectKeys.erasures() });
@@ -98,5 +104,14 @@ export function useMakeWorkspaceOwner() {
       qc.setQueryData(adminKeys.people(), report);
       void qc.invalidateQueries({ queryKey: [...adminKeys.all, "audit"] });
     },
+  });
+}
+
+/** Server operators only: stop an erasure that is not running and clear its working record. */
+export function useCancelErasure() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (erasure_id: string) => call(cancelErasure({ path: { erasure_id } })),
+    onSuccess: (list) => qc.setQueryData(subjectKeys.erasures(), list),
   });
 }

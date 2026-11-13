@@ -8,7 +8,7 @@ import Tooltip from "@/components/bits/Tooltip";
 import CopyButton from "@/components/bits/CopyButton";
 import { usePeople, usePersonTokens, useRevokePersonToken, useSetAdmin, useSetSuspended } from "@/lib/queries/admin";
 import type { Person } from "@/lib/gen";
-import { useErasePerson, useErasures, useMakeWorkspaceOwner, useReapplyErasures, useSetLegalHold, useStartPersonExport } from "@/lib/queries/subject";
+import { useCancelErasure, useErasePerson, useErasures, useMakeWorkspaceOwner, useReapplyErasures, useSetLegalHold, useStartPersonExport } from "@/lib/queries/subject";
 import { useMe } from "@/lib/queries/auth";
 import { ICON, PanelHead, QUIET_DANGER, RevokeButton, TableSkeleton, expiryLabel, relativeTime } from "./shared";
 
@@ -131,7 +131,7 @@ function RowActions({ p, onError, onData }: { p: Person; onError: (f: Failure | 
 }
 
 /* Someone's data, opened from "Data": export it for them, hold it, or delete the account and data (typing their email). */
-function PersonData({ p, onError }: { p: Person; onError: (f: Failure | null) => void }) {
+function PersonData({ p, onError, iOwn }: { p: Person; onError: (f: Failure | null) => void; iOwn: boolean }) {
   const exp = useStartPersonExport();
   const hold = useSetLegalHold();
   const erase = useErasePerson();
@@ -165,7 +165,7 @@ function PersonData({ p, onError }: { p: Person; onError: (f: Failure | null) =>
             run(
               () => exp.mutateAsync(p.id),
               `Could not start an export for ${p.email}.`,
-              "Export started. It is delivered to them in their Settings > Data, and their activity shows you started it. You see its status in your Settings > Data."
+              "Export started: this workspace's data about them (not their personal space or other workspaces). Download it from your Settings > Data when it is ready; their activity shows you made it."
             )
           }
         >
@@ -196,7 +196,7 @@ function PersonData({ p, onError }: { p: Person; onError: (f: Failure | null) =>
         >
           {held ? "Lift legal hold" : "Place legal hold"}
         </button>
-        {!p.workspace_owner && !p.is_you && (
+        {iOwn && !p.workspace_owner && !p.is_you && (
           <button
             type="button"
             className="btn btn-sm"
@@ -209,7 +209,7 @@ function PersonData({ p, onError }: { p: Person; onError: (f: Failure | null) =>
         )}
         {!confirming && !p.is_you && (
           <button type="button" className={QUIET_DANGER} disabled={held} title={held ? "Lift the legal hold first." : undefined} onClick={() => setConfirming(true)}>
-            Delete account and data
+            Remove from this workspace and erase
           </button>
         )}
       </div>
@@ -219,27 +219,30 @@ function PersonData({ p, onError }: { p: Person; onError: (f: Failure | null) =>
           onSubmit={(e) => {
             e.preventDefault();
             void run(
-              () => erase.mutateAsync(adminHasPassword ? { user_id: p.id, password: typed } : { user_id: p.id, confirm_email: typed }),
+              () => erase.mutateAsync(adminHasPassword ? { user_id: p.id, password: typed } : { user_id: p.id }),
               `${p.email} was not deleted.`,
               "Deletion started. They are signed out, and their data is removed in the next few minutes."
             ).then(() => setConfirming(false));
           }}
         >
           <span style={{ color: "var(--ink-dim)" }}>
-            Signs them out and deletes their account and everything that is theirs alone. What they wrote in shared spaces stays,
-            with them removed as its author.{" "}
-            {adminHasPassword ? "Type your own password to confirm." : <>Type <span className="font-mono">{p.email}</span> to confirm.</>}
+            Removes them from this workspace and erases what is theirs here: their personal space, chats, sources and files. What
+            they wrote in shared spaces stays, with them removed as its author. Their account and other workspaces are not touched
+            (unless this workspace made the account and it has nothing else left).{" "}
+            {adminHasPassword ? "Type your own password to confirm." : "You sign in with single sign-on: this needs a sign-in from the last 10 minutes."}
           </span>
           <span className="flex flex-wrap items-center gap-2">
-            <input
-              className="field h-8 px-3 min-w-[16rem]"
-              type={adminHasPassword ? "password" : "text"}
-              autoComplete={adminHasPassword ? "current-password" : "off"}
-              aria-label={adminHasPassword ? "Your password" : `Type ${p.email} to confirm`}
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-            />
-            <button type="submit" className="btn btn-danger-solid btn-sm" disabled={!typed || erase.isPending}>
+            {adminHasPassword && (
+              <input
+                className="field h-8 px-3 min-w-[16rem]"
+                type="password"
+                autoComplete="current-password"
+                aria-label="Your password"
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+              />
+            )}
+            <button type="submit" className="btn btn-danger-solid btn-sm" disabled={(adminHasPassword && !typed) || erase.isPending}>
               {erase.isPending ? "Deleting…" : "Delete"}
             </button>
             <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label="Cancel" onClick={() => setConfirming(false)}>
@@ -267,6 +270,7 @@ const mentions = (r: { review?: unknown }) =>
 function Erasures() {
   const query = useErasures();
   const reapply = useReapplyErasures();
+  const cancel = useCancelErasure();
   const [error, setError] = useState<Failure | null>(null);
   const rows = query.data ?? [];
   return (
@@ -315,8 +319,28 @@ function Erasures() {
                       ? `Failed, retrying: still in ${left.map(([t]) => t).join(", ") || "unknown"}`
                       : r.status === "held"
                         ? "Waiting: a legal hold stopped it"
-                        : "In progress"}
+                        : r.status === "cancelled"
+                          ? "Cancelled by an operator"
+                          : "In progress"}
                 </span>
+                {r.scope === "workspace" && <span style={{ color: "var(--ink-dim)" }}>this workspace only</span>}
+                {["pending", "held", "failed"].includes(r.status) && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    title="Server operators only: stops it and clears what it held about the person."
+                    onClick={async () => {
+                      setError(null);
+                      try {
+                        await cancel.mutateAsync(r.id);
+                      } catch (e) {
+                        setError(failure(e, "Could not cancel the erasure."));
+                      }
+                    }}
+                  >
+                    Cancel
+                  </button>
+                )}
                 {mentions(r) > 0 && (
                   <span style={{ color: "var(--ink-dim)" }} title="Mentions of their email in content other people wrote. That content is theirs, so it was kept: review it.">
                     {mentions(r)} {mentions(r) === 1 ? "mention" : "mentions"} left in others&apos; content, for review
@@ -444,6 +468,8 @@ export function PeopleSection() {
   // whose data panel is open under their row
   const [dataOf, setDataOf] = useState<string | null>(null);
   const toggleData = (id: string) => setDataOf((cur) => (cur === id ? null : id));
+  // only the workspace owner (or a server operator, which the server checks) hands the workspace over
+  const iOwn = !!people?.find((x) => x.is_you)?.workspace_owner;
 
   return (
     <div className="flex flex-col gap-5">
@@ -522,7 +548,7 @@ export function PeopleSection() {
               <div className={`pt-1 ${p.is_you ? "" : "-ml-2.5"}`}>
                 <RowActions p={p} onError={setActionError} onData={() => toggleData(p.id)} />
               </div>
-              {dataOf === p.id && <PersonData p={p} onError={setActionError} />}
+              {dataOf === p.id && <PersonData p={p} onError={setActionError} iOwn={iOwn} />}
             </li>
           ))
         )}
@@ -587,7 +613,7 @@ export function PeopleSection() {
                   dataOf === p.id ? (
                     <tr key={`${p.id}-data`}>
                       <td colSpan={7} className="h-auto! pl-8!">
-                        <PersonData p={p} onError={setActionError} />
+                        <PersonData p={p} onError={setActionError} iOwn={iOwn} />
                       </td>
                     </tr>
                   ) : null,

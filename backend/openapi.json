@@ -9,13 +9,55 @@
     "version": "1"
   },
   "paths": {
+    "/api/account/activity": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "What has been done about your data: exports an admin made of it, erasure requests, legal holds, admin actions on your account",
+        "operationId": "myDataActivity",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActivityRow"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/account/erasure": {
       "post": {
         "tags": [
           "export"
         ],
         "summary": "Delete your account and your data (browser session, confirmed with your password)",
-        "description": "Checks the confirmation, then suspends the account and signs it out everywhere, and queues the erasure. Refused with `subject.legal_hold` while an admin holds the account, `subject.last_owner` when you own a workspace that has other members and no other owner, and `subject.workspace_closes` until you confirm closing a workspace you are the only member of. What is deleted and what is kept: docs/privacy/subject-rights.md.",
+        "description": "An account with no password (single sign-on only) confirms with a sign-in from the last 10 minutes (`subject.reauthenticate` otherwise). Checks the confirmation, then suspends the account and signs it out everywhere, and queues the erasure. Refused with `subject.legal_hold` while an admin holds the account, `subject.last_owner` when you own a workspace that has other members and no other owner, and `subject.workspace_closes` until you confirm closing a workspace you are the only member of. What is deleted and what is kept: docs/privacy/subject-rights.md.",
         "operationId": "eraseMyAccount",
         "requestBody": {
           "content": {
@@ -186,7 +228,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "After restoring a backup: erase again everyone erased after the backup was taken (admin only, browser session)",
+        "summary": "After restoring a backup: erase again everyone erased after the backup was taken (server operators only, browser session)",
         "description": "Also runs by itself when the server starts. Matches live accounts, and the owners of rows in every workspace, against the erasure records; queues an erasure for each match. It acts on the whole server, like a restore.",
         "operationId": "reapplyErasures",
         "responses": {
@@ -196,6 +238,56 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Reapplied"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/erasures/{erasure_id}/cancel": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Cancel an erasure that is not running (server operators only, browser session)",
+        "description": "Stops a pending, held or failed erasure of this workspace and clears its working record (the email, token ids and file paths it held). The account stays suspended; an admin can restore it afterwards.",
+        "operationId": "cancelErasure",
+        "parameters": [
+          {
+            "name": "erasure_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ErasureRecord"
+                  }
                 }
               }
             }
@@ -319,8 +411,8 @@
         "tags": [
           "admin"
         ],
-        "summary": "Delete someone's account and data (admin only, browser session, confirmed with your own password)",
-        "description": "Refused for your own account (use Settings > Data), with `subject.legal_hold` while the account is held, and with `subject.last_owner` when the person owns a workspace with other members and nobody else owns it, or is the account that set up the server.",
+        "summary": "Erase someone from this workspace (admin only, browser session, confirmed with your own password)",
+        "description": "By default only this workspace: the person's membership, their content and files here and what the system holds about them here. Their account and other workspaces are untouched, unless no workspace is left and the account was made by this workspace's sign-up or invitation. `scope: account` (server operators only) erases the whole account. Refused for your own account (use Settings > Data), with `subject.legal_hold` while the account is held, and with `subject.last_owner` when the person owns the workspace with other members.",
         "operationId": "erasePerson",
         "parameters": [
           {
@@ -377,7 +469,7 @@
           "admin"
         ],
         "summary": "Prepare a full data export for someone in the workspace (admin only, browser session)",
-        "description": "The same archive the person gets from Settings > Data, delivered to them: it appears in their Settings > Data, and their activity records that an admin started it. You see its status and counts; you can download it only while their account is suspended, with a reason.",
+        "description": "This workspace's data about the person only: what they wrote in its shared spaces, their spaces here, their account record, tokens and connected apps by name, and audit events about them. Not their personal space, private chat, synced records or other workspaces. You download it from Settings > Data; the person's own activity records that it was made.",
         "operationId": "startPersonExport",
         "parameters": [
           {
@@ -424,7 +516,7 @@
           "admin"
         ],
         "summary": "Place or lift a legal hold on someone's account (admin only, browser session)",
-        "description": "While held, erasing the account is refused with `subject.legal_hold`, and an erasure already queued parks as `held` before its next irreversible step and resumes when the hold is lifted. Placing and lifting are both in the activity log. A hold does not stop the audit retention window (AUDIT_RETENTION_DAYS).",
+        "description": "Any admin places a hold; only the workspace owner or a server operator lifts it. While held, erasing the account is refused with `subject.legal_hold`, and an erasure already queued parks as `held` before its next irreversible step and resumes when the hold is lifted. Placing and lifting are both in the activity log, with who did each. A hold does not stop the audit retention window (AUDIT_RETENTION_DAYS).",
         "operationId": "setPersonLegalHold",
         "parameters": [
           {
@@ -648,8 +740,8 @@
         "tags": [
           "admin"
         ],
-        "summary": "Make someone the workspace's owner in place of the current owner (admin only, browser session)",
-        "description": "A workspace has one owner. Handing it over lets the previous owner's account be erased while the workspace keeps an owner.",
+        "summary": "Hand the workspace over to another member (the current owner or a server operator, browser session)",
+        "description": "A workspace has one owner. Only the current owner or a server operator hands it over, to an active member who is not suspended, not under a legal hold and not being erased. The change promotes exactly one membership or changes nothing, so the workspace always keeps an owner.",
         "operationId": "makeWorkspaceOwner",
         "parameters": [
           {
@@ -4191,7 +4283,7 @@
           "export"
         ],
         "summary": "Download a ready data export (zip; browser session)",
-        "description": "The person downloads their own. An admin who started one for someone downloads it only while that account is suspended, with a reason.",
+        "description": "Your own export (assembled from its part in every workspace you belong to), or a workspace export you started as an admin (while you are still an admin). Nobody else's own export, ever.",
         "operationId": "downloadSubjectExport",
         "parameters": [
           {
@@ -4199,15 +4291,6 @@
             "in": "path",
             "description": "The export's id, as listed",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "reason",
-            "in": "query",
-            "description": "Required when an admin downloads someone else's export (allowed only while that account is\nsuspended): why. Recorded in both people's activity.",
-            "required": false,
             "schema": {
               "type": "string"
             }
@@ -9549,6 +9632,31 @@
           }
         }
       },
+      "ActivityRow": {
+        "type": "object",
+        "description": "A row of the person's own activity about their data.",
+        "required": [
+          "action",
+          "outcome"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          }
+        }
+      },
       "AdminChange": {
         "type": "object",
         "required": [
@@ -11391,13 +11499,6 @@
             "type": "boolean",
             "description": "You confirm that a workspace whose only member you are is closed with your account (everything\nin it is deleted). Without it such a request is refused with `subject.workspace_closes`."
           },
-          "confirm_email": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Your email, typed again: the confirmation for an account that signs in only with single sign-on."
-          },
           "password": {
             "type": [
               "string",
@@ -11412,20 +11513,21 @@
         "properties": {
           "close_workspace": {
             "type": "boolean",
-            "description": "Confirms closing any workspace whose only member the person is."
-          },
-          "confirm_email": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "description": "With `scope: account`: confirms closing any workspace whose only member the person is."
           },
           "password": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Your own password, typed again (an admin who signs in only with single sign-on types the\nperson's email in `confirm_email` instead)."
+            "description": "Your own password, typed again (an admin who signs in only with single sign-on confirms with a\nsign-in from the last 10 minutes instead)."
+          },
+          "scope": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`workspace` (default): the person is erased from this workspace only. `account`: the whole\naccount in every workspace (server operators only)."
           }
         }
       },
@@ -11470,11 +11572,15 @@
           },
           "requested_by": {
             "type": "string",
-            "description": "`self`, `admin` or `reapply` (a restore brought the account back and it was erased again)."
+            "description": "`self`, `admin`, `operator` or `reapply` (a restore brought the person back and they were erased again)."
           },
           "review": {
             "type": "object",
-            "description": "Mentions of the person's email left in content other people wrote, for review (not counted as\nresidue: that content is theirs)."
+            "description": "Mentions of the person's email left in content other people wrote, for review, and for a\nworkspace erasure whether the account was kept."
+          },
+          "scope": {
+            "type": "string",
+            "description": "`account` or `workspace`."
           },
           "status": {
             "type": "string"
@@ -11500,9 +11606,13 @@
           "requested_at": {
             "type": "string"
           },
+          "scope": {
+            "type": "string",
+            "description": "`account` (every workspace and the account) or `workspace` (one workspace)."
+          },
           "status": {
             "type": "string",
-            "description": "`pending`, `running`, `held`, `done` or `failed`."
+            "description": "`pending`, `running`, `held`, `done`, `failed` or `cancelled`."
           }
         }
       },
@@ -11618,6 +11728,10 @@
               "string",
               "null"
             ]
+          },
+          "scope": {
+            "type": "string",
+            "description": "`self` (the person's own, every workspace) or `organisation` (an admin's, one workspace)."
           },
           "size_bytes": {
             "type": "integer",
