@@ -360,7 +360,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Server security settings: whether two-step verification is required (admin only)",
+        "summary": "Server security settings: whether two-step verification is required (server operators only)",
         "operationId": "getServerSecurity",
         "responses": {
           "200": {
@@ -397,8 +397,8 @@
         "tags": [
           "admin"
         ],
-        "summary": "Require two-step verification for every password account, or stop (admin only, browser session)",
-        "description": "Instance-wide. Turning it on needs your own account protected first (two-step verification on, or single sign-on only). While on, a password sign-in without two-step verification must set it up before it gets a session, and browser sessions that never passed a second factor are signed out. API tokens and app connections keep working.",
+        "summary": "Require two-step verification for every password account on the server, or stop (server operators only, browser session)",
+        "description": "Server-wide: it affects every organisation on the host. Only the account that set up the server or an email in `EUNOMIA_ADMIN_EMAILS` may change it; admins granted in Settings > People may not. Turning it on needs your own account protected first (two-step verification on, or single sign-on only). While on, a password sign-in without two-step verification must set it up before it gets a session, and browser sessions that never passed a second factor are signed out. API tokens and app connections keep working.",
         "operationId": "setServerSecurity",
         "requestBody": {
           "content": {
@@ -724,7 +724,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MfaStatus"
+                  "$ref": "#/components/schemas/StatusOut"
                 }
               }
             }
@@ -833,7 +833,7 @@
           "auth"
         ],
         "summary": "Finish signing in with an authenticator or recovery code",
-        "description": "The second step after `/api/auth/login` answered `mfa_required: verify`. Reads the `eunomia_mfa` cookie that answer set. A wrong code counts against the sign-in (5 and it ends) and the account (10 in 15 minutes and every attempt is refused).",
+        "description": "The second step after `/api/auth/login` answered `mfa_required: verify`. Reads the `eunomia_mfa` cookie that answer set. Each code counts against the sign-in (5 and it ends) and the account (10 in 15 minutes and every attempt is refused), reserved before it is checked.",
         "operationId": "verifyMfaChallenge",
         "requestBody": {
           "content": {
@@ -878,7 +878,7 @@
           "auth"
         ],
         "summary": "Turn off two-step verification",
-        "description": "Needs a current authenticator code or an unused recovery code, every time. Refused while an admin requires two-step verification.",
+        "description": "Needs a current authenticator code or an unused recovery code, every time. Refused while an admin requires two-step verification, unless the stored authenticator can no longer be read (`auth.mfa_unreadable`, after an `ENCRYPTION_KEY` change): then a recovery code turns it off so it can be set up again.",
         "operationId": "disableMfa",
         "requestBody": {
           "content": {
@@ -925,8 +925,18 @@
           "auth"
         ],
         "summary": "Start setting up an authenticator app",
-        "description": "Returns a new secret, its `otpauth://` URI and a QR code. Nothing changes until a code from the app confirms it (`/api/auth/mfa/enrol/confirm`). The secret is never shown again.",
+        "description": "Needs the account password (10 wrong passwords per account in 15 minutes and it is refused, like login). Returns a new secret, its `otpauth://` URI and a QR code. Nothing changes until a code from the app confirms it (`/api/auth/mfa/enrol/confirm`). The secret is never shown again. Accounts that sign in only through single sign-on cannot enrol here: their provider handles the second factor.",
         "operationId": "startMfaEnrolment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrolIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "",
@@ -4934,6 +4944,7 @@
           "oauth"
         ],
         "summary": "Approve or deny an authorization request",
+        "description": "Approving connects a long-lived app credential, so for an account with two-step verification the session's last second factor must be under 10 minutes old or `mfa_code` must carry a current code (`auth.step_up_required`). Denying never asks.",
         "operationId": "decideOauthConsent",
         "requestBody": {
           "content": {
@@ -10823,6 +10834,13 @@
             "properties": {
               "approve": {
                 "type": "boolean"
+              },
+              "mfa_code": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "A current authenticator or recovery code, when your account has two-step verification and its last\nsecond factor is older than 10 minutes (`auth.step_up_required`). Only needed to approve."
               }
             }
           }
@@ -11182,6 +11200,18 @@
           "vault": {
             "type": "string",
             "description": "The vault (memory space) the document is in."
+          }
+        }
+      },
+      "EnrolIn": {
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Your account password: setting up an authenticator from Settings needs it, so a stolen session alone\ncannot put an attacker's authenticator on the account."
           }
         }
       },
@@ -13812,7 +13842,8 @@
           "enabled",
           "recovery_codes_left",
           "required",
-          "available"
+          "available",
+          "unreadable"
         ],
         "properties": {
           "available": {
@@ -13837,6 +13868,10 @@
           "required": {
             "type": "boolean",
             "description": "An admin requires two-step verification for every password account on this server."
+          },
+          "unreadable": {
+            "type": "boolean",
+            "description": "True when the stored authenticator can no longer be read (`ENCRYPTION_KEY` changed): sign in with a\nrecovery code, turn it off and set it up again."
           }
         }
       },
@@ -15604,7 +15639,7 @@
               "string",
               "null"
             ],
-            "description": "A current authenticator or recovery code, when the admin's own account has two-step verification and\nits last second factor is older than 10 minutes (`auth.step_up_required`)."
+            "description": "A current authenticator or recovery code, when your own account has two-step verification and its\nlast second factor is older than 10 minutes (`auth.step_up_required`)."
           },
           "require_mfa": {
             "type": "boolean"
@@ -15620,7 +15655,7 @@
         "properties": {
           "require_mfa": {
             "type": "boolean",
-            "description": "Every password account must pass two-step verification before it gets a session. Accounts that\nsign in through single sign-on are left to the identity provider."
+            "description": "Every password account on this server, in every organisation, must pass two-step verification before\nit gets a session. Accounts that sign in through single sign-on are left to the identity provider\nunless they set up their own authenticator."
           },
           "updated_at": {
             "type": [
@@ -15633,12 +15668,12 @@
               "string",
               "null"
             ],
-            "description": "Email of the admin who last changed it."
+            "description": "Email of the operator who last changed it."
           },
           "without_mfa": {
             "type": "integer",
             "format": "int64",
-            "description": "Password accounts in the workspace without two-step verification yet (they must set it up at their\nnext sign-in while it is required)."
+            "description": "Active password accounts on the whole server (every organisation) without two-step verification yet:\nwhile it is required they are signed out and must set it up at their next sign-in."
           }
         }
       },
@@ -16170,6 +16205,25 @@
             "minimum": 0
           }
         }
+      },
+      "StatusOut": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MfaStatus"
+          },
+          {
+            "type": "object",
+            "required": [
+              "can_require"
+            ],
+            "properties": {
+              "can_require": {
+                "type": "boolean",
+                "description": "You may require two-step verification for the whole server (`/api/admin/security`): the server's operator."
+              }
+            }
+          }
+        ]
       },
       "StrictBody": {
         "type": "object",

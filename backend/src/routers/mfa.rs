@@ -40,6 +40,14 @@ struct CodeIn {
     code: String,
 }
 
+#[derive(Deserialize, utoipa::ToSchema)]
+struct EnrolIn {
+    /// Your account password: setting up an authenticator from Settings needs it, so a stolen session alone
+    /// cannot put an attacker's authenticator on the account.
+    #[serde(default)]
+    password: Option<String>,
+}
+
 #[derive(Serialize, utoipa::ToSchema)]
 struct RecoveryCodesOut {
     /// Shown once. Each works once, in place of an authenticator code.
@@ -62,12 +70,22 @@ const PROBLEM: &str = "application/problem+json";
     path = "/api/auth/mfa",
     tag = "auth",
     summary = "Two-step verification for your account",
-    responses((status = 200, body = MfaStatus), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = PROBLEM)),
+    responses((status = 200, body = StatusOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = PROBLEM)),
     security(("cookie" = [])),
 )]
-async fn get_status(State(state): State<AppState>, user: User) -> AppResult<Json<MfaStatus>> {
+async fn get_status(State(state): State<AppState>, user: User) -> AppResult<Json<StatusOut>> {
     authz::require_session()?;
-    Ok(Json(mfa::status(&state.control, &user.id).await?))
+    let mut status = mfa::status(&state.control, &user.id).await?;
+    status.unreadable = mfa::secret_unreadable(&state, &user.id).await?;
+    Ok(Json(StatusOut { status, can_require: authz::is_instance_operator(&state.control, &user).await? }))
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct StatusOut {
+    #[serde(flatten)]
+    status: MfaStatus,
+    /// You may require two-step verification for the whole server (`/api/admin/security`): the server's operator.
+    can_require: bool,
 }
 
 #[utoipa::path(
@@ -76,12 +94,30 @@ async fn get_status(State(state): State<AppState>, user: User) -> AppResult<Json
     path = "/api/auth/mfa/enrol",
     tag = "auth",
     summary = "Start setting up an authenticator app",
-    description = "Returns a new secret, its `otpauth://` URI and a QR code. Nothing changes until a code from the app confirms it (`/api/auth/mfa/enrol/confirm`). The secret is never shown again.",
+    description = "Needs the account password (10 wrong passwords per account in 15 minutes and it is refused, like login). Returns a new secret, its `otpauth://` URI and a QR code. Nothing changes until a code from the app confirms it (`/api/auth/mfa/enrol/confirm`). The secret is never shown again. Accounts that sign in only through single sign-on cannot enrol here: their provider handles the second factor.",
+    request_body = EnrolIn,
     responses((status = 200, body = Enrolment), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = PROBLEM)),
     security(("cookie" = [])),
 )]
-async fn enrol(State(state): State<AppState>, user: User) -> AppResult<Json<Enrolment>> {
+async fn enrol(State(state): State<AppState>, user: User, Json(body): Json<EnrolIn>) -> AppResult<Json<Enrolment>> {
     authz::require_session()?;
+    let status = mfa::status(&state.control, &user.id).await?;
+    if !status.available {
+        return Err(AppError::bad_request("This account signs in through single sign-on. Your identity provider handles two-step verification."));
+    }
+    // the password again, counted before it is checked (bcrypt is slow: the count must not wait for it)
+    let key = format!("reauth-fail:{}", crate::rid::RecordIdExt::to_string(&user.id));
+    if let Err(wait) = state.fail_throttle.reserve(&key, crate::ratelimit::LOGIN_FAILS) {
+        return Err(AppError::coded(ErrorCode::RateLimited, format!("Too many wrong passwords. Try again in {} minutes.", wait.div_ceil(60))));
+    }
+    let password = body.password.unwrap_or_default();
+    if password.is_empty() || !models_user::password_matches(&state.control, &user.id, &password).await? {
+        let actor = authz::current().map(|c| c.actor).unwrap_or(authz::Actor { kind: "user", id: crate::rid::RecordIdExt::to_string(&user.id) });
+        crate::audit::record(&state.control, crate::audit::Event { user: Some(&user.id), actor: &actor, action: "auth.reauth", target: "", outcome: ErrorCode::AuthForbidden.as_str(), detail: "where=mfa-setup" }).await;
+        // 403, not 401: the session is fine, only the password typed again was wrong
+        return Err(AppError::coded(ErrorCode::AuthForbidden, "That password isn't right."));
+    }
+    state.fail_throttle.clear(&key);
     Ok(Json(mfa::begin_enrolment(&state, &user.id).await?))
 }
 
@@ -97,12 +133,9 @@ async fn enrol(State(state): State<AppState>, user: User) -> AppResult<Json<Enro
 )]
 async fn enrol_confirm(State(state): State<AppState>, user: User, headers: HeaderMap, Json(body): Json<CodeIn>) -> AppResult<Json<RecoveryCodesOut>> {
     authz::require_session()?;
-    let recovery_codes = mfa::confirm_enrolment(&state, &user.id, &body.code).await?;
-    // the code just proved the factor: this session counts as verified, so it keeps working if MFA is required
-    if let Some(sid) = crate::auth::session_sid(&state.settings.jwt_secret, &headers) {
-        crate::store::control::MFA_SESSION_MARK.on(&state.control).bind(("sid", sid)).bind(("owner", user.id.clone())).await?.check()?;
-    }
-    state.credentials.forget_user(&user.id);
+    // the code just proved the factor: this session counts as verified; the account's other unverified sessions end
+    let sid = crate::auth::session_sid(&state.settings.jwt_secret, &headers);
+    let recovery_codes = mfa::confirm_enrolment(&state, &user.id, &body.code, None, sid.as_deref()).await?;
     Ok(Json(RecoveryCodesOut { recovery_codes }))
 }
 
@@ -112,14 +145,14 @@ async fn enrol_confirm(State(state): State<AppState>, user: User, headers: Heade
     path = "/api/auth/mfa/disable",
     tag = "auth",
     summary = "Turn off two-step verification",
-    description = "Needs a current authenticator code or an unused recovery code, every time. Refused while an admin requires two-step verification.",
+    description = "Needs a current authenticator code or an unused recovery code, every time. Refused while an admin requires two-step verification, unless the stored authenticator can no longer be read (`auth.mfa_unreadable`, after an `ENCRYPTION_KEY` change): then a recovery code turns it off so it can be set up again.",
     request_body = CodeIn,
     responses((status = 200, body = MfaStatus), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = PROBLEM)),
     security(("cookie" = [])),
 )]
 async fn disable(State(state): State<AppState>, user: User, Json(body): Json<CodeIn>) -> AppResult<Json<MfaStatus>> {
     authz::require_session()?;
-    if mfa::require_mfa(&state.control).await? {
+    if mfa::require_mfa(&state.control).await? && !mfa::secret_unreadable(&state, &user.id).await? {
         return Err(AppError::coded(ErrorCode::AuthForbidden, "Your admin requires two-step verification on this server, so it can't be turned off."));
     }
     if !mfa::enabled(&state.control, &user.id).await? {
@@ -150,11 +183,8 @@ async fn regenerate(State(state): State<AppState>, user: User, Json(body): Json<
     Ok(Json(RecoveryCodesOut { recovery_codes: mfa::regenerate_recovery_codes(&state.control, &user.id).await? }))
 }
 
-/// Spends the challenge and records the sign-in; the caller starts the session.
+/// Records the sign-in after the second step (which already spent the challenge); the caller starts the session.
 async fn finish(state: &AppState, c: &mfa::Challenge, detail: &str) -> AppResult<User> {
-    if !mfa::take_challenge(&state.control, c).await? {
-        return Err(AppError::coded(ErrorCode::AuthMfaChallengeExpired, "Your sign-in has expired. Enter your email and password again."));
-    }
     let user = models_user::load_user(&state.control, c.user.clone(), c.email.clone()).await?;
     let actor = authz::Actor { kind: "user", id: crate::rid::RecordIdExt::to_string(&user.id) };
     crate::audit::record(&state.control, crate::audit::Event { user: Some(&user.id), actor: &actor, action: "auth.login", target: "", outcome: "ok", detail }).await;
@@ -167,23 +197,14 @@ async fn finish(state: &AppState, c: &mfa::Challenge, detail: &str) -> AppResult
     path = "/api/auth/mfa/challenge/verify",
     tag = "auth",
     summary = "Finish signing in with an authenticator or recovery code",
-    description = "The second step after `/api/auth/login` answered `mfa_required: verify`. Reads the `eunomia_mfa` cookie that answer set. A wrong code counts against the sign-in (5 and it ends) and the account (10 in 15 minutes and every attempt is refused).",
+    description = "The second step after `/api/auth/login` answered `mfa_required: verify`. Reads the `eunomia_mfa` cookie that answer set. Each code counts against the sign-in (5 and it ends) and the account (10 in 15 minutes and every attempt is refused), reserved before it is checked.",
     request_body = CodeIn,
     responses((status = 200, body = AuthOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = PROBLEM)),
     security(()),
 )]
 async fn challenge_verify(State(state): State<AppState>, https: Option<Extension<ForwardedHttps>>, headers: HeaderMap, Json(body): Json<CodeIn>) -> AppResult<Response> {
     let c = mfa::find_challenge(&state.control, &headers, "verify").await?;
-    let factor = match mfa::verify(&state, &c.user, &body.code, "sign-in").await {
-        Ok(f) => f,
-        Err(e) if e.code == ErrorCode::AuthMfaInvalid => {
-            if !mfa::challenge_failed(&state.control, &c).await? {
-                return Err(AppError::coded(ErrorCode::AuthMfaChallengeExpired, "Too many wrong codes. Enter your email and password again."));
-            }
-            return Err(e);
-        }
-        Err(e) => return Err(e),
-    };
+    let factor = mfa::verify_attempt(&state, &c.user, &body.code, "sign-in", Some(&c)).await?;
     let user = finish(&state, &c, &format!("second step: {}", factor.words())).await?;
     let clear = mfa::clear_challenge_cookie(&state.settings.public_url, https);
     session_response(&state, user, &headers, https, Via::parse(&c.via), true, Some(clear)).await
@@ -217,16 +238,8 @@ async fn challenge_enrol(State(state): State<AppState>, headers: HeaderMap) -> A
 )]
 async fn challenge_enrol_confirm(State(state): State<AppState>, https: Option<Extension<ForwardedHttps>>, headers: HeaderMap, Json(body): Json<CodeIn>) -> AppResult<Response> {
     let c = mfa::find_challenge(&state.control, &headers, "enrol").await?;
-    let recovery_codes = match mfa::confirm_enrolment(&state, &c.user, &body.code).await {
-        Ok(codes) => codes,
-        Err(e) if e.code == ErrorCode::AuthMfaInvalid => {
-            if !mfa::challenge_failed(&state.control, &c).await? {
-                return Err(AppError::coded(ErrorCode::AuthMfaChallengeExpired, "Too many wrong codes. Enter your email and password again."));
-            }
-            return Err(e);
-        }
-        Err(e) => return Err(e),
-    };
+    // the password was proved by this sign-in: no second ask
+    let recovery_codes = mfa::confirm_enrolment(&state, &c.user, &body.code, Some(&c), None).await?;
     let user = finish(&state, &c, "second step: set up an authenticator").await?;
     let token = crate::auth::start_session(&state.control, &state.settings.jwt_secret, &user, crate::routers::auth::user_agent_from(&headers).as_deref(), Via::parse(&c.via), true).await?;
     let me = auth_out(&state, user).await?;

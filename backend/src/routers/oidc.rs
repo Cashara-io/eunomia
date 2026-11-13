@@ -273,9 +273,23 @@ async fn callback(State(state): State<AppState>, https: Option<Extension<Forward
     let flow = read_flow_cookie(&headers).and_then(|t| decode_flow(&state.settings.jwt_secret, &t));
     let next = flow.as_ref().map_or_else(|| "/".to_string(), |f| f.next.clone());
     match finish(&state, cfg, flow, &q, &headers).await {
-        Ok((user, mapped)) => {
-            let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref(), auth::Via::Oidc, false).await?;
+        Ok((user, mapped, asserted)) => {
             let actor = Actor { kind: "user", id: user.id.to_string() };
+            // an account with its own authenticator passes it here too, unless the provider said a second
+            // factor was used: the same pending second step as a password sign-in, no session yet
+            if !asserted && crate::mfa::enabled(&state.control, &user.id).await? {
+                let pending = crate::mfa::create_challenge(&state.control, &user.id, crate::mfa::AfterPassword::Verify, auth::Via::Oidc.as_str(), user_agent_from(&headers).as_deref()).await?;
+                let detail = if mapped == Mapped::Linked { "linked; second step pending" } else { "second step pending" };
+                audit::record(&state.control, Event { user: Some(&user.id), actor: &actor, action: "auth.oidc_login", target: "", outcome: "ok", detail }).await;
+                let mut q = vec![("mfa", "verify")];
+                if next != "/" {
+                    q.push(("next", next.as_str()));
+                }
+                let target = format!("/login?{}", serde_urlencoded::to_string(&q).unwrap_or_default());
+                let cookie = crate::mfa::challenge_cookie(&pending, &state.settings.public_url, https);
+                return Ok(no_store((AppendHeaders([(header::SET_COOKIE, cookie), (header::SET_COOKIE, clear)]), Redirect::to(&target)).into_response()));
+            }
+            let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref(), auth::Via::Oidc, asserted).await?;
             let rec = |action: &'static str, target: &'static str, detail: &'static str| {
                 audit::record(&state.control, Event { user: Some(&user.id), actor: &actor, action, target, outcome: "ok", detail })
             };
@@ -313,7 +327,8 @@ async fn callback(State(state): State<AppState>, https: Option<Extension<Forward
     }
 }
 
-async fn finish(state: &AppState, cfg: &OidcConfig, flow: Option<Flow>, q: &CallbackQuery, _headers: &HeaderMap) -> Result<(User, Mapped), Fail> {
+/// The signed-in account, how it was mapped, and whether the ID token asserted a second factor.
+async fn finish(state: &AppState, cfg: &OidcConfig, flow: Option<Flow>, q: &CallbackQuery, _headers: &HeaderMap) -> Result<(User, Mapped, bool), Fail> {
     let flow = flow.ok_or(Fail::State("no valid flow cookie (expired, missing, or started in another browser)"))?;
     if let Some(e) = &q.error {
         return Err(Fail::Denied(format!("the provider returned error {:?}", e.chars().take(64).collect::<String>())));
@@ -348,7 +363,9 @@ async fn finish(state: &AppState, cfg: &OidcConfig, flow: Option<Flow>, q: &Call
         ident.email = email;
         ident.email_verified = verified;
     }
-    map_identity(state, &ident).await
+    let asserted = ident.asserts_mfa(&cfg.mfa_acr);
+    let (user, mapped) = map_identity(state, &ident).await?;
+    Ok((user, mapped, asserted))
 }
 
 /// `EUNOMIA_ADMIN_EMAILS` lists at least one address.

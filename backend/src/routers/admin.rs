@@ -57,7 +57,7 @@ pub enum AuditCategory {
     Server,
 }
 
-const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.failed", "auth.mfa_failed", "auth.mfa_recovery_used"];
+const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.failed", "auth.mfa_failed", "auth.mfa_recovery_used", "auth.reauth", "auth.mfa_secret_unreadable"];
 const ADMIN_ACTIONS: &[&str] = &["admin.grant", "admin.revoke", "user.suspend", "user.restore", "admin.token_revoke", "admin.require_mfa"];
 
 impl AuditCategory {
@@ -320,9 +320,12 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
             None => "Used a recovery code".into(),
         },
         "auth.mfa_failed" => return "Two-step verification failed (wrong or reused code)".into(),
+        "auth.reauth" => return "Typed the wrong password while setting up two-step verification".into(),
+        "auth.mfa_secret_unreadable" => return "The authenticator could not be checked (the server's encryption key changed)".into(),
         "auth.login" if ok && detail.contains("second step") => return "Signed in with two-step verification".into(),
         "auth.login" if ok => return "Signed in".into(),
         "auth.login" => return "Sign-in failed (wrong email or password)".into(),
+        "auth.oidc_login" if ok && detail.contains("second step pending") => return "Single sign-on checked; asked for the account's authenticator code".into(),
         "auth.oidc_login" if ok => return "Signed in with single sign-on".into(),
         "auth.oidc_login" => return "Single sign-on sign-in failed".into(),
         "auth.oidc_link" => "Linked a single sign-on account".into(),
@@ -359,7 +362,7 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
 }
 
 /// Actions whose failed sentence already says why ([`describe`] returns early for them).
-const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.failed", "auth.mfa_failed", "oauth.consent", "authz.denied"];
+const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.failed", "auth.mfa_failed", "auth.reauth", "auth.mfa_secret_unreadable", "oauth.consent", "authz.denied"];
 
 /// Why an action failed, from the error code it ended with, in words; empty when it worked.
 /// The exact cause a failed attempt recorded in its detail (`why=...`), when it recorded one.
@@ -864,31 +867,45 @@ async fn set_suspended(
 
 #[derive(Serialize, utoipa::ToSchema)]
 struct SecurityOut {
-    /// Every password account must pass two-step verification before it gets a session. Accounts that
-    /// sign in through single sign-on are left to the identity provider.
+    /// Every password account on this server, in every organisation, must pass two-step verification before
+    /// it gets a session. Accounts that sign in through single sign-on are left to the identity provider
+    /// unless they set up their own authenticator.
     require_mfa: bool,
     #[schema(value_type = Option<String>)]
     updated_at: Option<Datetime>,
-    /// Email of the admin who last changed it.
+    /// Email of the operator who last changed it.
     updated_by: Option<String>,
-    /// Password accounts in the workspace without two-step verification yet (they must set it up at their
-    /// next sign-in while it is required).
+    /// Active password accounts on the whole server (every organisation) without two-step verification yet:
+    /// while it is required they are signed out and must set it up at their next sign-in.
     without_mfa: i64,
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
 struct SecurityChange {
     require_mfa: bool,
-    /// A current authenticator or recovery code, when the admin's own account has two-step verification and
-    /// its last second factor is older than 10 minutes (`auth.step_up_required`).
+    /// A current authenticator or recovery code, when your own account has two-step verification and its
+    /// last second factor is older than 10 minutes (`auth.step_up_required`).
     #[serde(default)]
     mfa_code: Option<String>,
 }
 
-async fn security_out(state: &AppState, user: &User) -> AppResult<SecurityOut> {
+/// Instance settings reach every organisation on the host: only its operators read or change them.
+async fn require_operator(state: &AppState, user: &User) -> AppResult<()> {
+    if authz::is_instance_operator(&state.control, user).await? {
+        Ok(())
+    } else {
+        Err(AppError::coded(ErrorCode::AuthForbidden, "Only the server's operator can change this: the account that set up the server, or an email in EUNOMIA_ADMIN_EMAILS."))
+    }
+}
+
+async fn security_out(state: &AppState) -> AppResult<SecurityOut> {
+    #[derive(Deserialize, SurrealValue)]
+    struct Count {
+        count: i64,
+    }
     let s = crate::mfa::security(&state.control).await?;
-    let without_mfa = people_rows(state, user).await?.iter().filter(|r| r.has_password && !r.mfa && r.suspended_at.is_none()).count();
-    Ok(SecurityOut { require_mfa: s.require_mfa, updated_at: s.updated_at, updated_by: s.updated_by, without_mfa: i64::try_from(without_mfa).unwrap_or(i64::MAX) })
+    let rows: Vec<Count> = store::control::ADMIN_WITHOUT_MFA_ALL.on(&state.control).await?.take(0)?;
+    Ok(SecurityOut { require_mfa: s.require_mfa, updated_at: s.updated_at, updated_by: s.updated_by, without_mfa: rows.first().map_or(0, |c| c.count) })
 }
 
 #[utoipa::path(
@@ -896,13 +913,13 @@ async fn security_out(state: &AppState, user: &User) -> AppResult<SecurityOut> {
     get,
     path = "/api/admin/security",
     tag = "admin",
-    summary = "Server security settings: whether two-step verification is required (admin only)",
+    summary = "Server security settings: whether two-step verification is required (server operators only)",
     responses((status = 200, body = SecurityOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
 async fn get_security(State(state): State<AppState>, user: User) -> AppResult<Json<SecurityOut>> {
-    require_admin(&state, &user).await?;
-    Ok(Json(security_out(&state, &user).await?))
+    require_operator(&state, &user).await?;
+    Ok(Json(security_out(&state).await?))
 }
 
 #[utoipa::path(
@@ -910,18 +927,18 @@ async fn get_security(State(state): State<AppState>, user: User) -> AppResult<Js
     put,
     path = "/api/admin/security",
     tag = "admin",
-    summary = "Require two-step verification for every password account, or stop (admin only, browser session)",
-    description = "Instance-wide. Turning it on needs your own account protected first (two-step verification on, or single sign-on only). While on, a password sign-in without two-step verification must set it up before it gets a session, and browser sessions that never passed a second factor are signed out. API tokens and app connections keep working.",
+    summary = "Require two-step verification for every password account on the server, or stop (server operators only, browser session)",
+    description = "Server-wide: it affects every organisation on the host. Only the account that set up the server or an email in `EUNOMIA_ADMIN_EMAILS` may change it; admins granted in Settings > People may not. Turning it on needs your own account protected first (two-step verification on, or single sign-on only). While on, a password sign-in without two-step verification must set it up before it gets a session, and browser sessions that never passed a second factor are signed out. API tokens and app connections keep working.",
     request_body = SecurityChange,
     responses((status = 200, body = SecurityOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = [])),
 )]
 async fn put_security(State(state): State<AppState>, user: User, headers: HeaderMap, Json(body): Json<SecurityChange>) -> AppResult<Json<SecurityOut>> {
     authz::require_session()?;
-    require_admin(&state, &user).await?;
+    require_operator(&state, &user).await?;
     let current = crate::mfa::security(&state.control).await?;
     if current.require_mfa == body.require_mfa {
-        return Ok(Json(security_out(&state, &user).await?));
+        return Ok(Json(security_out(&state).await?));
     }
     crate::mfa::step_up(&state, &user, &headers, body.mfa_code.as_deref()).await?;
     if body.require_mfa {
@@ -932,9 +949,10 @@ async fn put_security(State(state): State<AppState>, user: User, headers: Header
     }
     crate::mfa::set_require_mfa(&state.control, body.require_mfa, &user.id).await?;
     // sessions verified in the last few seconds are re-checked against the new rule on their next request
+    // (on this replica at once; other replicas within the credential cache's 20 seconds)
     state.credentials.clear();
     crate::audit::record_as_caller_detail(&state.control, &user.id, "admin.require_mfa", "", "ok", if body.require_mfa { "on" } else { "off" }).await;
-    Ok(Json(security_out(&state, &user).await?))
+    Ok(Json(security_out(&state).await?))
 }
 
 // ---------------------------------------------------------------- other people's API tokens
