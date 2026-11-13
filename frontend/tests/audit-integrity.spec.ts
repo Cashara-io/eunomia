@@ -53,7 +53,7 @@ test.describe("security log integrity and access reviews", () => {
     // metadata only: the free-text detail travels as its hash
     for (const e of doc.events) {
       expect(e.detail).toBeUndefined();
-      expect(e.detail_sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(e.detail_digest).toMatch(/^[0-9a-f]{64}$/);
     }
   });
 

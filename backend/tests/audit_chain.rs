@@ -58,6 +58,18 @@ async fn verify(app: &common::TestApp) -> chain::AuditVerification {
     chain::verify(app.control(), &ledger(app)).await.expect("verify")
 }
 
+/// Waits (bounded) for the background sealer to leave nothing pending in the test org's ledger,
+/// without sealing anything itself.
+async fn settled(app: &common::TestApp) -> bool {
+    for _ in 0..500 {
+        if sql(app.control(), "SELECT id FROM audit_event WHERE pending = true AND ledger = $l", json!({ "l": ledger(app) })).await.is_empty() {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    false
+}
+
 /// Waits (bounded) for `n` events with this action to land.
 async fn landed(db: &ControlDb, action: &str, n: usize) -> bool {
     for _ in 0..200 {
@@ -82,8 +94,9 @@ async fn every_event_is_chained_in_its_own_orgs_ledger() {
     // a real route writes too, through the same path
     let (status, _) = app.http("POST", "/api/auth/tokens", Some(json!({ "name": "ci" })), true).await;
     assert!(status.is_success(), "{status}");
+    assert!(settled(&app).await, "the background sealer seals every event without being asked");
     let mine = rows(&app).await;
-    assert!(mine.iter().all(|r| r["pending"].is_null()), "everything sealed inline: {mine:?}");
+    assert!(mine.iter().all(|r| r["pending"].is_null()), "{mine:?}");
     let seqs: Vec<i64> = mine.iter().map(|r| r["seq"].as_i64().unwrap()).collect();
     assert_eq!(seqs, (1..=seqs.len() as i64).collect::<Vec<_>>(), "one gapless sequence");
     assert!(mine.iter().all(|r| r["action"] != "test.b"), "another org's events never enter this chain");
@@ -107,11 +120,10 @@ async fn every_event_is_chained_in_its_own_orgs_ledger() {
 async fn a_cancelled_caller_does_not_lose_its_event() {
     let _g = serial().await;
     let app = common::TestApp::new().await;
-    // the caller's future is dropped after its first poll, while the write is in flight
-    let control = app.control().clone();
-    let user = app.user.id.clone();
-    let cut = tokio::time::timeout(Duration::ZERO, async move { emit(&control, &user, "test.cancelled", "").await }).await;
-    assert!(cut.is_err(), "the caller was cancelled before the write finished");
+    // the caller's future is polled once (the write is now in flight in its own task), then dropped
+    let mut caller = Box::pin(emit(app.control(), &app.user.id, "test.cancelled", ""));
+    assert!(futures::poll!(&mut caller).is_pending(), "the write had not finished when the caller went away");
+    drop(caller);
     assert!(landed(app.control(), "test.cancelled", 1).await, "the event landed anyway");
     let v = verify(&app).await;
     assert!(v.ok && v.pending == 0, "{v:?}");
@@ -162,10 +174,11 @@ async fn events_written_but_never_sealed_are_sealed_by_replay() {
     assert_eq!(v.checked as usize, sealed_before + 7);
 }
 
-async fn concurrent(locks_off: bool) {
+#[tokio::test]
+async fn concurrent_writers_make_one_unbroken_chain() {
+    let _g = serial().await;
     let app = common::TestApp::new().await;
     let start = rows(&app).await.len();
-    eunomia_backend::tx::LOCKS_OFF.store(locks_off, std::sync::atomic::Ordering::SeqCst);
     let mut tasks = Vec::new();
     for t in 0..8 {
         let control = app.control().clone();
@@ -179,8 +192,8 @@ async fn concurrent(locks_off: bool) {
     for t in tasks {
         t.await.unwrap();
     }
-    eunomia_backend::tx::LOCKS_OFF.store(false, std::sync::atomic::Ordering::SeqCst);
-    chain::replay(app.control()).await.unwrap();
+    // no replay and no explicit seal: the background sealers alone must have chained everything
+    assert!(settled(&app).await, "sealed in the background");
     let all = rows(&app).await;
     assert_eq!(all.len(), start + 200, "every event landed once");
     let seqs: Vec<i64> = all.iter().map(|r| r["seq"].as_i64().expect("sealed")).collect();
@@ -191,17 +204,216 @@ async fn concurrent(locks_off: bool) {
 }
 
 #[tokio::test]
-async fn concurrent_writers_make_one_unbroken_chain() {
+async fn sealers_racing_without_the_in_process_lock_meet_at_the_head_check() {
+    // Eight sealers on one ledger with `tx::lock` off meet only at AUDIT_SEAL's head check and the
+    // commit conflict, the way sealers in separate replicas do. Every one must finish without an
+    // error (a lost race is retried, never surfaced), and together they seal each row exactly once.
     let _g = serial().await;
-    concurrent(false).await;
+    let app = common::TestApp::new().await;
+    chain::seal(app.control(), &ledger(&app)).await.unwrap();
+    let start = rows(&app).await.len();
+    chain::SKIP_INLINE_SEAL.store(true, std::sync::atomic::Ordering::SeqCst);
+    for i in 0..200 {
+        emit(app.control(), &app.user.id, "test.race", &format!("n={i}")).await;
+    }
+    chain::SKIP_INLINE_SEAL.store(false, std::sync::atomic::Ordering::SeqCst);
+    eunomia_backend::tx::LOCKS_OFF.store(true, std::sync::atomic::Ordering::SeqCst);
+    let sealers: Vec<_> = (0..8)
+        .map(|_| {
+            let control = app.control().clone();
+            let l = ledger(&app);
+            tokio::spawn(async move { chain::seal(&control, &l).await })
+        })
+        .collect();
+    let mut sealed = 0;
+    for s in sealers {
+        sealed += s.await.unwrap().expect("a sealer that lost the race retries; none fails");
+    }
+    eunomia_backend::tx::LOCKS_OFF.store(false, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sealed, 200, "each row sealed once, by one sealer");
+    let all = rows(&app).await;
+    assert_eq!(all.len(), start + 200);
+    let seqs: Vec<i64> = all.iter().map(|r| r["seq"].as_i64().expect("sealed")).collect();
+    assert_eq!(seqs, (1..=seqs.len() as i64).collect::<Vec<_>>(), "one gapless sequence, no duplicates");
+    assert!(verify(&app).await.ok);
 }
 
 #[tokio::test]
-async fn concurrent_writers_without_the_in_process_lock_meet_at_the_head_check() {
-    // With `tx::lock` off, sealers only meet at AUDIT_SEAL's head check and the commit conflict,
-    // the way sealers in separate processes do.
+async fn verify_stays_intact_while_writers_append() {
     let _g = serial().await;
-    concurrent(true).await;
+    let app = common::TestApp::new().await;
+    for i in 0..30 {
+        emit(app.control(), &app.user.id, "test.before", &format!("n={i}")).await;
+    }
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let writers: Vec<_> = (0..3)
+        .map(|t| {
+            let (control, user, stop) = (app.control().clone(), app.user.id.clone(), stop.clone());
+            tokio::spawn(async move {
+                let mut i = 0;
+                while !stop.load(std::sync::atomic::Ordering::SeqCst) && i < 300 {
+                    emit(&control, &user, "test.busy", &format!("t={t} i={i}")).await;
+                    i += 1;
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+                i
+            })
+        })
+        .collect();
+    let mut checks = 0;
+    for _ in 0..8 {
+        let v = verify(&app).await;
+        assert!(v.ok, "a busy log is not a tampered one: {v:?}");
+        // a periodic checkpoint written mid-walk must not read as missing events either
+        chain::checkpoint_due(app.control(), chrono::TimeDelta::zero()).await.unwrap();
+        checks += 1;
+    }
+    stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    let mut written = 0;
+    for w in writers {
+        written += w.await.unwrap();
+    }
+    assert!(written > 0 && checks == 8, "writers appended during the checks ({written})");
+    assert!(verify(&app).await.ok);
+}
+
+#[tokio::test]
+async fn a_missing_head_or_genesis_is_not_intact() {
+    let _g = serial().await;
+    let app = common::TestApp::new().await;
+    ten_events(&app).await;
+    sql(app.control(), "DELETE audit_head WHERE ledger = $l", json!({ "l": ledger(&app) })).await;
+    let v = verify(&app).await;
+    assert!(!v.ok, "events but no head: {v:?}");
+    assert_eq!(v.broken.unwrap().kind, "head");
+
+    let app = common::TestApp::new().await;
+    ten_events(&app).await;
+    sql(app.control(), "DELETE audit_event WHERE ledger = $l; DELETE audit_head WHERE ledger = $l", json!({ "l": ledger(&app) })).await;
+    assert!(!verify(&app).await.ok, "events and head gone, checkpoints left");
+
+    let app = common::TestApp::new().await;
+    ten_events(&app).await;
+    sql(app.control(), "DELETE audit_checkpoint WHERE ledger = $l AND kind = 'genesis'", json!({ "l": ledger(&app) })).await;
+    assert_eq!(verify(&app).await.broken.unwrap().kind, "genesis");
+}
+
+#[tokio::test]
+async fn every_replica_drains_its_own_queue_on_its_own_timer() {
+    // two processes' queues, no scheduler leader: each drain timer writes only its own queue
+    let _g = serial().await;
+    let app = common::TestApp::new().await;
+    let a: &'static chain::Outbox = Box::leak(Box::new(chain::Outbox::new()));
+    let b: &'static chain::Outbox = Box::leak(Box::new(chain::Outbox::new()));
+    for _ in 0..3 {
+        a.queue_for_test(app.control(), &app.user.id, "test.replica_a");
+        b.queue_for_test(app.control(), &app.user.id, "test.replica_b");
+    }
+    assert_eq!((a.len(), b.len()), (3, 3));
+    let ha = chain::spawn_drain(a, Duration::from_millis(20));
+    assert!(landed(app.control(), "test.replica_a", 3).await, "replica A drained its queue");
+    assert_eq!(b.len(), 3, "A's timer never touches B's queue");
+    let hb = chain::spawn_drain(b, Duration::from_millis(20));
+    assert!(landed(app.control(), "test.replica_b", 3).await, "replica B drained its own");
+    ha.abort();
+    hb.abort();
+    assert_eq!((a.len(), b.len()), (0, 0));
+    assert!(settled(&app).await);
+    assert!(verify(&app).await.ok);
+}
+
+#[tokio::test]
+async fn a_dropped_client_cannot_separate_an_action_from_its_event() {
+    let _g = serial().await;
+    let app = common::TestApp::new().await;
+    let (control, user) = (app.control().clone(), app.user.id.clone());
+    // the "action" is still running when the client goes away
+    let request = audit::detached(async move {
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        emit(&control, &user, "test.action_done", "").await;
+        emit(&control, &user, "test.action_audited", "").await;
+    });
+    assert!(tokio::time::timeout(Duration::from_millis(20), request).await.is_err(), "the client left mid-action");
+    assert!(landed(app.control(), "test.action_done", 1).await, "the action finished");
+    assert!(landed(app.control(), "test.action_audited", 1).await, "and so did its audit event");
+}
+
+#[tokio::test]
+async fn the_instance_ledger_is_for_server_operators_on_a_host_with_several_orgs() {
+    let _g = serial().await;
+    let app = common::TestApp::new().await;
+    // one org: a granted admin of it sees the sign-in attempts with no workspace, as before
+    let bob = common::register(&app.state, "bob@example.com").await;
+    sql(app.control(), &format!("UPDATE {} SET admin = true", chain::rid(&bob.id)), json!({})).await;
+    let bob_token = |u: &eunomia_backend::models_user::User| {
+        let control = app.control().clone();
+        let id = u.id.clone();
+        async move {
+            eunomia_backend::models_user::create_api_token_with(&control, &id, "t", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token
+        }
+    };
+    let t_bob = bob_token(&bob).await;
+    const TRIED: &str = "victim-of-another-org@example.com";
+    let ((status, _), _) = common::http(&app.router, "POST", "/api/auth/login", Some(json!({ "email": TRIED, "password": "x" })), None, None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let ((status, _), _) = common::http(&app.router, "GET", "/api/admin/audit/export?ledger=instance", None, Some(&t_bob), None).await;
+    assert_eq!(status, StatusCode::OK, "single org: its admins keep the view they had");
+
+    // a second org on the same host: its admin (granted in their own org) is not an operator
+    let carol = common::register_personal(&app.state, "carol@example.com").await;
+    assert_ne!(carol.org, app.user.org);
+    sql(app.control(), &format!("UPDATE {} SET admin = true", chain::rid(&carol.id)), json!({})).await;
+    let t_carol = bob_token(&carol).await;
+    for (who, token) in [("carol", &t_carol), ("bob", &t_bob)] {
+        let ((status, body), _) = common::http(&app.router, "GET", "/api/admin/audit/export?ledger=instance", None, Some(token), None).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{who}: {body}");
+        let ((status, report), _) = common::http(&app.router, "GET", "/api/admin/audit/verify", None, Some(token), None).await;
+        assert_eq!(status, StatusCode::OK);
+        let ledgers: Vec<&str> = report["ledgers"].as_array().unwrap().iter().map(|l| l["ledger"].as_str().unwrap()).collect();
+        assert!(!ledgers.contains(&chain::INSTANCE), "{who}: {ledgers:?}");
+        let ((_, page), _) = common::http(&app.router, "GET", "/api/admin/audit?category=signins&limit=200", None, Some(token), None).await;
+        assert!(!page.to_string().contains(TRIED), "{who} cannot read other tenants' sign-in attempts in the activity log");
+    }
+    // the install's first account (and EUNOMIA_ADMIN_EMAILS) still can
+    let (status, doc) = app.http("GET", "/api/admin/audit/export?ledger=instance", None, true).await;
+    assert_eq!(status, StatusCode::OK, "{doc}");
+    let text = doc.to_string();
+    assert!(!text.contains(TRIED), "no email in the export");
+    assert!(!text.contains(&chain::sha256_hex(TRIED)), "and no plain hash of it a dictionary could reverse");
+    assert!(text.contains(&chain::digest(TRIED)), "only the keyed digest");
+    let (_, page) = app.http("GET", "/api/admin/audit?category=signins&limit=200", None, true).await;
+    assert!(page.to_string().contains(TRIED), "the operator's activity log still shows the attempt");
+    // and carol's own export carries nothing of the other org
+    let ((status, mine), _) = common::http(&app.router, "GET", "/api/admin/audit/export", None, Some(&t_carol), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(mine["events"].as_array().unwrap().iter().all(|e| e["ledger"] == chain::org_ledger(&carol.org)));
+}
+
+#[tokio::test]
+async fn retention_never_cuts_newer_events_for_one_late_old_timestamp() {
+    let _g = serial().await;
+    let app = common::TestApp::new().await;
+    for i in 0..5 {
+        emit(app.control(), &app.user.id, "test.old", &format!("n={i}")).await;
+    }
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    let cutoff = chrono::Utc::now();
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    for i in 0..5 {
+        emit(app.control(), &app.user.id, "test.new", &format!("n={i}")).await;
+    }
+    // a row written with an old time but sealed last (a replica with a slow clock, a late replay)
+    sql(
+        app.control(),
+        "CREATE audit_event SET user = $u, actor_kind = 'user', actor_id = 'late', action = 'test.late', outcome = 'ok', created_at = time::now() - 30d, ledger = $l, pending = true",
+        json!({ "u": app.user.id, "l": ledger(&app) }),
+    )
+    .await;
+    chain::seal(app.control(), &ledger(&app)).await.unwrap();
+    chain::prune(app.control(), cutoff).await.unwrap();
+    let left: Vec<String> = rows(&app).await.iter().map(|r| r["action"].as_str().unwrap().to_string()).collect();
+    assert_eq!(left.iter().filter(|a| *a == "test.new").count(), 5, "every event inside the window is kept: {left:?}");
+    assert!(verify(&app).await.ok);
 }
 
 async fn ten_events(app: &common::TestApp) -> i64 {
@@ -261,7 +473,8 @@ async fn editing_deleting_or_reordering_an_event_is_detected() {
     .await;
     assert_eq!(verify(&app).await.broken.unwrap().seq, Some(3));
 
-    // the whole tail rewritten with fresh hashes still disagrees with a checkpoint taken earlier
+    // the newest event deleted and the head wound back to the one before: caught by the periodic
+    // checkpoint taken before (a checkpoint past the head)
     let app = common::TestApp::new().await;
     ten_events(&app).await;
     chain::checkpoint_due(app.control(), chrono::TimeDelta::zero()).await.unwrap();
@@ -337,7 +550,9 @@ async fn the_export_holds_metadata_only_and_verifies_offline() {
     let text = doc.to_string();
     assert!(!text.contains(CANARY), "no tenant content or detail text in the export");
     assert!(!text.contains("launch code"));
-    assert!(text.contains(&chain::sha256_hex(format!("email={CANARY}@example.com"))), "the detail is committed by its hash");
+    let detail = format!("email={CANARY}@example.com");
+    assert!(text.contains(&chain::digest(&detail)), "the detail is committed by its keyed digest");
+    assert!(!text.contains(&chain::sha256_hex(&detail)), "not by a plain hash a dictionary could reverse");
     assert_eq!(doc["ok"], true, "{doc}");
     assert_eq!(doc["anchor"]["kind"], "genesis");
     let events = doc["events"].as_array().unwrap();
