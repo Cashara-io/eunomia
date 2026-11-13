@@ -92,6 +92,18 @@ pub fn detail_key_id() -> &'static str {
     &detail_key().1
 }
 
+/// `digest_key` of a detail committed by its plain SHA-256 (see [`public_detail`]).
+pub const PLAIN: &str = "sha256";
+
+/// Actions whose detail holds no personal data, only hashes and counts, so it is committed by its
+/// plain SHA-256: anyone holding the detail can check it against the chain offline. An access review's
+/// completion is one: its detail carries the review's `result_hash`, which an auditor checks against
+/// the exported review (`verify-audit-export.py --review`). Every other detail is committed by the keyed
+/// [`digest`], because it can hold an email address or a name.
+pub fn public_detail(action: &str) -> bool {
+    matches!(action, "access_review.start" | "access_review.complete")
+}
+
 /// HMAC-SHA256 of an event's detail under the detail key, hex.
 pub fn digest(detail: &str) -> String {
     use hmac::{Hmac, Mac};
@@ -199,8 +211,8 @@ impl Pending {
             outcome: e.outcome.to_string(),
             trace_id: crate::telemetry::current_trace_id(),
             detail: e.detail.to_string(),
-            detail_digest: digest(e.detail),
-            digest_key: detail_key_id().to_string(),
+            detail_digest: if public_detail(e.action) { sha256_hex(e.detail) } else { digest(e.detail) },
+            digest_key: if public_detail(e.action) { PLAIN.to_string() } else { detail_key_id().to_string() },
             created_at: now_micros(),
         }
     }
@@ -348,6 +360,10 @@ pub async fn shutdown_flush(wait: Duration) {
 /// database refused them. Process-global, so the tests that use it serialise on a lock.
 #[cfg(feature = "test-support")]
 pub static FAIL_WRITES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+/// Test-only (feature `test-support`): every seal of this ledger fails, as a ledger with a row that
+/// cannot be sealed would.
+#[cfg(feature = "test-support")]
+pub static FAIL_SEAL_LEDGER: Mutex<Option<String>> = Mutex::new(None);
 /// Test-only: when set, a written event is not scheduled for sealing (as if the process died right
 /// after the write), so only [`replay`] or an explicit [`seal`] can seal it.
 #[cfg(feature = "test-support")]
@@ -487,9 +503,51 @@ pub async fn replay(db: &ControlDb) -> AppResult<Replayed> {
     let ledgers: Vec<L> = store::control::AUDIT_PENDING_LEDGERS.on(db).await?.take(0)?;
     let mut sealed = 0;
     for l in ledgers.into_iter().filter_map(|l| l.ledger) {
-        sealed += seal(db, &l).await?;
+        // one ledger that fails is logged, counted and backed off; the rest carry on
+        let key = (db.identity(), l.clone());
+        if backing_off(&key) {
+            continue;
+        }
+        match seal(db, &l).await {
+            Ok(n) => {
+                sealed += n;
+                backoff_clear(&key);
+            }
+            Err(e) => {
+                SEAL_FAILURES.fetch_add(1, Ordering::Relaxed);
+                let wait = backoff_note(&key);
+                tracing::warn!(ledger = %l, error = %e.message, retry_in_secs = wait.as_secs(), "audit replay could not seal this ledger; carrying on with the others");
+            }
+        }
     }
     Ok(Replayed { written, sealed })
+}
+
+/// Ledgers whose seal failed in a replay pass (each failure counted once).
+pub static SEAL_FAILURES: AtomicU64 = AtomicU64::new(0);
+
+static BACKOFF: Mutex<Option<std::collections::HashMap<SealKey, (std::time::Instant, u32)>>> = Mutex::new(None);
+
+fn backing_off(key: &SealKey) -> bool {
+    let m = BACKOFF.lock().unwrap_or_else(|e| e.into_inner());
+    m.as_ref().and_then(|m| m.get(key)).is_some_and(|(until, _)| std::time::Instant::now() < *until)
+}
+
+fn backoff_clear(key: &SealKey) {
+    if let Some(m) = BACKOFF.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+        m.remove(key);
+    }
+}
+
+/// Records one more failure for `key` and returns how long the replay leaves it alone: 2, 4, 8 ...
+/// seconds, at most five minutes.
+fn backoff_note(key: &SealKey) -> Duration {
+    let mut m = BACKOFF.lock().unwrap_or_else(|e| e.into_inner());
+    let entry = m.get_or_insert_with(Default::default).entry(key.clone()).or_insert((std::time::Instant::now(), 0));
+    entry.1 = entry.1.saturating_add(1);
+    let wait = Duration::from_secs((1u64 << entry.1.min(9)).min(300));
+    entry.0 = std::time::Instant::now() + wait;
+    wait
 }
 
 // ---------------------------------------------------------------- sealing
@@ -553,6 +611,7 @@ impl Row {
     /// under another detail key (the encryption key changed since), so it cannot be checked here.
     fn detail_matches(&self) -> Option<bool> {
         match self.digest_key.as_deref() {
+            Some(PLAIN) => Some(sha256_hex(&self.detail) == self.stored_digest()),
             Some(k) if k == detail_key_id() => Some(digest(&self.detail) == self.stored_digest()),
             None if self.detail_digest.is_none() => Some(true),
             _ => None,
@@ -618,18 +677,40 @@ async fn heads(db: &ControlDb) -> AppResult<Vec<Head>> {
     Ok(store::control::AUDIT_HEADS.on(db).await?.take(0)?)
 }
 
+/// The audit sealer's own locks, one per database and ledger, apart from the striped `tx::lock`
+/// that request paths (sign-up, job claims) share.
+static SEAL_LOCKS: Mutex<Option<std::collections::HashMap<SealKey, std::sync::Arc<tokio::sync::Mutex<()>>>>> = Mutex::new(None);
+
+async fn seal_lock(db: &ControlDb, ledger: &str) -> Option<tokio::sync::OwnedMutexGuard<()>> {
+    #[cfg(feature = "test-support")]
+    if crate::tx::LOCKS_OFF.load(Ordering::SeqCst) {
+        return None;
+    }
+    let lock = {
+        let mut m = SEAL_LOCKS.lock().unwrap_or_else(|e| e.into_inner());
+        m.get_or_insert_with(Default::default).entry((db.identity(), ledger.to_string())).or_default().clone()
+    };
+    Some(lock.lock_owned().await)
+}
+
 fn lost_race(e: &surrealdb::Error) -> bool {
     crate::tx::is_conflict(e) || crate::tx::is_duplicate(e) || e.to_string().contains("audit.chain_moved")
 }
 
 /// Seals every pending row of `ledger`, oldest first. Returns how many it sealed.
 pub async fn seal(db: &ControlDb, ledger: &str) -> AppResult<u64> {
-    // one sealer per ledger in this process; other processes meet at the head check
-    let _guard = crate::tx::lock(&format!("audit-chain:{ledger}")).await;
+    #[cfg(feature = "test-support")]
+    if FAIL_SEAL_LEDGER.lock().unwrap_or_else(|e| e.into_inner()).as_deref() == Some(ledger) {
+        return Err(AppError::internal("injected seal failure"));
+    }
     let mut sealed = 0u64;
     let mut lost = 0u32;
     let mut batches = 0u32;
     loop {
+        // one sealer per ledger in this process, held for one batch only (never across a retry
+        // pause), on locks of its own: request paths never wait behind a seal. Other processes meet
+        // at the head check.
+        let _guard = seal_lock(db, ledger).await;
         let head = read_head(db, ledger).await?;
         let rows: Vec<Row> =
             store::control::AUDIT_PENDING.on(db).bind(("ledger", ledger.to_string())).bind(("limit", SEAL_BATCH)).await?.take(0)?;
@@ -678,6 +759,7 @@ pub async fn seal(db: &ControlDb, ledger: &str) -> AppResult<u64> {
                 }
             }
             Err(e) if lost_race(&e) && lost < 50 => {
+                drop(_guard);
                 lost += 1;
                 let ms = rand::random::<u64>() % (5 * lost as u64).min(100) + 1;
                 tokio::time::sleep(Duration::from_millis(ms)).await;
@@ -746,24 +828,36 @@ struct SeqHash {
 /// an old timestamp sealed late (a replayed event, a replica with a slow clock) can never pull newer
 /// events inside the window into the cut.
 pub async fn prune(db: &ControlDb, cutoff: DateTime<Utc>) -> AppResult<()> {
-    replay(db).await?;
+    // seal what can be sealed first; a ledger that cannot is skipped below, not the whole run
+    if let Err(e) = replay(db).await {
+        tracing::warn!(error = %e.message, "audit replay before retention failed; cutting what is sealed");
+    }
     for head in heads(db).await? {
         let ledger = head.ledger.clone();
-        let since: Vec<SeqHash> =
-            store::control::AUDIT_FIRST_SEQ_SINCE.on(db).bind(("ledger", ledger.clone())).bind(("from", Datetime::from(cutoff))).await?.take(0)?;
-        let cut = match since.first() {
-            Some(r) => r.seq - 1,
-            // nothing inside the window: everything sealed so far is older
-            None => head.seq,
-        };
-        if cut < 1 {
-            continue;
+        if let Err(e) = cut_ledger(db, &head, cutoff).await {
+            SEAL_FAILURES.fetch_add(1, Ordering::Relaxed);
+            tracing::warn!(ledger = %ledger, error = %e.message, "audit retention could not cut this ledger; carrying on with the others");
         }
-        let rows = page(db, &ledger, cut - 1, cut, 1).await?;
-        let Some(hash) = rows.first().and_then(|r| r.hash.clone()) else { continue }; // already cut
-        store::control::AUDIT_RETENTION_CUT.on(db).bind(("ledger", ledger.clone())).bind(("seq", cut)).bind(("hash", hash)).await?.check()?;
-        tracing::info!(ledger = %ledger, through_seq = cut, "audit retention cut, checkpoint kept");
     }
+    Ok(())
+}
+
+async fn cut_ledger(db: &ControlDb, head: &Head, cutoff: DateTime<Utc>) -> AppResult<()> {
+    let ledger = head.ledger.clone();
+    let since: Vec<SeqHash> =
+        store::control::AUDIT_FIRST_SEQ_SINCE.on(db).bind(("ledger", ledger.clone())).bind(("from", Datetime::from(cutoff))).await?.take(0)?;
+    let cut = match since.first() {
+        Some(r) => r.seq - 1,
+        // nothing inside the window: everything sealed so far is older
+        None => head.seq,
+    };
+    if cut < 1 {
+        return Ok(());
+    }
+    let rows = page(db, &ledger, cut - 1, cut, 1).await?;
+    let Some(hash) = rows.first().and_then(|r| r.hash.clone()) else { return Ok(()) }; // already cut
+    store::control::AUDIT_RETENTION_CUT.on(db).bind(("ledger", ledger.clone())).bind(("seq", cut)).bind(("hash", hash)).await?.check()?;
+    tracing::info!(ledger = %ledger, through_seq = cut, "audit retention cut, checkpoint kept");
     Ok(())
 }
 
@@ -933,6 +1027,13 @@ fn anchor_for(cps: &[CheckpointRow], seq: i64) -> Option<&CheckpointRow> {
     at.iter().find(|c| c.kind == "genesis" || c.kind == "retention").or_else(|| at.first()).copied()
 }
 
+async fn verify_reads(db: &ControlDb, ledger: &str) -> AppResult<(Vec<CheckpointRow>, Option<i64>, Option<Head>)> {
+    let cps = checkpoints(db, ledger).await?;
+    let first: Vec<SeqHash> = store::control::AUDIT_FIRST_SEQ.on(db).bind(("ledger", ledger.to_string())).await?.take(0)?;
+    let head = read_head(db, ledger).await?;
+    Ok((cps, first.first().map(|r| r.seq), head))
+}
+
 /// Seals what is pending, then walks the ledger from its anchor to its head and reports the
 /// first break.
 pub async fn verify(db: &ControlDb, ledger: &str) -> AppResult<AuditVerification> {
@@ -960,11 +1061,16 @@ pub async fn verify(db: &ControlDb, ledger: &str) -> AppResult<AuditVerification
         Ok(v)
     };
     // Checkpoints first, then the head: a checkpoint is a copy of an earlier head, so every one read
-    // here is at or below the head read next, however busy the ledger is.
-    let cps = checkpoints(db, ledger).await?;
-    let first: Vec<SeqHash> = store::control::AUDIT_FIRST_SEQ.on(db).bind(("ledger", ledger.to_string())).await?.take(0)?;
-    let first = first.first().map(|r| r.seq);
-    let Some(head) = read_head(db, ledger).await? else {
+    // here is at or below the head read next, however busy the ledger is. If the oldest stored event
+    // then has no checkpoint under it, a retention cut may have committed between the two reads:
+    // read once more before calling it a break.
+    let (mut cps, mut first, mut head) = verify_reads(db, ledger).await?;
+    if let Some(f) = first
+        && anchor_for(&cps, f - 1).is_none()
+    {
+        (cps, first, head) = verify_reads(db, ledger).await?;
+    }
+    let Some(head) = head else {
         if first.is_some() || !cps.is_empty() {
             return fail(v, brk(None, "head", "This log has events or checkpoints but no head: the record of its newest event was deleted.".into()));
         }
@@ -1099,6 +1205,10 @@ pub struct AuditExport {
     pub checkpoints: Vec<AuditCheckpoint>,
     /// The ledger's head when the export was made.
     pub head: Option<AuditCheckpoint>,
+    /// The file's own range: its first and last event, the ledger's head when it was made, and how
+    /// many events were still unsealed (written, not yet in the chain) and so are not in it. The
+    /// offline verifier checks it against the events and the head.
+    pub range: AuditExportRange,
     /// True when the range held more than one export carries; `next_seq` is where to resume.
     pub truncated: bool,
     pub next_seq: Option<i64>,
@@ -1106,6 +1216,15 @@ pub struct AuditExport {
     pub ok: bool,
     #[serde(rename = "break")]
     pub broken: Option<AuditChainBreak>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct AuditExportRange {
+    pub first_seq: Option<i64>,
+    pub last_seq: Option<i64>,
+    pub head_seq: Option<i64>,
+    pub head_hash: Option<String>,
+    pub unsealed: i64,
 }
 
 /// Exports the sealed events of `ledger` written in `[from, to)` (open ends allowed), as one
@@ -1138,12 +1257,26 @@ pub async fn export(db: &ControlDb, ledger: &str, from: Option<DateTime<Utc>>, t
             kind: "head".into(),
             pruned: None,
         }),
+        range: AuditExportRange::default(),
         truncated: false,
         next_seq: None,
         ok: true,
         broken: None,
     };
-    let Some(head) = head else { return Ok(out) };
+    out.range.unsealed = count(db, &store::control::AUDIT_PENDING_COUNT, ledger).await?;
+    if let Some(h) = &head {
+        out.range.head_seq = Some(h.seq);
+        out.range.head_hash = Some(h.hash.clone());
+    }
+    let Some(head) = head else {
+        // no head: an empty file is only honest when the ledger is really empty
+        let any: Vec<SeqHash> = store::control::AUDIT_FIRST_SEQ.on(db).bind(("ledger", ledger.to_string())).await?.take(0)?;
+        if !any.is_empty() || !cps.is_empty() {
+            out.ok = false;
+            out.broken = Some(brk(None, "head", "This log has events or checkpoints but no head: the record of its newest event was deleted. Nothing was exported.".into()));
+        }
+        return Ok(out);
+    };
     let first: Vec<SeqHash> = match from {
         Some(f) => store::control::AUDIT_FIRST_SEQ_SINCE.on(db).bind(("ledger", ledger.to_string())).bind(("from", Datetime::from(f))).await?.take(0)?,
         None => store::control::AUDIT_FIRST_SEQ.on(db).bind(("ledger", ledger.to_string())).await?.take(0)?,
@@ -1202,6 +1335,8 @@ pub async fn export(db: &ControlDb, ledger: &str, from: Option<DateTime<Utc>>, t
     if let Some(cp) = cps.iter().find(|cp| cp.seq == first - 1 && cp.kind != "periodic") {
         out.checkpoints.insert(0, cp.into());
     }
+    out.range.first_seq = out.events.first().map(|e| e.fields.seq);
+    out.range.last_seq = out.events.last().map(|e| e.fields.seq);
     out.ok = walk.broken.is_none();
     out.broken = walk.broken;
     Ok(out)

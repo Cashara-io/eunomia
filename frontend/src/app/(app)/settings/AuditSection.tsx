@@ -218,11 +218,13 @@ function LedgerResult({ v }: { v: AuditVerification }) {
   const range = v.checked ? `events ${v.first_seq} to ${v.last_seq} checked` : "nothing recorded yet";
   const from = v.anchor?.kind === "retention" ? ", from the last retention cut" : "";
   const older = v.before_chain ? `; ${v.before_chain} older events predate the chain` : "";
+  const waiting = v.pending ? `; ${v.pending} newer ${v.pending === 1 ? "event is" : "events are"} not sealed yet and not checked` : "";
   return (
     <StatusLine tone="good">
       {name}: intact, {range}
       {from}
-      {older}.
+      {older}
+      {waiting}.
     </StatusLine>
   );
 }

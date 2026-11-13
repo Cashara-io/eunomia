@@ -407,7 +407,7 @@ pub const AUDIT_RETENTION_CUT: ControlStmt = ControlStmt::new(
 /// The newest sealed event with this action and target in a ledger (an access review's completion).
 pub const AUDIT_EVENT_FIND: ControlStmt = ControlStmt::new(
     "control.audit_event_find",
-    "SELECT seq, hash, created_at, pending FROM audit_event WHERE action = $action AND target = $target AND ledger = $ledger \
+    "SELECT seq, hash, created_at, pending, detail, detail_digest, digest_key FROM audit_event WHERE action = $action AND target = $target AND ledger = $ledger \
      ORDER BY created_at DESC LIMIT 1",
 );
 

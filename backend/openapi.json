@@ -9351,7 +9351,8 @@
       "AccessReviewAuditLink": {
         "type": "object",
         "required": [
-          "ledger"
+          "ledger",
+          "detail"
         ],
         "properties": {
           "created_at": {
@@ -9359,6 +9360,10 @@
               "string",
               "null"
             ]
+          },
+          "detail": {
+            "type": "string",
+            "description": "The event's detail as written (`result=<hash> keep=.. remove=.. suspend=.. not_reviewed=..`).\nIts SHA-256 is the event's `detail_digest` in the chain."
           },
           "hash": {
             "type": [
@@ -9443,6 +9448,7 @@
           "snapshot",
           "snapshot_hash",
           "snapshot_hash_matches",
+          "chain_matches",
           "decisions"
         ],
         "properties": {
@@ -9456,6 +9462,10 @@
                 "description": "The completion's place in the hash-chained security log, once sealed."
               }
             ]
+          },
+          "chain_matches": {
+            "type": "boolean",
+            "description": "True when the chained completion event commits to this review as it is now: its detail\nnames this `result` document's hash and the chain holds that detail's plain SHA-256. False\nmeans the review was changed after it was completed (even if `result_hash` was recomputed).\nThe offline verifier checks the same: `verify-audit-export.py LOG.json --review THIS.json`."
           },
           "decisions": {
             "type": "array",
@@ -9949,6 +9959,7 @@
           "to",
           "events",
           "checkpoints",
+          "range",
           "truncated",
           "ok"
         ],
@@ -10023,6 +10034,10 @@
             "type": "boolean",
             "description": "The server's own check of the events in this file."
           },
+          "range": {
+            "$ref": "#/components/schemas/AuditExportRange",
+            "description": "The file's own range: its first and last event, the ledger's head when it was made, and how\nmany events were still unsealed (written, not yet in the chain) and so are not in it. The\noffline verifier checks it against the events and the head."
+          },
           "to": {
             "type": "string"
           },
@@ -10054,6 +10069,45 @@
           }
         ],
         "description": "One event in an export: its canonical fields (the detail only as its hash) and stored hash."
+      },
+      "AuditExportRange": {
+        "type": "object",
+        "required": [
+          "unsealed"
+        ],
+        "properties": {
+          "first_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "head_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "head_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "last_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "unsealed": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
       },
       "AuditPage": {
         "type": "object",

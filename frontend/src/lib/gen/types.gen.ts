@@ -48,6 +48,11 @@ export type AccessReview = AccessReviewSummary & {
 
 export type AccessReviewAuditLink = {
     created_at?: string | null;
+    /**
+     * The event's detail as written (`result=<hash> keep=.. remove=.. suspend=.. not_reviewed=..`).
+     * Its SHA-256 is the event's `detail_digest` in the chain.
+     */
+    detail: string;
     hash?: string | null;
     ledger: string;
     seq?: number | null;
@@ -86,6 +91,13 @@ export type AccessReviewDecisionBody = {
  */
 export type AccessReviewExport = {
     audit_event?: null | AccessReviewAuditLink;
+    /**
+     * True when the chained completion event commits to this review as it is now: its detail
+     * names this `result` document's hash and the chain holds that detail's plain SHA-256. False
+     * means the review was changed after it was completed (even if `result_hash` was recomputed).
+     * The offline verifier checks the same: `verify-audit-export.py LOG.json --review THIS.json`.
+     */
+    chain_matches: boolean;
     decisions: Array<AccessReviewDecision>;
     /**
      * The document `result_hash` is the SHA-256 of (canonical JSON: keys sorted, no spaces).
@@ -320,6 +332,12 @@ export type AuditExport = {
      * The server's own check of the events in this file.
      */
     ok: boolean;
+    /**
+     * The file's own range: its first and last event, the ledger's head when it was made, and how
+     * many events were still unsealed (written, not yet in the chain) and so are not in it. The
+     * offline verifier checks it against the events and the head.
+     */
+    range: AuditExportRange;
     to: string;
     /**
      * True when the range held more than one export carries; `next_seq` is where to resume.
@@ -336,6 +354,14 @@ export type AuditExport = {
  */
 export type AuditExportEvent = AuditEventFields & {
     hash: string;
+};
+
+export type AuditExportRange = {
+    first_seq?: number | null;
+    head_hash?: string | null;
+    head_seq?: number | null;
+    last_seq?: number | null;
+    unsealed: number;
 };
 
 export type AuditPage = {
