@@ -203,7 +203,7 @@ pub(crate) fn signup_allowed(mode: &str, has_users: bool, email: &str, allowlist
     }
     match mode.trim().to_ascii_lowercase().as_str() {
         "" | "open" => true,
-        "invite" => models_user::folds_like_ascii(email.trim()) && authz::email_listed_in(allowlist, email),
+        "invite" => models_user::case_folds_cleanly(email.trim()) && authz::email_listed_in(allowlist, email),
         _ => false,
     }
 }
