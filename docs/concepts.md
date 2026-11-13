@@ -287,7 +287,11 @@ out unless `include_history` is true, which returns them marked
 
 The query is embedded once, alongside the database arms, and every arm has a
 4-second deadline: a slow or failing embedding provider drops only the
-semantic arms. Inputs are bounded (query at
+semantic arms. When something that should have run times out or fails, the
+result says so in `incomplete`, so an empty answer is not mistaken for "nothing
+exists". Without an embedding model, recall matches on words and links only (a
+complete search for that setup, with no `incomplete` notice), so a question
+phrased differently from the stored text may find nothing. Inputs are bounded (query at
 most 2000 characters, `limit` 1-100, `max_tokens` 1-100000, `time_range` two
 ISO 8601 dates with since <= until); anything else is a clear error.
 

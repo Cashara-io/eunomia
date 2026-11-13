@@ -6,7 +6,7 @@ expression: stable
   "answer": null,
   "mode": "recall_only",
   "note": null,
-  "instructions": "Eunomia has no model configured, so you answer. Use ONLY the numbered memories below, cite them by index like [1], and say so plainly if they don't contain enough to answer. The memory search did not finish (semantic search skipped: no embedding provider is configured, so only words and names were matched), so these memories may be incomplete: do not conclude that something is unknown or does not exist only because it is missing here.",
+  "instructions": "Eunomia has no model configured, so you answer. Use ONLY the numbered memories below, cite them by index like [1], and say so plainly if they don't contain enough to answer.",
   "question": "tea",
   "memories": [
     {
@@ -33,8 +33,5 @@ expression: stable
       "vault_name": "Personal",
       "index": "<unstable>"
     }
-  ],
-  "incomplete": [
-    "semantic search skipped: no embedding provider is configured, so only words and names were matched"
   ]
 }

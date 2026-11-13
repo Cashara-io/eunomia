@@ -107,13 +107,19 @@ async fn a_recall_that_could_not_finish_says_so() {
     let out = recall(&app, json!({"query": "hosting contract"})).await;
     assert_eq!(notices(&out), ["semantic search skipped: embedding the query timed out"], "{out}");
 
-    // no embedding provider: a non-empty query says semantic search did not run; an empty one does not
+    // no embedding provider is a supported setup (words and links), so its search is complete: no
+    // notice, whether something is found or not, and reflect's plain answer
     test_hooks::set(&[], None);
     let plain = TestApp::new().await;
     plain.tool("memory_write", json!({"subject_name": "Acme Corp", "subject_kind": "organisation", "text": "Acme renewed the hosting contract"})).await;
     let out = recall(&plain, json!({"query": "hosting contract"})).await;
     assert!(!out["results"].as_array().unwrap().is_empty());
-    assert!(notices(&out)[0].contains("no embedding provider"), "{out}");
+    assert!(out.get("incomplete").is_none(), "no provider is not incomplete: {out}");
+    let out = recall(&plain, json!({"query": "nothing like this anywhere"})).await;
+    assert!(out["results"].as_array().unwrap().is_empty() && out.get("incomplete").is_none(), "{out}");
+    let out = plain.tool("reflect", json!({"query": "nothing like this anywhere"})).await;
+    assert_eq!(out["answer"], "No relevant memories found.", "{out}");
+    assert!(out.get("incomplete").is_none(), "{out}");
     let out = recall(&plain, json!({"query": "", "time_range": ["2000-01-01", "2999-01-01"]})).await;
     assert!(out.get("incomplete").is_none(), "{out}");
 }

@@ -112,8 +112,9 @@ pub mod test_hooks {
 }
 
 /// What did not run to completion in one recall, in words for the caller (`incomplete`): an arm past
-/// its deadline or (optional arms) failed, the query's embedding timing out or failing, or no
-/// embedding provider for a non-empty query. Each notice once.
+/// its deadline or (optional arms) failed, or the query's embedding timing out or failing with a
+/// provider configured. Having no embedding provider is not one: that install's search is words
+/// and links, and complete. Each notice once.
 #[derive(Default)]
 struct Notes(std::sync::Mutex<Vec<String>>);
 
@@ -611,8 +612,8 @@ async fn query_vector(db: &OrgDb, settings: &Settings, owner: &RecordId, query: 
         if test_hooks::hangs("embedding") {
             std::future::pending::<()>().await;
         }
+        // no provider is a supported way to run (search on words and links), not an incomplete search
         if !embeddings::available(db, settings, owner).await {
-            notes.add("semantic search skipped: no embedding provider is configured, so only words and names were matched".into());
             return AppResult::Ok(None);
         }
         let spec = embeddings::spec_for(db, settings, owner).await?.tag();
@@ -1047,8 +1048,8 @@ async fn arm<T: Default>(name: &str, optional: bool, notes: &Notes, fut: impl st
 /// every vault are fused in one ranking (see the module docs), and scores are scaled so the best hit
 /// of the whole recall is 1. `time_range` is a filter (module docs). `history` also returns facts a
 /// later one superseded, marked `status: superseded` (for "what did we think before"); otherwise
-/// only current facts. `incomplete` names what did not run to completion (an arm past its deadline,
-/// no or a failed query embedding): with it set, an empty or short result does not mean nothing
+/// only current facts. `incomplete` names what was supposed to run and did not finish (an arm past
+/// its deadline, a failed or timed-out query embedding): with it set, an empty or short result does not mean nothing
 /// else exists.
 #[allow(clippy::too_many_arguments)]
 pub async fn recall(
