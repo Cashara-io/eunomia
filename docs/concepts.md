@@ -69,7 +69,8 @@ chat model checks them against the entity's earlier facts, in the background
 (a few seconds after the write). An earlier fact a
 newer one shows is no longer true ("no access to the repo", then "was granted
 access") is marked `status: "superseded"`: `recall` leaves it out,
-`entities_get` still shows it, and editing it makes it current again. Recall
+`entities_get` still shows it, and editing it (a typo fix) keeps it replaced;
+deleting the fact that replaced it makes it current again. Recall
 also favours recent memories, and every hit carries its date. Without a chat
 model nothing is marked, so check dates on time-sensitive facts.
 
@@ -82,22 +83,40 @@ This is the one definition; recall and supersession both follow it.
   in the future (a meeting next month). For recall and display a memory's date
   is `occurred_at`, else its last write (`updated_at`, else `created_at`): that
   is what `time_range`, recency and every hit's `occurred_at` use.
-- *When we were last told* (`asserted_at`): for an extracted fact, its record's
-  date but never later than the moment the fact was written (a source cannot
-  tell us something after we read it); for a fact a person or agent wrote, the
-  write time, whatever `occurred_at` they passed; for an edited fact, the edit
-  time. A fact without one (written before it existed) falls back to its last
-  write. Only this date decides which fact is current: the fact we were told
-  most recently replaces the earlier one, never the other way round, and two
-  facts told at the same moment go to the later write. A replaced fact keeps
-  the id of the fact that replaced it (`superseded_by`).
+- *When we were last told it* (`asserted_at`): only a new claim is a telling.
+  - An extracted fact: its record's date, never later than the moment the fact
+    was written (a source cannot tell us something after we read it). A record
+    that is synced again does not tell its unchanged statements again: the same
+    text (ignoring case, spacing and a closing full stop) on the same entity
+    from the same record is the same telling, so no second row is written and
+    its date does not move. Statements new in the changed record are told at
+    its new date. (Facts that disappear from a record are not retracted yet.)
+  - A fact a person or agent wrote: the write time, whatever `occurred_at` they
+    passed, also when it cites a source record.
+  - An edit that changes the text of a current fact: the edit time (the person
+    is telling it again), and the fact is checked again. An edit that changes
+    only the type tells nothing; an edit of a replaced fact changes its text
+    only (it stays replaced).
+  - A fact written before this existed falls back to its last write, except a
+    fact drawn from a record, which is dated from that record (by a background
+    job, or on the spot when a check compares it first).
+
+  Only `asserted_at` decides which fact is current: the fact we were told most
+  recently replaces the earlier one, never the other way round, and two facts
+  told at the same moment go to the later write. Two facts from the same record
+  are never decided between. A check marks a fact only if neither fact changed
+  while it was deciding. A replaced fact keeps the id of the fact that replaced
+  it (`superseded_by`); deleting that fact makes it current again (only the
+  direct one: a fact further down a chain stays replaced), and it is checked
+  again.
 
 So an old email imported today cannot replace a newer fact, a correction made
 today wins even when it says "true since March", a fact from next month's
-calendar event does not outrank today's correction, and an edit counts as
-being told again (it is re-checked). One limit: a fact written directly about
-the past ("worked at Acme in 2019") is told today, so it relies on the model,
-which sees both dates, not to read history as a correction.
+calendar event does not outrank today's correction (nor does it after the event
+is synced again), and an edit counts as being told again. Limits: a fact
+written directly about the past ("worked at Acme in 2019"), or an agent
+restating an old fact, is told today, so only the model, which sees both dates,
+keeps it from replacing a current fact.
 
 **Finding and de-duplicating entities.** `entities_search` matches names and
 aliases, then the text of each entity's facts, so a handle that only appears

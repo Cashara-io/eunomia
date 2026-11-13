@@ -84,11 +84,21 @@ async fn write_kind(app: &TestApp, subject: &str, kind: &str, text: &str, occurr
 /// A fact extracted from a synced record dated `date` (`section`: "people" or "organisations"), as the
 /// extract job writes it. Returns `(subject, memory)`.
 async fn extract_fact(app: &TestApp, answers: &Answers, section: &str, subject: &str, text: &str, date: &str) -> (RecordId, RecordId) {
-    *answers.extraction.lock().unwrap() = json!({ section: [{"name": subject, "facts": [text]}] });
+    // one record per (text, date): the same pair is the same record synced again
+    let key = format!("{text}|{date}").bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
+    extract_record(app, answers, &format!("notes:{key:x}"), date, section, subject, &[text]).await;
+    fact_by_text(app, text).await
+}
+
+/// Runs extraction of one synced record (`id`, dated `date`) whose model answer gives `facts` about
+/// `subject`, as the extract job does on every sync of that record (or a retry of its job).
+#[allow(clippy::too_many_arguments)]
+async fn extract_record(app: &TestApp, answers: &Answers, id: &str, date: &str, section: &str, subject: &str, facts: &[&str]) {
+    *answers.extraction.lock().unwrap() = json!({ section: [{"name": subject, "facts": facts}] });
     let record = extract::ExtractRecord {
-        id: format!("notes:{}", text.len() * 7919 + date.len()),
+        id: id.to_string(),
         title: "Note".into(),
-        body_text: format!("{text}. This note is long enough to be worth extracting facts from."),
+        body_text: format!("{}. This note is long enough to be worth extracting facts from.", facts.join(". ")),
         occurred_at: Some(date.to_string()),
         vault: None,
         source: "notes".into(),
@@ -96,6 +106,10 @@ async fn extract_fact(app: &TestApp, answers: &Answers, section: &str, subject: 
         owner_name: None,
     };
     common::sys(extract::extract_entities(&app.db().await, &app.state.settings, &app.user.id, &record)).await.unwrap();
+}
+
+/// `(subject, memory)` of the one fact with this text (fails if there are none or several).
+async fn fact_by_text(app: &TestApp, text: &str) -> (RecordId, RecordId) {
     let rows: Vec<Value> = app
         .db()
         .await
@@ -108,6 +122,35 @@ async fn extract_fact(app: &TestApp, answers: &Answers, section: &str, subject: 
         .unwrap();
     assert_eq!(rows.len(), 1, "{text}: {rows:?}");
     (rid(&rows[0]["subject"]), rid(&rows[0]["id"]))
+}
+
+/// The keys of the supersede jobs queued so far.
+async fn supersede_jobs(app: &TestApp) -> Vec<String> {
+    app.control().test_raw().query("SELECT VALUE idempotency_key FROM job WHERE kind = 'supersede'").await.unwrap().take(0).unwrap()
+}
+
+/// Rows with this text.
+async fn count_text(app: &TestApp, text: &str) -> usize {
+    let rows: Vec<Value> = app.db().await.test_raw().query("SELECT id FROM memory WHERE text = $t").bind(("t", text.to_string())).await.unwrap().take(0).unwrap();
+    rows.len()
+}
+
+/// A synced record written straight to the cache, for a fact planted in its pre-0046 shape.
+async fn plant_record(app: &TestApp, key: &str, date: &str) -> String {
+    let rid = format!("cache_record:`{}:{key}`", eunomia_backend::rid::key_string(app.user.id.key()).unwrap());
+    app.db()
+        .await
+        .test_raw()
+        .query(format!(
+            "CREATE {rid} SET owner = {}, source = 'gmail', type = 'gmail.message', external_id = '{key}', title = 't', body_text = 'b', \
+             occurred_at = d'{date}', url = '', payload = {{}}, content_hash = 'fx', ingested_at = time::now(), updated_at = time::now(), deleted = false",
+            app.user.id.to_string()
+        ))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    rid
 }
 
 /// A memory's dates and replacement link, as strings.
@@ -278,6 +321,15 @@ async fn a_future_dated_fact_does_not_beat_a_correction_made_today() {
     check(&app, &acme, std::slice::from_ref(&correction)).await;
     assert!(!superseded(&app, &correction).await, "today's correction is not replaced by next month's plan");
     assert!(superseded(&app, &planned).await, "the correction replaces the plan");
+    let prompt = answers.prompts.lock().unwrap().last().cloned().unwrap();
+    assert!(prompt.contains("Ada owns the Acme account (planned for "), "a plan is not worded as done: {prompt}");
+    // the organiser adds an attendee: the event is re-synced and re-extracted with the same statement. It
+    // is the same telling: no second row, the plan stays replaced and is not told again now
+    let before = dates(&app, &planned).await;
+    let (_, again) = extract_fact(&app, &answers, "organisations", "Acme Corp", "Ada owns the Acme account", &next_month).await;
+    assert_eq!(again, planned, "the same row, not a new live one");
+    assert_eq!(dates(&app, &planned).await, before);
+    assert!(superseded(&app, &planned).await && !superseded(&app, &correction).await);
 }
 
 /// (4) A fact edited in 2026 is not replaced by a 2024 email imported later: an edit is being told again,
@@ -359,4 +411,178 @@ async fn a_history_extracted_in_any_order_keeps_the_latest_fact() {
         }
         assert_eq!(live, ["is a staff engineer"], "{name}: only the latest title stays live");
     }
+}
+
+// ---- re-syncs: the same claim from the same record is the same telling -----------------------
+
+#[tokio::test]
+async fn a_resynced_record_does_not_tell_its_facts_again() {
+    let answers = Answers::default();
+    let app = app(answers.clone()).await;
+    extract_record(&app, &answers, "notes:wiki", "2025-02-01T09:00:00+00:00", "people", "Ada Lovelace", &["Ada leads the platform team"]).await;
+    let (_, lead) = fact_by_text(&app, "Ada leads the platform team").await;
+    let told = dates(&app, &lead).await;
+    // unchanged re-sync: nothing new, the fact keeps its row and when it was told
+    extract_record(&app, &answers, "notes:wiki", "2025-02-01T09:00:00+00:00", "people", "Ada Lovelace", &["Ada leads the platform team"]).await;
+    assert_eq!(count_text(&app, "Ada leads the platform team").await, 1);
+    assert_eq!(dates(&app, &lead).await, told);
+    // the record is edited later and a statement is added (and the old one restated with other spacing and
+    // a full stop): only the new statement is new, told at the record's new date
+    extract_record(&app, &answers, "notes:wiki", "2025-06-01T09:00:00+00:00", "people", "Ada Lovelace", &["ada leads the  platform team.", "Ada hired two engineers"])
+        .await;
+    assert_eq!(count_text(&app, "Ada leads the platform team").await + count_text(&app, "ada leads the  platform team.").await, 1);
+    assert_eq!(dates(&app, &lead).await, told, "the unchanged statement is not told again");
+    let (_, hired) = fact_by_text(&app, "Ada hired two engineers").await;
+    assert!(dates(&app, &hired).await["asserted"].as_str().unwrap().starts_with("2025-06-01"));
+    // the same statement from another record is another telling
+    extract_record(&app, &answers, "notes:other", "2025-07-01T09:00:00+00:00", "people", "Ada Lovelace", &["Ada leads the platform team"]).await;
+    assert_eq!(count_text(&app, "Ada leads the platform team").await, 2);
+}
+
+/// A job that wrote some facts and failed is retried: it writes what was missing and duplicates nothing.
+#[tokio::test]
+async fn a_retried_extraction_job_does_not_duplicate_facts() {
+    let answers = Answers::default();
+    let app = app(answers.clone()).await;
+    // the first attempt got as far as one fact
+    extract_record(&app, &answers, "notes:mail", "2025-03-01T09:00:00+00:00", "people", "Grace Hopper", &["Grace runs the compiler group"]).await;
+    // the retry writes both
+    extract_record(&app, &answers, "notes:mail", "2025-03-01T09:00:00+00:00", "people", "Grace Hopper", &["Grace runs the compiler group", "Grace prefers email"]).await;
+    assert_eq!(count_text(&app, "Grace runs the compiler group").await, 1);
+    assert_eq!(count_text(&app, "Grace prefers email").await, 1);
+}
+
+// ---- facts written before tenant 0046 are placed by their record, not their extraction -------
+
+#[tokio::test]
+async fn an_undated_old_extracted_fact_is_dated_by_its_record_when_compared() {
+    let answers = Answers::default();
+    *answers.pairs.lock().unwrap() = both_ways();
+    let app = app(answers.clone()).await;
+    let (ada, _) = write(&app, "Ada Lovelace", "Ada likes tea", None).await;
+    // extracted last month from a 2019 email, before the upgrade: no dates; the backfill has not reached it
+    let email = plant_record(&app, "old", "2019-05-01T09:00:00Z").await;
+    let old: Vec<String> = app
+        .db()
+        .await
+        .test_raw()
+        .query(format!(
+            "CREATE memory SET owner = {}, vault = (SELECT VALUE vault FROM ONLY {ada}), subject = {ada}, text = 'Ada works at Acme', type = 'world', \
+             source = {email}, created_at = time::now() - 30d, updated_at = time::now() - 30d RETURN VALUE <string> id",
+            app.user.id.to_string(),
+            ada = ada.to_string()
+        ))
+        .await
+        .unwrap()
+        .take(0)
+        .unwrap();
+    let old = eunomia_backend::rid::parse(&old[0]).unwrap();
+    let (_, left) = extract_fact(&app, &answers, "people", "Ada Lovelace", "Ada left Acme", "2026-09-15T09:00:00+00:00").await;
+    check(&app, &ada, std::slice::from_ref(&left)).await;
+    assert!(!superseded(&app, &left).await, "a 2026 message is not replaced by a 2019 email read last month");
+    assert!(superseded(&app, &old).await);
+    let d = dates(&app, &old).await;
+    assert!(d["asserted"].as_str().unwrap().starts_with("2019-05-01"), "dated from its record on the spot, and kept: {d}");
+    let ledger: Vec<Value> = app.db().await.test_raw().query("SELECT id FROM fact_dates_redated").await.unwrap().take(0).unwrap();
+    assert_eq!(ledger.len(), 1, "recorded like a backfill re-date");
+}
+
+// ---- edits: only a changed claim on a current fact is a telling -------------------------------
+
+#[tokio::test]
+async fn editing_a_replaced_fact_or_only_its_type_tells_nothing() {
+    let answers = Answers::default();
+    *answers.pairs.lock().unwrap() = both_ways();
+    let app = app(answers).await;
+    let (ada, vp) = write(&app, "Ada Lovelace", "Ada is VP of Engineering", None).await;
+    let (_, cto) = write(&app, "Ada Lovelace", "Ada is the CTO", None).await;
+    check(&app, &ada, std::slice::from_ref(&cto)).await;
+    assert!(superseded(&app, &vp).await);
+    let before = dates(&app, &vp).await;
+    // a typo fix in the replaced fact: it stays replaced, by the same fact, told when it was
+    let out = app.tool("memory_update", json!({"memory_id": vp.to_string(), "text": "Ada was VP of Engineering"})).await;
+    assert!(out.get("error").is_none(), "{out}");
+    assert!(superseded(&app, &vp).await, "still replaced");
+    assert_eq!(dates(&app, &vp).await, before, "same superseded_by, same asserted_at");
+    // a type-only edit of the current fact: not told again
+    let cto_before = dates(&app, &cto).await;
+    let out = app.tool("memory_update", json!({"memory_id": cto.to_string(), "type": "experience"})).await;
+    assert!(out.get("error").is_none(), "{out}");
+    assert_eq!(dates(&app, &cto).await, cto_before);
+    let (vp_key, cto_key) = (vp.to_string(), cto.to_string());
+    let jobs = supersede_jobs(&app).await;
+    assert!(!jobs.iter().any(|k| (k.contains(vp_key.as_str()) || k.contains(cto_key.as_str())) && k.contains(":v")), "no edit queued a check: {jobs:?}");
+}
+
+// ---- deleting the replacing fact ------------------------------------------------------------
+
+#[tokio::test]
+async fn deleting_the_replacing_fact_restores_only_the_fact_it_replaced() {
+    let answers = Answers::default();
+    *answers.pairs.lock().unwrap() = both_ways();
+    let app = app(answers).await;
+    let (ada, a) = write(&app, "Ada Lovelace", "Ada works at Acme", None).await;
+    let (_, b) = write(&app, "Ada Lovelace", "Ada works at Globex", None).await;
+    check(&app, &ada, std::slice::from_ref(&b)).await;
+    let (_, c) = write(&app, "Ada Lovelace", "Ada works at Initech", None).await;
+    check(&app, &ada, std::slice::from_ref(&c)).await;
+    assert!(superseded(&app, &a).await && superseded(&app, &b).await, "a chain: a by b, b by c");
+    assert_eq!(dates(&app, &b).await["by"], json!(c.to_string()));
+    // the wrong correction is deleted: the fact it replaced is current again; the one further down stays
+    let out = app.tool("memory_delete", json!({"memory_id": c.to_string()})).await;
+    assert_eq!(out["deleted"], json!(true), "{out}");
+    assert!(!superseded(&app, &b).await, "b is current again");
+    assert_eq!(dates(&app, &b).await["by"], json!("NONE"));
+    assert!(superseded(&app, &a).await, "a stays replaced by b");
+    let b_key = b.to_string();
+    assert!(supersede_jobs(&app).await.iter().any(|k| k.contains(b_key.as_str()) && k.contains(":restored:")), "b is checked again");
+}
+
+// ---- two facts from one record ----------------------------------------------------------------
+
+#[tokio::test]
+async fn two_facts_from_one_record_never_replace_each_other() {
+    let answers = Answers::default();
+    *answers.pairs.lock().unwrap() = both_ways();
+    let app = app(answers.clone()).await;
+    extract_record(&app, &answers, "notes:promo", "2025-05-01T09:00:00+00:00", "people", "Ada Lovelace", &["Ada was VP", "Ada is now CTO"]).await;
+    let (ada, vp) = fact_by_text(&app, "Ada was VP").await;
+    let (_, cto) = fact_by_text(&app, "Ada is now CTO").await;
+    check(&app, &ada, std::slice::from_ref(&cto)).await;
+    check(&app, &ada, std::slice::from_ref(&vp)).await;
+    assert!(!superseded(&app, &vp).await && !superseded(&app, &cto).await, "one record told both at once");
+}
+
+// ---- vault copy keeps the dates and the replacements --------------------------------------
+
+#[tokio::test]
+async fn a_vault_copy_keeps_dates_status_and_who_replaced_whom() {
+    let answers = Answers::default();
+    *answers.pairs.lock().unwrap() = both_ways();
+    let app = app(answers).await;
+    let (ada, old) = write(&app, "Ada Lovelace", "Ada works at Acme", Some("2024-02-01")).await;
+    let (_, new) = write(&app, "Ada Lovelace", "Ada works at Globex", Some("2025-03-01")).await;
+    check(&app, &ada, std::slice::from_ref(&new)).await;
+    let vault: Vec<String> =
+        app.db().await.test_raw().query(format!("SELECT VALUE <string> vault FROM ONLY {}", ada.to_string())).await.unwrap().take(0).unwrap();
+    let out = app.tool("vault_clone", json!({"vault_id": vault[0], "name": "Ada Copy"})).await;
+    assert!(out.get("error").is_none(), "{out}");
+    let copy = out["id"].as_str().or(out["vault"]["id"].as_str()).unwrap_or_else(|| panic!("{out}")).to_string();
+    let rows: Vec<Value> = app
+        .db()
+        .await
+        .test_raw()
+        .query(format!(
+            "SELECT text, status, <string> occurred_at AS occurred, <string> asserted_at AS asserted, superseded_by.text AS by FROM memory WHERE vault = {copy} AND type = 'world'"
+        ))
+        .await
+        .unwrap()
+        .take(0)
+        .unwrap();
+    let get = |t: &str| rows.iter().find(|r| r["text"] == t).cloned().unwrap_or_else(|| panic!("{t}: {rows:?}"));
+    let (o, n) = (get("Ada works at Acme"), get("Ada works at Globex"));
+    assert_eq!(o["status"], json!("superseded"), "{o}");
+    assert_eq!(o["by"], json!("Ada works at Globex"), "points at the copy of the fact that replaced it: {o}");
+    assert!(o["occurred"].as_str().unwrap().starts_with("2024-02-01") && n["occurred"].as_str().unwrap().starts_with("2025-03-01"));
+    assert_eq!(o["asserted"], dates(&app, &old).await["asserted"], "told when the original was");
 }

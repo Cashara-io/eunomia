@@ -2,8 +2,8 @@
 //! record's date on (seeded here with raw SQL in their old shape) get their record's date as when they
 //! happened and when we were told them, never later than their own write; facts a person wrote or
 //! edited, facts their writer dated, observations and facts of undated records are untouched; the walk
-//! resumes by record-id range across batches; replacements that may have gone the wrong way are flagged
-//! in both directions, not changed; undo restores both dates except where a person changed one since.
+//! resumes by record-id range across batches; undo restores both dates except where a person changed one
+//! since.
 
 mod common;
 
@@ -85,7 +85,8 @@ async fn facts_from_dated_records_are_dated_once_reversibly_and_nothing_else_is_
     let person_wrote = w["memory"]["id"].as_str().unwrap().to_string();
     let dated = plant_record(&app, "m1", "gmail", Some("2023-04-01T09:30:00Z"), "{}").await;
     let undated = plant_record(&app, "m2", "gmail", None, "{}").await;
-    // a Notion page edited after the facts were drawn from it: one keeps its creation date, one does not
+    // Notion pages edited after the facts were drawn from them: a fact is dated by its own write, not by the
+    // page's later edit nor by its creation date (which can be years too early)
     let edited_page = plant_record(&app, "p1", "notion", Some("2026-11-10T00:00:00Z"), "{ created_time: '2024-01-01T00:00:00.000Z' }").await;
     let edited_page_bare = plant_record(&app, "p2", "notion", Some("2026-11-10T00:00:00Z"), "{}").await;
 
@@ -100,42 +101,28 @@ async fn facts_from_dated_records_are_dated_once_reversibly_and_nothing_else_is_
     let from_page = plant_fact(&app, &subject, &vault, "Ada wrote the pilot plan", Some(&edited_page), at_2025).await;
     let from_bare = plant_fact(&app, &subject, &vault, "Ada reviewed the plan", Some(&edited_page_bare), at_2025).await;
 
-    // wrong-order fixtures, one subject each. Grace: a re-dated fact is superseded while a fact told in 2021
-    // is live (it may have been replaced by an older fact). Hopper: a re-dated fact is live while a fact
-    // told in 2025 is superseded (it may have replaced a newer fact).
-    let (grace, _) = entity(&app, "Grace Brewster").await;
-    plant_fact(&app, &grace, &vault, "Grace is a lieutenant", None, ", asserted_at = d'2021-01-01T00:00:00Z'").await;
-    let replaced = plant_fact(&app, &grace, &vault, "Grace is a commander", Some(&dated), ", status = 'superseded'").await;
-    let (hopper, _) = entity(&app, "Hopper Brewster").await;
-    let replacer = plant_fact(&app, &hopper, &vault, "Hopper is a student", Some(&dated), "").await;
-    plant_fact(&app, &hopper, &vault, "Hopper is a professor", None, ", asserted_at = d'2025-01-01T00:00:00Z', status = 'superseded'").await;
     unmark(&app).await;
 
     let org = app.state.org(&app.user.org).await.unwrap();
     assert!(!fact_dates::done(&org).await.unwrap());
     let p = common::sys(fact_dates::run(&org, Some(1))).await.unwrap();
-    assert!(p.done_at.is_none() && p.cursor.is_some() && p.stage == "redate", "stopped after one batch, cursor saved: {p:?}");
+    assert!(p.done_at.is_none() && p.cursor.is_some(), "stopped after one batch, cursor saved: {p:?}");
     let (o, a) = dates_of(&app, &extracted).await;
     assert!(o.as_deref().is_some_and(|d| d.starts_with("2023-04-01T09:30:00")) && a == o, "both dates from the record: {o:?} {a:?}");
 
     // written after the walk started (an agent citing the record, no date): left alone, like any new write
     let later = plant_fact(&app, &subject, &vault, "Ada sent the contract", Some(&dated), "").await;
     let p = common::sys(fact_dates::run(&org, None)).await.unwrap();
-    assert!(p.done_at.is_some() && p.stage == "done", "{p:?}");
-    assert_eq!((p.changed, p.suspect_replaced, p.suspect_replacer), (6, 1, 1), "{p:?}");
+    assert!(p.done_at.is_some(), "{p:?}");
+    assert_eq!(p.changed, 4, "{p:?}");
     assert!(fact_dates::done(&org).await.unwrap());
-    for id in [&cited, &replaced, &replacer] {
+    for id in [&cited] {
         assert!(date_of(&app, id).await.is_some_and(|d| d.starts_with("2023-04-01")), "{id}");
     }
-    // never later than the fact's write: the page's creation date, else the write itself
+    // never later than the fact's write, and never the page's creation date: the write itself
     let both = |d: &str| (Some(d.to_string()), Some(d.to_string()));
-    assert_eq!(dates_of(&app, &from_page).await, both("2024-01-01T00:00:00Z"));
+    assert_eq!(dates_of(&app, &from_page).await, both("2025-02-01T00:00:00Z"));
     assert_eq!(dates_of(&app, &from_bare).await, both("2025-02-01T00:00:00Z"));
-    // flagged in the ledger, rows left as they are
-    let flags = sql(&app, "SELECT VALUE [<string> memory, suspect] FROM fact_dates_redated WHERE suspect != NONE").await;
-    assert_eq!(flags.len(), 2, "{flags:?}");
-    assert!(flags.contains(&json!([replaced.clone(), "replaced"])) && flags.contains(&json!([replacer.clone(), "replacer"])), "{flags:?}");
-    assert_eq!(sql(&app, &format!("SELECT VALUE status FROM {replaced}")).await, vec![json!("superseded")], "flagged, not changed");
     assert!(date_of(&app, &writer_dated).await.is_some_and(|d| d.starts_with("2020-02-02")), "a writer's date stays");
     for (id, why) in [
         (&person_wrote, "a fact a person wrote"),
@@ -148,7 +135,7 @@ async fn facts_from_dated_records_are_dated_once_reversibly_and_nothing_else_is_
         assert_eq!(sql(&app, &format!("SELECT VALUE id FROM fact_dates_redated WHERE memory = {id}")).await, Vec::<Value>::new(), "{why}");
     }
     // one ledger row per re-dated fact, with the previous dates (none) and the ones set
-    let mut want = vec![extracted.clone(), cited.clone(), replaced.clone(), replacer.clone(), from_page.clone(), from_bare.clone()];
+    let mut want = vec![extracted.clone(), cited.clone(), from_page.clone(), from_bare.clone()];
     want.sort();
     assert_eq!(ledger(&app).await, want);
     let row = sql(&app, &format!("SELECT previous, previous_asserted, <string> occurred_at AS at, version FROM fact_dates_redated WHERE memory = {extracted}")).await;
@@ -162,17 +149,17 @@ async fn facts_from_dated_records_are_dated_once_reversibly_and_nothing_else_is_
     // a finished backfill runs no more
     sql(&app, &format!("UPDATE {later} SET created_at = d'2020-01-01T00:00:00Z', updated_at = d'2020-01-01T00:00:00Z'")).await;
     let p = common::sys(fact_dates::run(&org, None)).await.unwrap();
-    assert_eq!(p.changed, 6);
+    assert_eq!(p.changed, 4);
     assert_eq!(date_of(&app, &later).await, None);
 
     // a person re-dates one fact by hand; undo restores the rest and leaves that one
     sql(&app, &format!("UPDATE {cited} SET occurred_at = d'2023-05-05T00:00:00Z'")).await;
-    assert_eq!(common::sys(fact_dates::undo(&org)).await.unwrap(), 5);
+    assert_eq!(common::sys(fact_dates::undo(&org)).await.unwrap(), 3);
     assert_eq!(dates_of(&app, &extracted).await, (None, None), "both dates restored");
     assert_eq!(dates_of(&app, &from_page).await, (None, None));
     assert!(date_of(&app, &cited).await.is_some_and(|d| d.starts_with("2023-05-05")), "a later change by a person stands");
     assert_eq!(ledger(&app).await, want, "ledger rows stay, marked undone");
-    assert_eq!(sql(&app, "SELECT VALUE count() FROM fact_dates_redated WHERE undone_at != NONE GROUP ALL").await, vec![json!(6)]);
+    assert_eq!(sql(&app, "SELECT VALUE count() FROM fact_dates_redated WHERE undone_at != NONE GROUP ALL").await, vec![json!(4)]);
     assert_eq!(common::sys(fact_dates::undo(&org)).await.unwrap(), 0, "undo is idempotent");
 
     // a later run (a new marker version, here: the marker deleted) never dates a fact in the ledger again;
@@ -209,4 +196,7 @@ async fn the_walk_resumes_by_id_range_across_batches() {
     assert_eq!(done.changed, 450, "{done:?}");
     let n = sql(&app, "SELECT VALUE count() FROM memory WHERE string::starts_with(text, 'fact ') AND occurred_at != NONE GROUP ALL").await;
     assert_eq!(n, vec![json!(450)]);
+    // undo walks the ledger by range too: three batches, each row once
+    let undone = tokio::time::timeout(std::time::Duration::from_secs(120), common::sys(fact_dates::undo(&org))).await.expect("undo finishes");
+    assert_eq!(undone.unwrap(), 450);
 }

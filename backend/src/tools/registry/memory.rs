@@ -407,7 +407,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(v) => v,
                     Err(e) => return Ok(e),
                 };
-                let result = entities_tools::memory_delete(&state.db, owner, &rid).await;
+                let result = entities_tools::memory_delete(state, owner, &rid).await;
                 Ok(to_tool_value(result.map(|deleted| json!({ "deleted": deleted }))))
             })
         }),

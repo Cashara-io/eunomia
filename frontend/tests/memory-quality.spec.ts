@@ -82,10 +82,14 @@ test.describe.serial("memory quality", () => {
     const entity = await ok("entities_get", { id: fresh.entity.id });
     expect(entity.memory.find((m: Json) => m.id === old.memory.id).status).toBe("superseded");
 
-    // Editing it makes it current again.
+    // Editing a replaced fact (a typo fix) keeps it replaced: bringing it back is an explicit action.
     await ok("memory_update", { memory_id: old.memory.id, text: "Riley had no access to the build server until October" });
     const edited = await ok("entities_get", { id: fresh.entity.id });
-    expect(edited.memory.find((m: Json) => m.id === old.memory.id).status ?? null).toBeNull();
+    expect(edited.memory.find((m: Json) => m.id === old.memory.id).status).toBe("superseded");
+    // Deleting the fact that replaced it makes it current again.
+    await ok("memory_delete", { memory_id: fresh.memory.id });
+    const restored = await ok("entities_get", { id: old.entity.id });
+    expect(restored.memory.find((m: Json) => m.id === old.memory.id).status ?? null).toBeNull();
   });
 
   test("a decorated name resolves to the existing entity, adding aliases", async () => {

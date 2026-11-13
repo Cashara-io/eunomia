@@ -156,8 +156,9 @@ fn embed_soon(state: &OrgState, owner: &RecordId) {
 /// Memories embedded right after a write (the new one and any backlog alongside it).
 const EMBED_SOON_BATCH: usize = 16;
 
-/// Edits a fact. An edit is being told the fact again (its `asserted_at` moves to now), so a raw fact is
-/// checked again, like a new write, against the subject's other facts.
+/// Edits a fact. Changing the text of a current raw fact is being told it again (its `asserted_at` moves
+/// to now), so it is checked again, like a new write, against the subject's other facts. A type-only
+/// edit, or an edit of a replaced fact (which stays replaced), tells nothing and queues nothing.
 pub async fn memory_update(
     state: &OrgState,
     owner: &RecordId,
@@ -165,21 +166,36 @@ pub async fn memory_update(
     text: Option<&str>,
     new_type: Option<&str>,
 ) -> AppResult<Option<service::MemoryOut>> {
-    let out = service::update_memory(&state.db, owner, memory_id, text, new_type).await?;
-    if let Some(m) = &out {
-        recheck_after_edit(state, owner, m).await;
+    let out = service::update_memory_told(&state.db, owner, memory_id, text, new_type).await?;
+    if let Some((m, true)) = &out
+        && let (Ok(subject), Ok(id)) = (crate::rid::parse(&m.subject), crate::rid::parse(&m.id))
+    {
+        recheck(state, owner, &subject, &id, Some(m.version)).await;
     }
-    Ok(out)
+    Ok(out.map(|(m, _)| m))
 }
 
-/// Queues the supersede check for an edited raw fact (the MCP tool and the web route both edit through
-/// here or call it). Best effort, like the check after a write.
-pub async fn recheck_after_edit(state: &OrgState, owner: &RecordId, memory: &service::MemoryOut) {
-    if memory.mem_type == "observation" || !super::supersede::enabled(&state.db, &state.settings, owner).await {
+/// Deletes a memory. The facts it had replaced are current again, and each gets a supersede check.
+pub async fn memory_delete(state: &OrgState, owner: &RecordId, memory_id: &RecordId) -> AppResult<bool> {
+    let Some(restored) = service::delete_memory_restoring(&state.db, owner, memory_id).await? else { return Ok(false) };
+    for (subject, id) in &restored {
+        recheck(state, owner, subject, id, None).await;
+    }
+    Ok(true)
+}
+
+/// Queues a supersede check for one raw fact: after an edit that told it again (keyed by its new
+/// `version`, so it is not taken for the check its first write queued), or after it became current
+/// again. Best effort, like the check after a write.
+async fn recheck(state: &OrgState, owner: &RecordId, subject: &RecordId, id: &RecordId, version: Option<i64>) {
+    if !super::supersede::enabled(&state.db, &state.settings, owner).await {
         return;
     }
-    let (Ok(subject), Ok(id)) = (crate::rid::parse(&memory.subject), crate::rid::parse(&memory.id)) else { return };
-    crate::jobs::enqueue_lossy(&state.control, crate::jobs::handlers::supersede_edit_job(state.db.org(), owner, &subject, &id, memory.version)).await;
+    let job = match version {
+        Some(v) => crate::jobs::handlers::supersede_edit_job(state.db.org(), owner, subject, id, v),
+        None => crate::jobs::handlers::supersede_restored_job(state.db.org(), owner, subject, id),
+    };
+    crate::jobs::enqueue_lossy(&state.control, job).await;
 }
 
 pub async fn entity_update(
@@ -191,10 +207,6 @@ pub async fn entity_update(
     summary: Option<&str>,
 ) -> AppResult<Option<service::EntityOut>> {
     service::update_entity(db, owner, entity_id, name, aliases, summary).await
-}
-
-pub async fn memory_delete(db: &OrgDb, owner: &RecordId, memory_id: &RecordId) -> AppResult<bool> {
-    service::delete_memory(db, owner, memory_id).await
 }
 
 pub async fn entity_delete(db: &OrgDb, owner: &RecordId, entity_id: &RecordId) -> AppResult<bool> {

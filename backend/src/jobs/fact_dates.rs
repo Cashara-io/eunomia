@@ -3,7 +3,7 @@
 //! date but never later than the fact's write; docs/concepts.md, "A fact's two dates"). Facts extracted
 //! before that shipped have neither, so supersession placed them at the time their job ran. This walks
 //! an org's memories by record-id range, a batch at a time, and dates each such fact by its record.
-//! Progress lives in `fact_dates_backfill:v1`: a crashed run resumes at its stage and cursor, and a
+//! Progress lives in `fact_dates_backfill:v1`: a crashed run resumes at its cursor, and a
 //! finished one is never repeated.
 //!
 //! A fact is re-dated only when all of these hold:
@@ -15,35 +15,30 @@
 //!
 //! The dates it sets are never later than the fact's own write, except a future `occurred_at` from a
 //! record dated by a fixed moment (a calendar event's start): that is when it happens, as extraction
-//! sets it. When the record's date is after the fact's write, the record has been edited since (Notion,
-//! GitHub, Linear, Todoist and Ed date a record by its last edit): both dates then come from the
-//! record's creation date where the connector keeps one, else the fact's write. Otherwise both are the
-//! record's date. See [`dates_for`].
+//! sets it. When the record's stored date is after the fact's write, the record changed since (Notion,
+//! GitHub, Linear, Todoist and Ed date a record by its last edit): the fact is then dated by its own
+//! write, the latest moment the record can have told it and no worse than before this release. (A
+//! record's creation date could be years too early.) Otherwise both dates are the record's date. See
+//! [`dates_for`].
+//!
+//! A supersede check dates the facts it compares the same way, on the spot ([`date_now`]), when the walk
+//! has not reached them yet: until then such a fact would be placed at its extraction.
 //!
 //! Facts with no source record (written by a person or an agent, copied from a peer, a relation's
-//! reason) are never touched. A `memory_write` that cited a source record but gave no date is re-dated
-//! like an extracted fact: a fact citing a record is about that record.
+//! reason) are never touched. A `memory_write` that cited a source record but gave no `occurred_at` is
+//! dated like an extracted fact: written before this release, it cannot be told apart from one (see
+//! docs/concepts.md and the PR's known limits).
 //!
 //! Reversible and auditable: each re-date is a compare-and-set (still undated, unedited, same source)
 //! written in one transaction with a `fact_dates_redated` ledger row (keyed by the memory) holding the
-//! previous dates and the ones set. A fact with a ledger row is never re-dated by any later run, so a
-//! date a person changed afterwards stands. [`undo`] restores the previous dates where the backfill's
-//! are still in place. Each re-date also gets an `updated` row in its vault's change log, for clients
-//! following the vault on this instance; peers do not receive dates (their content has no
-//! `occurred_at`).
+//! previous dates and the ones set. A fact with a ledger row is never re-dated again, so a date a person
+//! changed afterwards stands. [`undo`] restores the previous dates where the backfill's are still in
+//! place. Each re-date also gets an `updated` row in its vault's change log, for clients following the
+//! vault on this instance; peers do not receive dates (their content has no `occurred_at`).
 //!
-//! Supersession is not re-run and no replacement is undone. Once every fact is re-dated, a second pass
-//! over the ledger flags the replacements that may have gone the wrong way under the old job-run dates,
-//! in both directions, and leaves the rows as they are:
-//! - `replaced`: the re-dated fact is superseded while a live raw fact of its subject is now told before
-//!   it (that fact may be what replaced it);
-//! - `replacer`: the re-dated fact is live while a superseded raw fact of its subject is now told after
-//!   it (this fact may be what replaced that one).
-//!
-//! Each flag means "a pair on this subject is now in the wrong order", not "this replacement was wrong":
-//! which fact replaced which was not recorded before this release, so the pair may be unrelated facts.
-//! A wrong replacement between a re-dated fact and a fact that is still live is always flagged; one
-//! whose replacing fact was itself replaced later is not (nothing live is left to compare with).
+//! Supersession is not re-run and no earlier replacement is undone or counted here: going forward a
+//! replaced fact records what replaced it (`superseded_by`), and re-evaluating old replacements is the
+//! undo ticket's job.
 
 use serde::Deserialize;
 use surrealdb::types::{Datetime, RecordId, SurrealValue};
@@ -72,13 +67,9 @@ const EDIT_DATED: &[&str] = &["notion", "github", "linear", "todoist", "ed"];
 /// Where one org's backfill stands (the `fact_dates_backfill` row).
 #[derive(Debug, Clone, Deserialize, SurrealValue)]
 pub struct Progress {
-    /// `redate` (walking `memory`), `suspects` (walking the ledger), then `done`.
-    pub stage: String,
     pub cursor: Option<RecordId>,
     pub cutoff: Option<Datetime>,
     pub changed: i64,
-    pub suspect_replaced: i64,
-    pub suspect_replacer: i64,
     pub done_at: Option<Datetime>,
 }
 
@@ -99,12 +90,9 @@ async fn save(state: &OrgState, p: &Progress) -> AppResult<()> {
     q::SAVE_MARKER
         .on(&state.db)
         .bind(("id", marker_id()))
-        .bind(("stage", p.stage.clone()))
         .bind(("cursor", p.cursor.clone()))
         .bind(("cutoff", p.cutoff))
         .bind(("changed", p.changed))
-        .bind(("suspect_replaced", p.suspect_replaced))
-        .bind(("suspect_replacer", p.suspect_replacer))
         .bind(("done_at", p.done_at))
         .await?
         .check()?;
@@ -113,22 +101,14 @@ async fn save(state: &OrgState, p: &Progress) -> AppResult<()> {
 
 /// Runs the backfill from where it stopped, at most `max_batches` batches (`None`: to the end).
 ///
-/// Counts are saved after each batch, so a crash between a batch's writes and its save undercounts: the
-/// resumed run finds those facts already dated (or flagged). The dates are right either way.
+/// The count is saved after each batch, so a crash between a batch's writes and its save undercounts:
+/// the resumed run finds those facts already dated. The dates are right either way.
 pub async fn run(state: &OrgState, max_batches: Option<usize>) -> AppResult<Progress> {
     let mut p = match load(state).await? {
         Some(p) => p,
         None => {
             // the cutoff is fixed before the first batch and saved with it: a resumed run keeps it
-            let p = Progress {
-                stage: "redate".into(),
-                cursor: None,
-                cutoff: Some(Datetime::from(chrono::Utc::now())),
-                changed: 0,
-                suspect_replaced: 0,
-                suspect_replacer: 0,
-                done_at: None,
-            };
+            let p = Progress { cursor: None, cutoff: Some(Datetime::from(chrono::Utc::now())), changed: 0, done_at: None };
             save(state, &p).await?;
             p
         }
@@ -136,26 +116,13 @@ pub async fn run(state: &OrgState, max_batches: Option<usize>) -> AppResult<Prog
     let cutoff = p.cutoff.as_ref().and_then(datetime_to_chrono).unwrap_or_else(chrono::Utc::now);
     let mut batches = 0;
     while p.done_at.is_none() && max_batches.is_none_or(|m| batches < m) {
-        let last = if p.stage == "redate" {
-            let (last, changed) = redate_batch(state, &p.cursor, cutoff).await?;
-            p.changed += changed;
-            last
-        } else {
-            let (last, replaced, replacer) = suspect_batch(state, &p.cursor).await?;
-            p.suspect_replaced += replaced;
-            p.suspect_replacer += replacer;
-            last
-        };
+        let (last, changed) = redate_batch(state, &p.cursor, cutoff).await?;
+        p.changed += changed;
         p.cursor = last;
         if p.cursor.is_none() {
-            if p.stage == "redate" {
-                p.stage = "suspects".into();
-            } else {
-                p.stage = "done".into();
-                p.done_at = Some(Datetime::from(chrono::Utc::now()));
-                // before the marker says done: a crash between the two repeats the event, never loses it
-                report(state, &p).await;
-            }
+            p.done_at = Some(Datetime::from(chrono::Utc::now()));
+            // before the marker says done: a crash between the two repeats the event, never loses it
+            report(state, &p).await;
         }
         save(state, &p).await?;
         batches += 1;
@@ -163,21 +130,11 @@ pub async fn run(state: &OrgState, max_batches: Option<usize>) -> AppResult<Prog
     Ok(p)
 }
 
-/// One log line and one `audit_event` per org when it finishes: counts only.
+/// One log line and one `audit_event` per org when it finishes: a count only.
 async fn report(state: &OrgState, p: &Progress) {
     let org = state.db.org().key();
-    tracing::info!(
-        org = %org,
-        version = VERSION,
-        memory = p.changed,
-        suspect_replaced = p.suspect_replaced,
-        suspect_replacer = p.suspect_replacer,
-        "fact date backfill finished"
-    );
-    let detail = format!(
-        "version={VERSION} memory={} suspect_replaced={} suspect_replacer={}",
-        p.changed, p.suspect_replaced, p.suspect_replacer
-    );
+    tracing::info!(org = %org, version = VERSION, memory = p.changed, "fact date backfill finished");
+    let detail = format!("version={VERSION} memory={}", p.changed);
     let actor = Actor { kind: "system", id: "system".into() };
     audit::record(&state.control, Event { user: None, actor: &actor, action: "facts.backfill_dates", target: &org, outcome: "ok", detail: &detail }).await;
 }
@@ -199,7 +156,6 @@ struct Row {
     version: i64,
     source_kind: Option<String>,
     source_at: Option<Datetime>,
-    source_created: Option<String>,
 }
 
 /// `(occurred_at, asserted_at)` for `row`, if it is one the backfill re-dates (see the module docs).
@@ -219,17 +175,12 @@ fn dates_for(row: &Row, cutoff: Utc) -> Option<(Datetime, Datetime)> {
     let at = usable(datetime_to_chrono(row.source_at.as_ref()?)?)?;
     let (happened, told) = if at <= written {
         (at, at)
+    } else if EDIT_DATED.contains(&row.source_kind.as_deref().unwrap_or_default()) {
+        // edited since the fact was drawn from it: the fact's own write is the latest it can have been told
+        (written, written)
     } else {
-        // the record is dated after the fact was written: edited since, or an event still to come
-        let created = row
-            .source_created
-            .as_deref()
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-            .map(|d| d.with_timezone(&chrono::Utc))
-            .and_then(usable)
-            .filter(|c| *c <= written);
-        let told = created.unwrap_or(written);
-        if EDIT_DATED.contains(&row.source_kind.as_deref().unwrap_or_default()) { (told, told) } else { (at, written) }
+        // an event still to come: it happens then, and was told when it was read
+        (at, written)
     };
     Some((Datetime::from(happened), Datetime::from(told)))
 }
@@ -293,36 +244,34 @@ async fn redate_batch(state: &OrgState, cursor: &Option<RecordId>, cutoff: Utc) 
     Ok((rows.last().map(|r| r.id.clone()), changed))
 }
 
-/// (last ledger row read, `replaced` flags, `replacer` flags) for one batch of the ledger.
-async fn suspect_batch(state: &OrgState, cursor: &Option<RecordId>) -> AppResult<(Option<RecordId>, i64, i64)> {
-    #[derive(Deserialize, SurrealValue)]
-    struct Entry {
-        id: RecordId,
-        memory: RecordId,
-        subject: Option<RecordId>,
-        status: Option<String>,
-        asserted_at: Datetime,
-    }
-    let stmt = if cursor.is_some() { &q::LEDGER_AFTER } else { &q::LEDGER_FIRST };
-    let key = cursor.as_ref().map(|c| c.key().clone());
-    let rows: Vec<Entry> = stmt.on(&state.db).bind(("key", key)).bind(("limit", BATCH)).await?.check()?.take(0)?;
-    let (mut replaced, mut replacer) = (0, 0);
-    for r in &rows {
-        // the fact is gone (deleted since): nothing to flag
-        let Some(subject) = &r.subject else { continue };
-        let superseded = r.status.as_deref() == Some("superseded");
-        let probe = if superseded { &q::REPLACED_SUSPECT } else { &q::REPLACER_SUSPECT };
-        let hit: Vec<RecordId> =
-            probe.on(&state.db).bind(("subject", subject.clone())).bind(("id", r.memory.clone())).bind(("told", r.asserted_at)).await?.check()?.take(0)?;
-        if hit.is_empty() {
-            continue;
+/// Dates the given facts now, by the backfill's rule, when they are facts it would date (a supersede
+/// check calls this for facts the walk has not reached). Each is written like a backfill re-date (both
+/// dates, a ledger row, a compare-and-set). Returns `asserted_at` by fact id (as a string) for those it
+/// dated; the others keep their write time as their place.
+pub async fn date_now(db: &crate::pool::OrgDb, ids: &[RecordId]) -> AppResult<std::collections::HashMap<String, Datetime>> {
+    let rows: Vec<Row> = q::MEMORY_BY_ID.on(db).bind(("ids", ids.to_vec())).await?.check()?.take(0)?;
+    // no cutoff: any fact written without dates (before the upgrade, or by an older replica during it)
+    let cutoff = chrono::Utc::now() + chrono::Duration::days(1);
+    let mut told = std::collections::HashMap::new();
+    for row in &rows {
+        let Some((at, t)) = dates_for(row, cutoff) else { continue };
+        let set = || async {
+            q::REDATE
+                .on(db)
+                .bind(("id", row.id.clone()))
+                .bind(("ledger", ledger_id(&row.id)))
+                .bind(("at", at))
+                .bind(("told", t))
+                .bind(("source", row.source.clone()))
+                .bind(("version", row.version.max(1)))
+                .await?
+                .check()
+        };
+        if !with_retry(set).await?.take::<Vec<RecordId>>(q::REDATE.slot)?.is_empty() {
+            told.insert(row.id.to_string(), t);
         }
-        let flag = if superseded { "replaced" } else { "replacer" };
-        let set = || async { q::SET_SUSPECT.on(&state.db).bind(("id", r.id.clone())).bind(("suspect", flag)).await?.check() };
-        with_retry(set).await?;
-        if superseded { replaced += 1 } else { replacer += 1 }
     }
-    Ok((rows.last().map(|r| r.id.clone()), replaced, replacer))
+    Ok(told)
 }
 
 /// Undoes the backfill's re-dates: each fact gets its previous dates back where the backfill's are
@@ -341,15 +290,20 @@ pub async fn undo(state: &OrgState) -> AppResult<i64> {
         #[serde(default)]
         #[surreal(default)]
         vault: Option<RecordId>,
+        #[serde(default)]
+        #[surreal(default)]
+        undone_at: Option<Datetime>,
     }
-    let mut restored = 0;
+    let (mut restored, mut cursor): (i64, Option<RecordId>) = (0, None);
     loop {
-        let rows: Vec<Entry> = q::LEDGER_PENDING.on(&state.db).bind(("limit", BATCH)).await?.check()?.take(0)?;
-        if rows.is_empty() {
-            return Ok(restored);
-        }
+        // a record-id range walk from the last row read, like the backfill's
+        let stmt = if cursor.is_some() { &q::LEDGER_AFTER } else { &q::LEDGER_FIRST };
+        let key = cursor.as_ref().map(|c| c.key().clone());
+        let rows: Vec<Entry> = stmt.on(&state.db).bind(("key", key)).bind(("limit", BATCH)).await?.check()?.take(0)?;
+        let Some(last) = rows.last() else { return Ok(restored) };
+        cursor = Some(last.id.clone());
         let mut logged = Logged::default();
-        for r in &rows {
+        for r in rows.iter().filter(|r| r.undone_at.is_none()) {
             let one = || async {
                 q::UNDO
                     .on(&state.db)
@@ -394,7 +348,6 @@ mod tests {
             version: 1,
             source_kind: Some("gmail".into()),
             source_at: dt("2023-04-01T09:30:00Z"),
-            source_created: None,
         }
     }
 
@@ -416,10 +369,7 @@ mod tests {
         let mut r = row();
         r.source_kind = Some("notion".into());
         r.source_at = dt("2026-11-10T00:00:00Z");
-        assert_eq!(got(&r), Some((written.clone(), written.clone())), "no creation date: clamped to the write");
-        r.source_created = Some("2024-01-01T00:00:00.000Z".into());
-        let created = "2024-01-01T00:00:00+00:00".to_string();
-        assert_eq!(got(&r), Some((created.clone(), created)), "the record's creation date is preferred");
+        assert_eq!(got(&r), Some((written.clone(), written.clone())), "the fact's own write, not the record's later edit");
         // a calendar event still to come keeps its start as when it happens, but is told at the write
         let mut r = row();
         r.source_kind = Some("google_calendar".into());

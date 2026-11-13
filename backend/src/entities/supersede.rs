@@ -57,6 +57,18 @@ struct FactRow {
     #[serde(default)]
     #[surreal(default)]
     occurred_at: Option<Datetime>,
+    /// Its own `asserted_at` (NONE: written before tenant 0046, so `at` is only a fallback).
+    #[serde(default)]
+    #[surreal(default)]
+    told: Option<Datetime>,
+    /// The record it was drawn from, if any.
+    #[serde(default)]
+    #[surreal(default)]
+    source: Option<RecordId>,
+    /// Its version when read: a mark only lands if neither fact changed since.
+    #[serde(default)]
+    #[surreal(default)]
+    version: i64,
     #[serde(default)]
     #[surreal(default)]
     sim: f64,
@@ -86,8 +98,8 @@ fn build_prompt(facts: &[(String, String, bool)]) -> String {
         .join("\n");
     format!(
         "Below are facts recorded about one subject, in the order we were told them, oldest first, each with the date \
-we were told it. Some also say when the fact happened: a fact about the past can be history (true then, still true as \
-history) rather than a correction. Some are new. For each NEW fact, does it show that an OLDER fact is no longer true \
+we were told it. Some also say when the fact happened, or for a plan when it is planned for: a fact about the past \
+can be history (true then, still true as history) rather than a correction, and a plan is not yet done. Some are new. For each NEW fact, does it show that an OLDER fact is no longer true \
 -- the same status, role, plan, number, date, location, access or relationship, now changed? And does a LATER fact show \
 that the NEW fact itself is no longer true? A fact is superseded only when both cannot be true at once, and only by a \
 fact listed after it. These are NOT superseded: a restatement or duplicate, a fact the other adds detail to, a fact \
@@ -98,10 +110,11 @@ still holds, and anything merely old. When unsure, list nothing. Return strict J
 }
 
 /// The model's `{fact, by}` pairs -> `(fact to mark, fact that replaced it)`. `facts` is oldest first. A
-/// pair counts only when `fact` is listed (and told) before `by`, exactly one of the two is new, and
-/// neither is out of range; anything else is ignored. So a fact told earlier never replaces one told
-/// later, whatever order they were written in. (Two new facts are not compared with each other here.)
-fn pick(pairs: &[Value], facts: &[(String, String, bool)], ids: &[RecordId]) -> Vec<(RecordId, RecordId)> {
+/// pair counts only when `fact` is listed (and told) before `by`, exactly one of the two is new, the two
+/// were not drawn from the same source record (one record tells both at the same moment, so neither is
+/// later), and neither is out of range; anything else is ignored. So a fact told earlier never replaces
+/// one told later, whatever order they were written in. (Two new facts are not compared here.)
+fn pick(pairs: &[Value], facts: &[(String, String, bool)], ids: &[RecordId], sources: &[Option<RecordId>]) -> Vec<(RecordId, RecordId)> {
     let mut seen = HashSet::new();
     pairs
         .iter()
@@ -109,7 +122,8 @@ fn pick(pairs: &[Value], facts: &[(String, String, bool)], ids: &[RecordId]) -> 
             let fact = (p.get("fact")?.as_u64()? as usize).checked_sub(1)?;
             let by = (p.get("by")?.as_u64()? as usize).checked_sub(1)?;
             let (f, b) = (facts.get(fact)?, facts.get(by)?);
-            (fact < by && b.2 != f.2 && f.0 <= b.0).then(|| Some((ids.get(fact)?.clone(), ids.get(by)?.clone()))).flatten()
+            let same_record = matches!((sources.get(fact), sources.get(by)), (Some(Some(a)), Some(Some(b))) if a == b);
+            (fact < by && b.2 != f.2 && f.0 <= b.0 && !same_record).then(|| Some((ids.get(fact)?.clone(), ids.get(by)?.clone()))).flatten()
         })
         .filter(|(id, _)| seen.insert(id.to_string()))
         .collect()
@@ -244,6 +258,20 @@ async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &Record
     }
     older.sort_by(|a, b| b.sim.total_cmp(&a.sim));
     older.truncate(MAX_FACTS.saturating_sub(new_rows.len()));
+    let mut new_rows = new_rows;
+    // A fact drawn from a record before tenant 0046 has no `asserted_at` until the backfill reaches it;
+    // its write time would place it at its extraction, the very defect. Date it now, from its record,
+    // as the backfill would (and persisted with a ledger row, as the backfill does).
+    let undated: Vec<RecordId> = new_rows.iter().chain(&older).filter(|r| r.told.is_none() && r.source.is_some()).map(|r| r.id.clone()).collect();
+    if !undated.is_empty() {
+        let told = crate::jobs::fact_dates::date_now(db, &undated).await?;
+        for r in new_rows.iter_mut().chain(older.iter_mut()) {
+            if let Some(t) = told.get(&r.id.to_string()) {
+                r.at = *t;
+                r.told = Some(*t);
+            }
+        }
+    }
     let mut rows: Vec<(When, FactRow, bool)> = new_rows
         .into_iter()
         .map(|r| (false, r))
@@ -252,20 +280,36 @@ async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &Record
         .collect();
     oldest_first(&mut rows);
     let date = |w: &When| w.0.map(|d| d.format("%Y-%m-%d %H:%M").to_string()).unwrap_or_default();
+    let now = chrono::Utc::now();
     let text = |r: &FactRow| match r.occurred_at.as_ref().and_then(crate::sources::base::datetime_to_chrono) {
+        Some(d) if d > now => format!("{} (planned for {})", r.text, d.format("%Y-%m-%d")),
         Some(d) => format!("{} (happened {})", r.text, d.format("%Y-%m-%d")),
         None => r.text.clone(),
     };
     let facts: Vec<(String, String, bool)> = rows.iter().map(|(w, r, n)| (date(w), text(r), *n)).collect();
     let ids: Vec<RecordId> = rows.iter().map(|(_, r, _)| r.id.clone()).collect();
-    let marked = pick(&call_llm(db, settings, owner, build_prompt(&facts)).await?, &facts, &ids);
-    if !marked.is_empty() {
-        // the subject's other writers (consolidation, a new fact's embed) can touch these rows too
-        let pairs: Vec<Vec<RecordId>> = marked.iter().map(|(f, b)| vec![f.clone(), b.clone()]).collect();
-        let mark = || async { q::MARK_SUPERSEDED.on(db).bind(("pairs", pairs.clone())).bind(("subject", subject.clone())).await?.check() };
-        crate::tx::with_retry(mark).await?;
+    let sources: Vec<Option<RecordId>> = rows.iter().map(|(_, r, _)| r.source.clone()).collect();
+    let version = |id: &RecordId| rows.iter().find(|(_, r, _)| &r.id == id).map_or(1, |(_, r, _)| r.version);
+    let mut marked = Vec::new();
+    for (fact, by) in pick(&call_llm(db, settings, owner, build_prompt(&facts)).await?, &facts, &ids, &sources) {
+        // only if neither fact changed while the model was deciding: an edit made meanwhile is decided
+        // by its own check (the subject's other writers can conflict too: retried)
+        let mark = || async {
+            q::MARK_SUPERSEDED
+                .on(db)
+                .bind(("fact", fact.clone()))
+                .bind(("by", by.clone()))
+                .bind(("fact_version", version(&fact)))
+                .bind(("by_version", version(&by)))
+                .bind(("subject", subject.clone()))
+                .await?
+                .check()
+        };
+        if !crate::tx::with_retry(mark).await?.take::<Vec<RecordId>>(q::MARK_SUPERSEDED.slot)?.is_empty() {
+            marked.push(fact);
+        }
     }
-    Ok(marked.into_iter().map(|(f, _)| f).collect())
+    Ok(marked)
 }
 
 #[cfg(test)]
@@ -331,8 +375,22 @@ mod tests {
             ],
             &f,
             &ids,
+            &[],
         );
         assert_eq!(got, vec![(ids[0].clone(), ids[2].clone())], "the replaced fact and the fact that replaced it");
+    }
+
+    #[test]
+    fn pick_never_pairs_two_facts_from_one_record() {
+        let ids: Vec<RecordId> = ["memory:a", "memory:b", "memory:c"].iter().map(|s| crate::rid::parse(s).unwrap()).collect();
+        let rec = Some(crate::rid::parse("cache_record:r").unwrap());
+        let other = Some(crate::rid::parse("cache_record:s").unwrap());
+        let f = facts();
+        // a and c from one record ("formerly VP, now CTO"): never decided between them
+        assert!(pick(&[json!({"fact": 1, "by": 3})], &f, &ids, &[rec.clone(), None, rec.clone()]).is_empty());
+        // from different records, or one with no record: decided as usual
+        assert_eq!(pick(&[json!({"fact": 1, "by": 3})], &f, &ids, &[rec.clone(), None, other]).len(), 1);
+        assert_eq!(pick(&[json!({"fact": 1, "by": 3})], &f, &ids, &[rec, None, None]).len(), 1);
     }
 
     #[test]
@@ -344,17 +402,17 @@ mod tests {
             ("2024-01-01 10:00", "Ada mentors two interns", true),
             ("2025-06-01 10:00", "Ada is a senior engineer", false),
         ]);
-        assert_eq!(pick(&[json!({"fact": 1, "by": 3})], &f, &ids), vec![(ids[0].clone(), ids[2].clone())]);
+        assert_eq!(pick(&[json!({"fact": 1, "by": 3})], &f, &ids, &[]), vec![(ids[0].clone(), ids[2].clone())]);
         // the reverse pair would let the older-dated fact replace the newer one: refused
-        assert!(pick(&[json!({"fact": 3, "by": 1})], &f, &ids).is_empty());
+        assert!(pick(&[json!({"fact": 3, "by": 1})], &f, &ids, &[]).is_empty());
         // two new facts are not compared here
-        assert!(pick(&[json!({"fact": 1, "by": 2})], &f, &ids).is_empty());
+        assert!(pick(&[json!({"fact": 1, "by": 2})], &f, &ids, &[]).is_empty());
     }
 
     #[test]
     fn pick_rejects_a_replacement_dated_before_the_fact() {
         let ids: Vec<RecordId> = ["memory:a", "memory:b"].iter().map(|s| crate::rid::parse(s).unwrap()).collect();
         let f = list(&[("2026-10-09 10:00", "later old fact", false), ("2026-10-01 10:00", "earlier new fact", true)]);
-        assert!(pick(&[json!({"fact": 1, "by": 2})], &f, &ids).is_empty());
+        assert!(pick(&[json!({"fact": 1, "by": 2})], &f, &ids, &[]).is_empty());
     }
 }

@@ -276,6 +276,12 @@ pub fn supersede_edit_job(org: crate::pool::OrgId, owner: &RecordId, subject: &R
     supersede_job_keyed(org, owner, subject, memory, format!("{}:{}:{}:v{version}", kind::SUPERSEDE, org.key(), memory.to_string()))
 }
 
+/// One supersede check for a fact that became current again (the fact that replaced it was deleted).
+pub fn supersede_restored_job(org: crate::pool::OrgId, owner: &RecordId, subject: &RecordId, memory: &RecordId) -> NewJob {
+    let at = chrono::Utc::now().timestamp_millis();
+    supersede_job_keyed(org, owner, subject, memory, format!("{}:{}:{}:restored:{at}", kind::SUPERSEDE, org.key(), memory.to_string()))
+}
+
 fn supersede_job_keyed(org: crate::pool::OrgId, owner: &RecordId, subject: &RecordId, memory: &RecordId, key: String) -> NewJob {
     NewJob::new(kind::SUPERSEDE, owner.clone(), key)
         .in_org(org)

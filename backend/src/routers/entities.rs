@@ -327,7 +327,8 @@ async fn delete_memory(
 ) -> AppResult<Json<Value>> {
     let state = state.org(&user.org).await?;
     let rid = parse_record_id(&memory_id)?;
-    let deleted = service::delete_memory(&state.db, &user.id, &rid).await?;
+    // the same path as the memory_delete tool: facts the deleted one replaced are re-checked
+    let deleted = crate::entities::tools::memory_delete(&state, &user.id, &rid).await?;
     if !deleted {
         return Err(AppError::coded(ErrorCode::MemoryNotFound, "not found"));
     }

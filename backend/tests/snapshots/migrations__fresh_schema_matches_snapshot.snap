@@ -813,6 +813,14 @@ expression: info(&db).await
         },
         {
           "cols": [
+            "superseded_by"
+          ],
+          "index": "",
+          "name": "memory_superseded_by_idx",
+          "table": "memory"
+        },
+        {
+          "cols": [
             "text"
           ],
           "index": "FULLTEXT ANALYZER cache_text_analyzer BM25(1.2,0.75)",

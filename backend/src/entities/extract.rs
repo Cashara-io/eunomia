@@ -416,8 +416,10 @@ async fn apply_extraction(
                 if fact.is_empty() {
                     continue;
                 }
-                service::add_memory_at(db, owner, &entry_id, fact, Some(source_record_id), "world", occurred_at).await?;
-                touched.insert(entry_id.to_string());
+                // `None`: this record already told the subject this (a re-sync or a retried job)
+                if service::add_memory_at(db, owner, &entry_id, fact, Some(source_record_id), "world", occurred_at).await?.is_some() {
+                    touched.insert(entry_id.to_string());
+                }
             }
         }
     }
@@ -434,8 +436,9 @@ async fn apply_extraction(
             Err(e) => return Err(e),
         };
         for fact in item.entity.facts.iter().filter(|f| !f.is_empty()) {
-            service::add_memory_at(db, owner, &entry_id, fact, Some(source_record_id), "world", occurred_at).await?;
-            touched.insert(entry_id.to_string());
+            if service::add_memory_at(db, owner, &entry_id, fact, Some(source_record_id), "world", occurred_at).await?.is_some() {
+                touched.insert(entry_id.to_string());
+            }
         }
     }
 
