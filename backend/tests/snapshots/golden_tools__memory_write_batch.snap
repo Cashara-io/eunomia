@@ -16,7 +16,7 @@ expression: stable
     {
       "index": "<unstable>",
       "ok": false,
-      "error": "missing field `text`",
+      "error": "missing field `text` (the fact; `content` is accepted too)",
       "code": "validation.invalid"
     },
     {
