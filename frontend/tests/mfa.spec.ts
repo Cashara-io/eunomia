@@ -19,6 +19,8 @@ function totp(secretB32: string, at = Date.now()): string {
 
 test.describe("Two-step verification", () => {
   test("set it up in Settings, then sign in with a code and with a recovery code", async ({ page, context }) => {
+    // three sign-ins and a setup: longer than the default 30 s on a cold dev server
+    test.setTimeout(90_000);
     const email = uniqueEmail("mfa");
     await registerAndOnboard(page, email, PASSWORD);
 
@@ -32,7 +34,7 @@ test.describe("Two-step verification", () => {
     // a wrong code is refused in words, and nothing changes
     await page.getByLabel("Code from your authenticator app").fill("000000");
     await page.getByRole("button", { name: "Turn on two-step verification" }).click();
-    await expect(page.getByRole("alert")).toContainText("didn't work");
+    await expect(page.getByTestId("mfa-enrol").getByRole("alert")).toContainText("didn't work");
 
     await page.getByLabel("Code from your authenticator app").fill(totp(secret));
     await page.getByRole("button", { name: "Turn on two-step verification" }).click();
@@ -63,7 +65,8 @@ test.describe("Two-step verification", () => {
     await page.getByRole("button", { name: "Sign in" }).click();
     await page.getByLabel("Code", { exact: true }).fill(totp(secret, Date.now() + 30_000));
     await page.getByRole("button", { name: "Verify" }).click();
-    await expect(page).toHaveURL((url) => url.pathname === "/");
+    // back where the sign-in started (the redirect kept ?next=/settings)
+    await expect(page).toHaveURL((url) => url.pathname === "/settings");
 
     // and once more with a recovery code
     await page.goto("about:blank");
