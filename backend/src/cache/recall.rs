@@ -1283,6 +1283,7 @@ impl VaultArms {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn vault_arms(
     db: &OrgDb,
     vault: &RecordId,
