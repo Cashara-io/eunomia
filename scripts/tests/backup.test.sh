@@ -95,7 +95,9 @@ check "tenancy install writes a directory" test -d "$d"
 check "control, the org and the old database are each backed up" test "$(ls "$d" | sort | tr '\n' ' ')" = "control.surql.enc eunomia.surql.enc org_0123456789abcdef0123456789abcdef.surql.enc "
 check "no half-written .part is left" test -z "$(ls -d "$TMP"/backups/*.part 2>/dev/null)"
 
-# 3. restoring the directory imports every database into its own database
+# 3. restoring the directory imports every database into its own database (onto a live tenancy server,
+# whose control database the erasure records are read from first)
+export MOCK_TENANCY=1
 : > "$SHIM_LOG"
 bk restore "$(basename "$d")" --wipe >/dev/null
 check "each database is wiped, created and imported" sh -c "grep -c 'import ' '$SHIM_LOG' | grep -qx 3 && grep -q 'REMOVE DATABASE IF EXISTS .control.' '$SHIM_LOG' && grep -q 'import control: OPTION IMPORT; -- dump of control' '$SHIM_LOG'"
@@ -120,6 +122,31 @@ check "restore --wipe brings the documents back and drops what was not in the ba
 rm -rf "$TMP/docs"
 DOCUMENTS_DIR="$TMP/docs" bk restore "$(basename "$d")" >/dev/null 2>&1
 check "restore creates a missing documents folder (a fresh data volume)" test -f "$TMP/docs/org_x/abc/1/notes.md"
+
+# 3c. the erasure records are never lost silently (docs/privacy/subject-rights.md)
+rm -rf "$TMP/docs"; rm -rf "$TMP/backups"/*; sleep 1
+bk now manual >/dev/null
+d="$(ls -d "$TMP"/backups/manual-* | head -1)"; n="$(basename "$d")"
+: > "$SHIM_LOG"; out="$(MOCK_INFO_FAIL=1 sh "$SCRIPT" restore "$n" --wipe 2>&1)"; rc=$?
+check "a restore that cannot read the live erasure records stops" test "$rc" -ne 0
+check "and says why and how to override" sh -c "echo \"\$1\" | grep -q 'could not read the erasure records' && echo \"\$1\" | grep -q -- '--without-erasures'" _ "$out"
+check "and touched nothing" sh -c "! grep -q 'import ' '$SHIM_LOG' && ! grep -q 'REMOVE DATABASE' '$SHIM_LOG'"
+: > "$SHIM_LOG"; out="$(MOCK_TENANCY= sh "$SCRIPT" restore "$n" --wipe 2>&1)"; rc=$?
+check "onto a server with no control database (a fresh one) it stops too" sh -c "test $rc -ne 0 && echo \"\$1\" | grep -q 'no control database' && ! grep -q 'import ' '$SHIM_LOG'" _ "$out"
+: > "$SHIM_LOG"
+check "--without-erasures restores anyway" sh -c "MOCK_TENANCY= sh '$SCRIPT' restore '$n' --wipe --without-erasures >/dev/null 2>&1 && grep -q 'import control: OPTION IMPORT; -- dump of control' '$SHIM_LOG'"
+printf '%s\n' "OPTION IMPORT;" "INSERT IGNORE INTO erasure [ { id: erasure:offbox, subject_ref: 'ref-offbox' } ];" > "$TMP/offbox.surql"
+: > "$SHIM_LOG"
+check "--erasures FILE merges an off-box copy after control is restored" sh -c "MOCK_TENANCY= sh '$SCRIPT' restore '$n' --wipe --erasures '$TMP/offbox.surql' >/dev/null 2>&1 && grep -q 'erasure:offbox' '$SHIM_LOG'"
+check "the erasures command writes that copy" sh -c "MOCK_ERASURES=1 sh '$SCRIPT' erasures '$TMP/copy.surql' >/dev/null 2>&1 && grep -q '^INSERT IGNORE INTO erasure' '$TMP/copy.surql'"
+# a single database's file goes back into its own database; restoring control from one file carries the records over
+: > "$SHIM_LOG"
+MOCK_ERASURES=1 sh "$SCRIPT" restore "$d/control.surql.enc" --wipe >/dev/null 2>&1
+dumped="$(grep -n 'import control: OPTION IMPORT; -- dump of control' "$SHIM_LOG" | cut -d: -f1)"; merged="$(grep -n '^INSERT IGNORE INTO erasure \[ { id: erasure:after' "$SHIM_LOG" | cut -d: -f1)"
+check "a single-file restore of control carries the erasure records over" test -n "$dumped" -a -n "$merged" -a "${merged:-0}" -gt "${dumped:-0}"
+: > "$SHIM_LOG"
+check "a single-file restore of an org database goes into that database" sh -c "sh '$SCRIPT' restore '$d/org_0123456789abcdef0123456789abcdef.surql.enc' --wipe >/dev/null 2>&1 && grep -q 'import org_0123456789abcdef0123456789abcdef: OPTION IMPORT; -- dump of org_0123456789abcdef0123456789abcdef' '$SHIM_LOG' && ! grep -q 'import control' '$SHIM_LOG'"
+unset MOCK_TENANCY
 rm -rf "$TMP/docs"; rm -rf "$TMP/backups"/*; sleep 1
 DOCUMENTS_DIR="$TMP/docs" MOCK_TENANCY=1 bk now manual >/dev/null
 check "no documents folder, no archive" test -z "$(ls "$TMP"/backups/manual-*/documents.tar.enc 2>/dev/null)"

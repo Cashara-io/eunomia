@@ -68,6 +68,8 @@ const ADMIN_ACTIONS: &[&str] = &[
     "subject.erase_request",
     "subject.erase",
     "subject.export_request_admin",
+    "subject.export_download_admin",
+    "org.owner_transfer",
 ];
 
 impl AuditCategory {
@@ -318,7 +320,13 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "user.restore" => format!("Restored access for {email}"),
         "subject.legal_hold" => format!("Placed a legal hold on {email}"),
         "subject.legal_hold_lift" => format!("Lifted the legal hold on {email}"),
-        "subject.erase_request" => "Asked for an account and its data to be deleted".into(),
+        "subject.erase_request" => match detail.split_whitespace().find_map(|kv| kv.strip_prefix("by=")) {
+            Some("self") => "Someone asked for their own account and data to be deleted".into(),
+            Some("reapply") => "A restore brought back an erased account; it is being erased again".into(),
+            _ => "Asked for an account and its data to be deleted".into(),
+        },
+        "subject.export_download_admin" => "Downloaded the data export of a suspended account".into(),
+        "org.owner_transfer" => format!("Made {email} the workspace owner"),
         "subject.erase" => return "Deleted an account and its data (the erasure record keeps the counts)".into(),
         "subject.export_request" => "Exported their data".into(),
         "subject.export_request_admin" => "Exported someone's data for them".into(),
@@ -595,6 +603,9 @@ struct Person {
     is_you: bool,
     /// How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`).
     tokens: i64,
+    /// The workspace's owner (one per workspace). An owner whose workspace has other members hands it
+    /// over (`/api/admin/people/{user_id}/workspace-owner`) before their account can be erased.
+    workspace_owner: bool,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -618,7 +629,7 @@ struct SignupPolicy {
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
-struct PeopleReport {
+pub(crate) struct PeopleReport {
     people: Vec<Person>,
     signup: SignupPolicy,
 }
@@ -700,6 +711,18 @@ async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport>
         .collect();
 
     let creator = crate::capsules::first_user(&state.control).await?;
+    #[derive(Deserialize, SurrealValue)]
+    struct OwnerRow {
+        user: RecordId,
+    }
+    let owner: Option<RecordId> = store::control::ORG_FIRST_OWNER
+        .on(&state.control)
+        .bind(("org", user.org.record()))
+        .await?
+        .take::<Vec<OwnerRow>>(0)?
+        .into_iter()
+        .next()
+        .map(|r| r.user);
     let people = rows
         .into_iter()
         .map(|r| {
@@ -712,6 +735,7 @@ async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport>
                 role: if admin.is_empty() { "member" } else { "admin" }.into(),
                 is_you: r.id == user.id,
                 tokens: token_counts.get(&key).copied().unwrap_or(0),
+                workspace_owner: owner.as_ref() == Some(&r.id),
                 id: key,
                 email: r.email,
                 created_at: r.created_at,
@@ -750,6 +774,15 @@ struct SuspendChange {
     /// `true` suspends the account, `false` restores it.
     suspended: bool,
 }
+
+/// The people list as a response (`routers/subject.rs` answers with it after a handover).
+pub(crate) async fn people_response(state: &AppState, user: &User) -> AppResult<axum::response::Response> {
+    use axum::response::IntoResponse;
+    Ok(Json(people_report(state, user).await?).into_response())
+}
+
+/// The schema the handover route answers with.
+pub(crate) type PeopleReportRef = PeopleReport;
 
 /// For the data-subject routes (`routers/subject.rs`): the admin acting (browser session only), the
 /// account they act on (in their workspace) and its email.

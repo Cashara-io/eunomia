@@ -62,6 +62,7 @@ pub enum ErrorCode {
     DbDuplicate,
     SubjectLegalHold,
     SubjectLastOwner,
+    SubjectWorkspaceCloses,
     SubjectConfirmationFailed,
     SubjectExportNotReady,
     JobNoHandler,
@@ -117,6 +118,7 @@ impl ErrorCode {
         ErrorCode::DbDuplicate,
         ErrorCode::SubjectLegalHold,
         ErrorCode::SubjectLastOwner,
+        ErrorCode::SubjectWorkspaceCloses,
         ErrorCode::SubjectConfirmationFailed,
         ErrorCode::SubjectExportNotReady,
         ErrorCode::JobNoHandler,
@@ -172,6 +174,7 @@ impl ErrorCode {
             ErrorCode::DbDuplicate => "db.duplicate",
             ErrorCode::SubjectLegalHold => "subject.legal_hold",
             ErrorCode::SubjectLastOwner => "subject.last_owner",
+            ErrorCode::SubjectWorkspaceCloses => "subject.workspace_closes",
             ErrorCode::SubjectConfirmationFailed => "subject.confirmation_failed",
             ErrorCode::SubjectExportNotReady => "subject.export_not_ready",
             ErrorCode::JobNoHandler => "job.no_handler",
@@ -196,7 +199,7 @@ impl ErrorCode {
             ErrorCode::ChangesResync => StatusCode::GONE,
             ErrorCode::TenantProvisioningDisabled => StatusCode::NOT_IMPLEMENTED,
             ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision
-            | ErrorCode::SubjectLegalHold | ErrorCode::SubjectLastOwner | ErrorCode::SubjectExportNotReady => StatusCode::CONFLICT,
+            | ErrorCode::SubjectLegalHold | ErrorCode::SubjectLastOwner | ErrorCode::SubjectWorkspaceCloses | ErrorCode::SubjectExportNotReady => StatusCode::CONFLICT,
             ErrorCode::SubjectConfirmationFailed => StatusCode::FORBIDDEN,
             ErrorCode::AuthNotFound
             | ErrorCode::VaultNotFound
@@ -396,7 +399,7 @@ mod tests {
                 | ErrorCode::ResourceNotFound | ErrorCode::DocumentNotFound | ErrorCode::DocumentTooLarge
                 | ErrorCode::DocumentUnsupportedType | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable | ErrorCode::SecretRequestClosed | ErrorCode::SecretHostDenied
                 | ErrorCode::SecretOutboundBlocked | ErrorCode::SecretOutboundFailed | ErrorCode::ChangesResync | ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected | ErrorCode::OntologyStaleRevision | ErrorCode::DbConflict
-                | ErrorCode::DbDuplicate | ErrorCode::SubjectLegalHold | ErrorCode::SubjectLastOwner | ErrorCode::SubjectConfirmationFailed
+                | ErrorCode::DbDuplicate | ErrorCode::SubjectLegalHold | ErrorCode::SubjectLastOwner | ErrorCode::SubjectWorkspaceCloses | ErrorCode::SubjectConfirmationFailed
                 | ErrorCode::SubjectExportNotReady | ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked
                 | ErrorCode::Internal => {}
             }

@@ -370,6 +370,10 @@ impl Pool {
             no_org_context("for_org: unknown org");
             return Err(AppError::coded(ErrorCode::TenantNotFound, "No data store exists for this organisation."));
         };
+        if row.status == "closed" {
+            // its only member was erased (docs/privacy/subject-rights.md): nothing is served from it again
+            return Err(AppError::coded(ErrorCode::TenantNotFound, "This workspace was closed."));
+        }
         if row.status != "ready" {
             no_org_context("for_org: org not ready");
             return Err(AppError::coded(ErrorCode::TenantNotFound, "This organisation's data store is being set up."));

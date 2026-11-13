@@ -169,6 +169,9 @@ async fn assign_org(state: &AppState, user: &RecordId, email: &str, personal: bo
     let _one_at_a_time = crate::tx::lock("org.signup").await;
     let mut res = store::tenant::LIST.on(&state.control).await?;
     let rows: Vec<TenantListRow> = res.take(0)?;
+    // a closed workspace (its only member was erased) is never joined, but it still counts as an org the
+    // install had, so its fixed first-org id is not provisioned again over it
+    let had_orgs = rows.iter().any(|r| r.status == "closed");
     let existing = rows
         .into_iter()
         .filter(|r| r.status == "ready")
@@ -181,11 +184,12 @@ async fn assign_org(state: &AppState, user: &RecordId, email: &str, personal: bo
             };
             // The install's first org has a fixed id: two replicas that both see an empty install
             // converge on one org (provisioning is idempotent) instead of making two "Default"s.
-            let org = if found.is_none() { OrgId::from_label(&format!("default:{}", state.settings.surreal_ns)) } else { OrgId::new() };
-            match p.provision_org(&state.control, org, if found.is_none() { "Default" } else { email }).await {
+            let first = found.is_none() && !had_orgs;
+            let org = if first { OrgId::from_label(&format!("default:{}", state.settings.surreal_ns)) } else { OrgId::new() };
+            match p.provision_org(&state.control, org, if first { "Default" } else { email }).await {
                 Ok(()) => {}
                 // another replica is provisioning the same first org and got there first: wait for it, then join
-                Err(e) if found.is_none() && wait_ready(state, &org).await => {
+                Err(e) if first && wait_ready(state, &org).await => {
                     tracing::info!(error = %e.message, "first org provisioned by another process, joining it");
                 }
                 Err(e) => return Err(e),

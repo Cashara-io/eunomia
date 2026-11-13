@@ -133,8 +133,22 @@ async fn seed(app: &TestApp, who: &User, bob: &User) -> Seeded {
     call(state, &app.user, "vault_invite", json!({"vault_id": team, "email": who.email})).await;
     call(state, who, "vault_accept_invitation", json!({"vault_id": team})).await;
     call(state, who, "memory_write", json!({"subject_name": "Quarterly plan", "subject_kind": "organisation", "vault_id": team, "text": "Plan agreed by the team"})).await;
-    // the owner mentions them by email in the shared space (scrubbed, not deleted)
-    call(state, &app.user, "memory_write", json!({"subject_name": "Contacts", "subject_kind": "organisation", "vault_id": team, "text": format!("Reach {} for invoices", who.email)})).await;
+    // the owner mentions them by email, in another case, in the shared space: a fact and an entity name (scrubbed, not deleted)
+    let shouted = who.email.to_uppercase().replacen("EXAMPLE", "Example", 1);
+    call(state, &app.user, "memory_write", json!({"subject_name": "Contacts", "subject_kind": "organisation", "vault_id": team, "text": format!("Reach {shouted} for invoices")})).await;
+    call(state, &app.user, "memory_write", json!({"subject_name": format!("Billing desk {shouted}"), "subject_kind": "person", "vault_id": team, "text": "Handles refunds"})).await;
+    // a relation the person wrote between two of the owner's entities in the shared space (it stays, reassigned)
+    call(state, &app.user, "memory_write", json!({"subject_name": "Acme", "subject_kind": "organisation", "vault_id": team, "text": "A customer"})).await;
+    call(state, &app.user, "memory_write", json!({"subject_name": "Globex", "subject_kind": "organisation", "vault_id": team, "text": "A supplier"})).await;
+    let team_rid = eunomia_backend::rid::parse(&team).unwrap();
+    db.test_raw()
+        .query("LET $a = (SELECT VALUE id FROM organisation WHERE vault = $v AND name = 'Acme')[0]; LET $g = (SELECT VALUE id FROM organisation WHERE vault = $v AND name = 'Globex')[0]; RELATE $a->relates_to->$g SET owner = $u, label = 'buys from';")
+        .bind(("v", team_rid.clone()))
+        .bind(("u", who.id.clone()))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
     // a space they own alone with bob in it (ownership is handed to bob)
     let club = call(state, who, "vault_create", json!({"name": format!("Club {mark}"), "kind": "org"})).await["id"].as_str().unwrap().to_string();
     call(state, who, "vault_invite", json!({"vault_id": club, "email": bob.email})).await;
@@ -224,7 +238,8 @@ async fn seed(app: &TestApp, who: &User, bob: &User) -> Seeded {
         LET $g = (CREATE oauth_grant SET owner = $u, client_id = 'client-x', client_name = $c, scope = ['memory:read'], resource = 'http://localhost:8001/mcp' RETURN VALUE id)[0];
         CREATE oauth_token SET kind = 'access', token_hash = $c, family = $g, expires_at = time::now() + 15m;
         CREATE oauth_code SET code_hash = $c, owner = $u, client_id = 'client-x', redirect_uri = 'http://localhost/cb', code_challenge = $c, scope = ['memory:read'], resource = 'http://x', expires_at = time::now() + 1m;
-        CREATE failure_capsule SET kind = 'tool', name = 'recall', source = 'test', status = 500, code = 'internal', trace_id = $c, version = 'x', args = '', user = <string> $u;";
+        CREATE failure_capsule SET kind = 'tool', name = 'recall', source = 'test', status = 500, code = 'internal', trace_id = $c, version = 'x', args = '{q: secret}', user = <string> $u;
+        CREATE failure_capsule SET kind = 'tool', name = 'vault_invite', source = 'test', status = 500, code = 'internal', trace_id = 'x', version = 'x', args = string::concat('{email: ', string::uppercase($email), '}'), user = <string> $admin;";
     state
         .control
         .test_raw()
@@ -238,21 +253,37 @@ async fn seed(app: &TestApp, who: &User, bob: &User) -> Seeded {
         .unwrap()
         .check()
         .unwrap();
-    // an export of theirs, waiting
-    let (s, b) = req(&app.router, "POST", "/api/export/subject", None, Some(&token), None).await;
+    // a colleague's own chat mentioning them: their content, counted for review, not deleted
+    let owner_db = common::org_db(state, &app.user).await;
+    owner_db
+        .test_raw()
+        .query("LET $t = (CREATE ONLY chat_thread SET owner = $o, title = 'x').id; CREATE chat_message SET owner = $o, thread_id = $t, role = 'user', content = string::concat('ask ', $e);")
+        .bind(("o", app.user.id.clone()))
+        .bind(("e", shouted.clone()))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    // an export of theirs, waiting (started from a browser session: tokens cannot)
+    let cookie = login(&app.router, &who.email).await;
+    assert_eq!(req(&app.router, "POST", "/api/export/subject", None, Some(&token), None).await.0, 403, "an API token cannot start an export");
+    let (s, b) = req(&app.router, "POST", "/api/export/subject", None, None, Some(&cookie)).await;
     assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
 
     Seeded { team, club, files: vec![path[0].clone(), audio] }
 }
 
-/// Every row of every table, as text, that mentions `needle`.
-async fn rows_naming(state: &AppState, org: &eunomia_backend::pool::OrgDb, needles: &[String]) -> Vec<String> {
+/// Every row of every table, as text, that mentions one of `needles` (any case). `others_content`
+/// tables may still hold the email in other people's own content (kept, counted for review): there
+/// only the first needle (the key) counts.
+async fn rows_naming(state: &AppState, org: &eunomia_backend::pool::OrgDb, needles: &[String], others_content: &[&str]) -> Vec<String> {
     let mut hits = Vec::new();
-    for t in TENANT_TABLES.iter().chain(["subject_export"].iter()) {
+    for t in TENANT_TABLES.iter() {
         let rows: Vec<Value> = org.test_raw().query(format!("SELECT * OMIT embedding, archive FROM {t}")).await.unwrap().take(0).unwrap();
+        let check: &[String] = if others_content.contains(t) { &needles[..1] } else { needles };
         for r in rows {
             let text = r.to_string().to_lowercase();
-            if needles.iter().any(|n| text.contains(&n.to_lowercase())) {
+            if check.iter().any(|n| text.contains(&n.to_lowercase())) {
                 hits.push(format!("{t}: {}", text.chars().take(300).collect::<String>()));
             }
         }
@@ -274,8 +305,36 @@ async fn erasure_status(state: &AppState, id: &str) -> Value {
     rows.into_iter().next().unwrap_or(Value::Null)
 }
 
+/// Every erasure test takes this: a few use `isolation::mutate`, which rewrites a statement for the
+/// whole process, so they must not overlap with one another.
+static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+async fn erase_route(app: &TestApp, who: &User, close: bool) -> String {
+    let cookie = login(&app.router, &who.email).await;
+    let (s, b) = req(&app.router, "POST", "/api/account/erasure", Some(json!({"password": common::PASSWORD, "close_workspace": close})), None, Some(&cookie)).await;
+    assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
+    json_of(&b)["id"].as_str().unwrap().to_string()
+}
+
+async fn wait_status(app: &TestApp, id: &str, want: &str) -> Value {
+    let start = Instant::now();
+    loop {
+        let r = erasure_status(&app.state, id).await;
+        if r["status"] == want {
+            return r;
+        }
+        assert!(start.elapsed() < Duration::from_secs(90), "erasure not {want}: {r}");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+async fn account_exists(app: &TestApp, u: &User) -> bool {
+    !app.state.control.test_raw().query("SELECT VALUE id FROM user WHERE id = $u").bind(("u", u.id.clone())).await.unwrap().take::<Vec<RecordId>>(0).unwrap().is_empty()
+}
+
 #[tokio::test]
 async fn erasure_removes_every_category_and_proves_it() {
+    let _serial = SERIAL.lock().await;
     let (app, _stop) = app_with_worker().await;
     let alice = common::register(&app.state, "Alice@Example.com").await;
     let bob = common::register(&app.state, "bob@example.com").await;
@@ -283,92 +342,70 @@ async fn erasure_removes_every_category_and_proves_it() {
     let db = common::org_db(&app.state, &alice).await;
     let key = alice.id.key_str();
     let needles = vec![key.clone(), "alice@example.com".to_string()];
-    assert!(!rows_naming(&app.state, &db, &needles).await.is_empty(), "the seed names the person");
-    let tester_token_ok = req(&app.router, "GET", "/api/auth/me", None, Some(&app.token), None).await.0;
-    assert_eq!(tester_token_ok, 200);
+    assert!(!rows_naming(&app.state, &db, &needles, &[]).await.is_empty(), "the seed names the person");
 
-    // a wrong password changes nothing
+    // a wrong password changes nothing; a token cannot ask at all
     let cookie = login(&app.router, &alice.email).await;
     let (s, b) = req(&app.router, "POST", "/api/account/erasure", Some(json!({"password": "not-it"})), None, Some(&cookie)).await;
-    assert_eq!(s, 403, "{}", String::from_utf8_lossy(&b));
-    assert_eq!(json_of(&b)["code"], "subject.confirmation_failed");
-    // a token cannot ask for it, only a browser session
+    assert_eq!((s, json_of(&b)["code"].clone()), (403, json!("subject.confirmation_failed")));
     let tok = token_for(&app.state, &alice).await;
-    let (s, _) = req(&app.router, "POST", "/api/account/erasure", Some(json!({"password": common::PASSWORD})), Some(&tok), None).await;
-    assert_eq!(s, 403);
+    assert_eq!(req(&app.router, "POST", "/api/account/erasure", Some(json!({"password": common::PASSWORD})), Some(&tok), None).await.0, 403);
 
-    let (s, b) = req(&app.router, "POST", "/api/account/erasure", Some(json!({"password": common::PASSWORD})), None, Some(&cookie)).await;
-    assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
-    let ticket = json_of(&b);
-    let id = ticket["id"].as_str().unwrap().to_string();
-    // signed out at once
-    assert_eq!(req(&app.router, "GET", "/api/auth/me", None, None, Some(&cookie)).await.0, 401);
-
-    let start = Instant::now();
-    while erasure_status(&app.state, &id).await["status"] != "done" {
-        assert!(start.elapsed() < Duration::from_secs(60), "erasure not done: {}", erasure_status(&app.state, &id).await);
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    let record = erasure_status(&app.state, &id).await;
+    let id = erase_route(&app, &alice, false).await;
+    assert_eq!(req(&app.router, "GET", "/api/auth/me", None, None, Some(&cookie)).await.0, 401, "signed out at once");
+    let record = wait_status(&app, &id, "done").await;
     assert!(record.get("subject").is_none_or(Value::is_null), "the completion record drops the user id: {record}");
+    assert_eq!(record["work"], json!({}), "and the working record with the email: {record}");
     let check = record["post_check"].as_object().unwrap();
     assert!(check.len() > 40, "the post-check covers every table: {record}");
     assert!(check.values().all(|v| v == 0), "{record}");
-    assert!(record["counts"]["memories"].as_i64().unwrap() >= 2, "{record}");
     assert!(record["counts"]["bucket_files"].as_i64().unwrap() >= 2, "{record}");
     assert_eq!(record["counts"]["ownership_handed_over"], 1, "{record}");
-    assert!(record["counts"]["reassigned_in_shared_spaces"].as_i64().unwrap() >= 3, "facts and the document in the shared spaces: {record}");
+    assert!(record["counts"]["email_scrubbed"].as_i64().unwrap() >= 2, "the mixed-case mentions: {record}");
+    assert_eq!(record["review"]["mentions_left_in_others_content"]["chat_messages"], 1, "a colleague's own chat is counted for review: {record}");
 
-    // nothing in any table names them, by id or email, and their files are gone
-    let left = rows_naming(&app.state, &db, &needles).await;
+    // nothing names them, by key or email in any case (a colleague's own chat keeps its words); their files are gone
+    let left = rows_naming(&app.state, &db, &needles, &["chat_message"]).await;
     assert!(left.is_empty(), "rows still naming the person:\n{}", left.join("\n"));
     for f in &seeded.files {
         assert!(!object_exists(&db, f).await, "{f} is still in the bucket");
     }
+    assert!(!account_exists(&app, &alice).await);
 
-    // what they wrote in the shared space stays, owned by someone who remains; the email in it is gone
-    let kept: Vec<Value> = db
-        .test_raw()
-        .query("SELECT text, <string> owner AS owner FROM memory WHERE vault = type::record($v)")
-        .bind(("v", seeded.team.clone()))
-        .await
-        .unwrap()
-        .take(0)
-        .unwrap();
+    // the shared space keeps what they wrote, owned by someone who stays: facts, the relation, the document
+    let team = seeded.team.clone();
+    let kept: Vec<Value> = db.test_raw().query("SELECT text, <string> owner AS owner FROM memory WHERE vault = type::record($v)").bind(("v", team.clone())).await.unwrap().take(0).unwrap();
     assert!(kept.iter().any(|m| m["text"] == "Plan agreed by the team" && m["owner"] == app.user.id.to_string()), "{kept:?}");
     assert!(kept.iter().any(|m| m["text"].as_str().unwrap().contains("[erased person]")), "{kept:?}");
-    // their document in the shared space is the owner's now, its file kept, and indexed again under the owner's key
-    let docs: Vec<Value> = db.test_raw().query("SELECT <string> owner AS owner, object_path FROM document WHERE vault = type::record($v)").bind(("v", seeded.team.clone())).await.unwrap().take(0).unwrap();
+    let rel: Vec<Value> = db.test_raw().query("SELECT <string> owner AS owner FROM relates_to WHERE label = 'buys from'").await.unwrap().take(0).unwrap();
+    assert_eq!(rel, vec![json!({"owner": app.user.id.to_string()})], "the relation they wrote in the shared space is reassigned, not deleted");
+    let names: Vec<String> = db.test_raw().query("SELECT VALUE name FROM person WHERE vault = type::record($v)").bind(("v", team.clone())).await.unwrap().take(0).unwrap();
+    assert!(names.iter().any(|n| n == "Billing desk [erased person]"), "{names:?}");
+    let docs: Vec<Value> = db.test_raw().query("SELECT <string> owner AS owner, object_path FROM document WHERE vault = type::record($v)").bind(("v", team.clone())).await.unwrap().take(0).unwrap();
     assert_eq!(docs.len(), 1, "{docs:?}");
     assert_eq!(docs[0]["owner"], app.user.id.to_string());
     assert!(object_exists(&db, docs[0]["object_path"].as_str().unwrap()).await);
-    wait_for("the reassigned document's chunks under the new owner", || async {
-        let n: Vec<Value> = db.test_raw().query("SELECT VALUE id FROM cache_record WHERE source = 'documents' AND vault = type::record($v) AND owner = $o").bind(("v", seeded.team.clone())).bind(("o", app.user.id.clone())).await.unwrap().take(0).unwrap();
-        !n.is_empty()
-    })
-    .await;
-    // the space they ran with bob is bob's now
     let roles: Vec<String> = db.test_raw().query("SELECT VALUE role FROM vault_member WHERE vault = type::record($v) AND user = $b").bind(("v", seeded.club.clone())).bind(("b", bob.id.clone())).await.unwrap().take(0).unwrap();
     assert_eq!(roles, vec!["owner"]);
 
-    // the completion record is in the audit trail, in this workspace's activity log
-    let ev = control_rows(&app.state, "SELECT action, detail FROM audit_event WHERE action = 'subject.erase' AND target = $t", ("t", json!(id))).await;
-    assert_eq!(ev.len(), 1, "{ev:?}");
+    // the workspace's activity log keeps who asked (the person only as the opaque reference) and the completion
     let cookie = app.session_cookie().await;
-    let (s, b) = req(&app.router, "GET", "/api/admin/erasures", None, None, Some(&cookie)).await;
-    assert_eq!(s, 200);
-    assert!(json_of(&b).as_array().unwrap().iter().any(|e| e["id"] == id.as_str() && e["status"] == "done"));
+    let (_, b) = req(&app.router, "GET", "/api/admin/audit?category=admin", None, None, Some(&cookie)).await;
+    let log = json_of(&b).to_string();
+    assert!(log.contains("Someone asked for their own account and data to be deleted"), "{log}");
+    assert!(log.contains("Deleted an account and its data"), "{log}");
+    assert!(!log.to_lowercase().contains("alice@example.com"), "{log}");
 
-    // everyone else still works: the owner's token and session, bob's account
+    // everyone else still works
     assert_eq!(req(&app.router, "GET", "/api/auth/me", None, Some(&app.token), None).await.0, 200);
     login(&app.router, &bob.email).await;
 
-    // resync suppression: a sync for the erased account stands down
+    // resync suppression
     let org = app.state.org(&alice.org).await.unwrap();
     let report = eunomia_backend::sources::scheduler::sync_source(&org, &alice.id, "github", None).await;
     assert_eq!(report["status"], "erased", "{report}");
 
-    // restore re-apply: a backup taken before the erasure brings the account back; the re-apply erases it again
+    // a restore of control and the org brings the account back: the leader's start-up step erases it again
     app.state
         .control
         .test_raw()
@@ -381,94 +418,294 @@ async fn erasure_removes_every_category_and_proves_it() {
         .check()
         .unwrap();
     db.test_raw().query("CREATE chat_thread SET owner = $u, title = 'restored'").bind(("u", alice.id.clone())).await.unwrap().check().unwrap();
-    let (s, b) = req(&app.router, "POST", "/api/admin/erasures/reapply", None, None, Some(&cookie)).await;
-    assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
-    assert_eq!(json_of(&b)["queued"], 1);
+    eunomia_backend::subject::reapply_on_start(&app.state).await;
     wait_for("the re-applied erasure", || async {
         control_rows(&app.state, "SELECT VALUE id FROM erasure WHERE requested_by = 'reapply' AND status = 'done'", ("x", json!(null))).await.len() == 1
     })
     .await;
-    let left = rows_naming(&app.state, &db, &needles).await;
-    assert!(left.is_empty(), "rows still naming the restored person:\n{}", left.join("\n"));
-}
+    assert!(!account_exists(&app, &alice).await);
 
-#[tokio::test]
-async fn the_post_check_fails_when_one_category_is_not_deleted() {
-    let app = TestApp::new().await;
-    let carol = common::register(&app.state, "carol@example.com").await;
-    let db = common::org_db(&app.state, &carol).await;
+    // a restore of only the org database brings rows back under an id control no longer has: matched by reference
     db.test_raw()
-        .query("LET $t = (CREATE ONLY chat_thread SET owner = $u, title = 'x').id; CREATE chat_message SET owner = $u, thread_id = $t, role = 'user', content = 'hello';")
-        .bind(("u", carol.id.clone()))
+        .query("CREATE chat_thread SET owner = $u, title = 'restored org only'; CREATE app_settings SET owner = $u;")
+        .bind(("u", alice.id.clone()))
         .await
         .unwrap()
         .check()
         .unwrap();
-    let erasure = RecordId::new("erasure", "mutated");
-    let orgs = eunomia_backend::subject::check_erasable(&app.state.control, &carol.id).await.unwrap();
+    eunomia_backend::subject::reapply_on_start(&app.state).await;
+    wait_for("the org-only re-apply", || async {
+        control_rows(&app.state, "SELECT VALUE id FROM erasure WHERE requested_by = 'reapply' AND status = 'done'", ("x", json!(null))).await.len() == 2
+    })
+    .await;
+    let left = rows_naming(&app.state, &db, &needles[..1].to_vec(), &[]).await;
+    assert!(left.is_empty(), "rows still naming the restored person:\n{}", left.join("\n"));
+}
 
-    // the control removed: chat messages are no longer deleted
-    eunomia_backend::isolation::mutate("subject.erase_owned", "DELETE chat_message WHERE owner = $u", "DELETE chat_message WHERE false");
-    let res = common::sys(eunomia_backend::subject::erase::erase_subject(&app.state, &carol.id, &orgs, &erasure)).await;
+#[tokio::test]
+async fn a_failing_post_check_keeps_the_account_and_every_retry_checks_again() {
+    let _serial = SERIAL.lock().await;
+    let (app, _stop) = app_with_worker().await;
+    let carol = common::register(&app.state, "carol@example.com").await;
+    let team = call(&app.state, &app.user, "vault_create", json!({"name": "Ops", "kind": "org"})).await["id"].as_str().unwrap().to_string();
+    call(&app.state, &app.user, "memory_write", json!({"subject_name": "Rota", "subject_kind": "organisation", "vault_id": team, "text": "Call CAROL@Example.COM on Mondays"})).await;
+
+    // the control removed: the case-insensitive scrub of facts does nothing
+    eunomia_backend::isolation::mutate(
+        "subject.scrub_email",
+        "LET $m = (UPDATE memory SET text = string::replace(text, <regex> $email_re, '[erased person]'), embedding = NONE",
+        "LET $m = (UPDATE memory SET text = text, embedding = NONE",
+    );
+    let id = erase_route(&app, &carol, false).await;
+    let failed = wait_status(&app, &id, "failed").await;
+    assert_eq!(failed["post_check"]["memory"], 1, "the first run finds the mixed-case mention: {failed}");
+    assert!(failed["error"].as_str().unwrap().contains("memory"), "{failed}");
+    // retries keep finding it with the captured email, and the account is never deleted while they do
+    wait_for("a retry", || async {
+        let jobs: Vec<i64> = app.state.control.test_raw().query("SELECT VALUE attempts FROM job WHERE kind = 'subject_erase'").await.unwrap().take(0).unwrap();
+        jobs.iter().any(|a| *a >= 3)
+    })
+    .await;
+    let again = erasure_status(&app.state, &id).await;
+    assert_ne!(again["status"], "done", "done is never written while residue exists: {again}");
+    assert!(again["work"]["email_lc"] == "carol@example.com", "the working record keeps the email for the retries: {again}");
+    assert!(account_exists(&app, &carol).await, "the account is kept until every org post-check is clean");
     eunomia_backend::isolation::clear_mutations();
-    let (_, check) = res.unwrap();
-    assert_eq!(eunomia_backend::subject::erase::residue(&check), vec!["chat_message".to_string()], "{check}");
+
+    // with the scrub back, the next retry passes
+    eunomia_backend::subject::heal_open(&app.state).await.unwrap();
+    let done = wait_status(&app, &id, "done").await;
+    assert!(done["post_check"].as_object().unwrap().values().all(|v| v == 0), "{done}");
+    let texts: Vec<String> = common::org_db(&app.state, &carol).await.test_raw().query("SELECT VALUE text FROM memory").await.unwrap().take(0).unwrap();
+    assert!(texts.iter().all(|t| !t.to_lowercase().contains("carol@example.com")), "{texts:?}");
 }
 
 #[tokio::test]
-async fn erasure_is_refused_under_a_legal_hold_for_the_last_owner_and_for_a_wrong_confirmation() {
-    let app = TestApp::new().await;
-    let dan = common::register(&app.state, "dan@example.com").await;
-    let admin_cookie = app.session_cookie().await;
-    let path = format!("/api/admin/people/{}", dan.id.to_string());
+async fn a_hold_placed_after_the_request_parks_the_erasure_until_it_is_lifted() {
+    let _serial = SERIAL.lock().await;
+    for removed in [false, true] {
+        let app = TestApp::new().await;
+        let dan = common::register(&app.state, "dan@example.com").await;
+        call(&app.state, &dan, "memory_write", json!({"subject_name": "Me", "subject_kind": "person", "text": "kept while held"})).await;
+        let id = erase_route(&app, &dan, false).await;
+        let admin = app.session_cookie().await;
+        let (s, b) = req(&app.router, "PUT", &format!("/api/admin/people/{}/legal-hold", dan.id.to_string()), Some(json!({"hold": true})), None, Some(&admin)).await;
+        assert_eq!(s, 200);
+        assert_eq!(json_of(&b)["erasure_open"], true, "the admin is told an erasure is open");
+        if removed {
+            // the control removed: the job no longer sees the hold
+            eunomia_backend::isolation::mutate("subject.hold_of", "SELECT VALUE legal_hold_at FROM ONLY $u", "SELECT VALUE NONE FROM ONLY $u");
+        }
+        let (tx, rx) = tokio::sync::watch::channel(false);
+        let cfg = WorkerConfig { id: "hold".into(), poll: Duration::from_millis(20), retry_base: Duration::from_millis(10), owner_cap: 1000, ..WorkerConfig::default() };
+        tokio::spawn(worker::run(app.state.clone(), handlers::registry(), cfg, rx));
+        if removed {
+            let r = wait_status(&app, &id, "done").await;
+            eunomia_backend::isolation::clear_mutations();
+            assert_eq!(r["status"], "done", "without the check the held account is erased: the test below detects that");
+            let _ = tx.send(true);
+            continue;
+        }
+        let r = wait_status(&app, &id, "held").await;
+        assert!(r["held_at"].is_string(), "{r}");
+        assert!(account_exists(&app, &dan).await, "a held erasure deletes nothing");
+        let texts: Vec<String> = common::org_db(&app.state, &dan).await.test_raw().query("SELECT VALUE text FROM memory").await.unwrap().take(0).unwrap();
+        assert!(texts.contains(&"kept while held".to_string()));
+        let (s, _) = req(&app.router, "PUT", &format!("/api/admin/people/{}/legal-hold", dan.id.to_string()), Some(json!({"hold": false})), None, Some(&admin)).await;
+        assert_eq!(s, 200);
+        wait_status(&app, &id, "done").await;
+        assert!(!account_exists(&app, &dan).await);
+        let _ = tx.send(true);
+    }
+}
 
-    let (s, b) = req(&app.router, "PUT", &format!("{path}/legal-hold"), Some(json!({"hold": true})), None, Some(&admin_cookie)).await;
-    assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
-    assert!(json_of(&b)["legal_hold_at"].is_string());
-    let dan_cookie = login(&app.router, &dan.email).await;
-    let (s, b) = req(&app.router, "POST", "/api/account/erasure", Some(json!({"password": common::PASSWORD})), None, Some(&dan_cookie)).await;
-    assert_eq!((s, json_of(&b)["code"].clone()), (409, json!("subject.legal_hold")));
-    let (s, b) = req(&app.router, "POST", &format!("{path}/erasure"), Some(json!({"confirm_email": dan.email})), None, Some(&admin_cookie)).await;
-    assert_eq!((s, json_of(&b)["code"].clone()), (409, json!("subject.legal_hold")));
-    // People shows the hold; the activity log has it both ways
-    let (_, b) = req(&app.router, "GET", "/api/admin/people", None, None, Some(&admin_cookie)).await;
-    assert!(json_of(&b)["people"].as_array().unwrap().iter().any(|p| p["email"] == dan.email.as_str() && p["legal_hold_at"].is_string()));
-    let (s, _) = req(&app.router, "PUT", &format!("{path}/legal-hold"), Some(json!({"hold": false})), None, Some(&admin_cookie)).await;
-    assert_eq!(s, 200);
-    let actions: Vec<String> = app.state.control.test_raw().query("SELECT VALUE action FROM audit_event WHERE string::starts_with(action, 'subject.legal_hold') ORDER BY created_at").await.unwrap().take(0).unwrap();
-    assert_eq!(actions, vec!["subject.legal_hold", "subject.legal_hold_lift"]);
+#[tokio::test]
+async fn two_erasures_in_one_workspace_keep_it_owned_and_never_hand_rows_to_each_other() {
+    let _serial = SERIAL.lock().await;
+    let (app, _stop) = app_with_worker().await;
+    let dave = common::register(&app.state, "dave@example.com").await;
+    let erin = common::register(&app.state, "erin@example.com").await;
+    // a space only dave and erin share (dave owns it), and a team space the owner runs
+    let pair = call(&app.state, &dave, "vault_create", json!({"name": "Pair", "kind": "org"})).await["id"].as_str().unwrap().to_string();
+    call(&app.state, &dave, "vault_invite", json!({"vault_id": pair, "email": erin.email})).await;
+    call(&app.state, &erin, "vault_accept_invitation", json!({"vault_id": pair})).await;
+    call(&app.state, &dave, "memory_write", json!({"subject_name": "Plan", "subject_kind": "organisation", "vault_id": pair, "text": "dave's"})).await;
+    call(&app.state, &erin, "memory_write", json!({"subject_name": "Plan", "subject_kind": "organisation", "vault_id": pair, "text": "erin's"})).await;
+    let admin = app.session_cookie().await;
+    let ask = |u: &User| {
+        let path = format!("/api/admin/people/{}/erasure", u.id.to_string());
+        let (router, admin) = (app.router.clone(), admin.clone());
+        async move { req(&router, "POST", &path, Some(json!({"password": common::PASSWORD})), None, Some(&admin)).await }
+    };
+    // two at once, and the same person twice at once: one erasure per person
+    let ((s1, b1), (s2, b2), (s3, b3)) = tokio::join!(ask(&dave), ask(&erin), ask(&dave));
+    assert_eq!((s1, s2, s3), (200, 200, 200), "{} {} {}", String::from_utf8_lossy(&b1), String::from_utf8_lossy(&b2), String::from_utf8_lossy(&b3));
+    assert_eq!(json_of(&b1)["id"], json!(json_of(&b3)["id"]), "two requests for one person make one erasure");
+    let (d, e) = (json_of(&b1)["id"].as_str().unwrap().to_string(), json_of(&b2)["id"].as_str().unwrap().to_string());
+    wait_status(&app, &d, "done").await;
+    wait_status(&app, &e, "done").await;
+    let db = common::org_db(&app.state, &app.user).await;
+    let left = rows_naming(&app.state, &db, &[dave.id.key_str(), erin.id.key_str()], &[]).await;
+    assert!(left.is_empty(), "no row is left owned by either, or handed from one to the other:\n{}", left.join("\n"));
+    let pair_rows: Vec<Value> = db.test_raw().query("SELECT * FROM memory WHERE vault = type::record($v)").bind(("v", pair.clone())).await.unwrap().take(0).unwrap();
+    assert!(pair_rows.is_empty(), "the space only they read is gone with them: {pair_rows:?}");
+    let owner: Vec<RecordId> = app.state.control.test_raw().query("SELECT VALUE user FROM membership WHERE org = $o AND role = 'owner'").bind(("o", app.user.org.record())).await.unwrap().take(0).unwrap();
+    assert_eq!(owner, vec![app.user.id.clone()], "the workspace keeps its owner");
+}
 
-    // an admin confirms with the person's email; a wrong one is refused and nothing changes
-    let (s, b) = req(&app.router, "POST", &format!("{path}/erasure"), Some(json!({"confirm_email": "someone@example.com"})), None, Some(&admin_cookie)).await;
+#[tokio::test]
+async fn a_request_left_without_a_job_is_finished_by_the_next_request_or_the_next_start() {
+    let _serial = SERIAL.lock().await;
+    let (app, _stop) = app_with_worker().await;
+    let frank = common::register(&app.state, "frank@example.com").await;
+    let gina = common::register(&app.state, "gina@example.com").await;
+    // a request that stopped half way: the row is there, no job (what a crash between the two used to leave)
+    for (u, id) in [(&frank, "stuckf"), (&gina, "stuckg")] {
+        let r = eunomia_backend::subject::subject_ref(&app.state.settings, &u.id);
+        app.state
+            .control
+            .test_raw()
+            .query("CREATE type::record('erasure', $k) SET org = $o, subject_ref = $r, subject = $u, requested_by = 'self', status = 'pending', open_slot = $r, running_slot = $k")
+            .bind(("k", id))
+            .bind(("o", u.org.key()))
+            .bind(("r", r))
+            .bind(("u", u.id.clone()))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+    }
+    // asking again joins the stuck request and gives it a job
+    let again = erase_route(&app, &frank, false).await;
+    assert_eq!(again, "erasure:stuckf");
+    wait_status(&app, "erasure:stuckf", "done").await;
+    // the start-up heal gives the other one its job
+    eunomia_backend::subject::reapply_on_start(&app.state).await;
+    wait_status(&app, "erasure:stuckg", "done").await;
+    assert!(!account_exists(&app, &gina).await);
+}
+
+#[tokio::test]
+async fn refusals_admin_reauthentication_and_closing_a_workspace() {
+    let _serial = SERIAL.lock().await;
+    let (app, _stop) = app_with_worker().await;
+    let hal = common::register(&app.state, "hal@example.com").await;
+    let admin = app.session_cookie().await;
+    let path = format!("/api/admin/people/{}/erasure", hal.id.to_string());
+
+    // an admin confirms with their own password: the person's email (visible on People) is not enough
+    let (s, b) = req(&app.router, "POST", &path, Some(json!({"confirm_email": hal.email})), None, Some(&admin)).await;
     assert_eq!((s, json_of(&b)["code"].clone()), (403, json!("subject.confirmation_failed")));
-    assert_eq!(req(&app.router, "GET", "/api/auth/me", None, None, Some(&dan_cookie)).await.0, 200, "still signed in");
-    let (s, b) = req(&app.router, "POST", &format!("{path}/erasure"), Some(json!({"confirm_email": "DAN@example.com"})), None, Some(&admin_cookie)).await;
-    assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
-    assert_eq!(json_of(&b)["status"], "pending");
-
-    // the account that set up the server (here also the workspace's last owner) cannot erase itself
-    let (s, b) = req(&app.router, "POST", "/api/account/erasure", Some(json!({"password": common::PASSWORD})), None, Some(&admin_cookie)).await;
+    let (s, b) = req(&app.router, "POST", &path, Some(json!({"password": "wrong"})), None, Some(&admin)).await;
+    assert_eq!((s, json_of(&b)["code"].clone()), (403, json!("subject.confirmation_failed")));
+    assert_eq!(req(&app.router, "GET", "/api/auth/me", None, None, Some(&login(&app.router, &hal.email).await)).await.0, 200, "nothing changed");
+    // the account that set up the server stays
+    let (s, b) = req(&app.router, "POST", "/api/account/erasure", Some(json!({"password": common::PASSWORD})), None, Some(&admin)).await;
     assert_eq!((s, json_of(&b)["code"].clone()), (409, json!("subject.last_owner")));
-    // an admin cannot use the People route on themselves
-    let (s, _) = req(&app.router, "POST", &format!("/api/admin/people/{}/erasure", app.user.id.to_string()), Some(json!({"confirm_email": app.user.email})), None, Some(&admin_cookie)).await;
-    assert_eq!(s, 400);
-}
+    assert_eq!(req(&app.router, "POST", &format!("/api/admin/people/{}/erasure", app.user.id.to_string()), Some(json!({"password": common::PASSWORD})), None, Some(&admin)).await.0, 400);
 
-#[tokio::test]
-async fn the_last_owner_of_a_workspace_cannot_be_erased() {
-    // two accounts, each with a workspace of their own: the second is its workspace's only owner
-    let app = TestApp::new().await;
+    // alone in a workspace: refused until the person confirms the workspace closes with them, then it is emptied and closed
     let solo = common::register_personal(&app.state, "solo@example.com").await;
-    let err = eunomia_backend::subject::check_erasable(&app.state.control, &solo.id).await.unwrap_err();
-    assert_eq!(err.code.as_str(), "subject.last_owner");
+    call(&app.state, &solo, "memory_write", json!({"subject_name": "Diary", "subject_kind": "organisation", "text": "private"})).await;
+    let doc = call(&app.state, &solo, "document_upload", json!({"filename": "a.md", "text": "a file"})).await;
+    let solo_db = common::org_db(&app.state, &solo).await;
+    let path_of: Vec<String> = solo_db.test_raw().query("SELECT VALUE object_path FROM type::record($d)").bind(("d", doc["id"].as_str().unwrap().to_string())).await.unwrap().take(0).unwrap();
+    let cookie = login(&app.router, &solo.email).await;
+    let (s, b) = req(&app.router, "POST", "/api/account/erasure", Some(json!({"password": common::PASSWORD})), None, Some(&cookie)).await;
+    assert_eq!((s, json_of(&b)["code"].clone()), (409, json!("subject.workspace_closes")));
+    assert!(json_of(&b)["detail"].as_str().unwrap().contains("also deletes the workspace"));
+    let id = erase_route(&app, &solo, true).await;
+    let r = wait_status(&app, &id, "done").await;
+    assert_eq!(r["counts"]["workspaces_closed"], 1, "{r}");
+    assert_eq!(r["post_check"]["closed_workspace_rows"], 0, "{r}");
+    assert!(!object_exists(&solo_db, &path_of[0]).await, "its files are gone");
+    assert_eq!(eunomia_backend::subject::erase::count_all_rows(&solo_db).await.unwrap(), 0, "every table of the workspace is empty");
+    let status: Vec<String> = app.state.control.test_raw().query("SELECT VALUE status FROM type::record('tenant', $k)").bind(("k", solo.org.key())).await.unwrap().take(0).unwrap();
+    assert_eq!(status, vec!["closed"]);
+    assert_eq!(app.state.org(&solo.org).await.err().map(|e| e.message), Some("This workspace was closed.".into()), "nothing is served from it again");
+    // the next sign-up does not land in it
+    let next = common::register(&app.state, "next@example.com").await;
+    assert_ne!(next.org, solo.org);
+
+    // owning a workspace that has other members: refused until ownership is handed over
+    let boss = common::register_personal(&app.state, "boss@example.com").await;
+    let ivy = common::register(&app.state, "ivy@example.com").await;
+    app.state
+        .control
+        .test_raw()
+        .query("CREATE membership SET user = $u, org = $o, role = 'member', slot = string::concat(<string> $o, '/', <string> $u)")
+        .bind(("u", ivy.id.clone()))
+        .bind(("o", boss.org.record()))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    let cookie = login(&app.router, &boss.email).await;
+    let (s, b) = req(&app.router, "POST", "/api/account/erasure", Some(json!({"password": common::PASSWORD, "close_workspace": true})), None, Some(&cookie)).await;
+    assert_eq!((s, json_of(&b)["code"].clone()), (409, json!("subject.last_owner")));
+    assert!(json_of(&b)["detail"].as_str().unwrap().contains("Make one of them the workspace owner first"));
+    eunomia_backend::subject::transfer_workspace(&app.state.control, &boss.org, &ivy.id).await.unwrap();
+    let id = erase_route(&app, &boss, false).await;
+    wait_status(&app, &id, "done").await;
+    let owner: Vec<RecordId> = app.state.control.test_raw().query("SELECT VALUE user FROM membership WHERE org = $o AND role = 'owner'").bind(("o", boss.org.record())).await.unwrap().take(0).unwrap();
+    assert_eq!(owner, vec![ivy.id.clone()]);
+
+    // a legal hold refuses at request time
+    let jo = common::register(&app.state, "jo@example.com").await;
+    let (s, _) = req(&app.router, "PUT", &format!("/api/admin/people/{}/legal-hold", jo.id.to_string()), Some(json!({"hold": true})), None, Some(&admin)).await;
+    assert_eq!(s, 200);
+    let cookie = login(&app.router, &jo.email).await;
+    let (s, b) = req(&app.router, "POST", "/api/account/erasure", Some(json!({"password": common::PASSWORD})), None, Some(&cookie)).await;
+    assert_eq!((s, json_of(&b)["code"].clone()), (409, json!("subject.legal_hold")));
+    let actions: Vec<String> = app.state.control.test_raw().query("SELECT VALUE action FROM audit_event WHERE action = 'subject.legal_hold'").await.unwrap().take(0).unwrap();
+    assert_eq!(actions.len(), 1);
 }
 
 #[tokio::test]
-async fn export_holds_every_category_and_leaves_out_spaces_you_left() {
+async fn with_one_control_removed_the_detectors_go_red() {
+    let _serial = SERIAL.lock().await;
+    // relations in shared spaces: without them in the reassignment, the person's relation is deleted
+    let (app, _stop) = app_with_worker().await;
+    let kim = common::register(&app.state, "kim@example.com").await;
+    let team = call(&app.state, &app.user, "vault_create", json!({"name": "Graph", "kind": "org"})).await["id"].as_str().unwrap().to_string();
+    call(&app.state, &app.user, "vault_invite", json!({"vault_id": team, "email": kim.email})).await;
+    call(&app.state, &kim, "vault_accept_invitation", json!({"vault_id": team})).await;
+    call(&app.state, &app.user, "memory_write", json!({"subject_name": "Acme", "subject_kind": "organisation", "vault_id": team, "text": "x"})).await;
+    call(&app.state, &app.user, "memory_write", json!({"subject_name": "Globex", "subject_kind": "organisation", "vault_id": team, "text": "y"})).await;
+    let db = common::org_db(&app.state, &kim).await;
+    db.test_raw()
+        .query("LET $a = (SELECT VALUE id FROM organisation WHERE vault = type::record($v) AND name = 'Acme')[0]; LET $g = (SELECT VALUE id FROM organisation WHERE vault = type::record($v) AND name = 'Globex')[0]; RELATE $a->relates_to->$g SET owner = $u, label = 'only kim';")
+        .bind(("v", team.clone()))
+        .bind(("u", kim.id.clone()))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    eunomia_backend::isolation::mutate("subject.vaults_with_rows", "(SELECT VALUE <string> in.vault FROM relates_to WHERE owner = $u AND in.vault IS NOT NONE)", "[]");
+    eunomia_backend::isolation::mutate("subject.vaults_with_rows", "(SELECT VALUE <string> out.vault FROM relates_to WHERE owner = $u AND out.vault IS NOT NONE)", "[]");
+    let id = erase_route(&app, &kim, false).await;
+    wait_status(&app, &id, "done").await;
+    eunomia_backend::isolation::clear_mutations();
+    let rel: Vec<Value> = db.test_raw().query("SELECT * FROM relates_to WHERE label = 'only kim'").await.unwrap().take(0).unwrap();
+    assert!(rel.is_empty(), "without the control the relation is deleted, which erasure_removes_every_category_and_proves_it detects");
+
+    // the org-only restore sweep: without it, restored rows of an erased owner stay
+    db.test_raw().query("CREATE chat_thread SET owner = $u, title = 'back'").bind(("u", kim.id.clone())).await.unwrap().check().unwrap();
+    eunomia_backend::isolation::mutate("subject.row_owners", "(SELECT VALUE owner FROM chat_thread GROUP BY owner)", "[]");
+    eunomia_backend::subject::reapply_on_start(&app.state).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    eunomia_backend::isolation::clear_mutations();
+    let back: Vec<Value> = db.test_raw().query("SELECT * FROM chat_thread WHERE title = 'back'").await.unwrap().take(0).unwrap();
+    assert_eq!(back.len(), 1, "without the sweep the restored row stays, which the restore step of erasure_removes_every_category_and_proves_it detects");
+}
+
+#[tokio::test]
+async fn export_is_the_persons_covers_every_workspace_and_leaves_out_spaces_they_left() {
+    let _serial = SERIAL.lock().await;
     let (app, _stop) = app_with_worker().await;
     let erin = common::register(&app.state, "erin@example.com").await;
     let token = token_for(&app.state, &erin).await;
-    // a shared space erin writes in, and the owner writes in; another space erin left
+    let cookie = login(&app.router, &erin.email).await;
     let team = call(&app.state, &app.user, "vault_create", json!({"name": "Team", "kind": "org"})).await["id"].as_str().unwrap().to_string();
     call(&app.state, &app.user, "vault_invite", json!({"vault_id": team, "email": erin.email})).await;
     call(&app.state, &erin, "vault_accept_invitation", json!({"vault_id": team})).await;
@@ -495,19 +732,39 @@ async fn export_holds_every_category_and_leaves_out_spaces_you_left() {
         .check()
         .unwrap();
     app.state.control.test_raw().query("CREATE audit_event SET user = $u, actor_kind = 'user', action = 'vault.invite', target = 'x', outcome = 'ok', detail = 'email=someone.else@example.com'").bind(("u", erin.id.clone())).await.unwrap().check().unwrap();
+    // erin is in a second workspace too, with a fact there
+    let other = common::register_personal(&app.state, "other@example.com").await;
+    let other_vault = call(&app.state, &other, "vault_create", json!({"name": "Theirs", "kind": "org"})).await["id"].as_str().unwrap().to_string();
+    app.state
+        .control
+        .test_raw()
+        .query("CREATE membership SET user = $u, org = $o, role = 'member', slot = string::concat(<string> $o, '/', <string> $u)")
+        .bind(("u", erin.id.clone()))
+        .bind(("o", other.org.record()))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    // erin acting in that workspace (a credential lands in the home workspace, so the tools are called with it set)
+    let erin_there = User { id: erin.id.clone(), email: erin.email.clone(), org: other.org };
+    call(&app.state, &other, "vault_invite", json!({"vault_id": other_vault, "email": erin.email})).await;
+    call(&app.state, &erin_there, "vault_accept_invitation", json!({"vault_id": other_vault})).await;
+    call(&app.state, &erin_there, "memory_write", json!({"subject_name": "Elsewhere", "subject_kind": "organisation", "vault_id": other_vault, "text": "written in the second workspace"})).await;
 
-    let (s, b) = req(&app.router, "POST", "/api/export/subject", None, Some(&token), None).await;
+    // a token cannot start or download; a browser session can
+    assert_eq!(req(&app.router, "POST", "/api/export/subject", None, Some(&token), None).await.0, 403);
+    let (s, b) = req(&app.router, "POST", "/api/export/subject", None, None, Some(&cookie)).await;
     assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
     let id = json_of(&b)["id"].as_str().unwrap().to_string();
-    // not ready yet, or ready: never another person's
     wait_for("the export", || async {
         let (_, b) = req(&app.router, "GET", "/api/export/subject", None, Some(&token), None).await;
         json_of(&b).as_array().unwrap().iter().any(|e| e["id"] == id.as_str() && e["status"] == "ready")
     })
     .await;
-    let other = token_for(&app.state, &common::register(&app.state, "frank@example.com").await).await;
-    assert_eq!(req(&app.router, "GET", &format!("/api/export/subject/{id}"), None, Some(&other), None).await.0, 404, "only the person (or the admin who asked) downloads it");
-    let (s, zip) = req(&app.router, "GET", &format!("/api/export/subject/{id}"), None, Some(&token), None).await;
+    assert_eq!(req(&app.router, "GET", &format!("/api/export/subject/{id}"), None, Some(&token), None).await.0, 403, "not with a token");
+    let stranger = login(&app.router, &common::register(&app.state, "frank@example.com").await.email).await;
+    assert_eq!(req(&app.router, "GET", &format!("/api/export/subject/{id}"), None, None, Some(&stranger)).await.0, 404);
+    let (s, zip) = req(&app.router, "GET", &format!("/api/export/subject/{id}"), None, None, Some(&cookie)).await;
     assert_eq!(s, 200);
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(zip)).unwrap();
     let mut read = |name: &str| -> String {
@@ -515,29 +772,46 @@ async fn export_holds_every_category_and_leaves_out_spaces_you_left() {
         archive.by_name(name).unwrap_or_else(|_| panic!("{name} in the archive")).read_to_string(&mut s).unwrap();
         s
     };
+    let home = format!("workspaces/{}", erin.org.key());
+    let second = format!("workspaces/{}", other.org.key());
     let manifest: Value = serde_json::from_str(&read("manifest.json")).unwrap();
+    assert_eq!(manifest["workspaces"].as_array().unwrap().len(), 2, "every workspace the person belongs to: {manifest}");
     let names: Vec<&str> = manifest["categories"].as_array().unwrap().iter().map(|c| c["name"].as_str().unwrap()).collect();
     for want in ["account", "spaces", "entities", "memories", "relations", "skills", "documents", "synced_records", "chat", "tool_log", "sources", "recordings", "api_tokens", "sessions", "connected_apps", "audit_events", "usage"] {
         assert!(names.contains(&want), "{want} missing from {names:?}");
     }
-    let memories = read("memories.json");
+    let memories = read(&format!("{home}/memories.json"));
     assert!(memories.contains("personal fact") && memories.contains("erin wrote this"), "{memories}");
     assert!(!memories.contains("owner wrote this"), "other members' facts are theirs");
     assert!(!memories.contains("from a space erin left"), "a space erin left is left out");
-    let chat = read("chat.json");
+    assert!(read(&format!("{second}/memories.json")).contains("written in the second workspace"));
+    let chat = read(&format!("{home}/chat.json"));
     assert!(!chat.contains("Secret project") && chat.contains("Left out of this export"), "{chat}");
-    assert_eq!(manifest["redactions"]["chat_messages_replaced"], 1);
-    let audit = read("audit_events.json");
-    assert!(!audit.contains("someone.else@example.com"), "{audit}");
+    assert!(!read("audit_events.json").contains("someone.else@example.com"));
     let tokens = read("api_tokens.json");
     assert!(tokens.contains("erasable") && !tokens.contains("token_hash"), "{tokens}");
     assert_eq!(manifest["document_files"]["included"], 1, "{manifest}");
-    let doc_files: Vec<String> = (0..archive.len()).map(|i| archive.by_index(i).unwrap().name().to_string()).filter(|n| n.starts_with("documents/")).collect();
-    assert_eq!(doc_files.len(), 1, "{doc_files:?}");
 
-    // an admin can export for someone in the workspace; the archive is listed for the admin
-    let cookie = app.session_cookie().await;
-    let (s, b) = req(&app.router, "POST", &format!("/api/admin/people/{}/export", erin.id.to_string()), None, None, Some(&cookie)).await;
+    // an admin-started export is delivered to the person: the admin sees status and counts, not the archive
+    let admin = app.session_cookie().await;
+    let (s, b) = req(&app.router, "POST", &format!("/api/admin/people/{}/export", erin.id.to_string()), None, None, Some(&admin)).await;
     assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
-    assert_eq!(json_of(&b)["subject"], erin.id.to_string());
+    let by_admin = json_of(&b)["id"].as_str().unwrap().to_string();
+    wait_for("the admin-started export", || async {
+        let (_, b) = req(&app.router, "GET", "/api/export/subject", None, None, Some(&cookie)).await;
+        json_of(&b).as_array().unwrap().iter().any(|e| e["id"] == by_admin.as_str() && e["status"] == "ready" && e["requested_by"] == app.user.id.to_string())
+    })
+    .await;
+    let (s, b) = req(&app.router, "GET", &format!("/api/export/subject/{by_admin}"), None, None, Some(&admin)).await;
+    assert_eq!((s, json_of(&b)["code"].clone()), (403, json!("auth.forbidden")), "an admin cannot download an active member's data");
+    assert_eq!(req(&app.router, "GET", &format!("/api/export/subject/{by_admin}"), None, None, Some(&cookie)).await.0, 200, "the person can");
+    let seen: Vec<String> = app.state.control.test_raw().query("SELECT VALUE action FROM audit_event WHERE user = $u AND action = 'subject.export_request_admin'").bind(("u", erin.id.clone())).await.unwrap().take(0).unwrap();
+    assert_eq!(seen.len(), 1, "the person's own ledger records it");
+    // only while the account is suspended, with a reason, recorded
+    let (s, _) = req(&app.router, "PUT", &format!("/api/admin/people/{}/suspended", erin.id.to_string()), Some(json!({"suspended": true})), None, Some(&admin)).await;
+    assert_eq!(s, 200);
+    assert_eq!(req(&app.router, "GET", &format!("/api/export/subject/{by_admin}"), None, None, Some(&admin)).await.0, 400, "a reason is required");
+    assert_eq!(req(&app.router, "GET", &format!("/api/export/subject/{by_admin}?reason=legal%20request%2042"), None, None, Some(&admin)).await.0, 200);
+    let why: Vec<String> = app.state.control.test_raw().query("SELECT VALUE detail FROM audit_event WHERE action = 'subject.export_download_admin' AND user = $u").bind(("u", erin.id.clone())).await.unwrap().take(0).unwrap();
+    assert!(why.iter().any(|d| d.contains("legal request 42")), "{why:?}");
 }
