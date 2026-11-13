@@ -12,6 +12,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import { TokensSection } from "./TokensSection";
 import { ConnectedAppsSection } from "./ConnectedAppsSection";
 import { SessionsSection } from "./SessionsSection";
+import { MfaSection } from "./MfaSection";
 import { DiagnosticsSection } from "./DiagnosticsSection";
 import { UpdateSection } from "./UpdateSection";
 import { BackupsSection } from "./BackupsSection";
@@ -163,6 +164,7 @@ function Settings() {
             {tab === "accessibility" && <AccessibilitySection />}
             {tab === "tokens" && <TokensSection />}
             {tab === "sessions" && <SessionsSection />}
+            {tab === "security" && <MfaSection />}
             {tab === "support" && <DiagnosticsSection />}
             {tab === "data" && <DataSection />}
             {tab === "people" && <PeopleSection />}
