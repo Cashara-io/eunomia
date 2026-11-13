@@ -1,6 +1,6 @@
 # Self-hosted readiness catalogue
 
-This catalogue describes Eunomia's source at the commit recorded in [controls.json](controls.json). It does not establish deployed effectiveness or independent assurance. There are 36 capabilities: 5 Done, 21 Partial and 10 Missing. A capability can support several clauses without satisfying any whole clause.
+This catalogue describes Eunomia's source at the commit recorded in [controls.json](controls.json). It does not establish deployed effectiveness or independent assurance. There are 36 capabilities: 5 Done, 22 Partial and 9 Missing. A capability can support several clauses without satisfying any whole clause.
 
 Start with [responsibilities](responsibilities.md) and [applicability](applicability.md). The [ASVS checklist](asvs-checklist.md) covers every L1/L2 requirement separately. Organisational work belongs to the [policy track](policy-track.md).
 

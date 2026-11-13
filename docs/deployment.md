@@ -167,6 +167,7 @@ their local-dev defaults in production:
 | `CAPSULE_ARGS` | `off` | `off`: failure capsules keep only a hash and the JSON shape of a failed call's arguments. `redacted`: keep the arguments with secrets masked, so `eunomia replay` can re-run them. See [debugging](debugging.md). |
 | `AUDIT_RETENTION_DAYS` | `365` | The `prune_auth` job deletes audit events older than this. `0` keeps them forever. |
 | `TOOL_USAGE_RETENTION_DAYS` | `90` | The same job deletes the hourly tool-call counters (Settings, Usage) older than this. `0` keeps them forever. |
+| `EUNOMIA_EXPORT_MAX_MB` | `64` | The largest data export archive (Settings > Data, Export my data) the server keeps; a bigger one fails with a message saying so. Archives are kept for seven days. Erasure records are never pruned. See [subject-rights.md](privacy/subject-rights.md). |
 | `SESSION_RETENTION_DAYS` | `7` | The same job deletes browser sessions that expired (or were revoked) this many days ago. |
 | `CHANGE_LOG_RETENTION_DAYS` | `90` | The scheduler trims each vault's change log ([projects](projects.md#retention)) to rows newer than this, about hourly. `0` keeps rows whatever their age. |
 | `CHANGE_LOG_MAX_ROWS` | `100000` | The same trim keeps at most this many of a vault's newest change log rows. `0` means no cap. A client whose cursor falls below what is kept gets `changes.resync`. |
