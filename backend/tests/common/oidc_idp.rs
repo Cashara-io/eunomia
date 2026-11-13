@@ -283,6 +283,8 @@ pub struct Landed {
     pub location: String,
     /// `name=value` of the session cookie when one was set
     pub session: Option<String>,
+    /// `name=value` of the cookie a sign-in leaves when it must ask before linking to a password account
+    pub link: Option<String>,
 }
 
 impl Landed {
@@ -368,7 +370,8 @@ impl App {
         let (status, headers, _) = raw(&self.router, req.body(Body::empty()).unwrap()).await;
         let location = headers.get(header::LOCATION).map(|v| v.to_str().unwrap().to_string()).unwrap_or_default();
         let session = cookie_pairs(&headers).into_iter().find(|c| c.starts_with("eunomia_session=") && c.len() > "eunomia_session=".len());
-        Landed { status, location, session }
+        let link = cookie_pairs(&headers).into_iter().find(|c| c.starts_with("eunomia_oidc_link=") && c.len() > "eunomia_oidc_link=".len());
+        Landed { status, location, session, link }
     }
 
     pub async fn sign_in(&self) -> Landed {

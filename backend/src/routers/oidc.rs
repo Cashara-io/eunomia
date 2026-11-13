@@ -15,8 +15,13 @@
 //! 1. already linked: that user.
 //! 2. an account with the same email exists: link to it only when the provider says the email is verified
 //!    (otherwise anyone who can claim someone's address at a lax provider would take over their account).
-//!    Linking signs the account's other browser sessions out, so a session somebody planted by pre-registering
-//!    the address does not survive it.
+//!    - The account has no password (made by single sign-on): link it, signing its other browser sessions out.
+//!    - The account has a password: ask first ([`ask_before_linking`]). Anyone could have registered the
+//!      address with a password of their own, and linking silently would hand the real owner an account
+//!      whose password and API tokens someone else still holds. The person either proves the password
+//!      (link, nothing removed) or takes the account over, which removes the password, every API token, app
+//!      connection and session ([`take_over`]). `POST /api/auth/oidc/link` does either; the provider sign-in
+//!      that started it rides in a short-lived signed cookie.
 //! 3. otherwise a new account with no password, through the same signup gate and setup (org membership,
 //!    personal vault) as password signup. On an empty install the first sign-in is the first user, the admin.
 //!    When the sign-in started from an organisation invitation link (`POST /api/auth/oidc/start` from the
@@ -30,11 +35,12 @@ use axum::{
     http::{HeaderMap, HeaderValue, header},
     response::{AppendHeaders, IntoResponse, Redirect, Response},
     routing::get,
-    Form, Router,
+    Form, Json, Router,
 };
 use chrono::Utc;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
+use surrealdb::types::SurrealValue;
 
 use crate::audit::{self, Event};
 use crate::auth;
@@ -48,7 +54,10 @@ use crate::routers::auth::{cookie_flags, session_cookie_header, signup_allowed, 
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/auth/oidc/start", get(start).post(start_invited)).route("/auth/oidc/callback", get(callback))
+    Router::new()
+        .route("/auth/oidc/start", get(start).post(start_invited))
+        .route("/auth/oidc/callback", get(callback))
+        .route("/auth/oidc/link", get(link_info).post(link))
 }
 
 const FLOW_COOKIE: &str = "eunomia_oidc";
@@ -245,6 +254,9 @@ enum Fail {
     SignupClosed,
     /// The invitation the sign-in started from cannot be used: (the `oidc_error` code, why).
     Invitation(&'static str, String),
+    /// Not a failure: the verified email belongs to an account with a password, so the person is asked
+    /// before linking ([`ask_before_linking`]).
+    AskToLink { user: surrealdb::types::RecordId, email: String, issuer: String, subject: String },
     Internal(AppError),
 }
 
@@ -259,6 +271,7 @@ impl Fail {
             Fail::EmailUnverified => "email_unverified",
             Fail::SignupClosed => "signup_closed",
             Fail::Invitation(code, _) => code,
+            Fail::AskToLink { .. } => "link",
             Fail::Internal(_) => "unavailable",
         }
     }
@@ -266,7 +279,7 @@ impl Fail {
     fn outcome(&self) -> ErrorCode {
         match self {
             Fail::State(_) | Fail::Denied(_) | Fail::Token(_) => ErrorCode::AuthUnauthorized,
-            Fail::NoEmail | Fail::EmailUnverified | Fail::SignupClosed | Fail::Invitation(..) => ErrorCode::AuthForbidden,
+            Fail::NoEmail | Fail::EmailUnverified | Fail::SignupClosed | Fail::Invitation(..) | Fail::AskToLink { .. } => ErrorCode::AuthForbidden,
             Fail::Provider(_) | Fail::Internal(_) => ErrorCode::Internal,
         }
     }
@@ -279,6 +292,7 @@ impl Fail {
             Fail::EmailUnverified => "an account has this email but the provider did not verify it".into(),
             Fail::SignupClosed => "signup is not open to this email".into(),
             Fail::Invitation(_, why) => why.clone(),
+            Fail::AskToLink { .. } => "an account with a password has this email: asking before linking".into(),
             Fail::Internal(e) => e.source.clone().unwrap_or_else(|| e.message.clone()),
         }
     }
@@ -352,6 +366,12 @@ async fn callback(State(state): State<AppState>, https: Option<Extension<Forward
             };
             let session = session_cookie_header(&token, &state.settings.public_url, https);
             Ok(no_store((AppendHeaders([(header::SET_COOKIE, session), (header::SET_COOKIE, clear)]), Redirect::to(&target)).into_response()))
+        }
+        Err(Fail::AskToLink { user, email, issuer, subject }) => {
+            let pending = PendingLink { purpose: LINK_PURPOSE.into(), user: user.to_string(), email, issuer, subject, next, exp: Utc::now().timestamp() + FLOW_TTL_SECS };
+            let token = encode(&Header::new(Algorithm::HS256), &pending, &EncodingKey::from_secret(state.settings.jwt_secret.as_bytes())).map_err(|e| AppError::internal(e.to_string()))?;
+            let cookie = format!("{LINK_COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/api/auth/oidc; Max-Age={FLOW_TTL_SECS}{}", cookie_flags(&state.settings.public_url, https));
+            Ok(no_store((AppendHeaders([(header::SET_COOKIE, cookie), (header::SET_COOKIE, clear)]), Redirect::to("/login/link")).into_response()))
         }
         Err(fail) => {
             if let Fail::Internal(e) = &fail {
@@ -447,6 +467,9 @@ async fn map_identity(state: &AppState, cfg: &OidcConfig, id: &Identity, invite:
             if !verified {
                 return Err(Fail::EmailUnverified);
             }
+            if ask_before_linking(db, &user.id).await? {
+                return Err(Fail::AskToLink { user: user.id, email, issuer: id.issuer.clone(), subject: id.subject.clone() });
+            }
             match models_user::link_identity(db, &user.id, &id.issuer, &id.subject, &email).await {
                 Ok(()) => {
                     // whoever pre-registered this address may hold a session on the account: end every one
@@ -516,8 +539,186 @@ async fn invited(state: &AppState, hash: &str, email: &str, verified: bool) -> R
     Ok(p)
 }
 
+// ---------------------------------------------------------------- linking to an account that has a password
+
+const LINK_COOKIE: &str = "eunomia_oidc_link";
+const LINK_PURPOSE: &str = "oidc-link";
+
+/// A verified provider sign-in waiting for the person to prove the account's password or take it over.
+#[derive(Serialize, Deserialize)]
+struct PendingLink {
+    purpose: String,
+    /// The account with this email.
+    user: String,
+    email: String,
+    issuer: String,
+    subject: String,
+    next: String,
+    exp: i64,
+}
+
+fn read_pending_link(state: &AppState, headers: &HeaderMap) -> Option<PendingLink> {
+    let all = headers.get(header::COOKIE)?.to_str().ok()?;
+    let token = all.split(';').find_map(|p| p.trim().strip_prefix(&format!("{LINK_COOKIE}=")))?;
+    let mut v = Validation::new(Algorithm::HS256);
+    v.set_required_spec_claims(&["exp"]);
+    v.leeway = 0;
+    let p = decode::<PendingLink>(token, &DecodingKey::from_secret(state.settings.jwt_secret.as_bytes()), &v).ok()?.claims;
+    (p.purpose == LINK_PURPOSE).then_some(p)
+}
+
+fn clear_link_cookie(state: &AppState, https: Option<Extension<ForwardedHttps>>) -> String {
+    format!("{LINK_COOKIE}=; HttpOnly; SameSite=Lax; Path=/api/auth/oidc; Max-Age=0{}", cookie_flags(&state.settings.public_url, https))
+}
+
+/// Whether linking a verified provider identity to this existing account must ask first: it has a
+/// password, so whoever set that password may not be the person signing in. An account with no password
+/// (made by single sign-on) links as before. Accounts already linked to the identity never get here.
+async fn ask_before_linking(db: &crate::pool::ControlDb, user: &surrealdb::types::RecordId) -> AppResult<bool> {
+    #[derive(Deserialize, SurrealValue)]
+    struct Row {
+        #[serde(default)]
+        #[surreal(default)]
+        password_hash: Option<String>,
+    }
+    let mut res = crate::store::control::AUTH_USER_BY_ID.on(db).bind(("id", user.clone())).await?;
+    Ok(res.take::<Vec<Row>>(0)?.into_iter().next().is_some_and(|r| r.password_hash.is_some()))
+}
+
+/// Takes an account over for the person whose provider verified its address: removes every credential
+/// someone else may hold (the password, all API tokens, OAuth grants, codes and tokens, every browser
+/// session) in one transaction, and records it. When enforced second factors exist, their enrolment and
+/// recovery codes must be cleared here too.
+async fn take_over(state: &AppState, user: &surrealdb::types::RecordId) -> AppResult<()> {
+    crate::store::control::AUTH_TAKE_OVER.on(&state.control).bind(("user", user.clone())).await?.check()?;
+    state.credentials.forget_user(user);
+    let actor = Actor { kind: "user", id: user.to_string() };
+    audit::record(
+        &state.control,
+        Event { user: Some(user), actor: &actor, action: "auth.oidc_takeover", target: "", outcome: "ok", detail: "removed the password, API tokens, app connections and sessions" },
+    )
+    .await;
+    Ok(())
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct LinkInfo {
+    /// The address both the provider and the existing account have.
+    email: String,
+    /// "Continue with {provider}".
+    provider: String,
+}
+
+#[utoipa::path(
+    operation_id = "oidcLinkInfo",
+    get,
+    path = "/api/auth/oidc/link",
+    tag = "auth",
+    summary = "The account a provider sign-in is waiting to link to (it has a password)",
+    responses((status = 200, body = LinkInfo), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(()),
+)]
+async fn link_info(State(state): State<AppState>, headers: HeaderMap) -> AppResult<Json<LinkInfo>> {
+    let cfg = configured(&state)?;
+    let p = read_pending_link(&state, &headers).ok_or_else(link_expired)?;
+    Ok(Json(LinkInfo { email: p.email, provider: cfg.provider_name.clone() }))
+}
+
+fn link_expired() -> AppError {
+    AppError::coded(ErrorCode::AuthUnauthorized, "This sign-in has expired. Sign in with your provider again.")
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+struct LinkChoice {
+    /// The existing account's password: proves it is yours, and links without removing anything.
+    #[serde(default)]
+    password: Option<String>,
+    /// `true`: you don't know the password. The account is taken over: its password, API tokens, app
+    /// connections and sessions are removed first.
+    #[serde(default)]
+    take_over: bool,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct LinkDone {
+    /// The account was taken over: whatever it already held was put there by whoever had it before.
+    took_over: bool,
+    /// Where to go next.
+    next: String,
+}
+
+#[utoipa::path(
+    operation_id = "oidcLink",
+    post,
+    path = "/api/auth/oidc/link",
+    tag = "auth",
+    summary = "Link the provider sign-in to the existing account: prove its password, or take it over",
+    description = "Needs the cookie the provider sign-in left. With `password`, the password is checked (throttled like login) and the account is linked; nothing is removed. With `take_over: true`, the account's password, API tokens, app connections and sessions are removed, then it is linked. Starts a session.",
+    request_body = LinkChoice,
+    responses((status = 200, body = LinkDone), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(()),
+)]
+async fn link(
+    State(state): State<AppState>,
+    https: Option<Extension<ForwardedHttps>>,
+    ip: Option<Extension<crate::gate::ClientIp>>,
+    headers: HeaderMap,
+    Json(body): Json<LinkChoice>,
+) -> AppResult<Response> {
+    configured(&state)?;
+    let p = read_pending_link(&state, &headers).ok_or_else(link_expired)?;
+    let user_id: surrealdb::types::RecordId = crate::rid::parse(&p.user).map_err(|_| link_expired())?;
+    let still_asks = ask_before_linking(&state.control, &user_id).await?;
+    let took_over = if body.take_over {
+        if still_asks {
+            take_over(&state, &user_id).await?;
+        }
+        true
+    } else {
+        let password = body.password.as_deref().filter(|p| !p.is_empty()).ok_or_else(|| AppError::bad_request("Enter the account's password, or choose to take the account over."))?;
+        // the same throttle as login, on the same keys: guesses here and there add up
+        let account_key = format!("login-fail:{}", models_user::normalize_email(&p.email));
+        let fail_key = format!("{account_key}:{}", ip.as_ref().map_or("", |i| i.0 .0.as_str()));
+        let throttled = state.fail_throttle.check(&fail_key, crate::ratelimit::LOGIN_FAILS).and_then(|()| state.fail_throttle.check(&account_key, crate::ratelimit::LOGIN_ACCOUNT_FAILS));
+        if let Err(wait) = throttled {
+            return Ok(crate::gate::rate_limited(wait));
+        }
+        let proved = models_user::authenticate(&state.control, &p.email, password).await?.is_some_and(|u| u.id == user_id);
+        if !proved {
+            state.fail_throttle.fail(&fail_key);
+            state.fail_throttle.fail(&account_key);
+            let actor = audit::anonymous();
+            audit::record(&state.control, Event { user: Some(&user_id), actor: &actor, action: "auth.oidc_link", target: "", outcome: ErrorCode::AuthUnauthorized.as_str(), detail: "wrong password" }).await;
+            return Err(AppError::unauthorized("That isn't the password for this account."));
+        }
+        state.fail_throttle.clear(&fail_key);
+        state.fail_throttle.clear(&account_key);
+        false
+    };
+    match models_user::link_identity(&state.control, &user_id, &p.issuer, &p.subject, &p.email).await {
+        Ok(()) => {}
+        // a second tab finished first: the identity is already this account's
+        Err(e) if e.code == ErrorCode::DbDuplicate && models_user::user_by_identity(&state.control, &p.issuer, &p.subject).await?.is_some_and(|u| u.id == user_id) => {}
+        Err(e) => return Err(e),
+    }
+    let mut res = crate::store::control::AUTH_USER_BY_ID.on(&state.control).bind(("id", user_id.clone())).await?;
+    #[derive(Deserialize, SurrealValue)]
+    struct Row {
+        email: String,
+    }
+    let email = res.take::<Vec<Row>>(0)?.into_iter().next().ok_or_else(link_expired)?.email;
+    let user = models_user::load_user(&state.control, user_id.clone(), email).await?;
+    let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref()).await?;
+    let actor = Actor { kind: "user", id: user.id.to_string() };
+    let detail = if took_over { "linked after taking the account over" } else { "linked after the account's password was given" };
+    audit::record(&state.control, Event { user: Some(&user.id), actor: &actor, action: "auth.oidc_link", target: "", outcome: "ok", detail }).await;
+    let session = session_cookie_header(&token, &state.settings.public_url, https);
+    let body = LinkDone { took_over, next: p.next };
+    Ok(no_store((AppendHeaders([(header::SET_COOKIE, session), (header::SET_COOKIE, clear_link_cookie(&state, https))]), Json(body)).into_response()))
+}
+
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(start, start_invited, callback))]
+#[openapi(paths(start, start_invited, callback, link_info, link))]
 pub struct Doc;
 
 #[cfg(test)]

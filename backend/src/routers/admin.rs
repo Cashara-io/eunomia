@@ -57,7 +57,7 @@ pub enum AuditCategory {
     Server,
 }
 
-const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.failed"];
+const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.oidc_takeover", "auth.failed"];
 const ADMIN_ACTIONS: &[&str] = &[
     "admin.grant",
     "admin.revoke",
@@ -338,7 +338,9 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "auth.login" => return "Sign-in failed (wrong email or password)".into(),
         "auth.oidc_login" if ok => return "Signed in with single sign-on".into(),
         "auth.oidc_login" => return "Single sign-on sign-in failed".into(),
-        "auth.oidc_link" => "Linked a single sign-on account".into(),
+        "auth.oidc_link" if ok => "Linked a single sign-on account".into(),
+        "auth.oidc_link" => return "Linking single sign-on failed (wrong password)".into(),
+        "auth.oidc_takeover" => "Took the account over with single sign-on: its password, API tokens, app connections and sessions were removed".into(),
         "auth.register" => "Created an account".into(),
         "auth.failed" => return "Used a sign-in or token that is no longer valid".into(),
         "auth.token_create" => format!("Created the API token {}", name("(since revoked)")),
@@ -372,7 +374,7 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
 }
 
 /// Actions whose failed sentence already says why ([`describe`] returns early for them).
-const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.failed", "oauth.consent", "authz.denied", "org.invite_accept", "org.invite_expired"];
+const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.oidc_link", "auth.failed", "oauth.consent", "authz.denied", "org.invite_accept", "org.invite_expired"];
 
 /// Why an action failed, from the error code it ended with, in words; empty when it worked.
 /// The exact cause a failed attempt recorded in its detail (`why=...`), when it recorded one.
