@@ -50,6 +50,15 @@ struct ErasureRow {
     #[serde(default)]
     #[surreal(default)]
     closes: Vec<String>,
+    #[serde(default)]
+    #[surreal(default)]
+    scope: String,
+    #[serde(default)]
+    #[surreal(default)]
+    org: String,
+    #[serde(default)]
+    #[surreal(default)]
+    first_org: Option<String>,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -158,7 +167,10 @@ enum Outcome {
 pub async fn erase_job(state: AppState, job: Job) -> Result<(), JobError> {
     let id_str = job.payload.get("erasure").and_then(Value::as_str).ok_or_else(|| JobError::permanent(ErrorCode::ValidationInvalid, "job payload has no erasure"))?;
     let erasure = crate::rid::parse(id_str).map_err(|_| JobError::permanent(ErrorCode::ValidationInvalid, "bad erasure id"))?;
-    match run(&state, &erasure, &job.payload).await {
+    let out = run(&state, &erasure).await;
+    // every way out of a run gives the workspace locks back (a crash leaves them to the start-up heal)
+    let _ = q::LOCKS_RELEASE.on(&state.control).bind(("id", erasure.clone())).await;
+    match out {
         Ok(Outcome::Done | Outcome::Held) => Ok(()),
         Ok(Outcome::Busy) => {
             // waiting for another erasure is not a failure: a fresh job a few seconds on, this one ends
@@ -191,48 +203,43 @@ async fn park(state: &AppState, erasure: &RecordId) -> Result<Outcome, AppError>
     Ok(Outcome::Held)
 }
 
-async fn run(state: &AppState, erasure: &RecordId, payload: &Value) -> Result<Outcome, AppError> {
+async fn run(state: &AppState, erasure: &RecordId) -> Result<Outcome, AppError> {
     let row: Option<ErasureRow> = q::ERASURE_GET.on(&state.control).bind(("id", erasure.clone())).await?.take(0)?;
     let Some(row) = row else { return Err(AppError::coded(ErrorCode::ResourceNotFound, "erasure row is gone")) };
-    if row.status == "done" || row.status == "held" {
+    if matches!(row.status.as_str(), "done" | "held" | "cancelled") {
         return Ok(Outcome::Done);
     }
     let Some(subject) = row.subject.clone() else { return Err(AppError::internal("erasure has no subject")) };
     let reapply = row.requested_by == "reapply";
+    let workspace = (row.scope == "workspace").then(|| OrgId::parse(&row.org)).flatten();
 
     if !reapply && held(state, &subject).await? {
         return park(state, erasure).await;
     }
-    // one running erasure per workspace: the slot is unique
-    let taken = q::ERASURE_RUNNING.on(&state.control).bind(("id", erasure.clone())).await.and_then(|mut r| r.take::<Vec<String>>(0));
-    match taken {
-        Ok(ids) if ids.is_empty() => return Ok(Outcome::Done),
-        Ok(_) => {}
-        Err(e) if crate::tx::is_duplicate(&e) => return Ok(Outcome::Busy),
-        Err(e) => {
-            let e = AppError::from(e);
-            if e.code == ErrorCode::DbConflict || e.code == ErrorCode::DbDuplicate {
-                return Ok(Outcome::Busy);
-            }
-            return Err(e);
-        }
+    let started: Vec<String> = q::ERASURE_RUNNING.on(&state.control).bind(("id", erasure.clone())).await?.take(0)?;
+    if started.is_empty() {
+        return Ok(Outcome::Done);
     }
 
-    let work: Work = match serde_json::from_value::<Work>(row.work.clone()) {
-        Ok(w) if w.captured => w,
-        _ => {
-            let w = capture(state, &subject, &row, payload).await?;
-            let closes: Vec<String> = w.orgs.iter().filter(|o| o.close).map(|o| o.org.clone()).collect();
-            q::ERASURE_WORK
-                .on(&state.control)
-                .bind(("id", erasure.clone()))
-                .bind(("work", serde_json::to_value(&w).unwrap_or_default()))
-                .bind(("closes", closes))
-                .await?
-                .check()?;
-            w
-        }
+    // the plan is rebuilt from live state on every run (a resume after a hold sees new files, tokens and
+    // workspaces) and merged with what was saved before (a retry after steps that already ran still checks
+    // everything the first run knew)
+    let saved = serde_json::from_value::<Work>(row.work.clone()).ok().filter(|w| w.captured);
+    let fresh = capture(state, &subject, &row, workspace.as_ref()).await?;
+    let work = match saved {
+        Some(s) => merge(s, fresh),
+        None => fresh,
     };
+    let closes: Vec<String> = work.orgs.iter().filter(|o| o.close).map(|o| o.org.clone()).collect();
+    q::ERASURE_WORK.on(&state.control).bind(("id", erasure.clone())).bind(("work", serde_json::to_value(&work).unwrap_or_default())).bind(("closes", closes)).await?.check()?;
+
+    // one running erasure per workspace, over every workspace this one touches
+    let orgs: Vec<String> = work.orgs.iter().map(|o| o.org.clone()).collect();
+    let locked = q::LOCKS_TAKE.on(&state.control).bind(("id", erasure.clone())).bind(("orgs", orgs)).await.and_then(|r| r.check());
+    if let Err(e) = locked {
+        tracing::info!(erasure = %erasure.to_string(), error = %e, "another erasure holds a workspace this one touches; waiting");
+        return Ok(Outcome::Busy);
+    }
 
     // the last moment a hold placed after the request stops it: nothing is deleted yet
     if !reapply && held(state, &subject).await? {
@@ -256,7 +263,8 @@ async fn run(state: &AppState, erasure: &RecordId, payload: &Value) -> Result<Ou
         add_counts(&mut counts, &c);
         add_into(&mut check, &org_check(&org_state, &subject, o, &work, &email_lc).await?);
         if !o.close {
-            let r: Value = q::REVIEW.on(&org_state.db).bind(("email_lc", email_lc.clone())).await?.take::<Option<Value>>(0)?.unwrap_or_default();
+            let kept: Vec<RecordId> = o.kept.iter().filter_map(|k| crate::rid::parse(&k.vault).ok()).collect();
+            let r: Value = q::REVIEW.on(&org_state.db).bind(("email_lc", email_lc.clone())).bind(("kept", kept)).await?.take::<Option<Value>>(0)?.unwrap_or_default();
             add_into(&mut review, &r);
         }
     }
@@ -267,32 +275,66 @@ async fn run(state: &AppState, erasure: &RecordId, payload: &Value) -> Result<Ou
     if !reapply && held(state, &subject).await? {
         return park(state, erasure).await;
     }
-    // the workspace keeps an owner (a restore re-apply of its sole owner): hand it over first
+    // the workspace keeps an owner: hand it over first where the person owned it
     for o in work.orgs.iter().filter(|o| o.transfer) {
         if let (Some(org), Some(heir)) = (OrgId::parse(&o.org), o.heir.as_deref()) {
-            q::ORG_OWNER_TRANSFER.on(&state.control).bind(("org", org.record())).bind(("from", subject.clone())).bind(("to", rid(heir)?)).await?.check()?;
-            *counts.entry("workspace_ownership_handed_over".into()).or_insert(0) += 1;
+            let res = q::ORG_OWNER_TRANSFER.on(&state.control).bind(("org", org.record())).bind(("from", subject.clone())).bind(("to", rid(heir)?)).await.and_then(|r| r.check());
+            // already handed over by an earlier run: the person is no longer a member there
+            if res.is_ok() {
+                *counts.entry("workspace_ownership_handed_over".into()).or_insert(0) += 1;
+            }
         }
     }
-    let mut res = q::ERASE_CONTROL
-        .on(&state.control)
-        .bind(("key", work.key.clone()))
-        .bind(("u", subject.clone()))
-        .bind(("actors", work.actors.clone()))
-        .bind(("email_re", email_re.clone()))
-        .bind(("email_lc", email_lc.clone()))
-        .await?;
-    add_counts(&mut counts, &res.take::<Option<Value>>(q::ERASE_CONTROL.slot)?.unwrap_or_default());
-    state.credentials.forget_user(&subject);
-    let mut res = q::CONTROL_RESIDUE
-        .on(&state.control)
-        .bind(("key", work.key.clone()))
-        .bind(("u", subject.clone()))
-        .bind(("actors", work.actors.clone()))
-        .bind(("email_lc", email_lc.clone()))
-        .bind(("erasure", erasure.clone()))
-        .await?;
-    add_into(&mut check, &res.take::<Option<Value>>(0)?.unwrap_or_default());
+
+    let mut account_note = json!("deleted");
+    let delete_account = match &workspace {
+        None => true,
+        Some(org) => {
+            // a workspace erasure: what the control database holds about the person in that workspace
+            let mut res = q::ERASE_CONTROL_WORKSPACE.on(&state.control).bind(("u", subject.clone())).bind(("org", org.record())).bind(("okey", org.key())).await?;
+            add_counts(&mut counts, &res.take::<Option<Value>>(q::ERASE_CONTROL_WORKSPACE.slot)?.unwrap_or_default());
+            let mut res = q::CONTROL_RESIDUE_WORKSPACE.on(&state.control).bind(("u", subject.clone())).bind(("org", org.record())).bind(("okey", org.key())).await?;
+            add_into(&mut check, &res.take::<Option<Value>>(0)?.unwrap_or_default());
+            // the account goes too only when nothing else is left of it and this workspace made it
+            let left: Vec<RecordId> = q::USER_ORGS.on(&state.control).bind(("u", subject.clone())).await?.take(0)?;
+            let made_here = row.first_org.as_deref() == Some(org.key().as_str());
+            let exists: Vec<RecordId> = q::USERS_EXISTING.on(&state.control).bind(("ids", vec![subject.clone()])).await?.take(0)?;
+            if exists.is_empty() {
+                account_note = json!("already gone (a restore of only this workspace)");
+                false
+            } else if left.is_empty() && made_here {
+                true
+            } else {
+                account_note = json!(if left.is_empty() {
+                    "kept: it was not made by this workspace's sign-up or invitation; a server operator decides"
+                } else {
+                    "kept: it belongs to other workspaces"
+                });
+                false
+            }
+        }
+    };
+    if delete_account {
+        let mut res = q::ERASE_CONTROL
+            .on(&state.control)
+            .bind(("key", work.key.clone()))
+            .bind(("u", subject.clone()))
+            .bind(("actors", work.actors.clone()))
+            .bind(("email_re", email_re.clone()))
+            .bind(("email_lc", email_lc.clone()))
+            .await?;
+        add_counts(&mut counts, &res.take::<Option<Value>>(q::ERASE_CONTROL.slot)?.unwrap_or_default());
+        state.credentials.forget_user(&subject);
+        let mut res = q::CONTROL_RESIDUE
+            .on(&state.control)
+            .bind(("key", work.key.clone()))
+            .bind(("u", subject.clone()))
+            .bind(("actors", work.actors.clone()))
+            .bind(("email_lc", email_lc.clone()))
+            .bind(("erasure", erasure.clone()))
+            .await?;
+        add_into(&mut check, &res.take::<Option<Value>>(0)?.unwrap_or_default());
+    }
     if !residue(&Value::Object(check.clone())).is_empty() {
         return fail_with_residue(state, erasure, check).await;
     }
@@ -310,7 +352,7 @@ async fn run(state: &AppState, erasure: &RecordId, payload: &Value) -> Result<Ou
         .bind(("id", erasure.clone()))
         .bind(("counts", counts.clone()))
         .bind(("post_check", Value::Object(check)))
-        .bind(("review", json!({ "mentions_left_in_others_content": Value::Object(review) })))
+        .bind(("review", json!({ "mentions_left_in_others_content": Value::Object(review), "account": account_note })))
         .await?
         .check()?;
     // filed under someone who stays in the home workspace, so that workspace's log (and only it) shows it
@@ -338,8 +380,52 @@ pub async fn pending_others(state: &AppState, subject: &RecordId) -> Result<Vec<
     Ok(all.into_iter().filter(|u| u != subject).collect())
 }
 
-/// Builds the working record. Run once, before anything is deleted.
-async fn capture(state: &AppState, subject: &RecordId, row: &ErasureRow, payload: &Value) -> Result<Work, AppError> {
+/// A later capture added to an earlier one: every identifier and file either knew, the live plan where
+/// there is one and the saved plan for workspaces the live state no longer shows (steps already ran).
+fn merge(saved: Work, fresh: Work) -> Work {
+    let mut actors = saved.actors.clone();
+    for a in fresh.actors {
+        if !actors.contains(&a) {
+            actors.push(a);
+        }
+    }
+    let mut orgs: Vec<OrgWork> = Vec::new();
+    for f in fresh.orgs {
+        let mut o = f;
+        if let Some(s) = saved.orgs.iter().find(|s| s.org == o.org) {
+            for v in &s.solo {
+                if !o.solo.contains(v) {
+                    o.solo.push(v.clone());
+                }
+            }
+            for p in &s.files {
+                if !o.files.contains(p) {
+                    o.files.push(p.clone());
+                }
+            }
+            for k in &s.kept {
+                if !o.kept.iter().any(|x| x.vault == k.vault) && !o.solo.contains(&k.vault) {
+                    o.kept.push(k.clone());
+                }
+            }
+            o.close |= s.close;
+            o.transfer |= s.transfer;
+            if o.heir.is_none() {
+                o.heir = s.heir.clone();
+            }
+        }
+        orgs.push(o);
+    }
+    for s in saved.orgs {
+        if !orgs.iter().any(|o| o.org == s.org) {
+            orgs.push(s);
+        }
+    }
+    Work { captured: true, email_lc: saved.email_lc.or(fresh.email_lc), actors, key: saved.key, orgs }
+}
+
+/// Builds a working record from live state.
+async fn capture(state: &AppState, subject: &RecordId, row: &ErasureRow, workspace: Option<&OrgId>) -> Result<Work, AppError> {
     #[derive(Deserialize, SurrealValue)]
     struct EmailRow {
         #[serde(default)]
@@ -353,16 +439,43 @@ async fn capture(state: &AppState, subject: &RecordId, row: &ErasureRow, payload
     let key = crate::rid::key_string(subject.key()).unwrap_or_else(never_matches);
 
     let pending = pending_others(state, subject).await?;
-    let allow_close = !row.closes.is_empty() || row.requested_by == "reapply";
-    let plans = match super::plan(&state.control, subject, &pending, allow_close, row.requested_by == "reapply").await {
-        Ok(p) if !p.is_empty() => p,
-        // no memberships left (a restore of only an org database): the plan the request recorded
-        Ok(_) => plans_from_payload(payload),
-        Err(e) => return Err(e),
+    let plans = match workspace {
+        // a workspace erasure took the person out of the workspace at request time: its plan is that
+        // workspace, inherited by its owner (or longest-standing member) who stays
+        Some(org) => {
+            #[derive(Deserialize, SurrealValue)]
+            struct Member {
+                user: RecordId,
+                #[serde(default)]
+                #[surreal(default)]
+                role: String,
+            }
+            let members: Vec<Member> = q::ORG_MEMBERSHIPS.on(&state.control).bind(("org", org.record())).await?.take(0)?;
+            let staying: Vec<&Member> = members.iter().filter(|m| &m.user != subject && !pending.contains(&m.user)).collect();
+            let heir = staying.iter().find(|m| m.role == "owner").or(staying.first()).map(|m| m.user.clone());
+            vec![super::OrgPlan { org: *org, heir, close: false, transfer: false, joint: Vec::new() }]
+        }
+        None => {
+            let allow_close = !row.closes.is_empty() || row.requested_by == "reapply";
+            match super::plan(&state.control, subject, &pending, allow_close, row.requested_by == "reapply", None).await {
+                Ok(p) => p,
+                // the account is already gone (a retry after the control step): the saved plan stands
+                Err(e) if e.code == ErrorCode::AuthNotFound => Vec::new(),
+                Err(e) => return Err(e),
+            }
+        }
     };
     let mut orgs = Vec::new();
     for p in plans {
-        let org_state = state.org(&p.org).await?;
+        if !p.joint.is_empty() {
+            // everyone left in this workspace is being erased: the last of them closes it
+            q::ERASURE_JOINT_CLOSE.on(&state.control).bind(("okey", p.org.key())).bind(("others", p.joint.clone())).await?.check()?;
+        }
+        let org_state = match state.org(&p.org).await {
+            Ok(s) => s,
+            Err(e) if e.message.contains("closed") => continue,
+            Err(e) => return Err(e),
+        };
         let db = &org_state.db;
         let others: Vec<MemberRow> = q::OTHER_MEMBERS.on(db).bind(("u", subject.clone())).bind(("pending", pending.clone())).await?.take(0)?;
         let mut heir_of: HashMap<String, (RecordId, bool)> = HashMap::new();
@@ -399,35 +512,18 @@ async fn capture(state: &AppState, subject: &RecordId, row: &ErasureRow, payload
     Ok(Work { captured: true, email_lc, actors, key, orgs })
 }
 
-fn plans_from_payload(payload: &Value) -> Vec<super::OrgPlan> {
-    payload
-        .get("orgs")
-        .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(|o| {
-                    Some(super::OrgPlan {
-                        org: OrgId::parse(o.get("org")?.as_str()?)?,
-                        heir: o.get("heir").and_then(Value::as_str).and_then(|h| crate::rid::parse(h).ok()),
-                        close: o.get("close").and_then(Value::as_bool).unwrap_or(false),
-                        transfer: false,
-                    })
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 /// The org post-check for one workspace: the residue statement, the files, and for a closed
 /// workspace every table empty.
 async fn org_check(state: &OrgState, subject: &RecordId, o: &OrgWork, work: &Work, email_lc: &str) -> Result<Value, AppError> {
     let solo: Vec<RecordId> = o.solo.iter().filter_map(|v| crate::rid::parse(v).ok()).collect();
+    let kept: Vec<RecordId> = o.kept.iter().filter_map(|k| crate::rid::parse(&k.vault).ok()).collect();
     let mut res = q::RESIDUE
         .on(&state.db)
         .bind(("u", subject.clone()))
         .bind(("actors", work.actors.clone()))
         .bind(("email_lc", email_lc.to_string()))
         .bind(("solo", solo))
+        .bind(("kept", kept))
         .await?;
     let mut check: Map<String, Value> = res.take::<Option<Value>>(0)?.and_then(|v| v.as_object().cloned()).unwrap_or_default();
     let mut left = 0i64;
@@ -459,7 +555,7 @@ async fn erase_in_org(state: &OrgState, subject: &RecordId, o: &OrgWork, actors:
     let with_rows: HashSet<String> = q::VAULTS_WITH_ROWS.on(db).bind(("u", subject.clone())).await?.take::<Vec<String>>(0)?.into_iter().collect();
     for k in o.kept.iter().filter(|k| with_rows.contains(&k.vault)) {
         let (vault, to) = (rid(&k.vault)?, rid(&k.to)?);
-        let mut res = crate::tx::with_retry(|| async { q::REASSIGN.on(db).bind(("u", subject.clone())).bind(("vault", vault.clone())).bind(("to", to.clone())).await }).await?;
+        let mut res = crate::tx::with_retry(|| async { q::REASSIGN.on(db).bind(("u", subject.clone())).bind(("vault", vault.clone())).bind(("to", to.clone())).bind(("email_re", email_re.to_string())).await }).await?;
         #[derive(Deserialize, SurrealValue)]
         struct Reassigned {
             #[serde(default)]
@@ -493,8 +589,23 @@ async fn erase_in_org(state: &OrgState, subject: &RecordId, o: &OrgWork, actors:
     }
 
     // what stays in the workspace no longer carries their email address, in any case
-    let mut res = q::SCRUB_EMAIL.on(db).bind(("email_re", email_re.to_string())).bind(("email_lc", email_lc.to_string())).await?;
+    let kept: Vec<RecordId> = o.kept.iter().filter_map(|k| crate::rid::parse(&k.vault).ok()).collect();
+    let targets: Vec<Value> = q::SCRUB_TARGETS.on(db).bind(("email_lc", email_lc.to_string())).await?.take::<Option<Vec<Value>>>(0)?.unwrap_or_default();
+    let mut res = q::SCRUB_EMAIL.on(db).bind(("email_re", email_re.to_string())).bind(("email_lc", email_lc.to_string())).bind(("kept", kept)).await?;
     counts.insert("email_scrubbed".into(), res.take::<Option<i64>>(q::SCRUB_EMAIL.slot)?.unwrap_or(0));
+    let mut updated: BTreeMap<String, Vec<(&'static str, &'static str, RecordId)>> = BTreeMap::new();
+    for it in &targets {
+        let (Some(id), Some(vault)) = (it.get("id").and_then(Value::as_str), it.get("vault").and_then(Value::as_str)) else { continue };
+        let kind = if it.get("kind").and_then(Value::as_str) == Some("memory") { crate::changes::MEMORY } else { crate::changes::ENTITY };
+        if let Ok(rid) = crate::rid::parse(id) {
+            updated.entry(vault.to_string()).or_default().push((crate::changes::UPDATED, kind, rid));
+        }
+    }
+    for (vault, rows) in updated {
+        if let Ok(v) = crate::rid::parse(&vault) {
+            crate::changes::record_many(db, &v, rows).await;
+        }
+    }
 
     // the person's own rows everywhere else, the bucket files, the actor names, the embed cache
     if objects {
@@ -502,6 +613,22 @@ async fn erase_in_org(state: &OrgState, subject: &RecordId, o: &OrgWork, actors:
             crate::documents::delete_object(db, path).await?;
         }
         counts.insert("bucket_files".into(), o.files.len() as i64);
+    }
+    // the same content-free `deleted` change rows a normal delete writes, so sync clients drop their copies
+    let items: Vec<Value> = q::CHANGE_ITEMS.on(db).bind(("u", subject.clone())).bind(("solo", solo.clone())).await?.take::<Option<Vec<Value>>>(0)?.unwrap_or_default();
+    let mut by_vault: BTreeMap<String, Vec<(&'static str, &'static str, RecordId)>> = BTreeMap::new();
+    for it in &items {
+        let (Some(id), Some(vault), Some(kind)) = (it.get("id").and_then(Value::as_str), it.get("vault").and_then(Value::as_str), it.get("kind").and_then(Value::as_str)) else { continue };
+        let kind = match kind {
+            "memory" => crate::changes::MEMORY,
+            "relation" => crate::changes::RELATION,
+            "skill" => crate::changes::SKILL,
+            "document" => crate::changes::DOCUMENT,
+            _ => crate::changes::ENTITY,
+        };
+        if let Ok(rid) = crate::rid::parse(id) {
+            by_vault.entry(vault.to_string()).or_default().push((crate::changes::DELETED, kind, rid));
+        }
     }
     let mut res = crate::tx::with_retry(|| async {
         q::ERASE_OWNED
@@ -514,11 +641,20 @@ async fn erase_in_org(state: &OrgState, subject: &RecordId, o: &OrgWork, actors:
     })
     .await?;
     add_counts(&mut counts, &res.take::<Option<Value>>(q::ERASE_OWNED.slot)?.unwrap_or_default());
+    for (vault, rows) in by_vault {
+        if let Ok(v) = crate::rid::parse(&vault) {
+            counts.entry("change_log_rows".into()).and_modify(|n| *n += rows.len() as i64).or_insert(rows.len() as i64);
+            crate::changes::record_many(db, &v, rows).await;
+        }
+    }
     for vault in &solo {
+        let audience = crate::changes::audience(db, vault).await;
         crate::tx::with_retry(|| async {
             crate::store::vaults::DELETE_VAULT.on(db).bind(("vault", vault.clone())).bind(("counter", crate::changes::counter(vault))).await?.check()
         })
         .await?;
+        // as a normal space delete does: everyone who had it hears it is gone
+        crate::changes::announce(db, vault, crate::changes::VAULT_DELETED, &audience).await;
     }
     counts.insert("spaces".into(), solo.len() as i64);
     let gone: Vec<Value> = q::ERASE_MEMBERSHIPS.on(db).bind(("u", subject.clone())).await?.take(0)?;

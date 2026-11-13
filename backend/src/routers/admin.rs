@@ -70,6 +70,7 @@ const ADMIN_ACTIONS: &[&str] = &[
     "subject.export_request_admin",
     "subject.export_download_admin",
     "org.owner_transfer",
+    "subject.erase_cancel",
 ];
 
 impl AuditCategory {
@@ -327,6 +328,7 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         },
         "subject.export_download_admin" => "Downloaded the data export of a suspended account".into(),
         "org.owner_transfer" => format!("Made {email} the workspace owner"),
+        "subject.erase_cancel" => "Cancelled an erasure (its working record was cleared)".into(),
         "subject.erase" => return "Deleted an account and its data (the erasure record keeps the counts)".into(),
         "subject.export_request" => "Exported their data".into(),
         "subject.export_request_admin" => "Exported someone's data for them".into(),
@@ -875,6 +877,13 @@ async fn set_suspended(
     let email = row.email.clone();
     if body.suspended == row.suspended_at.is_some() {
         return Ok(Json(people_report(&state, &user).await?));
+    }
+    if !body.suspended && crate::subject::account_erasure_open(&state.control, &target).await? {
+        // an erasure of the whole account keeps it suspended until it finishes or an operator cancels it
+        return Err(AppError::coded(
+            ErrorCode::AuthForbidden,
+            "This account is being erased (or the erasure is waiting on a legal hold), so it can't be restored. A server operator can cancel the erasure first.",
+        ));
     }
     if body.suspended {
         if target == user.id {

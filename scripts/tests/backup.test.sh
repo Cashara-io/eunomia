@@ -134,6 +134,7 @@ check "and touched nothing" sh -c "! grep -q 'import ' '$SHIM_LOG' && ! grep -q 
 : > "$SHIM_LOG"; out="$(MOCK_TENANCY= sh "$SCRIPT" restore "$n" --wipe 2>&1)"; rc=$?
 check "onto a server with no control database (a fresh one) it stops too" sh -c "test $rc -ne 0 && echo \"\$1\" | grep -q 'no control database' && ! grep -q 'import ' '$SHIM_LOG'" _ "$out"
 : > "$SHIM_LOG"
+check "when the live records cannot be read, an off-box copy lets the restore go on and is merged" sh -c ": > '$SHIM_LOG'; printf '%s\\n' 'OPTION IMPORT;' \"INSERT IGNORE INTO erasure [ { id: erasure:copy, subject_ref: 'r' } ];\" > '$TMP/copy0.surql'; MOCK_INFO_FAIL=1 sh '$SCRIPT' restore '$n' --wipe --erasures '$TMP/copy0.surql' >/dev/null 2>&1 && grep -q 'erasure:copy' '$SHIM_LOG'"
 check "--without-erasures restores anyway" sh -c "MOCK_TENANCY= sh '$SCRIPT' restore '$n' --wipe --without-erasures >/dev/null 2>&1 && grep -q 'import control: OPTION IMPORT; -- dump of control' '$SHIM_LOG'"
 printf '%s\n' "OPTION IMPORT;" "INSERT IGNORE INTO erasure [ { id: erasure:offbox, subject_ref: 'ref-offbox' } ];" > "$TMP/offbox.surql"
 : > "$SHIM_LOG"

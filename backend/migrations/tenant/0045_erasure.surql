@@ -4,6 +4,11 @@
 DEFINE TABLE IF NOT EXISTS subject_export SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS subject ON subject_export TYPE record<user>;
 DEFINE FIELD IF NOT EXISTS requested_by ON subject_export TYPE record<user>;
+-- `self`: the person's own export, every workspace (one row per workspace, the same id: each workspace's
+-- part stays in its own database; the home row also holds the account-level part and is the one listed).
+-- `organisation`: an admin's export of this workspace's data about the person, one row, here.
+DEFINE FIELD IF NOT EXISTS scope ON subject_export TYPE string DEFAULT "self" ASSERT $value IN ["self", "organisation"];
+DEFINE FIELD IF NOT EXISTS part ON subject_export TYPE bool DEFAULT false;
 DEFINE FIELD IF NOT EXISTS status ON subject_export TYPE string ASSERT $value IN ["pending", "ready", "failed"];
 DEFINE FIELD IF NOT EXISTS manifest ON subject_export TYPE object FLEXIBLE DEFAULT {};
 DEFINE FIELD IF NOT EXISTS archive ON subject_export TYPE option<bytes>;

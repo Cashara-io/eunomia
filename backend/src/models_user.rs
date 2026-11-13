@@ -337,6 +337,12 @@ pub async fn user_by_identity(db: &ControlDb, issuer: &str, subject: &str) -> Ap
 }
 
 /// The user with this (any-case) email, if there is one.
+/// An account's email, if it exists.
+pub async fn email_of(db: &ControlDb, id: &RecordId) -> AppResult<String> {
+    let mut res = store::control::AUTH_USER_BY_ID.on(db).bind(("id", id.clone())).await?;
+    Ok(res.take::<Vec<UserRow>>(0)?.into_iter().next().map(|r| r.email).unwrap_or_default())
+}
+
 pub async fn user_by_email(db: &ControlDb, email: &str) -> AppResult<Option<User>> {
     let mut res = store::control::AUTH_USER_BY_EMAIL.on(db).bind(("email", normalize_email(email))).await?;
     let Some(row) = res.take::<Vec<UserRow>>(0)?.into_iter().next() else { return Ok(None) };

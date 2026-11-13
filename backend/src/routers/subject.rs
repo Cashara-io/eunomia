@@ -5,8 +5,8 @@
 //! route that changes something need a browser session: no API token or app.
 
 use axum::{
-    extract::{Path, Query, State},
-    http::{header, StatusCode},
+    extract::{Path, State},
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post, put},
     Json, Router,
@@ -26,12 +26,14 @@ pub fn router() -> Router<AppState> {
         .route("/export/subject", get(list_my_exports).post(start_my_export))
         .route("/export/subject/{export_id}", get(download_export))
         .route("/account/erasure", post(erase_me))
+        .route("/account/activity", get(my_activity))
         .route("/admin/people/{user_id}/export", post(start_person_export))
         .route("/admin/people/{user_id}/erasure", post(erase_person))
         .route("/admin/people/{user_id}/legal-hold", put(set_legal_hold))
         .route("/admin/people/{user_id}/workspace-owner", put(make_workspace_owner))
         .route("/admin/erasures", get(list_erasures))
         .route("/admin/erasures/reapply", post(reapply_erasures))
+        .route("/admin/erasures/{erasure_id}/cancel", post(cancel_erasure))
 }
 
 #[utoipa::path(
@@ -46,7 +48,7 @@ pub fn router() -> Router<AppState> {
 )]
 async fn start_my_export(State(state): State<AppState>, user: User) -> AppResult<Json<ExportRow>> {
     authz::require_session()?;
-    Ok(Json(subject::export::request_export(&state, &user.id, &user.id).await?))
+    Ok(Json(subject::export::request_export(&state, &user.id, None).await?))
 }
 
 #[utoipa::path(
@@ -63,15 +65,6 @@ async fn list_my_exports(State(state): State<AppState>, user: User) -> AppResult
     Ok(Json(subject::export::list_exports(&org, &user.id).await?))
 }
 
-#[derive(Deserialize, utoipa::IntoParams)]
-#[into_params(parameter_in = Query)]
-struct DownloadQuery {
-    /// Required when an admin downloads someone else's export (allowed only while that account is
-    /// suspended): why. Recorded in both people's activity.
-    #[serde(default)]
-    reason: Option<String>,
-}
-
 // open body: a zip download (Content-Disposition attachment), not consumed through the typed client
 #[utoipa::path(
     operation_id = "downloadSubjectExport",
@@ -79,17 +72,21 @@ struct DownloadQuery {
     path = "/api/export/subject/{export_id}",
     tag = "export",
     summary = "Download a ready data export (zip; browser session)",
-    description = "The person downloads their own. An admin who started one for someone downloads it only while that account is suspended, with a reason.",
-    params(("export_id" = String, Path, description = "The export's id, as listed"), DownloadQuery),
+    description = "Your own export (assembled from its part in every workspace you belong to), or a workspace export you started as an admin (while you are still an admin). Nobody else's own export, ever.",
+    params(("export_id" = String, Path, description = "The export's id, as listed")),
     responses((status = 200, description = "The zip archive", content_type = "application/zip"), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = [])),
 )]
-async fn download_export(State(state): State<AppState>, user: User, Path(export_id): Path<String>, Query(q): Query<DownloadQuery>) -> AppResult<Response> {
+async fn download_export(State(state): State<AppState>, user: User, Path(export_id): Path<String>) -> AppResult<Response> {
     authz::require_session()?;
     let org = state.org(&user.org).await?;
-    let bytes = subject::export::archive(&state, &org, &user.id, &export_id, q.reason.as_deref())
+    let (bytes, scope) = subject::export::archive(&state, &org, &user.id, &export_id)
         .await?
         .ok_or_else(|| AppError::coded(ErrorCode::ResourceNotFound, "That export doesn't exist or has expired."))?;
+    if scope == "organisation" {
+        crate::routers::admin::require_admin(&state, &user).await?;
+        crate::audit::record_as_caller(&state.control, &user.id, "subject.export_download_admin", &export_id, "ok").await;
+    }
     Ok((
         StatusCode::OK,
         [(header::CONTENT_TYPE, "application/zip".to_string()), (header::CONTENT_DISPOSITION, "attachment; filename=\"eunomia-data-export.zip\"".to_string())],
@@ -103,9 +100,6 @@ struct EraseMe {
     /// Your password, typed again. Required when the account has one.
     #[serde(default)]
     password: Option<String>,
-    /// Your email, typed again: the confirmation for an account that signs in only with single sign-on.
-    #[serde(default)]
-    confirm_email: Option<String>,
     /// You confirm that a workspace whose only member you are is closed with your account (everything
     /// in it is deleted). Without it such a request is refused with `subject.workspace_closes`.
     #[serde(default)]
@@ -118,15 +112,16 @@ struct EraseMe {
     path = "/api/account/erasure",
     tag = "export",
     summary = "Delete your account and your data (browser session, confirmed with your password)",
-    description = "Checks the confirmation, then suspends the account and signs it out everywhere, and queues the erasure. Refused with `subject.legal_hold` while an admin holds the account, `subject.last_owner` when you own a workspace that has other members and no other owner, and `subject.workspace_closes` until you confirm closing a workspace you are the only member of. What is deleted and what is kept: docs/privacy/subject-rights.md.",
+    description = "An account with no password (single sign-on only) confirms with a sign-in from the last 10 minutes (`subject.reauthenticate` otherwise). Checks the confirmation, then suspends the account and signs it out everywhere, and queues the erasure. Refused with `subject.legal_hold` while an admin holds the account, `subject.last_owner` when you own a workspace that has other members and no other owner, and `subject.workspace_closes` until you confirm closing a workspace you are the only member of. What is deleted and what is kept: docs/privacy/subject-rights.md.",
     request_body = EraseMe,
     responses((status = 200, body = ErasureTicket), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = [])),
 )]
-async fn erase_me(State(state): State<AppState>, user: User, Json(body): Json<EraseMe>) -> AppResult<Json<ErasureTicket>> {
+async fn erase_me(State(state): State<AppState>, user: User, headers: HeaderMap, Json(body): Json<EraseMe>) -> AppResult<Json<ErasureTicket>> {
     authz::require_session()?;
     let res = async {
-        subject::confirm(&state.control, &user.id, Confirmation::SelfService { password: body.password.as_deref(), email: body.confirm_email.as_deref() }).await?;
+        let signed_in_at = subject::session_signed_in_at(&state.control, &user.id, crate::auth::session_sid(&state.settings.jwt_secret, &headers)).await?;
+        subject::confirm(&state.control, &user.id, Confirmation::SelfService { password: body.password.as_deref(), signed_in_at }).await?;
         subject::request_erasure(&state, &user.id, Requester::Myself, body.close_workspace).await
     }
     .await;
@@ -142,25 +137,27 @@ async fn erase_me(State(state): State<AppState>, user: User, Json(body): Json<Er
     path = "/api/admin/people/{user_id}/export",
     tag = "admin",
     summary = "Prepare a full data export for someone in the workspace (admin only, browser session)",
-    description = "The same archive the person gets from Settings > Data, delivered to them: it appears in their Settings > Data, and their activity records that an admin started it. You see its status and counts; you can download it only while their account is suspended, with a reason.",
+    description = "This workspace's data about the person only: what they wrote in its shared spaces, their spaces here, their account record, tokens and connected apps by name, and audit events about them. Not their personal space, private chat, synced records or other workspaces. You download it from Settings > Data; the person's own activity records that it was made.",
     params(("user_id" = String, Path)),
     responses((status = 200, body = ExportRow), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = [])),
 )]
 async fn start_person_export(State(state): State<AppState>, user: User, Path(user_id): Path<String>) -> AppResult<Json<ExportRow>> {
     let (_, target, _) = crate::routers::admin::person_in_workspace(&state, &user, &user_id).await?;
-    Ok(Json(subject::export::request_export(&state, &target, &user.id).await?))
+    Ok(Json(subject::export::request_export(&state, &target, Some((&user.id, user.org))).await?))
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
 struct ErasePerson {
-    /// Your own password, typed again (an admin who signs in only with single sign-on types the
-    /// person's email in `confirm_email` instead).
+    /// Your own password, typed again (an admin who signs in only with single sign-on confirms with a
+    /// sign-in from the last 10 minutes instead).
     #[serde(default)]
     password: Option<String>,
+    /// `workspace` (default): the person is erased from this workspace only. `account`: the whole
+    /// account in every workspace (server operators only).
     #[serde(default)]
-    confirm_email: Option<String>,
-    /// Confirms closing any workspace whose only member the person is.
+    scope: Option<String>,
+    /// With `scope: account`: confirms closing any workspace whose only member the person is.
     #[serde(default)]
     close_workspace: bool,
 }
@@ -170,22 +167,29 @@ struct ErasePerson {
     post,
     path = "/api/admin/people/{user_id}/erasure",
     tag = "admin",
-    summary = "Delete someone's account and data (admin only, browser session, confirmed with your own password)",
-    description = "Refused for your own account (use Settings > Data), with `subject.legal_hold` while the account is held, and with `subject.last_owner` when the person owns a workspace with other members and nobody else owns it, or is the account that set up the server.",
+    summary = "Erase someone from this workspace (admin only, browser session, confirmed with your own password)",
+    description = "By default only this workspace: the person's membership, their content and files here and what the system holds about them here. Their account and other workspaces are untouched, unless no workspace is left and the account was made by this workspace's sign-up or invitation. `scope: account` (server operators only) erases the whole account. Refused for your own account (use Settings > Data), with `subject.legal_hold` while the account is held, and with `subject.last_owner` when the person owns the workspace with other members.",
     params(("user_id" = String, Path)),
     request_body = ErasePerson,
     responses((status = 200, body = ErasureTicket), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = [])),
 )]
-async fn erase_person(State(state): State<AppState>, user: User, Path(user_id): Path<String>, Json(body): Json<ErasePerson>) -> AppResult<Json<ErasureTicket>> {
+async fn erase_person(State(state): State<AppState>, user: User, headers: HeaderMap, Path(user_id): Path<String>, Json(body): Json<ErasePerson>) -> AppResult<Json<ErasureTicket>> {
     let (_, target, _) = crate::routers::admin::person_in_workspace(&state, &user, &user_id).await?;
     if target == user.id {
         return Err(AppError::bad_request("To delete your own account, use Settings > Data."));
     }
+    // the whole account only for a server operator (EUNOMIA_ADMIN_EMAILS), never the in-app admin flag
+    let who = match body.scope.as_deref() {
+        Some("account") if authz::is_operator(&user) => Requester::Operator(user.id.clone()),
+        Some("account") => return Err(AppError::coded(ErrorCode::AuthForbidden, "Only a server operator can erase a whole account. You can erase the person from this workspace.")),
+        _ => Requester::Admin(user.id.clone(), user.org),
+    };
     let res = async {
-        let how = Confirmation::Admin { admin: &user.id, password: body.password.as_deref(), email: body.confirm_email.as_deref() };
+        let signed_in_at = subject::session_signed_in_at(&state.control, &user.id, crate::auth::session_sid(&state.settings.jwt_secret, &headers)).await?;
+        let how = Confirmation::Admin { admin: &user.id, password: body.password.as_deref(), signed_in_at };
         subject::confirm(&state.control, &target, how).await?;
-        subject::request_erasure(&state, &target, Requester::Admin(user.id.clone()), body.close_workspace).await
+        subject::request_erasure(&state, &target, who, body.close_workspace).await
     }
     .await;
     if let Err(e) = &res {
@@ -216,7 +220,7 @@ struct HoldState {
     path = "/api/admin/people/{user_id}/legal-hold",
     tag = "admin",
     summary = "Place or lift a legal hold on someone's account (admin only, browser session)",
-    description = "While held, erasing the account is refused with `subject.legal_hold`, and an erasure already queued parks as `held` before its next irreversible step and resumes when the hold is lifted. Placing and lifting are both in the activity log. A hold does not stop the audit retention window (AUDIT_RETENTION_DAYS).",
+    description = "Any admin places a hold; only the workspace owner or a server operator lifts it. While held, erasing the account is refused with `subject.legal_hold`, and an erasure already queued parks as `held` before its next irreversible step and resumes when the hold is lifted. Placing and lifting are both in the activity log, with who did each. A hold does not stop the audit retention window (AUDIT_RETENTION_DAYS).",
     params(("user_id" = String, Path)),
     request_body = HoldChange,
     responses((status = 200, body = HoldState), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
@@ -224,9 +228,14 @@ struct HoldState {
 )]
 async fn set_legal_hold(State(state): State<AppState>, user: User, Path(user_id): Path<String>, Json(body): Json<HoldChange>) -> AppResult<Json<HoldState>> {
     let (_, target, email) = crate::routers::admin::person_in_workspace(&state, &user, &user_id).await?;
-    let (at, erasure_open) = subject::set_legal_hold(&state.control, &target, body.hold).await?;
+    let placed_by = subject::hold_placed_by(&state.control, &target).await?;
+    let (at, erasure_open) = subject::set_legal_hold(&state.control, &user, &target, body.hold).await?;
     let action = if body.hold { "subject.legal_hold" } else { "subject.legal_hold_lift" };
-    crate::audit::record_as_caller_detail(&state.control, &user.id, action, &target.to_string(), "ok", &format!("email={email}")).await;
+    let mut detail = format!("email={email} by={}", user.email);
+    if let (false, Some(p)) = (body.hold, placed_by) {
+        detail.push_str(&format!(" placed_by={}", crate::models_user::email_of(&state.control, &p).await.unwrap_or_default()));
+    }
+    crate::audit::record_as_caller_detail(&state.control, &user.id, action, &target.to_string(), "ok", &detail).await;
     Ok(Json(HoldState { legal_hold_at: at, erasure_open }))
 }
 
@@ -235,16 +244,21 @@ async fn set_legal_hold(State(state): State<AppState>, user: User, Path(user_id)
     put,
     path = "/api/admin/people/{user_id}/workspace-owner",
     tag = "admin",
-    summary = "Make someone the workspace's owner in place of the current owner (admin only, browser session)",
-    description = "A workspace has one owner. Handing it over lets the previous owner's account be erased while the workspace keeps an owner.",
+    summary = "Hand the workspace over to another member (the current owner or a server operator, browser session)",
+    description = "A workspace has one owner. Only the current owner or a server operator hands it over, to an active member who is not suspended, not under a legal hold and not being erased. The change promotes exactly one membership or changes nothing, so the workspace always keeps an owner.",
     params(("user_id" = String, Path)),
     responses((status = 200, body = crate::routers::admin::PeopleReportRef), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = [])),
 )]
 async fn make_workspace_owner(State(state): State<AppState>, user: User, Path(user_id): Path<String>) -> AppResult<Response> {
     let (_, target, email) = crate::routers::admin::person_in_workspace(&state, &user, &user_id).await?;
-    subject::transfer_workspace(&state.control, &user.org, &target).await?;
-    crate::audit::record_as_caller_detail(&state.control, &user.id, "org.owner_transfer", &target.to_string(), "ok", &format!("email={email}")).await;
+    let previous = subject::transfer_workspace(&state.control, &user, &user.org, &target).await?;
+    let from = crate::models_user::email_of(&state.control, &previous).await.unwrap_or_default();
+    let detail = format!("email={email} from={from}");
+    crate::audit::record_as_caller_detail(&state.control, &user.id, "org.owner_transfer", &target.to_string(), "ok", &detail).await;
+    if previous != user.id {
+        crate::audit::record_as_caller_detail(&state.control, &previous, "org.owner_transfer", &target.to_string(), "ok", &detail).await;
+    }
     crate::routers::admin::people_response(&state, &user).await
 }
 
@@ -274,17 +288,53 @@ struct Reapplied {
     post,
     path = "/api/admin/erasures/reapply",
     tag = "admin",
-    summary = "After restoring a backup: erase again everyone erased after the backup was taken (admin only, browser session)",
+    summary = "After restoring a backup: erase again everyone erased after the backup was taken (server operators only, browser session)",
     description = "Also runs by itself when the server starts. Matches live accounts, and the owners of rows in every workspace, against the erasure records; queues an erasure for each match. It acts on the whole server, like a restore.",
     responses((status = 200, body = Reapplied), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = [])),
 )]
 async fn reapply_erasures(State(state): State<AppState>, user: User) -> AppResult<Json<Reapplied>> {
     authz::require_session()?;
-    crate::routers::admin::require_admin(&state, &user).await?;
+    if !authz::is_operator(&user) {
+        return Err(AppError::coded(ErrorCode::AuthForbidden, "Only a server operator can re-apply erasures: it acts on the whole server."));
+    }
     subject::heal_open(&state).await?;
     let queued = subject::reapply_erasures(&state).await?;
     Ok(Json(Reapplied { queued }))
+}
+
+#[utoipa::path(
+    operation_id = "cancelErasure",
+    post,
+    path = "/api/admin/erasures/{erasure_id}/cancel",
+    tag = "admin",
+    summary = "Cancel an erasure that is not running (server operators only, browser session)",
+    description = "Stops a pending, held or failed erasure of this workspace and clears its working record (the email, token ids and file paths it held). The account stays suspended; an admin can restore it afterwards.",
+    params(("erasure_id" = String, Path)),
+    responses((status = 200, body = Vec<ErasureRecord>), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = [])),
+)]
+async fn cancel_erasure(State(state): State<AppState>, user: User, Path(erasure_id): Path<String>) -> AppResult<Json<Vec<ErasureRecord>>> {
+    authz::require_session()?;
+    if !authz::is_operator(&user) {
+        return Err(AppError::coded(ErrorCode::AuthForbidden, "Only a server operator can cancel an erasure."));
+    }
+    subject::cancel_erasure(&state.control, &user.org, &erasure_id).await?;
+    crate::audit::record_as_caller(&state.control, &user.id, "subject.erase_cancel", &erasure_id, "ok").await;
+    Ok(Json(subject::list_erasures(&state.control, &user.org).await?))
+}
+
+#[utoipa::path(
+    operation_id = "myDataActivity",
+    get,
+    path = "/api/account/activity",
+    tag = "export",
+    summary = "What has been done about your data: exports an admin made of it, erasure requests, legal holds, admin actions on your account",
+    responses((status = 200, body = Vec<subject::ActivityRow>), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn my_activity(State(state): State<AppState>, user: User) -> AppResult<Json<Vec<subject::ActivityRow>>> {
+    Ok(Json(subject::member_activity(&state.control, &user.id).await?))
 }
 
 #[derive(utoipa::OpenApi)]
@@ -298,6 +348,8 @@ async fn reapply_erasures(State(state): State<AppState>, user: User) -> AppResul
     set_legal_hold,
     make_workspace_owner,
     list_erasures,
-    reapply_erasures
+    reapply_erasures,
+    cancel_erasure,
+    my_activity
 ))]
 pub struct Doc;

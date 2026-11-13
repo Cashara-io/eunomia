@@ -181,7 +181,7 @@ pub async fn sync_active(state: &OrgState, owner: &RecordId, key: &str) -> AppRe
 /// `job` is the `sync` job this run belongs to, if any.
 pub async fn sync_source(state: &OrgState, owner: &RecordId, key: &str, job: Option<&RecordId>) -> Value {
     // an erased (or being erased) account: a resync must not bring its records back as theirs
-    if crate::subject::is_erased(&state.control, &state.settings, owner).await {
+    if crate::subject::is_erased(&state.control, &state.settings, owner, &state.db.org()).await {
         return json!({"source": key, "status": "erased"});
     }
     let Some(_running) = Claim::take(&RUNNING, owner, key) else {

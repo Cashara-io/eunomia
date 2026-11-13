@@ -314,7 +314,7 @@ erasures_before_control() {
     2) rm -f "$kept"; kept=""
        [ -n "$WITHOUT" ] || [ -n "$EXTRA" ] || die "this server has no control database to read the erasure records from (a fresh server?). Restoring control without them can bring back people who were erased after this backup was taken. Pass --erasures FILE with a copy made by 'eunomia-backup erasures', or --without-erasures to restore anyway." ;;
     *) rm -f "$kept"; kept=""
-       [ -n "$WITHOUT" ] || die "could not read the erasure records from the live control database, so the restore was stopped before touching anything: restoring control without them would bring back people erased after this backup was taken. Check that SurrealDB is reachable, or pass --erasures FILE (a copy from 'eunomia-backup erasures') or --without-erasures." ;;
+       [ -n "$WITHOUT" ] || [ -n "$EXTRA" ] || die "could not read the erasure records from the live control database, so the restore was stopped before touching anything: restoring control without them would bring back people erased after this backup was taken. Check that SurrealDB is reachable and try again; or pass --erasures FILE (an off-box copy from 'eunomia-backup erasures'), which is merged in their place; or --without-erasures to restore without any." ;;
   esac
   [ -z "$kept" ] || [ -s "$kept" ] || { rm -f "$kept"; kept=""; }
 }

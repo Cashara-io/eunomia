@@ -47,26 +47,44 @@ pub const OWNED: Stmt = Stmt::new(
      SELECT <string> id AS id, name, created_at FROM extension WHERE owner = $u",
 );
 
+/// A new export: `self` (the person's own, home row) or `organisation` (an admin's, of this workspace).
 pub const EXPORT_CREATE: Stmt = Stmt::new(
     "subject.export_create",
-    "CREATE subject_export SET subject = $u, requested_by = $by, status = 'pending' RETURN <string> id AS id, status, created_at, expires_at",
+    "CREATE subject_export SET subject = $u, requested_by = $by, scope = $scope, status = 'pending' RETURN <string> id AS id, status, created_at, expires_at",
 );
 pub const EXPORT_FINISH: Stmt = Stmt::new(
     "subject.export_finish",
     "UPDATE $id SET status = $status, manifest = $manifest, archive = $archive, size_bytes = $size, error = $error WHERE status = 'pending' RETURN NONE",
 );
-/// The exports `$u` asked for or that are about them (an admin's request for them included), newest first, without the archive.
+/// One workspace's part of a person's own export, kept in that workspace's database under the same id.
+pub const EXPORT_PART_PUT: Stmt = Stmt::new(
+    "subject.export_part_put",
+    "UPSERT $id SET subject = $u, requested_by = $u, scope = 'self', part = true, status = 'ready', manifest = $manifest, archive = $archive, \
+     size_bytes = $size, expires_at = time::now() + 7d RETURN NONE",
+);
+/// A person's part in this workspace, if it is still there.
+pub const EXPORT_PART_GET: Stmt = Stmt::new(
+    "subject.export_part_get",
+    "SELECT archive FROM $id WHERE subject = $u AND scope = 'self' AND part = true AND expires_at > time::now()",
+);
+/// The exports listed for `$u`: their own, and the ones they started about someone as an admin (status
+/// and counts only), newest first, without the archive.
 pub const EXPORT_LIST: Stmt = Stmt::new(
     "subject.export_list",
-    "SELECT <string> id AS id, <string> subject AS subject, <string> requested_by AS requested_by, status, manifest, size_bytes, error, created_at, expires_at FROM subject_export \
-     WHERE (subject = $u OR requested_by = $u) AND expires_at > time::now() ORDER BY created_at DESC LIMIT 20",
+    "SELECT <string> id AS id, <string> subject AS subject, <string> requested_by AS requested_by, scope, status, manifest, size_bytes, error, created_at, expires_at \
+     FROM subject_export WHERE part = false AND ((subject = $u AND scope = 'self') OR (requested_by = $u AND scope = 'organisation')) \
+     AND expires_at > time::now() ORDER BY created_at DESC LIMIT 20",
 );
+/// The listed row of an export `$u` may download: their own (`self`) or one they started as an admin (`organisation`).
 pub const EXPORT_GET: Stmt = Stmt::new(
     "subject.export_get",
-    "SELECT <string> id AS id, subject, requested_by, status, archive, expires_at FROM $id WHERE (subject = $u OR requested_by = $u) AND expires_at > time::now()",
+    "SELECT <string> id AS id, subject, requested_by, scope, status, archive, expires_at FROM $id WHERE part = false \
+     AND ((subject = $u AND scope = 'self') OR (requested_by = $u AND scope = 'organisation')) AND expires_at > time::now()",
 );
 /// The export job's row (no caller filter: the job checked the requester when it was queued).
-pub const EXPORT_JOB_ROW: Stmt = Stmt::new("subject.export_job_row", "SELECT subject, requested_by, status FROM $id");
+pub const EXPORT_JOB_ROW: Stmt = Stmt::new("subject.export_job_row", "SELECT subject, requested_by, scope, status FROM $id");
+/// This workspace's shared spaces (an admin's export covers what the person wrote in them).
+pub const ORG_SHARED_VAULTS: Stmt = Stmt::new("subject.org_shared_vaults", "SELECT VALUE id FROM vault WHERE kind = 'org'");
 /// Retention: an archive is kept for seven days.
 pub const EXPORT_PRUNE: Stmt = Stmt::new("subject.export_prune", "DELETE subject_export WHERE expires_at < time::now()");
 
@@ -115,8 +133,10 @@ pub const REASSIGN: Stmt = Stmt::at(
      UPDATE entity_property SET source = NONE WHERE source IN $recs RETURN NONE; \
      DELETE linked_to WHERE in IN $recs OR out IN $recs RETURN NONE; \
      DELETE $recs RETURN NONE; \
-     LET $docs = (UPDATE document SET owner = $to WHERE owner = $u AND vault = $vault AND status != 'deleted' RETURN VALUE <string> id); \
-     UPDATE skill SET owner = $to WHERE owner = $u AND vault = $vault RETURN NONE; \
+     LET $docs = (UPDATE document SET owner = $to, filename = string::replace(filename, <regex> $email_re, '[erased person]') \
+        WHERE owner = $u AND vault = $vault AND status != 'deleted' RETURN VALUE <string> id); \
+     UPDATE skill SET owner = $to, name = string::replace(name, <regex> $email_re, '[erased person]'), \
+        description = string::replace(description, <regex> $email_re, '[erased person]') WHERE owner = $u AND vault = $vault RETURN NONE; \
      UPDATE peer_share SET created_by = $to WHERE created_by = $u AND vault = $vault RETURN NONE; \
      UPDATE peer_link SET user = $to WHERE user = $u AND vault = $vault RETURN NONE; \
      UPDATE credential_ref SET created_by = $to WHERE created_by = $u AND vault = $vault RETURN NONE; \
@@ -153,9 +173,11 @@ pub const SCRUB_EMAIL: Stmt = Stmt::at(
            WHERE string::contains(string::lowercase(name), $email_lc) OR string::contains(string::lowercase(summary ?? ''), $email_lc) OR (aliases ?? []).any(|$a| string::contains(string::lowercase($a), $email_lc)) RETURN VALUE id) ]); \
      LET $t = (UPDATE audit_log SET args_summary = string::replace(args_summary, <regex> $email_re, '[erased person]') \
         WHERE string::contains(string::lowercase(args_summary), $email_lc) RETURN VALUE id); \
-     RETURN array::len($m) + array::len($e) + array::len($t); \
+     LET $v = (UPDATE vault SET name = string::replace(name, <regex> $email_re, '[erased person]') \
+        WHERE id IN $kept AND string::contains(string::lowercase(name), $email_lc) RETURN VALUE id); \
+     RETURN array::len($m) + array::len($e) + array::len($t) + array::len($v); \
      COMMIT TRANSACTION;",
-    4,
+    5,
 );
 
 /// Spaces only the subject could read: every row in them, whoever wrote it (their documents' files
@@ -285,7 +307,7 @@ pub const RESIDUE: Stmt = Stmt::new(
        ontology_property: count((SELECT id FROM ontology_property WHERE decided_by = $u OR activity_actor IN $actors OR string::lowercase(activity_actor_name ?? '') = $email_lc)), \
        ontology_metric: count((SELECT id FROM ontology_metric WHERE decided_by = $u OR activity_actor IN $actors OR string::lowercase(activity_actor_name ?? '') = $email_lc)), \
        ontology_event: count((SELECT id FROM ontology_event WHERE actor IN $actors OR string::lowercase(actor_name ?? '') = $email_lc)), \
-       vault: count((SELECT id FROM vault WHERE id IN $solo OR (string::lowercase(name) CONTAINS $email_lc) OR ontology_actor IN $actors OR string::lowercase(ontology_actor_name ?? '') = $email_lc)), \
+       vault: count((SELECT id FROM vault WHERE id IN $solo OR (id IN $kept AND string::contains(string::lowercase(name), $email_lc)) OR ontology_actor IN $actors OR string::lowercase(ontology_actor_name ?? '') = $email_lc)), \
        change: count((SELECT id FROM change WHERE actor IN $actors)), \
        subject_export: count((SELECT id FROM subject_export WHERE subject = $u OR requested_by = $u)) \
      }",
@@ -308,6 +330,40 @@ pub const VAULTS_WITH_ROWS: Stmt = Stmt::new(
        (SELECT VALUE <string> out.vault FROM relates_to WHERE owner = $u AND out.vault IS NOT NONE) ]))",
 );
 
+/// The person's rows of the kinds the change log tracks, outside the spaces that go whole, with their
+/// space: the erasure writes the same content-free `deleted` rows as a normal delete, so sync clients
+/// drop their copies.
+pub const CHANGE_ITEMS: Stmt = Stmt::new(
+    "subject.change_items",
+    "RETURN array::flatten([ \
+       (SELECT <string> id AS id, <string> vault AS vault, 'memory' AS kind FROM memory WHERE owner = $u AND vault NOTINSIDE $solo), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'entity' AS kind FROM person WHERE owner = $u AND vault NOTINSIDE $solo), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'entity' AS kind FROM organisation WHERE owner = $u AND vault NOTINSIDE $solo), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'entity' AS kind FROM location WHERE owner = $u AND vault NOTINSIDE $solo), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'entity' AS kind FROM repository WHERE owner = $u AND vault NOTINSIDE $solo), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'entity' AS kind FROM file WHERE owner = $u AND vault NOTINSIDE $solo), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'entity' AS kind FROM symbol WHERE owner = $u AND vault NOTINSIDE $solo), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'entity' AS kind FROM entity WHERE owner = $u AND vault NOTINSIDE $solo), \
+       (SELECT <string> id AS id, <string> in.vault AS vault, 'relation' AS kind FROM relates_to WHERE owner = $u AND in.vault IS NOT NONE AND in.vault NOTINSIDE $solo), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'skill' AS kind FROM skill WHERE owner = $u AND vault NOTINSIDE $solo), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'document' AS kind FROM document WHERE owner = $u AND vault NOTINSIDE $solo) ])",
+);
+
+/// The facts and entities the email scrub is about to rewrite, with their space: the erasure writes the
+/// same content-free `updated` change rows an edit does, so sync clients fetch the scrubbed text.
+pub const SCRUB_TARGETS: Stmt = Stmt::new(
+    "subject.scrub_targets",
+    "RETURN array::flatten([ \
+       (SELECT <string> id AS id, <string> vault AS vault, 'memory' AS kind FROM memory WHERE string::contains(string::lowercase(text), $email_lc)), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'entity' AS kind FROM person WHERE string::contains(string::lowercase(name), $email_lc) OR string::contains(string::lowercase(summary ?? ''), $email_lc) OR (aliases ?? []).any(|$a| string::contains(string::lowercase($a), $email_lc))), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'entity' AS kind FROM organisation WHERE string::contains(string::lowercase(name), $email_lc) OR string::contains(string::lowercase(summary ?? ''), $email_lc) OR (aliases ?? []).any(|$a| string::contains(string::lowercase($a), $email_lc))), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'entity' AS kind FROM location WHERE string::contains(string::lowercase(name), $email_lc) OR string::contains(string::lowercase(summary ?? ''), $email_lc) OR (aliases ?? []).any(|$a| string::contains(string::lowercase($a), $email_lc))), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'entity' AS kind FROM repository WHERE string::contains(string::lowercase(name), $email_lc) OR string::contains(string::lowercase(summary ?? ''), $email_lc) OR (aliases ?? []).any(|$a| string::contains(string::lowercase($a), $email_lc))), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'entity' AS kind FROM file WHERE string::contains(string::lowercase(name), $email_lc) OR string::contains(string::lowercase(summary ?? ''), $email_lc) OR (aliases ?? []).any(|$a| string::contains(string::lowercase($a), $email_lc))), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'entity' AS kind FROM symbol WHERE string::contains(string::lowercase(name), $email_lc) OR string::contains(string::lowercase(summary ?? ''), $email_lc) OR (aliases ?? []).any(|$a| string::contains(string::lowercase($a), $email_lc))), \
+       (SELECT <string> id AS id, <string> vault AS vault, 'entity' AS kind FROM entity WHERE string::contains(string::lowercase(name), $email_lc) OR string::contains(string::lowercase(summary ?? ''), $email_lc) OR (aliases ?? []).any(|$a| string::contains(string::lowercase($a), $email_lc))) ])",
+);
+
 /// What the post-check counts but does not fail on: the email in content other people wrote and the
 /// system does not rewrite (their chats, skills, synced records, recordings, property values). The
 /// completion record keeps the counts as "mentions left in others' content, for review".
@@ -318,7 +374,8 @@ pub const REVIEW: Stmt = Stmt::new(
        skills: count((SELECT id FROM skill WHERE string::contains(string::lowercase(body), $email_lc) OR string::contains(string::lowercase(description), $email_lc))), \
        synced_records: count((SELECT id FROM cache_record WHERE string::contains(string::lowercase(body_text), $email_lc) OR string::contains(string::lowercase(title), $email_lc))), \
        recordings: count((SELECT id FROM pocket_recording WHERE string::contains(string::lowercase(transcript), $email_lc) OR string::contains(string::lowercase(summary), $email_lc))), \
-       entity_properties: count((SELECT id FROM entity_property WHERE string::contains(string::lowercase(value_text ?? ''), $email_lc))) \
+       entity_properties: count((SELECT id FROM entity_property WHERE string::contains(string::lowercase(value_text ?? ''), $email_lc))), \
+       space_names: count((SELECT id FROM vault WHERE id NOTINSIDE $kept AND string::contains(string::lowercase(name), $email_lc))) \
      }",
 );
 
@@ -337,7 +394,12 @@ pub const ROW_OWNERS: Stmt = Stmt::new(
        (SELECT VALUE owner FROM organisation GROUP BY owner), (SELECT VALUE owner FROM cache_record GROUP BY owner), (SELECT VALUE owner FROM document GROUP BY owner), \
        (SELECT VALUE owner FROM chat_message GROUP BY owner), (SELECT VALUE owner FROM chat_thread GROUP BY owner), (SELECT VALUE owner FROM connector GROUP BY owner), \
        (SELECT VALUE owner FROM app_settings GROUP BY owner), (SELECT VALUE owner FROM audit_log GROUP BY owner), (SELECT VALUE owner FROM pocket_recording GROUP BY owner), \
-       (SELECT VALUE owner FROM skill GROUP BY owner), (SELECT VALUE user FROM vault_member GROUP BY user) ]))",
+       (SELECT VALUE owner FROM skill GROUP BY owner), (SELECT VALUE user FROM vault_member GROUP BY user), \
+       (SELECT VALUE owner FROM location GROUP BY owner), (SELECT VALUE owner FROM repository GROUP BY owner), (SELECT VALUE owner FROM file GROUP BY owner), \
+       (SELECT VALUE owner FROM symbol GROUP BY owner), (SELECT VALUE owner FROM relates_to WHERE owner IS NOT NONE GROUP BY owner), \
+       (SELECT VALUE owner FROM sync_status GROUP BY owner), (SELECT VALUE owner FROM composio_file GROUP BY owner), (SELECT VALUE owner FROM extension GROUP BY owner), \
+       (SELECT VALUE owner FROM extension_event GROUP BY owner), (SELECT VALUE user FROM peer_link GROUP BY user), (SELECT VALUE created_by FROM peer_share GROUP BY created_by), \
+       (SELECT VALUE created_by FROM vault_secret GROUP BY created_by), (SELECT VALUE created_by FROM credential_ref GROUP BY created_by) ]))",
 );
 
 /// One bucket object, or NONE once it is gone (the post-check of the files).
@@ -368,6 +430,11 @@ pub const ALL: &[&Stmt] = &[
     &REVIEW,
     &ALL_SPACES_AND_FILES,
     &ROW_OWNERS,
+    &CHANGE_ITEMS,
+    &SCRUB_TARGETS,
+    &EXPORT_PART_PUT,
+    &EXPORT_PART_GET,
+    &ORG_SHARED_VAULTS,
 ];
 
 // ------------------------------------------------------------------ control database
@@ -401,23 +468,50 @@ pub const OPEN_SUBJECTS: ControlStmt = ControlStmt::new(
     "SELECT VALUE subject FROM erasure WHERE status IN ['pending', 'running', 'held', 'failed'] AND subject IS NOT NONE",
 );
 
-/// Hands the workspace's ownership from `$from` to `$to` (the owner slot is unique per org, so the old
+/// Hands the workspace's ownership from `$from` to `$to`, or changes nothing: the new owner must be a
+/// member, and the promotion must match exactly one row (the owner slot is unique per org, so the old
 /// owner gives it up first, in the same transaction).
 pub const ORG_OWNER_TRANSFER: ControlStmt = ControlStmt::new(
     "subject.org_owner_transfer",
     "BEGIN TRANSACTION; \
+     IF array::len((SELECT VALUE id FROM membership WHERE user = $to AND org = $org)) != 1 { THROW 'the new owner is not a member of this workspace' }; \
      UPDATE membership SET role = 'member', slot = string::concat(<string> $org, '/', <string> $from) WHERE user = $from AND org = $org RETURN NONE; \
-     UPDATE membership SET role = 'owner', slot = string::concat(<string> $org, '/owner') WHERE user = $to AND org = $org RETURN NONE; \
+     LET $p = (UPDATE membership SET role = 'owner', slot = string::concat(<string> $org, '/owner') WHERE user = $to AND org = $org RETURN VALUE id); \
+     IF array::len($p) != 1 { THROW 'the new owner was not promoted' }; \
      COMMIT TRANSACTION;",
 );
 
 /// The legal hold alone (the erasure job reads it before each irreversible phase).
 pub const HOLD_OF: ControlStmt = ControlStmt::new("subject.hold_of", "SELECT VALUE legal_hold_at FROM ONLY $u");
 
-/// Places (`true`, now) or lifts (`false`) a legal hold.
+/// Who placed the hold, if any.
+pub const HOLD_BY: ControlStmt = ControlStmt::new("subject.hold_by", "SELECT VALUE legal_hold_by FROM ONLY $u");
+
+/// An account's state for the ownership hand-over checks.
+pub const USER_STATE: ControlStmt =
+    ControlStmt::new("subject.user_state", "SELECT suspended_at, legal_hold_at FROM ONLY $u");
+
+/// Places (`true`, now, by `$by`) or lifts (`false`) a legal hold.
 pub const SET_LEGAL_HOLD: ControlStmt = ControlStmt::new(
     "subject.set_legal_hold",
-    "UPDATE $u SET legal_hold_at = IF $hold THEN (legal_hold_at ?? time::now()) ELSE NONE END RETURN legal_hold_at",
+    "UPDATE $u SET legal_hold_at = IF $hold THEN (legal_hold_at ?? time::now()) ELSE NONE END, \
+     legal_hold_by = IF $hold THEN (legal_hold_by ?? $by) ELSE NONE END RETURN legal_hold_at",
+);
+
+/// When the browser session behind this request signed in (a recent sign-in confirms an account with
+/// no password).
+pub const SESSION_CREATED: ControlStmt = ControlStmt::new(
+    "subject.session_created",
+    "SELECT VALUE created_at FROM session WHERE sid = $sid AND owner = $u AND revoked = false LIMIT 1",
+);
+
+/// What the person can see about their own data: the ledger rows filed under them about exports,
+/// erasures and holds, and admin actions that name them.
+pub const MEMBER_ACTIVITY: ControlStmt = ControlStmt::new(
+    "subject.member_activity",
+    "SELECT action, outcome, detail, created_at FROM audit_event WHERE user = $u \
+     AND (string::starts_with(action, 'subject.') OR action IN ['user.suspend', 'user.restore', 'admin.grant', 'admin.revoke', 'admin.token_revoke']) \
+     ORDER BY created_at DESC LIMIT 50",
 );
 
 /// The request and its job, in one transaction: a request is never left without a job. `open_slot`
@@ -425,17 +519,25 @@ pub const SET_LEGAL_HOLD: ControlStmt = ControlStmt::new(
 pub const ERASURE_CREATE: ControlStmt = ControlStmt::at(
     "subject.erasure_create",
     "BEGIN TRANSACTION; \
-     CREATE $eid SET org = $org, subject_ref = $ref, subject = $u, requested_by = $by, requester = $requester, status = 'pending', \
-        open_slot = $ref, running_slot = <string> $eid, closes = $closes; \
+     CREATE $eid SET org = $org, subject_ref = $ref, subject = $u, requested_by = $by, scope = $scope, requester = $requester, first_org = $first_org, status = 'pending', \
+        open_slot = $ref, closes = $closes; \
      INSERT IGNORE INTO job { id: $jid, kind: 'subject_erase', owner: $owner, payload: $payload, idempotency_key: $key, run_at: time::now(), max_attempts: 8 }; \
-     RETURN (SELECT <string> id AS id, status, requested_at FROM ONLY $eid); \
+     RETURN (SELECT <string> id AS id, status, scope, requested_at FROM ONLY $eid); \
      COMMIT TRANSACTION;",
     3,
 );
-/// The open erasure of this person (pending, running, held or failed), if any.
+/// The open erasure of this person (pending, running, held or failed), under the current or a previous key.
 pub const ERASURE_OPEN: ControlStmt = ControlStmt::new(
     "subject.erasure_open",
-    "SELECT <string> id AS id, status, requested_at FROM erasure WHERE open_slot = $ref LIMIT 1",
+    "SELECT <string> id AS id, status, scope, requested_at FROM erasure WHERE open_slot IN $refs LIMIT 1",
+);
+/// A repeat request adds its confirmation that a workspace closes.
+pub const ERASURE_ADD_CLOSES: ControlStmt =
+    ControlStmt::new("subject.erasure_add_closes", "UPDATE type::record($id) SET closes = array::union(closes, $closes) RETURN NONE");
+/// Everyone left in a workspace is being erased: the last of them closes it.
+pub const ERASURE_JOINT_CLOSE: ControlStmt = ControlStmt::new(
+    "subject.erasure_joint_close",
+    "UPDATE erasure SET closes = array::union(closes, [$okey]) WHERE subject IN $others AND status IN ['pending', 'running', 'held', 'failed'] RETURN NONE",
 );
 /// Open erasures, for the start-up heal (one with no live job gets a new one).
 pub const ERASURES_OPEN_ALL: ControlStmt = ControlStmt::new(
@@ -448,19 +550,25 @@ pub const ERASURE_LIVE_JOB: ControlStmt = ControlStmt::new(
     "SELECT VALUE id FROM job WHERE kind = 'subject_erase' AND payload.erasure = $eid AND status IN ['ready', 'running']",
 );
 pub const ERASURE_GET: ControlStmt = ControlStmt::new("subject.erasure_get", "SELECT * FROM ONLY $id");
-/// Takes the workspace's running slot (unique): a second erasure in the same workspace fails here
-/// with a duplicate and waits for its retry.
 pub const ERASURE_RUNNING: ControlStmt = ControlStmt::new(
     "subject.erasure_running",
-    "UPDATE $id SET status = 'running', running_slot = org, held_at = NONE, error = NONE WHERE status IN ['pending', 'running', 'failed'] RETURN VALUE <string> id",
+    "UPDATE $id SET status = 'running', held_at = NONE, error = NONE WHERE status IN ['pending', 'running', 'failed'] RETURN VALUE <string> id",
 );
+/// The locks of every workspace the erasure touches, all or none (a lock held by another erasure makes
+/// the transaction fail: this one waits). Its own stale locks (a crash) are taken back first.
+pub const LOCKS_TAKE: ControlStmt = ControlStmt::new(
+    "subject.locks_take",
+    "BEGIN TRANSACTION; \
+     DELETE erasure_lock WHERE erasure = $id; \
+     FOR $o IN $orgs { CREATE type::record('erasure_lock', $o) SET erasure = $id; }; \
+     COMMIT TRANSACTION;",
+);
+pub const LOCKS_RELEASE: ControlStmt = ControlStmt::new("subject.locks_release", "DELETE erasure_lock WHERE erasure = $id");
 /// The identifiers the post-check needs, saved before anything is deleted.
 pub const ERASURE_WORK: ControlStmt = ControlStmt::new("subject.erasure_work", "UPDATE $id SET work = $work, closes = $closes RETURN NONE");
 /// Parked by a legal hold placed after the request; lifting the hold resumes it.
-pub const ERASURE_HELD: ControlStmt = ControlStmt::new(
-    "subject.erasure_held",
-    "UPDATE $id SET status = 'held', held_at = time::now(), running_slot = <string> id RETURN NONE",
-);
+pub const ERASURE_HELD: ControlStmt =
+    ControlStmt::new("subject.erasure_held", "UPDATE $id SET status = 'held', held_at = time::now() RETURN NONE");
 /// The held erasures of `$u` go back to pending (the hold was lifted).
 pub const ERASURES_HELD_OF: ControlStmt = ControlStmt::new(
     "subject.erasures_held_of",
@@ -471,28 +579,51 @@ pub const ERASURE_OPEN_OF: ControlStmt = ControlStmt::new(
     "subject.erasure_open_of",
     "SELECT VALUE id FROM erasure WHERE subject = $u AND status IN ['pending', 'running', 'failed', 'held']",
 );
+/// Whether `$u` has an erasure of the whole account open (it stays suspended until it finishes or an
+/// operator cancels it).
+pub const ACCOUNT_ERASURE_OPEN_OF: ControlStmt = ControlStmt::new(
+    "subject.account_erasure_open_of",
+    "SELECT VALUE id FROM erasure WHERE subject = $u AND scope = 'account' AND status IN ['pending', 'running', 'failed', 'held']",
+);
 /// The completion record: counts, the post-check and the review counts; the person's id and the
-/// working record are dropped, and both slots become the row's own id.
+/// working record are dropped, and the slot becomes the row's own id.
 pub const ERASURE_DONE: ControlStmt = ControlStmt::new(
     "subject.erasure_done",
-    "UPDATE $id SET status = 'done', subject = NONE, work = {}, open_slot = <string> id, running_slot = <string> id, counts = $counts, \
+    "UPDATE $id SET status = 'done', subject = NONE, work = {}, open_slot = <string> id, counts = $counts, \
      post_check = $post_check, review = $review, error = NONE, completed_at = time::now() RETURN NONE",
 );
-pub const ERASURE_FAILED: ControlStmt = ControlStmt::new(
-    "subject.erasure_failed",
-    "UPDATE $id SET status = 'failed', error = $error, post_check = $post_check, running_slot = <string> id RETURN NONE",
+pub const ERASURE_FAILED: ControlStmt =
+    ControlStmt::new("subject.erasure_failed", "UPDATE $id SET status = 'failed', error = $error, post_check = $post_check RETURN NONE");
+/// An operator stops an erasure that is not running: the working record (the email, token ids, file
+/// paths) and the person's id are cleared, its locks and waiting jobs go.
+pub const ERASURE_CANCEL: ControlStmt = ControlStmt::at(
+    "subject.erasure_cancel",
+    "BEGIN TRANSACTION; \
+     LET $c = (UPDATE $id SET status = 'cancelled', subject = NONE, work = {}, open_slot = <string> id, completed_at = time::now() \
+        WHERE status IN ['pending', 'held', 'failed'] RETURN VALUE <string> id); \
+     DELETE erasure_lock WHERE erasure = $id; \
+     DELETE job WHERE kind = 'subject_erase' AND payload.erasure = <string> $id AND status != 'running'; \
+     RETURN $c; \
+     COMMIT TRANSACTION;",
+    4,
 );
 /// One org's erasures, newest first (Settings > People shows them as proof).
 pub const ERASURE_LIST: ControlStmt = ControlStmt::new(
     "subject.erasure_list",
-    "SELECT <string> id AS id, subject_ref, requested_by, status, counts, post_check, review, error, requested_at, completed_at FROM erasure \
+    "SELECT <string> id AS id, subject_ref, requested_by, scope, status, counts, post_check, review, error, requested_at, completed_at FROM erasure \
      WHERE org = $org ORDER BY requested_at DESC LIMIT 50",
 );
-/// Every finished erasure's reference and the workspaces it closed (the restore re-apply).
-pub const ERASURE_REFS: ControlStmt = ControlStmt::new("subject.erasure_refs", "SELECT subject_ref, closes FROM erasure WHERE status = 'done'");
-/// Whether any of `$refs` has an erasure on record (resync suppression).
-pub const ERASURE_HAS_REF: ControlStmt =
-    ControlStmt::new("subject.erasure_has_ref", "SELECT VALUE id FROM erasure WHERE subject_ref IN $refs LIMIT 1");
+/// One erasure of this org (the operator's cancel).
+pub const ERASURE_IN_ORG: ControlStmt =
+    ControlStmt::new("subject.erasure_in_org", "SELECT VALUE id FROM erasure WHERE id = $id AND org = $org");
+/// Every finished erasure's reference, scope and workspace (the restore re-apply).
+pub const ERASURE_REFS: ControlStmt =
+    ControlStmt::new("subject.erasure_refs", "SELECT subject_ref, scope, org, closes FROM erasure WHERE status = 'done'");
+/// Whether any of `$refs` has an erasure on record that covers workspace `$org` (resync suppression).
+pub const ERASURE_HAS_REF: ControlStmt = ControlStmt::new(
+    "subject.erasure_has_ref",
+    "SELECT VALUE id FROM erasure WHERE subject_ref IN $refs AND (scope = 'account' OR org = $org) AND status != 'cancelled' LIMIT 1",
+);
 /// Every account (the restore re-apply).
 pub const USERS_WITH_ORG: ControlStmt = ControlStmt::new("subject.users_with_org", "SELECT VALUE id FROM user");
 /// Which of `$ids` still have an account.
@@ -504,6 +635,39 @@ pub const CLOSE_ORG: ControlStmt = ControlStmt::new(
 );
 /// Ready workspaces (the re-apply sweeps each).
 pub const READY_ORGS: ControlStmt = ControlStmt::new("subject.ready_orgs", "SELECT VALUE org FROM tenant WHERE status = 'ready'");
+
+/// A workspace-scoped erasure that keeps the account: what the control database holds about the person
+/// in that workspace (the membership, its usage counters, jobs and capsules).
+pub const ERASE_CONTROL_WORKSPACE: ControlStmt = ControlStmt::at(
+    "subject.erase_control_workspace",
+    "BEGIN TRANSACTION; \
+     LET $ms = (DELETE membership WHERE user = $u AND org = $org RETURN BEFORE); \
+     LET $tu = (DELETE tool_usage WHERE user = $u AND org = $okey RETURN BEFORE); \
+     LET $jb = (DELETE job WHERE owner = $u AND org = $okey RETURN BEFORE); \
+     LET $fc = (UPDATE failure_capsule SET user = NONE, args = '' WHERE user = <string> $u AND org = $okey RETURN BEFORE); \
+     RETURN { org_memberships: array::len($ms), usage_counters: array::len($tu), jobs: array::len($jb), failure_capsules: array::len($fc) }; \
+     COMMIT TRANSACTION;",
+    5,
+);
+
+/// The control half of the post-check for a workspace-scoped erasure that keeps the account.
+pub const CONTROL_RESIDUE_WORKSPACE: ControlStmt = ControlStmt::new(
+    "subject.control_residue_workspace",
+    "RETURN { \
+       membership: count((SELECT id FROM membership WHERE user = $u AND org = $org)), \
+       tool_usage: count((SELECT id FROM tool_usage WHERE user = $u AND org = $okey)), \
+       job: count((SELECT id FROM job WHERE owner = $u AND org = $okey)), \
+       failure_capsule: count((SELECT id FROM failure_capsule WHERE user = <string> $u AND org = $okey)) \
+     }",
+);
+
+/// Audit events about the person that an admin's export of the workspace includes: admin actions that
+/// name them, and their own space and data-rights events.
+pub const ORG_AUDIT_ABOUT: ControlStmt = ControlStmt::new(
+    "subject.org_audit_about",
+    "SELECT action, outcome, created_at FROM audit_event WHERE target = <string> $u \
+     OR (user = $u AND (string::starts_with(action, 'vault.') OR string::starts_with(action, 'subject.'))) ORDER BY created_at",
+);
 
 /// Every org the subject belongs to (an erasure covers each).
 pub const USER_ORGS: ControlStmt = ControlStmt::new("subject.user_orgs", "SELECT VALUE org FROM membership WHERE user = $u ORDER BY created_at, id");
@@ -570,26 +734,40 @@ pub const CONTROL_ALL: &[&ControlStmt] = &[
     &OPEN_SUBJECTS,
     &ORG_OWNER_TRANSFER,
     &HOLD_OF,
+    &HOLD_BY,
+    &USER_STATE,
     &SET_LEGAL_HOLD,
+    &SESSION_CREATED,
+    &MEMBER_ACTIVITY,
     &ERASURE_CREATE,
     &ERASURE_OPEN,
+    &ERASURE_ADD_CLOSES,
+    &ERASURE_JOINT_CLOSE,
     &ERASURES_OPEN_ALL,
     &ERASURE_LIVE_JOB,
     &ERASURE_GET,
     &ERASURE_RUNNING,
+    &LOCKS_TAKE,
+    &LOCKS_RELEASE,
     &ERASURE_WORK,
     &ERASURE_HELD,
     &ERASURES_HELD_OF,
     &ERASURE_OPEN_OF,
+    &ACCOUNT_ERASURE_OPEN_OF,
     &ERASURE_DONE,
     &ERASURE_FAILED,
+    &ERASURE_CANCEL,
     &ERASURE_LIST,
+    &ERASURE_IN_ORG,
     &ERASURE_REFS,
     &ERASURE_HAS_REF,
     &USERS_WITH_ORG,
     &USERS_EXISTING,
     &CLOSE_ORG,
     &READY_ORGS,
+    &ERASE_CONTROL_WORKSPACE,
+    &CONTROL_RESIDUE_WORKSPACE,
+    &ORG_AUDIT_ABOUT,
     &USER_ORGS,
     &TOKEN_IDS,
     &ERASE_CONTROL,
