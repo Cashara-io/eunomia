@@ -333,7 +333,8 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         CREATE credential_ref SET reference = 'op://Ops/Item/field', provider = 'onepassword_connect', vault = $v, label = $c, created_by = $u;
         CREATE $sp SET kind = 'onepassword_connect', host = $c, token_enc = 'enc:v1:planted', created_by = $u, updated_by = $u;
         CREATE secret_request SET vault = $v, name = 'planted', label = $c, description = $c, target_hosts = ['api.example.com'], requested_by = $u, actor_id = $c, client_name = $c, expires_at = time::now() + 1d;
-        CREATE vault_secret SET vault = $v, name = 'planted', label = $c, value_enc = $senc, allowed_hosts = ['api.example.com'], allowed_actors = [$c], created_by = $u;";
+        CREATE vault_secret SET vault = $v, name = 'planted', label = $c, value_enc = $senc, allowed_hosts = ['api.example.com'], allowed_actors = [$c], created_by = $u;
+        CREATE subject_export SET subject = $u, requested_by = $u, status = 'ready', manifest = {note: $c}, archive = <bytes>$c;";
     let uid = user.id.clone();
     db.test_raw()
         .query(sql)
@@ -398,6 +399,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         LET $g = (CREATE oauth_grant SET owner = $u, client_id = 'client-x', client_name = $c, scope = ['memory:read'], resource = 'http://localhost:8001/mcp' RETURN VALUE id)[0];
         CREATE oauth_token SET kind = 'access', token_hash = $c, family = $g, expires_at = time::now() + 15m;
         CREATE oauth_code SET code_hash = $c, owner = $u, client_id = 'client-x', redirect_uri = 'http://localhost/cb', code_challenge = $c, scope = ['memory:read'], resource = 'http://x', expires_at = time::now() + 1m;
+        CREATE erasure SET org = $okey_bare, subject_ref = $c, requested_by = 'admin', status = 'done', counts = {note: $c};
         RETURN $g;";
     let mut res = state
         .control
@@ -405,6 +407,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         .query(control_sql)
         .bind(("org", user.org.record()))
         .bind(("okey", user.org.to_string()))
+        .bind(("okey_bare", user.org.key()))
         .bind(("u", uid.clone()))
         .bind(("c", canary.clone()))
         .bind(("mem", surrealdb::types::RecordId::new("membership", canary.clone())))
