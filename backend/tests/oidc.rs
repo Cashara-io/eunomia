@@ -713,3 +713,15 @@ async fn a_pending_organisation_invitation_places_a_new_sso_account_in_the_invit
     assert_ne!(carol.org, owner_b.org);
     assert!(eunomia_backend::invitations::open_for_email(&app.state.control, "carol@example.test").await.unwrap().is_some(), "still open");
 }
+
+#[tokio::test]
+async fn a_provider_email_written_with_look_alike_letters_makes_no_account() {
+    let app = app(AuthMode::Both).await;
+    expect_signed_in(&app.sign_in().await);
+    for (sub, email) in [("kelvin-sub", "\u{212A}ate@example.test"), ("angstrom-sub", "\u{212B}sa@example.test")] {
+        app.idp.behave(Behavior { sub: sub.into(), email: Some(email.into()), ..Default::default() });
+        expect_refused(&app.sign_in().await, "no_email");
+    }
+    assert_eq!(app.user_count().await, 1);
+    assert!(models_user::user_by_email(&app.state.control, "kate@example.test").await.unwrap().is_none());
+}
