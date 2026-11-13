@@ -149,7 +149,10 @@ fn rid(s: &str) -> Result<RecordId, AppError> {
 enum Outcome {
     Done,
     Held,
+    /// Another erasure in the workspace is running: try again shortly, without spending an attempt.
     Busy,
+    /// The post-check found the person somewhere: recorded on the row; the job retries.
+    Residue(String),
 }
 
 pub async fn erase_job(state: AppState, job: Job) -> Result<(), JobError> {
@@ -157,7 +160,16 @@ pub async fn erase_job(state: AppState, job: Job) -> Result<(), JobError> {
     let erasure = crate::rid::parse(id_str).map_err(|_| JobError::permanent(ErrorCode::ValidationInvalid, "bad erasure id"))?;
     match run(&state, &erasure, &job.payload).await {
         Ok(Outcome::Done | Outcome::Held) => Ok(()),
-        Ok(Outcome::Busy) => Err(JobError::retryable(ErrorCode::DbConflict, "another erasure in this workspace is running")),
+        Ok(Outcome::Busy) => {
+            // waiting for another erasure is not a failure: a fresh job a few seconds on, this one ends
+            let key = format!("{}:{}:{}", crate::jobs::kind::SUBJECT_ERASE, erasure.to_string(), uuid::Uuid::new_v4().simple());
+            let mut next = crate::jobs::NewJob::new(crate::jobs::kind::SUBJECT_ERASE, job.owner.clone(), key).payload(json!({ "erasure": erasure.to_string() }));
+            next.run_at = Some(chrono::Utc::now() + chrono::Duration::seconds(3));
+            next.max_attempts = 8;
+            crate::jobs::enqueue(&state.control, next).await.map_err(JobError::from)?;
+            Ok(())
+        }
+        Ok(Outcome::Residue(msg)) => Err(JobError::retryable(ErrorCode::Internal, msg)),
         Err(e) => {
             // the raw database text stays in the log (it can quote a row), the record gets the code
             tracing::warn!(erasure = %erasure.to_string(), code = e.code.as_str(), source = e.source.as_deref().unwrap_or(""), "erasure step failed; the job retries");
@@ -317,7 +329,7 @@ async fn fail_with_residue(state: &AppState, erasure: &RecordId, check: Map<Stri
     let left = residue(&Value::Object(check.clone())).join(", ");
     let msg = format!("The post-check still found the person in: {left}. The account is kept and the job retries.");
     q::ERASURE_FAILED.on(&state.control).bind(("id", erasure.clone())).bind(("error", msg.clone())).bind(("post_check", Value::Object(check))).await?.check()?;
-    Err(AppError::coded(ErrorCode::Internal, msg))
+    Ok(Outcome::Residue(msg))
 }
 
 /// The people with an erasure open, but not `subject` (they inherit nothing).

@@ -291,6 +291,8 @@ An install whose existing key is shorter than 16 characters keeps working: it bo
 
 Changing a real key later has no such fallback: values written under the old key stop decrypting, so reconnect the connectors, re-enter the OpenAI key, and expect org databases to be unreachable until their users are redefined (see [architecture/tenancy.md](architecture/tenancy.md)). Do not change it casually.
 
+Erasure records are keyed hashes under the key, and a hash cannot be re-keyed. After any key change, set `ENCRYPTION_KEY_PREVIOUS` to the old key (comma separated for several) for as long as backups from before the change exist, so a restored account that was erased is still recognised and erased again ([privacy/subject-rights.md](privacy/subject-rights.md#resync-and-restore-suppression)).
+
 ## Backups
 
 See [INSTALLATION.md](../INSTALLATION.md#backups): the nightly encrypted export, where the key lives, and how to restore.

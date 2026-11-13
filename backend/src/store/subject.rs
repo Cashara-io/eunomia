@@ -513,8 +513,8 @@ pub const TOKEN_IDS: ControlStmt = ControlStmt::new("subject.token_ids", "SELECT
 
 /// Everything the control database holds about the subject. Their audit events stay (the security
 /// ledger is append-only and pruned only by retention) but no longer name them: the actor id, a
-/// target that is their id and their email anywhere in the detail become "erased", and the row's
-/// `user` becomes `user:erased`, an account that never exists, so no workspace's activity log lists
+/// target that is their id and their email anywhere in the detail become "erased", and a row filed
+/// under them gets `user:erased`, an account that never exists, so no workspace's activity log lists
 /// it (a row with no user would show in every workspace's log, like a failed sign-in).
 pub const ERASE_CONTROL: ControlStmt = ControlStmt::at(
     "subject.erase_control",
@@ -531,7 +531,7 @@ pub const ERASE_CONTROL: ControlStmt = ControlStmt::at(
      LET $fc = (UPDATE failure_capsule SET user = NONE, args = '' WHERE user = <string> $u RETURN BEFORE); \
      UPDATE failure_capsule SET args = string::replace(args, <regex> $email_re, '[erased person]') WHERE string::contains(string::lowercase(args), $email_lc) RETURN NONE; \
      UPDATE erasure SET requester = NONE WHERE requester = $u RETURN NONE; \
-     LET $ae = (UPDATE audit_event SET user = user:erased, actor_id = IF actor_id IN $actors THEN 'erased' ELSE actor_id END, \
+     LET $ae = (UPDATE audit_event SET user = IF user = $u THEN user:erased ELSE user END, actor_id = IF actor_id IN $actors THEN 'erased' ELSE actor_id END, \
         target = IF target IN $actors OR string::contains(target, $key) THEN 'erased' ELSE target END, \
         detail = string::replace(detail, <regex> $email_re, '[erased person]') \
         WHERE user = $u OR actor_id IN $actors OR target IN $actors OR string::contains(target, $key) OR string::contains(string::lowercase(detail), $email_lc) RETURN BEFORE); \
