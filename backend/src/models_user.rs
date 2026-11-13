@@ -48,7 +48,7 @@ async fn hash_password(password: &str) -> AppResult<String> {
 
 /// `false` for a wrong password and for a hash that cannot be checked. `None` checks against a
 /// dummy hash (unknown email): the same work as a wrong password, so timing does not reveal accounts.
-async fn verify_password(password: &str, hash: Option<&str>) -> bool {
+pub(crate) async fn verify_password(password: &str, hash: Option<&str>) -> bool {
     let (password, hash) = (password.to_string(), hash.map(String::from));
     blocking_hash(move || bcrypt::verify(password, hash.as_deref().unwrap_or_else(|| dummy_hash())).unwrap_or(false) && hash.is_some())
         .await

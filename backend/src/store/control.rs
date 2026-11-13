@@ -423,7 +423,7 @@ pub const ADMIN_AUDIT_PAGE: ControlStmt = ControlStmt::new(
 /// Every account in an org, oldest first.
 pub const ADMIN_PEOPLE: ControlStmt = ControlStmt::new(
     "control.admin_people",
-    "SELECT id, email, created_at, admin, suspended_at FROM user WHERE id IN (SELECT VALUE user FROM membership WHERE org = $org) ORDER BY created_at, id",
+    "SELECT id, email, created_at, admin, suspended_at, legal_hold_at FROM user WHERE id IN (SELECT VALUE user FROM membership WHERE org = $org) ORDER BY created_at, id",
 );
 
 /// When each of `$ids` was last seen: browser sessions, then API tokens (the caller takes the latest).

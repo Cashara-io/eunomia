@@ -104,6 +104,7 @@ pub fn spec() -> utoipa::openapi::OpenApi {
         routers::peers::Doc::openapi(),
         routers::settings::Doc::openapi(),
         routers::sources::Doc::openapi(),
+        routers::subject::Doc::openapi(),
         routers::tools::Doc::openapi(),
         routers::update::Doc::openapi(),
         crate::diagnostics::Doc::openapi(),

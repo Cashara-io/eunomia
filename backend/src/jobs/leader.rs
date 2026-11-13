@@ -30,6 +30,8 @@ pub async fn run(state: AppState, cfg: WorkerConfig, mut shutdown: watch::Receiv
                 if !leading {
                     tracing::info!(worker = %cfg.id, "became scheduler leader");
                     revive_dead_migrations(&state.control).await;
+                    // after a backup restore: erase again whoever was erased after the backup was taken
+                    crate::subject::reapply_on_start(&state).await;
                 }
                 leading = true;
                 tick(&state, ticks).await;
@@ -67,6 +69,11 @@ pub async fn tick(state: &AppState, n: u64) {
                 tracing::warn!(error = %e.message, "pruning extension events failed");
             }
             crate::changes::prune_due(&org_state.db).await;
+            if org_state.db.schema_version() >= crate::subject::export::SCHEMA_VERSION
+                && let Err(e) = crate::store::subject::EXPORT_PRUNE.on(&org_state.db).await
+            {
+                tracing::warn!(error = %e, "pruning expired data exports failed");
+            }
         }
     }
     if n.is_multiple_of(SLOW_EVERY)

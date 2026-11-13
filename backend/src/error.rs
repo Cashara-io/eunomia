@@ -60,6 +60,10 @@ pub enum ErrorCode {
     OntologyStaleRevision,
     DbConflict,
     DbDuplicate,
+    SubjectLegalHold,
+    SubjectLastOwner,
+    SubjectConfirmationFailed,
+    SubjectExportNotReady,
     JobNoHandler,
     JobLeaseExpired,
     JobPanicked,
@@ -111,6 +115,10 @@ impl ErrorCode {
         ErrorCode::OntologyStaleRevision,
         ErrorCode::DbConflict,
         ErrorCode::DbDuplicate,
+        ErrorCode::SubjectLegalHold,
+        ErrorCode::SubjectLastOwner,
+        ErrorCode::SubjectConfirmationFailed,
+        ErrorCode::SubjectExportNotReady,
         ErrorCode::JobNoHandler,
         ErrorCode::JobLeaseExpired,
         ErrorCode::JobPanicked,
@@ -162,6 +170,10 @@ impl ErrorCode {
             ErrorCode::OntologyStaleRevision => "ontology.stale_revision",
             ErrorCode::DbConflict => "db.conflict",
             ErrorCode::DbDuplicate => "db.duplicate",
+            ErrorCode::SubjectLegalHold => "subject.legal_hold",
+            ErrorCode::SubjectLastOwner => "subject.last_owner",
+            ErrorCode::SubjectConfirmationFailed => "subject.confirmation_failed",
+            ErrorCode::SubjectExportNotReady => "subject.export_not_ready",
             ErrorCode::JobNoHandler => "job.no_handler",
             ErrorCode::JobLeaseExpired => "job.lease_expired",
             ErrorCode::JobPanicked => "job.panicked",
@@ -183,7 +195,9 @@ impl ErrorCode {
             ErrorCode::DocumentUnsupportedType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             ErrorCode::ChangesResync => StatusCode::GONE,
             ErrorCode::TenantProvisioningDisabled => StatusCode::NOT_IMPLEMENTED,
-            ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision => StatusCode::CONFLICT,
+            ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision
+            | ErrorCode::SubjectLegalHold | ErrorCode::SubjectLastOwner | ErrorCode::SubjectExportNotReady => StatusCode::CONFLICT,
+            ErrorCode::SubjectConfirmationFailed => StatusCode::FORBIDDEN,
             ErrorCode::AuthNotFound
             | ErrorCode::VaultNotFound
             | ErrorCode::EntityNotFound
@@ -382,7 +396,8 @@ mod tests {
                 | ErrorCode::ResourceNotFound | ErrorCode::DocumentNotFound | ErrorCode::DocumentTooLarge
                 | ErrorCode::DocumentUnsupportedType | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable | ErrorCode::SecretRequestClosed | ErrorCode::SecretHostDenied
                 | ErrorCode::SecretOutboundBlocked | ErrorCode::SecretOutboundFailed | ErrorCode::ChangesResync | ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected | ErrorCode::OntologyStaleRevision | ErrorCode::DbConflict
-                | ErrorCode::DbDuplicate | ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked
+                | ErrorCode::DbDuplicate | ErrorCode::SubjectLegalHold | ErrorCode::SubjectLastOwner | ErrorCode::SubjectConfirmationFailed
+                | ErrorCode::SubjectExportNotReady | ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked
                 | ErrorCode::Internal => {}
             }
         }

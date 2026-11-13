@@ -94,6 +94,8 @@ pub fn explicit_class(method: &Method, path: &str) -> Option<Class> {
         ["api", "extensions", ..] => Account(scopes::CONNECTORS),
         ["api", "secrets", ..] => Account(scopes::VAULTS_ADMIN),
         ["api", "sources", ..] => Account(scopes::CONNECTORS),
+        // the account itself (deleting it: the handler also requires a browser session)
+        ["api", "account", ..] => Account(scopes::VAULTS_ADMIN),
         ["api", "settings" | "debug" | "export" | "diagnostics" | "update" | "https" | "audit" | "admin" | "chat" | "oauth", ..] => Account(scopes::VAULTS_ADMIN),
         // OAuth endpoints for MCP clients: public, so limited per client address like login
         ["oauth", "token" | "register" | "revoke"] => AuthAttempt,

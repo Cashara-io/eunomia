@@ -26,7 +26,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/people/{user_id}/tokens/{token_id}", delete(revoke_person_token))
 }
 
-async fn require_admin(state: &AppState, user: &User) -> AppResult<()> {
+pub(crate) async fn require_admin(state: &AppState, user: &User) -> AppResult<()> {
     if authz::is_admin(&state.control, user).await? {
         Ok(())
     } else {
@@ -57,7 +57,18 @@ pub enum AuditCategory {
 }
 
 const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.failed"];
-const ADMIN_ACTIONS: &[&str] = &["admin.grant", "admin.revoke", "user.suspend", "user.restore", "admin.token_revoke"];
+const ADMIN_ACTIONS: &[&str] = &[
+    "admin.grant",
+    "admin.revoke",
+    "user.suspend",
+    "user.restore",
+    "admin.token_revoke",
+    "subject.legal_hold",
+    "subject.legal_hold_lift",
+    "subject.erase_request",
+    "subject.erase",
+    "subject.export_request_admin",
+];
 
 impl AuditCategory {
     /// `(prefix, exact actions, excluded actions)` for the ledger query; all empty means every event.
@@ -305,6 +316,12 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "admin.revoke" => format!("Took admin rights away from {email}"),
         "user.suspend" => format!("Suspended {email}"),
         "user.restore" => format!("Restored access for {email}"),
+        "subject.legal_hold" => format!("Placed a legal hold on {email}"),
+        "subject.legal_hold_lift" => format!("Lifted the legal hold on {email}"),
+        "subject.erase_request" => "Asked for an account and its data to be deleted".into(),
+        "subject.erase" => return "Deleted an account and its data (the erasure record keeps the counts)".into(),
+        "subject.export_request" => "Exported their data".into(),
+        "subject.export_request_admin" => "Exported someone's data for them".into(),
         "admin.token_revoke" => match rest_of(detail, "token") {
             Some(t) => format!("Revoked {email}\u{2019}s API token \u{201c}{t}\u{201d}"),
             None => format!("Revoked an API token of {email}"),
@@ -532,6 +549,9 @@ struct PersonRow {
     #[serde(default)]
     #[surreal(default)]
     suspended_at: Option<Datetime>,
+    #[serde(default)]
+    #[surreal(default)]
+    legal_hold_at: Option<Datetime>,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -568,6 +588,9 @@ struct Person {
     /// When an admin suspended the account, RFC 3339; none while it is active.
     #[schema(value_type = Option<String>)]
     suspended_at: Option<Datetime>,
+    /// When an admin placed a legal hold on the account, RFC 3339; none when there is none. A held account cannot be erased.
+    #[schema(value_type = Option<String>)]
+    legal_hold_at: Option<Datetime>,
     /// The admin looking at the list.
     is_you: bool,
     /// How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`).
@@ -693,6 +716,7 @@ async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport>
                 email: r.email,
                 created_at: r.created_at,
                 suspended_at: r.suspended_at,
+                legal_hold_at: r.legal_hold_at,
             }
         })
         .collect();
@@ -725,6 +749,14 @@ struct AdminChange {
 struct SuspendChange {
     /// `true` suspends the account, `false` restores it.
     suspended: bool,
+}
+
+/// For the data-subject routes (`routers/subject.rs`): the admin acting (browser session only), the
+/// account they act on (in their workspace) and its email.
+pub(crate) async fn person_in_workspace(state: &AppState, user: &User, user_id: &str) -> AppResult<(Option<RecordId>, RecordId, String)> {
+    let (rows, creator, target) = target_of(state, user, user_id).await?;
+    let email = rows.iter().find(|r| r.id == target).map(|r| r.email.clone()).unwrap_or_default();
+    Ok((creator, target, email))
 }
 
 /// The admin acting (browser session only) and the account they act on, which must be in their workspace.
@@ -1006,6 +1038,7 @@ mod tests {
             created_at: None,
             admin: admin.then_some(true),
             suspended_at: suspended.then(Datetime::now),
+            legal_hold_at: None,
         };
         let a: RecordId = crate::rid::parse("user:a").unwrap();
         let b: RecordId = crate::rid::parse("user:b").unwrap();

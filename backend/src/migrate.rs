@@ -53,6 +53,7 @@ pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (40, "object_paging", include_str!("../migrations/tenant/0040_object_paging.surql")),
     (41, "composio_connector", include_str!("../migrations/tenant/0041_composio_connector.surql")),
     (42, "ontology_activity", include_str!("../migrations/tenant/0042_ontology_activity.surql")),
+    (45, "erasure", include_str!("../migrations/tenant/0045_erasure.surql")),
 ];
 
 /// The tenant schema version this code writes. An org database is current at this version.
@@ -72,6 +73,7 @@ pub const CONTROL_MIGRATIONS: &[(u32, &str, &str)] = &[
     (6, "oidc_identity", include_str!("../migrations/control/0006_oidc_identity.surql")),
     (7, "secret_audit_index", include_str!("../migrations/control/0007_secret_audit_index.surql")),
     (8, "user_admin_suspend", include_str!("../migrations/control/0008_user_admin_suspend.surql")),
+    (11, "erasure", include_str!("../migrations/control/0011_erasure.surql")),
 ];
 
 /// The last tenant migration the legacy single database may be brought to before its data moves out

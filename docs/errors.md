@@ -68,6 +68,10 @@ The `ErrorCode` enum is in `backend/src/error.rs`. A unit test fails if a code i
 | `validation.invalid` | 400 | The request or tool arguments are invalid. Also the default for a bare 400, for MCP protocol errors and for tool errors with no more specific code. | most routers, `tools/registry.rs`, `routers/mcp.rs` |
 | `db.conflict` | 409 | A transaction conflicted with another write. Retryable: repeat the request. Also the default for a bare 409. | `error.rs` (DB error mapping) |
 | `db.duplicate` | 409 | A unique index rejected the write. Not retryable. | `error.rs` (DB error mapping), `routers/auth.rs` |
+| `subject.legal_hold` | 409 | The account is under a legal hold set by a workspace admin (Settings > People), so it cannot be erased until an admin lifts the hold. | `subject/mod.rs` |
+| `subject.last_owner` | 409 | The account is the workspace's last owner. Erasing it would leave the workspace without one: make someone else an owner first. | `subject/mod.rs` |
+| `subject.confirmation_failed` | 403 | An erasure was not confirmed: the password was wrong, or the email typed to confirm does not match the account. Nothing was deleted. | `subject/mod.rs` |
+| `subject.export_not_ready` | 409 | The data export is still being prepared (or failed); download it once its status is `ready`. | `routers/subject.rs` |
 | `job.no_handler` | n/a | A job of a kind no handler is registered for was claimed. Dead-lettered, never sent over HTTP (stored in `job.last_error_code`). | `jobs/worker.rs` |
 | `job.lease_expired` | n/a | A job was claimed `max_attempts` times and each lease expired (worker crash loop). Dead-lettered. Stored in `job.last_error_code`. | `jobs/leader.rs` |
 | `job.panicked` | n/a | A job handler panicked. Retried with backoff, dead after `max_attempts`. Stored in `job.last_error_code`. | `jobs/worker.rs` |

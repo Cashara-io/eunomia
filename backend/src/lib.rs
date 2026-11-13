@@ -39,6 +39,7 @@ pub mod secrets;
 pub mod sources;
 pub mod state;
 pub mod store;
+pub mod subject;
 pub mod telemetry;
 pub mod diagnostics;
 pub mod tools;
@@ -83,6 +84,7 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
         .merge(routers::audit::router())
         .merge(routers::admin::router())
         .merge(routers::export::router())
+        .merge(routers::subject::router())
         .merge(routers::debug::router())
         .merge(routers::diagnostics::router())
         .merge(routers::update::router())

@@ -16,6 +16,7 @@ pub mod extensions;
 pub mod secret_requests;
 pub mod secrets;
 pub mod sources;
+pub mod subject;
 pub mod tools;
 pub mod update;
 pub mod https;
