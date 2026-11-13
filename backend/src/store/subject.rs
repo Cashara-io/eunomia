@@ -86,7 +86,10 @@ pub const PROMOTE: Stmt = Stmt::new(
 );
 
 /// The rule for a space other people can still read: what the subject wrote there stays, owned by
-/// `$to` (an owner who remains), and the subject's name goes from its decision trail. One transaction.
+/// `$to` (an owner who remains). Their synced records filed there are deleted instead (their ids carry
+/// the subject's key, and the sources they came from are deleted with the account); facts and
+/// relations drawn from them stay, without the link. Documents keep their file and are indexed again
+/// as `$to`'s, so the chunks get ids of the new owner. One transaction.
 pub const REASSIGN: Stmt = Stmt::at(
     "subject.reassign",
     "BEGIN TRANSACTION; \
@@ -105,17 +108,22 @@ pub const REASSIGN: Stmt = Stmt::at(
      UPDATE entity SET owner = $to WHERE owner = $u AND vault = $vault RETURN NONE; \
      UPDATE memory SET owner = $to WHERE owner = $u AND vault = $vault RETURN NONE; \
      UPDATE relates_to SET owner = $to WHERE owner = $u AND (in.vault = $vault OR out.vault = $vault) RETURN NONE; \
-     UPDATE cache_record SET owner = $to WHERE owner = $u AND vault = $vault RETURN NONE; \
-     UPDATE document SET owner = $to WHERE owner = $u AND vault = $vault RETURN NONE; \
+     LET $recs = (SELECT VALUE id FROM cache_record WHERE owner = $u AND vault = $vault); \
+     UPDATE memory SET source = NONE WHERE source IN $recs RETURN NONE; \
+     UPDATE relates_to SET source = NONE WHERE source IN $recs RETURN NONE; \
+     UPDATE entity_property SET source = NONE WHERE source IN $recs RETURN NONE; \
+     DELETE linked_to WHERE in IN $recs OR out IN $recs RETURN NONE; \
+     DELETE $recs RETURN NONE; \
+     LET $docs = (UPDATE document SET owner = $to WHERE owner = $u AND vault = $vault AND status != 'deleted' RETURN VALUE <string> id); \
      UPDATE skill SET owner = $to WHERE owner = $u AND vault = $vault RETURN NONE; \
      UPDATE peer_share SET created_by = $to WHERE created_by = $u AND vault = $vault RETURN NONE; \
      UPDATE peer_link SET user = $to WHERE user = $u AND vault = $vault RETURN NONE; \
      UPDATE credential_ref SET created_by = $to WHERE created_by = $u AND vault = $vault RETURN NONE; \
      UPDATE vault_secret SET created_by = $to WHERE created_by = $u AND vault = $vault RETURN NONE; \
      UPDATE secret_request SET requested_by = $to WHERE requested_by = $u AND vault = $vault RETURN NONE; \
-     RETURN $n; \
+     RETURN { n: $n, documents: $docs }; \
      COMMIT TRANSACTION;",
-    20, // BEGIN 0, LET 1, eighteen updates 2 to 19, RETURN 20
+    24, // BEGIN 0, LET 1, the updates, deletes and LETs 2 to 23, RETURN 24
 );
 
 /// The subject's email in what stays in the workspace (shared spaces and other people's own): replaced in the text of facts and in the
@@ -130,9 +138,11 @@ pub const SCRUB_EMAIL: Stmt = Stmt::at(
            WHERE (string::contains(string::lowercase(name), $email_lc) OR string::contains(string::lowercase(summary), $email_lc) OR aliases.any(|$a| string::contains(string::lowercase($a), $email_lc))) RETURN VALUE id), \
         (UPDATE entity SET name = string::replace(name, $email_lc, '[erased person]'), summary = string::replace(summary, $email_lc, '[erased person]'), aliases = aliases.filter(|$a| !string::contains(string::lowercase($a), $email_lc)) \
            WHERE (string::contains(string::lowercase(name), $email_lc) OR string::contains(string::lowercase(summary), $email_lc) OR aliases.any(|$a| string::contains(string::lowercase($a), $email_lc))) RETURN VALUE id)); \
-     RETURN array::len($m) + array::len($e); \
+     LET $t = (UPDATE audit_log SET args_summary = string::replace(string::replace(args_summary, $email, '[erased person]'), $email_lc, '[erased person]') \
+        WHERE string::contains(string::lowercase(args_summary), $email_lc) RETURN VALUE id); \
+     RETURN array::len($m) + array::len($e) + array::len($t); \
      COMMIT TRANSACTION;",
-    3,
+    4,
 );
 
 /// Spaces only the subject could read: every row in them, whoever wrote it (their documents' files
@@ -156,7 +166,7 @@ pub const ERASE_SPACES: Stmt = Stmt::at(
         (DELETE ontology_metric WHERE vault IN $solo RETURN BEFORE), (DELETE ontology_event WHERE vault IN $solo RETURN BEFORE), (DELETE extension WHERE vault IN $solo RETURN BEFORE)); \
      RETURN { relations: array::len($r) + array::len($l), memories: array::len($m), entities: array::len($e) + array::len($p), synced_records: array::len($c), skills: array::len($s), space_settings: array::len($x) }; \
      COMMIT TRANSACTION;",
-    12,
+    10, // BEGIN 0, nine LETs 1 to 9, RETURN 10
 );
 
 /// Everything else the subject owns in the org database, wherever it is. What is left in a space with
@@ -205,7 +215,7 @@ pub const ERASE_OWNED: Stmt = Stmt::at(
         skills: array::len($s), chat_threads: array::len($ct), chat_messages: array::len($cm), tool_log: array::len($al), sources: array::len($src), recordings: array::len($pr), \
         extensions: array::len($ex), settings: array::len($st), sharing_and_secrets: array::len($sec), exports: array::len($xp) }; \
      COMMIT TRANSACTION;",
-    35,
+    33, // BEGIN 0, the LETs and updates 1 to 32, RETURN 33
 );
 
 /// The subject's own memberships (active, pending or left), after everything they decide is done.
@@ -245,7 +255,7 @@ pub const RESIDUE: Stmt = Stmt::new(
        relates_to: count((SELECT id FROM relates_to WHERE owner = $u)), \
        chat_thread: count((SELECT id FROM chat_thread WHERE owner = $u)), \
        chat_message: count((SELECT id FROM chat_message WHERE owner = $u)), \
-       audit_log: count((SELECT id FROM audit_log WHERE owner = $u)), \
+       audit_log: count((SELECT id FROM audit_log WHERE owner = $u OR string::contains(string::lowercase(args_summary), $email_lc))), \
        pocket_recording: count((SELECT id FROM pocket_recording WHERE owner = $u)), \
        document: count((SELECT id FROM document WHERE owner = $u)), \
        extension: count((SELECT id FROM extension WHERE owner = $u)), \
@@ -410,9 +420,9 @@ pub const ERASE_CONTROL: ControlStmt = ControlStmt::at(
      LET $jb = (DELETE job WHERE owner = $u RETURN BEFORE); \
      LET $fc = (UPDATE failure_capsule SET user = NONE WHERE user = <string> $u RETURN BEFORE); \
      LET $ae = (UPDATE audit_event SET user = user:erased, actor_id = IF actor_id IN $actors THEN 'erased' ELSE actor_id END, \
-        target = IF target IN $actors THEN 'erased' ELSE target END, \
+        target = IF target IN $actors OR string::contains(target, $key) THEN 'erased' ELSE target END, \
         detail = string::replace(string::replace(detail, $email, '[erased person]'), $email_lc, '[erased person]') \
-        WHERE user = $u OR actor_id IN $actors OR target IN $actors OR string::contains(string::lowercase(detail), $email_lc) RETURN BEFORE); \
+        WHERE user = $u OR actor_id IN $actors OR target IN $actors OR string::contains(target, $key) OR string::contains(string::lowercase(detail), $email_lc) RETURN BEFORE); \
      LET $ms = (DELETE membership WHERE user = $u RETURN BEFORE); \
      LET $us = (DELETE $u RETURN BEFORE); \
      RETURN { app_connections: array::len($og) + array::len($ot) + array::len($oc), api_tokens: array::len($at), sessions: array::len($se), \
@@ -436,7 +446,7 @@ pub const CONTROL_RESIDUE: ControlStmt = ControlStmt::new(
        tool_usage: count((SELECT id FROM tool_usage WHERE user = $u)), \
        job: count((SELECT id FROM job WHERE owner = $u)), \
        failure_capsule: count((SELECT id FROM failure_capsule WHERE user = <string> $u)), \
-       audit_event: count((SELECT id FROM audit_event WHERE user = $u OR actor_id IN $actors OR target IN $actors OR string::contains(string::lowercase(detail), $email_lc))), \
+       audit_event: count((SELECT id FROM audit_event WHERE user = $u OR actor_id IN $actors OR target IN $actors OR string::contains(target, $key) OR string::contains(string::lowercase(detail), $email_lc))), \
        erasure: count((SELECT id FROM erasure WHERE subject = $u AND id != $erasure)) \
      }",
 );
@@ -462,3 +472,37 @@ pub const CONTROL_ALL: &[&ControlStmt] = &[
     &ERASE_CONTROL,
     &CONTROL_RESIDUE,
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The statement index of the RETURN in a transaction (SurrealDB gives BEGIN, LET and COMMIT a slot too).
+    fn return_slot(sql: &str) -> usize {
+        let (mut depth, mut i, mut start) = (0i32, 0usize, 0usize);
+        let b = sql.as_bytes();
+        for (pos, c) in sql.char_indices() {
+            match c {
+                '(' | '{' | '[' => depth += 1,
+                ')' | '}' | ']' => depth -= 1,
+                ';' if depth == 0 => {
+                    if std::str::from_utf8(&b[start..pos]).unwrap().trim_start().starts_with("RETURN") {
+                        return i;
+                    }
+                    i += 1;
+                    start = pos + 1;
+                }
+                _ => {}
+            }
+        }
+        panic!("no RETURN in {sql}");
+    }
+
+    #[test]
+    fn every_transaction_takes_its_return_slot() {
+        for s in [&REASSIGN, &SCRUB_EMAIL, &ERASE_SPACES, &ERASE_OWNED] {
+            assert_eq!(s.slot, return_slot(s.sql), "{}", s.name);
+        }
+        assert_eq!(ERASE_CONTROL.slot, return_slot(ERASE_CONTROL.sql), "{}", ERASE_CONTROL.name);
+    }
+}

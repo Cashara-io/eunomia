@@ -9,6 +9,53 @@
     "version": "1"
   },
   "paths": {
+    "/api/account/erasure": {
+      "post": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Delete your account and your data (browser session, confirmed with your password)",
+        "description": "Checks the confirmation, then suspends the account and signs it out everywhere, and queues the erasure. Refused with `subject.legal_hold` while an admin holds the account, and with `subject.last_owner` for the workspace's last owner. What is deleted and what is kept: docs/privacy/subject-rights.md.",
+        "operationId": "eraseMyAccount",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EraseMe"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureTicket"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/admin/audit": {
       "get": {
         "tags": [
@@ -91,6 +138,86 @@
         ]
       }
     },
+    "/api/admin/erasures": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Erasure records for the workspace, newest first (admin only)",
+        "description": "Each record keeps only an opaque reference to the person, the counts per category and the post-check (every value 0 when it passed).",
+        "operationId": "listErasures",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ErasureRecord"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/erasures/reapply": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "After restoring a backup: erase again everyone erased after the backup was taken (admin only, browser session)",
+        "description": "Also runs by itself when the server starts. Matches live accounts against the erasure records; queues an erasure for each match.",
+        "operationId": "reapplyErasures",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reapplied"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/admin/people": {
       "get": {
         "tags": [
@@ -165,6 +292,167 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PeopleReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/erasure": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Delete someone's account and data (admin only, browser session, confirmed with their email)",
+        "description": "Refused for your own account (use Settings > Data), with `subject.legal_hold` while the account is held, and with `subject.last_owner` for the workspace's last owner or the account that set up the server.",
+        "operationId": "erasePerson",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErasePerson"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureTicket"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/export": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Prepare a full data export for someone in the workspace (admin only, browser session)",
+        "description": "The same archive the person gets from Settings > Data. It is listed with your own exports and kept for seven days.",
+        "operationId": "startPersonExport",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportRow"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/legal-hold": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Place or lift a legal hold on someone's account (admin only, browser session)",
+        "description": "While held, erasing the account is refused with `subject.legal_hold`. Placing and lifting are both in the activity log. A hold does not stop the audit retention window (AUDIT_RETENTION_DAYS).",
+        "operationId": "setPersonLegalHold",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoldChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldState"
                 }
               }
             }
@@ -3750,6 +4038,132 @@
                   "type": "object"
                 }
               }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/export/subject": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Your data exports, and the ones you asked for as an admin, newest first",
+        "operationId": "listSubjectExports",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExportRow"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Prepare a full export of your data (a zip archive with a manifest)",
+        "description": "Queues a job that collects everything in scope about you (account, spaces, what you wrote in spaces you can still read, documents and their files, synced records, chat, sources, tokens and connected apps by name, your audit events) into a zip archive kept for seven days. List exports to see when it is ready.",
+        "operationId": "startSubjectExport",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportRow"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/export/subject/{export_id}": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Download a ready data export (zip)",
+        "operationId": "downloadSubjectExport",
+        "parameters": [
+          {
+            "name": "export_id",
+            "in": "path",
+            "description": "The export's id, as listed",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The zip archive",
+            "content": {
+              "application/zip": {}
             }
           },
           "default": {
@@ -10919,6 +11333,110 @@
           }
         }
       },
+      "EraseMe": {
+        "type": "object",
+        "properties": {
+          "confirm_email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Your email, typed again: the confirmation for an account that signs in only with single sign-on."
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Your password, typed again. Required when the account has one."
+          }
+        }
+      },
+      "ErasePerson": {
+        "type": "object",
+        "required": [
+          "confirm_email"
+        ],
+        "properties": {
+          "confirm_email": {
+            "type": "string",
+            "description": "The person's email, typed by the admin to confirm."
+          }
+        }
+      },
+      "ErasureRecord": {
+        "type": "object",
+        "description": "The record a completed erasure leaves, for the People page (no personal data: an opaque reference,\nper-category counts and the post-check result).",
+        "required": [
+          "id",
+          "subject_ref",
+          "requested_by",
+          "status",
+          "counts",
+          "post_check",
+          "requested_at"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "counts": {
+            "type": "object",
+            "description": "Rows removed or anonymised per category."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "post_check": {
+            "type": "object",
+            "description": "Rows still naming the person per table after the erasure: every value is 0 when it passed."
+          },
+          "requested_at": {
+            "type": "string"
+          },
+          "requested_by": {
+            "type": "string",
+            "description": "`self`, `admin` or `reapply` (a restore brought the account back and it was erased again)."
+          },
+          "status": {
+            "type": "string"
+          },
+          "subject_ref": {
+            "type": "string",
+            "description": "The keyed hash of the erased account's id (never the id or the email)."
+          }
+        }
+      },
+      "ErasureTicket": {
+        "type": "object",
+        "description": "An erasure as the routes report it.",
+        "required": [
+          "id",
+          "status",
+          "requested_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "requested_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "`pending`, `running`, `done` or `failed`."
+          }
+        }
+      },
       "EventDetail": {
         "type": "object",
         "required": [
@@ -10994,6 +11512,57 @@
           },
           "received_at": {
             "type": "string"
+          }
+        }
+      },
+      "ExportRow": {
+        "type": "object",
+        "description": "What the exports list shows (never the archive).",
+        "required": [
+          "id",
+          "status",
+          "created_at",
+          "expires_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "manifest": {
+            "type": "object",
+            "description": "Categories and counts (empty until ready)."
+          },
+          "requested_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "type": "string",
+            "description": "`pending`, `ready` or `failed`."
+          },
+          "subject": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -11631,6 +12200,30 @@
               "null"
             ],
             "description": "The helper's version when running."
+          }
+        }
+      },
+      "HoldChange": {
+        "type": "object",
+        "required": [
+          "hold"
+        ],
+        "properties": {
+          "hold": {
+            "type": "boolean",
+            "description": "`true` places a legal hold (the account cannot be erased), `false` lifts it."
+          }
+        }
+      },
+      "HoldState": {
+        "type": "object",
+        "properties": {
+          "legal_hold_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the hold was placed, RFC 3339; none when there is no hold."
           }
         }
       },
@@ -13745,6 +14338,13 @@
             ],
             "description": "Latest browser session activity or API token use, RFC 3339; none if never seen."
           },
+          "legal_hold_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When an admin placed a legal hold on the account, RFC 3339; none when there is none. A held account cannot be erased."
+          },
           "role": {
             "type": "string",
             "description": "`admin` or `member`."
@@ -14376,6 +14976,19 @@
           },
           "vault": {
             "type": "string"
+          }
+        }
+      },
+      "Reapplied": {
+        "type": "object",
+        "required": [
+          "queued"
+        ],
+        "properties": {
+          "queued": {
+            "type": "integer",
+            "description": "Accounts erased before that a restore brought back, queued to be erased again.",
+            "minimum": 0
           }
         }
       },

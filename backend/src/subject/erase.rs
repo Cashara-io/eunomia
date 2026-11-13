@@ -134,7 +134,9 @@ pub async fn erase_job(state: AppState, job: Job) -> Result<(), JobError> {
             Err(JobError::retryable(ErrorCode::Internal, msg))
         }
         Err(e) => {
-            let msg = e.message.clone();
+            // the raw database text stays in the log (it can quote a row), the record gets the code
+            tracing::warn!(erasure = %erasure.to_string(), code = e.code.as_str(), source = e.source.as_deref().unwrap_or(""), "erasure step failed; the job retries");
+            let msg = format!("A step failed ({}); the job retries.", e.code.as_str());
             q::ERASURE_FAILED.on(&state.control).bind(("id", erasure)).bind(("error", msg)).bind(("post_check", json!({}))).await.map_err(job_err)?;
             Err(JobError::retryable(e.code, e.source.unwrap_or(e.message)))
         }
@@ -187,8 +189,11 @@ pub async fn erase_subject(state: &AppState, subject: &RecordId, orgs: &[(OrgId,
         *check.entry("bucket_files").or_insert(json!(0)) = json!(check.get("bucket_files").and_then(Value::as_i64).unwrap_or(0) + left);
     }
 
+    // a record id that embeds their key (an extension's, a document chunk's) names them too
+    let key = crate::rid::key_string(subject.key()).unwrap_or_else(never_matches);
     let mut res = q::ERASE_CONTROL
         .on(&state.control)
+        .bind(("key", key.clone()))
         .bind(("u", subject.clone()))
         .bind(("actors", actors.clone()))
         .bind(("email", email_raw.clone()))
@@ -200,6 +205,7 @@ pub async fn erase_subject(state: &AppState, subject: &RecordId, orgs: &[(OrgId,
 
     let mut res = q::CONTROL_RESIDUE
         .on(&state.control)
+        .bind(("key", key))
         .bind(("u", subject.clone()))
         .bind(("actors", actors))
         .bind(("email_lc", email_lc))
@@ -253,7 +259,7 @@ async fn erase_in_org(
             *counts.entry("ownership_handed_over".into()).or_insert(0) += 1;
         }
     }
-    let with_rows: Vec<String> = q::VAULTS_WITH_ROWS.on(db).bind(("u", subject.clone())).await?.take::<Option<Vec<String>>>(0)?.unwrap_or_default();
+    let with_rows: Vec<String> = q::VAULTS_WITH_ROWS.on(db).bind(("u", subject.clone())).await?.take::<Vec<String>>(0)?;
     for v in with_rows {
         let Some((to, _)) = heir_of.get(&v) else { continue };
         let vault = crate::rid::parse(&v).map_err(|_| AppError::internal("bad vault id"))?;
@@ -261,8 +267,26 @@ async fn erase_in_org(
             q::REASSIGN.on(db).bind(("u", subject.clone())).bind(("vault", vault.clone())).bind(("to", to.clone())).await
         })
         .await?;
-        let n: Option<i64> = res.take(q::REASSIGN.slot)?;
-        *counts.entry("reassigned_in_shared_spaces".into()).or_insert(0) += n.unwrap_or(0);
+        #[derive(Deserialize, SurrealValue)]
+        struct Reassigned {
+            #[serde(default)]
+            #[surreal(default)]
+            n: i64,
+            #[serde(default)]
+            #[surreal(default)]
+            documents: Vec<String>,
+        }
+        let r: Option<Reassigned> = res.take(q::REASSIGN.slot)?;
+        let r = r.unwrap_or(Reassigned { n: 0, documents: Vec::new() });
+        *counts.entry("reassigned_in_shared_spaces".into()).or_insert(0) += r.n;
+        // their chunks went with their records: index the document again as the new owner's
+        if !state.settings.documents_backend.is_empty() {
+            for doc in &r.documents {
+                if let Err(e) = crate::documents::reindex(state, to, doc).await {
+                    tracing::warn!(error = %e.message, "re-indexing a reassigned document failed; reindex it from Documents");
+                }
+            }
+        }
     }
 
     // the person's files: documents outside the shared spaces and their recordings' audio

@@ -125,7 +125,8 @@ async fn seed(app: &TestApp, who: &User, bob: &User) -> Seeded {
     let state = &app.state;
     let db = common::org_db(state, who).await;
     let token = token_for(state, who).await;
-    let mark = format!("canary-{}", who.id.key_str());
+    // random, not the user key: the scan afterwards looks for the key, so the seed text must not carry it
+    let mark = format!("canary-{}", uuid::Uuid::new_v4().simple());
 
     // a shared space the workspace owner runs; `who` writes in it (this stays, reassigned)
     let team = call(state, &app.user, "vault_create", json!({"name": format!("Team {mark}"), "kind": "org"})).await["id"].as_str().unwrap().to_string();
@@ -193,7 +194,7 @@ async fn seed(app: &TestApp, who: &User, bob: &User) -> Seeded {
         CREATE $sp SET kind = 'onepassword_connect', host = $c, token_enc = 'enc:v1:x', created_by = $u, updated_by = $u;
         CREATE secret_request SET vault = $team, name = 'asked', label = $c, description = $c, target_hosts = ['api.example.com'], requested_by = $u, actor_id = <string> $u, client_name = $c, expires_at = time::now() + 1d;
         CREATE vault_secret SET vault = $pv, name = 'held', label = $c, value_enc = $enc, allowed_hosts = ['api.example.com'], allowed_actors = [$c], created_by = $u;
-        CREATE ontology_kind SET vault = $club, kind = $c, status = 'approved', decided_by = $u, activity_actor = <string> $u, activity_actor_name = $email;";
+        CREATE ontology_kind SET vault = $club, kind = 'held_kind', origin = 'human', status = 'approved', decided_by = $u, activity_actor = <string> $u, activity_actor_name = $email;";
     db.test_raw()
         .query(sql)
         .bind(("u", who.id.clone()))
@@ -303,7 +304,11 @@ async fn erasure_removes_every_category_and_proves_it() {
     // signed out at once
     assert_eq!(req(&app.router, "GET", "/api/auth/me", None, None, Some(&cookie)).await.0, 401);
 
-    wait_for("the erasure to finish", || async { erasure_status(&app.state, &id).await["status"] == "done" }).await;
+    let start = Instant::now();
+    while erasure_status(&app.state, &id).await["status"] != "done" {
+        assert!(start.elapsed() < Duration::from_secs(60), "erasure not done: {}", erasure_status(&app.state, &id).await);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     let record = erasure_status(&app.state, &id).await;
     assert!(record.get("subject").is_none_or(Value::is_null), "the completion record drops the user id: {record}");
     let check = record["post_check"].as_object().unwrap();
@@ -312,6 +317,7 @@ async fn erasure_removes_every_category_and_proves_it() {
     assert!(record["counts"]["memories"].as_i64().unwrap() >= 2, "{record}");
     assert!(record["counts"]["bucket_files"].as_i64().unwrap() >= 2, "{record}");
     assert_eq!(record["counts"]["ownership_handed_over"], 1, "{record}");
+    assert!(record["counts"]["reassigned_in_shared_spaces"].as_i64().unwrap() >= 3, "facts and the document in the shared spaces: {record}");
 
     // nothing in any table names them, by id or email, and their files are gone
     let left = rows_naming(&app.state, &db, &needles).await;
@@ -331,6 +337,16 @@ async fn erasure_removes_every_category_and_proves_it() {
         .unwrap();
     assert!(kept.iter().any(|m| m["text"] == "Plan agreed by the team" && m["owner"] == app.user.id.to_string()), "{kept:?}");
     assert!(kept.iter().any(|m| m["text"].as_str().unwrap().contains("[erased person]")), "{kept:?}");
+    // their document in the shared space is the owner's now, its file kept, and indexed again under the owner's key
+    let docs: Vec<Value> = db.test_raw().query("SELECT <string> owner AS owner, object_path FROM document WHERE vault = type::record($v)").bind(("v", seeded.team.clone())).await.unwrap().take(0).unwrap();
+    assert_eq!(docs.len(), 1, "{docs:?}");
+    assert_eq!(docs[0]["owner"], app.user.id.to_string());
+    assert!(object_exists(&db, docs[0]["object_path"].as_str().unwrap()).await);
+    wait_for("the reassigned document's chunks under the new owner", || async {
+        let n: Vec<Value> = db.test_raw().query("SELECT VALUE id FROM cache_record WHERE source = 'documents' AND vault = type::record($v) AND owner = $o").bind(("v", seeded.team.clone())).bind(("o", app.user.id.clone())).await.unwrap().take(0).unwrap();
+        !n.is_empty()
+    })
+    .await;
     // the space they ran with bob is bob's now
     let roles: Vec<String> = db.test_raw().query("SELECT VALUE role FROM vault_member WHERE vault = type::record($v) AND user = $b").bind(("v", seeded.club.clone())).bind(("b", bob.id.clone())).await.unwrap().take(0).unwrap();
     assert_eq!(roles, vec!["owner"]);
