@@ -399,7 +399,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         LET $g = (CREATE oauth_grant SET owner = $u, client_id = 'client-x', client_name = $c, scope = ['memory:read'], resource = 'http://localhost:8001/mcp' RETURN VALUE id)[0];
         CREATE oauth_token SET kind = 'access', token_hash = $c, family = $g, expires_at = time::now() + 15m;
         CREATE oauth_code SET code_hash = $c, owner = $u, client_id = 'client-x', redirect_uri = 'http://localhost/cb', code_challenge = $c, scope = ['memory:read'], resource = 'http://x', expires_at = time::now() + 1m;
-        CREATE erasure SET org = $okey_bare, subject_ref = $c, requested_by = 'admin', status = 'done', open_slot = $c, counts = {note: $c};
+        CREATE erasure SET org = $okey_bare, subject_ref = $c, requested_by = 'operator', status = 'done', open_slot = $c, counts = {note: $c};
         CREATE type::record('erasure_lock', $c) SET erasure = type::record('erasure', $c);
         RETURN $g;";
     let mut res = state

@@ -265,8 +265,8 @@
         "tags": [
           "admin"
         ],
-        "summary": "Cancel an erasure that is not running (server operators only, browser session)",
-        "description": "Stops a pending, held or failed erasure of this workspace and clears its working record (the email, token ids and file paths it held). The account stays suspended; an admin can restore it afterwards.",
+        "summary": "Cancel an erasure that has not started deleting (server operators only, browser session)",
+        "description": "Stops an erasure before its first irreversible step, clears its working record (the email, token ids and file paths it held) and leaves the account exactly as it was (unsuspended if the request suspended it). Refused with `db.conflict` once deletion has begun: from then on it completes, or waits while held or failed and retried.",
         "operationId": "cancelErasure",
         "parameters": [
           {
@@ -411,8 +411,8 @@
         "tags": [
           "admin"
         ],
-        "summary": "Erase someone from this workspace (admin only, browser session, confirmed with your own password)",
-        "description": "By default only this workspace: the person's membership, their content and files here and what the system holds about them here. Their account and other workspaces are untouched, unless no workspace is left and the account was made by this workspace's sign-up or invitation. `scope: account` (server operators only) erases the whole account. Refused for your own account (use Settings > Data), with `subject.legal_hold` while the account is held, and with `subject.last_owner` when the person owns the workspace with other members.",
+        "summary": "Erase someone's whole account and data (server operators only, browser session, confirmed with your own password)",
+        "description": "Only a server operator (an address in EUNOMIA_ADMIN_EMAILS, or the server's first account): the whole account in every workspace, as if the person had deleted it themselves. An admin of a workspace who is not an operator can't erase anyone in this release. Refused for your own account (use Settings > Data), for the first account and other operators' accounts, with `subject.legal_hold` while the account is held, with `subject.last_owner` when the person owns a workspace with other members, and with `subject.workspace_closes` until you confirm closing a workspace the person is the only member of.",
         "operationId": "erasePerson",
         "parameters": [
           {
@@ -515,8 +515,8 @@
         "tags": [
           "admin"
         ],
-        "summary": "Place or lift a legal hold on someone's account (admin only, browser session)",
-        "description": "Any admin places a hold; only the workspace owner or a server operator lifts it. While held, erasing the account is refused with `subject.legal_hold`, and an erasure already queued parks as `held` before its next irreversible step and resumes when the hold is lifted. Placing and lifting are both in the activity log, with who did each. A hold does not stop the audit retention window (AUDIT_RETENTION_DAYS).",
+        "summary": "Place or lift a legal hold on someone's account (admin places, server operator lifts; browser session)",
+        "description": "Any admin places a hold; only a server operator lifts it, and never a hold on their own account. Who placed it and who lifted it are recorded. While held, erasing the account is refused with `subject.legal_hold`, and an erasure already queued parks as `held` before its next irreversible step and resumes when the hold is lifted. Placing and lifting are both in the activity log, with who did each. A hold does not stop the audit retention window (AUDIT_RETENTION_DAYS).",
         "operationId": "setPersonLegalHold",
         "parameters": [
           {
@@ -11513,21 +11513,14 @@
         "properties": {
           "close_workspace": {
             "type": "boolean",
-            "description": "With `scope: account`: confirms closing any workspace whose only member the person is."
+            "description": "Confirms closing any workspace whose only member the person is."
           },
           "password": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Your own password, typed again (an admin who signs in only with single sign-on confirms with a\nsign-in from the last 10 minutes instead)."
-          },
-          "scope": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "`workspace` (default): the person is erased from this workspace only. `account`: the whole\naccount in every workspace (server operators only)."
+            "description": "Your own password, typed again (an operator who signs in only with single sign-on confirms with a\nsign-in from the last 10 minutes instead)."
           }
         }
       },
@@ -11554,6 +11547,13 @@
             "type": "object",
             "description": "Rows removed or anonymised per category."
           },
+          "deleting_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When it took its first irreversible step; none while it can still be cancelled."
+          },
           "error": {
             "type": [
               "string",
@@ -11572,15 +11572,11 @@
           },
           "requested_by": {
             "type": "string",
-            "description": "`self`, `admin`, `operator` or `reapply` (a restore brought the person back and they were erased again)."
+            "description": "`self`, `operator` or `reapply` (a restore brought the person back and they were erased again)."
           },
           "review": {
             "type": "object",
-            "description": "Mentions of the person's email left in content other people wrote, for review, and for a\nworkspace erasure whether the account was kept."
-          },
-          "scope": {
-            "type": "string",
-            "description": "`account` or `workspace`."
+            "description": "Mentions of the person's email left in content other people wrote, for review."
           },
           "status": {
             "type": "string"
@@ -11605,10 +11601,6 @@
           },
           "requested_at": {
             "type": "string"
-          },
-          "scope": {
-            "type": "string",
-            "description": "`account` (every workspace and the account) or `workspace` (one workspace)."
           },
           "status": {
             "type": "string",

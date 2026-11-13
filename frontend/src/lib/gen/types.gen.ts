@@ -766,19 +766,14 @@ export type EraseMe = {
 
 export type ErasePerson = {
     /**
-     * With `scope: account`: confirms closing any workspace whose only member the person is.
+     * Confirms closing any workspace whose only member the person is.
      */
     close_workspace?: boolean;
     /**
-     * Your own password, typed again (an admin who signs in only with single sign-on confirms with a
+     * Your own password, typed again (an operator who signs in only with single sign-on confirms with a
      * sign-in from the last 10 minutes instead).
      */
     password?: string | null;
-    /**
-     * `workspace` (default): the person is erased from this workspace only. `account`: the whole
-     * account in every workspace (server operators only).
-     */
-    scope?: string | null;
 };
 
 /**
@@ -793,6 +788,10 @@ export type ErasureRecord = {
     counts: {
         [key: string]: unknown;
     };
+    /**
+     * When it took its first irreversible step; none while it can still be cancelled.
+     */
+    deleting_at?: string | null;
     error?: string | null;
     id: string;
     /**
@@ -803,20 +802,15 @@ export type ErasureRecord = {
     };
     requested_at: string;
     /**
-     * `self`, `admin`, `operator` or `reapply` (a restore brought the person back and they were erased again).
+     * `self`, `operator` or `reapply` (a restore brought the person back and they were erased again).
      */
     requested_by: string;
     /**
-     * Mentions of the person's email left in content other people wrote, for review, and for a
-     * workspace erasure whether the account was kept.
+     * Mentions of the person's email left in content other people wrote, for review.
      */
     review?: {
         [key: string]: unknown;
     };
-    /**
-     * `account` or `workspace`.
-     */
-    scope?: string;
     status: string;
     /**
      * The keyed hash of the erased account's id (never the id or the email).
@@ -830,10 +824,6 @@ export type ErasureRecord = {
 export type ErasureTicket = {
     id: string;
     requested_at: string;
-    /**
-     * `account` (every workspace and the account) or `workspace` (one workspace).
-     */
-    scope?: string;
     /**
      * `pending`, `running`, `held`, `done`, `failed` or `cancelled`.
      */

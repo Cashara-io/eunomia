@@ -90,12 +90,12 @@ pub const EXPORT_PRUNE: Stmt = Stmt::new("subject.export_prune", "DELETE subject
 
 // ------------------------------------------------------------------ org database: erasure
 
-/// Who else can read each space: every active membership that is not the subject's nor that of
-/// someone with an erasure open (`$pending`), owners first, then the longest-standing.
+/// Who else can read each space: every active membership that is not the subject's, owners first, then
+/// the longest-standing. People with an erasure open, or under a legal hold, still count: a space they
+/// share with the subject stays, with their content (they only cannot inherit the subject's rows).
 pub const OTHER_MEMBERS: Stmt = Stmt::new(
     "subject.other_members",
-    "SELECT <string> vault AS vault, user, role, created_at FROM vault_member WHERE status = 'active' AND user != $u AND user NOTINSIDE $pending \
-     ORDER BY role DESC, created_at, id",
+    "SELECT <string> vault AS vault, user, role, created_at FROM vault_member WHERE status = 'active' AND user != $u ORDER BY role DESC, created_at, id",
 );
 
 /// Makes `$to` an owner of `$vault` (the subject was its only owner).
@@ -454,7 +454,10 @@ pub const ACCOUNT: ControlStmt = ControlStmt::new(
 
 /// The subject's password hash (the self-service erasure asks for the password again) and hold.
 pub const CONFIRM_ROW: ControlStmt =
-    ControlStmt::new("subject.confirm_row", "SELECT email, password_hash, legal_hold_at FROM ONLY $u");
+    ControlStmt::new("subject.confirm_row", "SELECT email, password_hash, legal_hold_at, suspended_at FROM ONLY $u");
+
+/// People under a legal hold (they keep their content and cannot inherit anyone's).
+pub const HELD_USERS: ControlStmt = ControlStmt::new("subject.held_users", "SELECT VALUE id FROM user WHERE legal_hold_at IS NOT NONE");
 
 /// Every membership of an org with its role, longest-standing first (the plan: who stays, who owns).
 pub const ORG_MEMBERSHIPS: ControlStmt = ControlStmt::new(
@@ -519,17 +522,17 @@ pub const MEMBER_ACTIVITY: ControlStmt = ControlStmt::new(
 pub const ERASURE_CREATE: ControlStmt = ControlStmt::at(
     "subject.erasure_create",
     "BEGIN TRANSACTION; \
-     CREATE $eid SET org = $org, subject_ref = $ref, subject = $u, requested_by = $by, scope = $scope, requester = $requester, first_org = $first_org, status = 'pending', \
-        open_slot = $ref, closes = $closes; \
+     CREATE $eid SET org = $org, subject_ref = $ref, subject = $u, requested_by = $by, requester = $requester, suspended_here = $suspended_here, \
+        status = 'pending', open_slot = $ref, closes = $closes; \
      INSERT IGNORE INTO job { id: $jid, kind: 'subject_erase', owner: $owner, payload: $payload, idempotency_key: $key, run_at: time::now(), max_attempts: 8 }; \
-     RETURN (SELECT <string> id AS id, status, scope, requested_at FROM ONLY $eid); \
+     RETURN (SELECT <string> id AS id, status, requested_at FROM ONLY $eid); \
      COMMIT TRANSACTION;",
     3,
 );
 /// The open erasure of this person (pending, running, held or failed), under the current or a previous key.
 pub const ERASURE_OPEN: ControlStmt = ControlStmt::new(
     "subject.erasure_open",
-    "SELECT <string> id AS id, status, scope, requested_at FROM erasure WHERE open_slot IN $refs LIMIT 1",
+    "SELECT <string> id AS id, status, requested_at FROM erasure WHERE open_slot IN $refs LIMIT 1",
 );
 /// A repeat request adds its confirmation that a workspace closes.
 pub const ERASURE_ADD_CLOSES: ControlStmt =
@@ -566,8 +569,14 @@ pub const LOCKS_TAKE: ControlStmt = ControlStmt::new(
 pub const LOCKS_RELEASE: ControlStmt = ControlStmt::new("subject.locks_release", "DELETE erasure_lock WHERE erasure = $id");
 /// The identifiers the post-check needs, saved before anything is deleted.
 /// `closes` only grows: another erasure may have added a workspace this one closes as the last member.
-pub const ERASURE_WORK: ControlStmt =
-    ControlStmt::new("subject.erasure_work", "UPDATE $id SET work = $work, closes = array::union(closes, $closes) RETURN NONE");
+/// Never on a cancelled or finished row (a cancel racing the run keeps its record cleared).
+pub const ERASURE_WORK: ControlStmt = ControlStmt::new(
+    "subject.erasure_work",
+    "UPDATE $id SET work = $work, closes = array::union(closes, $closes) WHERE status IN ['pending', 'running', 'failed'] RETURN VALUE <string> id",
+);
+/// Set just before the first irreversible step: from here the erasure cannot be cancelled.
+pub const ERASURE_DELETING: ControlStmt =
+    ControlStmt::new("subject.erasure_deleting", "UPDATE $id SET deleting_at = deleting_at ?? time::now() WHERE status = 'running' RETURN VALUE <string> id");
 /// Parked by a legal hold placed after the request; lifting the hold resumes it.
 pub const ERASURE_HELD: ControlStmt =
     ControlStmt::new("subject.erasure_held", "UPDATE $id SET status = 'held', held_at = time::now() RETURN NONE");
@@ -581,12 +590,6 @@ pub const ERASURE_OPEN_OF: ControlStmt = ControlStmt::new(
     "subject.erasure_open_of",
     "SELECT VALUE id FROM erasure WHERE subject = $u AND status IN ['pending', 'running', 'failed', 'held']",
 );
-/// Whether `$u` has an erasure of the whole account open (it stays suspended until it finishes or an
-/// operator cancels it).
-pub const ACCOUNT_ERASURE_OPEN_OF: ControlStmt = ControlStmt::new(
-    "subject.account_erasure_open_of",
-    "SELECT VALUE id FROM erasure WHERE subject = $u AND scope = 'account' AND status IN ['pending', 'running', 'failed', 'held']",
-);
 /// The completion record: counts, the post-check and the review counts; the person's id and the
 /// working record are dropped, and the slot becomes the row's own id.
 pub const ERASURE_DONE: ControlStmt = ControlStmt::new(
@@ -596,35 +599,35 @@ pub const ERASURE_DONE: ControlStmt = ControlStmt::new(
 );
 pub const ERASURE_FAILED: ControlStmt =
     ControlStmt::new("subject.erasure_failed", "UPDATE $id SET status = 'failed', error = $error, post_check = $post_check RETURN NONE");
-/// An operator stops an erasure that is not running: the working record (the email, token ids, file
-/// paths) and the person's id are cleared, its locks and waiting jobs go.
+/// An operator stops an erasure that has not started deleting (pending, held or failed before its first
+/// irreversible step): the working record and the person's id are cleared, its locks and waiting jobs
+/// go. Returns what the caller needs to leave the account exactly as it was.
 pub const ERASURE_CANCEL: ControlStmt = ControlStmt::at(
     "subject.erasure_cancel",
     "BEGIN TRANSACTION; \
-     LET $c = (UPDATE $id SET status = 'cancelled', subject = NONE, work = {}, open_slot = <string> id, completed_at = time::now() \
-        WHERE status IN ['pending', 'held', 'failed'] RETURN VALUE <string> id); \
+     LET $was = (SELECT subject, suspended_here FROM ONLY $id WHERE status IN ['pending', 'held', 'failed'] AND deleting_at IS NONE); \
+     UPDATE $id SET status = 'cancelled', subject = NONE, work = {}, open_slot = <string> id, completed_at = time::now() \
+        WHERE status IN ['pending', 'held', 'failed'] AND deleting_at IS NONE RETURN NONE; \
      DELETE erasure_lock WHERE erasure = $id; \
      DELETE job WHERE kind = 'subject_erase' AND payload.erasure = <string> $id AND status != 'running'; \
-     RETURN $c; \
+     RETURN $was; \
      COMMIT TRANSACTION;",
-    4,
+    5,
 );
 /// One org's erasures, newest first (Settings > People shows them as proof).
 pub const ERASURE_LIST: ControlStmt = ControlStmt::new(
     "subject.erasure_list",
-    "SELECT <string> id AS id, subject_ref, requested_by, scope, status, counts, post_check, review, error, requested_at, completed_at FROM erasure \
+    "SELECT <string> id AS id, subject_ref, requested_by, status, deleting_at, counts, post_check, review, error, requested_at, completed_at FROM erasure \
      WHERE org = $org ORDER BY requested_at DESC LIMIT 50",
 );
-/// One erasure of this org (the operator's cancel).
-pub const ERASURE_IN_ORG: ControlStmt =
-    ControlStmt::new("subject.erasure_in_org", "SELECT VALUE id FROM erasure WHERE id = $id AND org = $org");
-/// Every finished erasure's reference, scope and workspace (the restore re-apply).
-pub const ERASURE_REFS: ControlStmt =
-    ControlStmt::new("subject.erasure_refs", "SELECT subject_ref, scope, org, closes FROM erasure WHERE status = 'done'");
-/// Whether any of `$refs` has an erasure on record that covers workspace `$org` (resync suppression).
+/// One erasure, wherever it is (an operator acts on the whole server).
+pub const ERASURE_EXISTS: ControlStmt = ControlStmt::new("subject.erasure_exists", "SELECT VALUE id FROM erasure WHERE id = $id");
+/// Every finished erasure's reference (the restore re-apply).
+pub const ERASURE_REFS: ControlStmt = ControlStmt::new("subject.erasure_refs", "SELECT subject_ref, closes FROM erasure WHERE status = 'done'");
+/// Whether any of `$refs` has an erasure on record (resync suppression; a cancelled one does not count).
 pub const ERASURE_HAS_REF: ControlStmt = ControlStmt::new(
     "subject.erasure_has_ref",
-    "SELECT VALUE id FROM erasure WHERE subject_ref IN $refs AND (scope = 'account' OR org = $org) AND status != 'cancelled' LIMIT 1",
+    "SELECT VALUE id FROM erasure WHERE subject_ref IN $refs AND status != 'cancelled' LIMIT 1",
 );
 /// Every account (the restore re-apply).
 pub const USERS_WITH_ORG: ControlStmt = ControlStmt::new("subject.users_with_org", "SELECT VALUE id FROM user");
@@ -637,31 +640,6 @@ pub const CLOSE_ORG: ControlStmt = ControlStmt::new(
 );
 /// Ready workspaces (the re-apply sweeps each).
 pub const READY_ORGS: ControlStmt = ControlStmt::new("subject.ready_orgs", "SELECT VALUE org FROM tenant WHERE status = 'ready'");
-
-/// A workspace-scoped erasure that keeps the account: what the control database holds about the person
-/// in that workspace (the membership, its usage counters, jobs and capsules).
-pub const ERASE_CONTROL_WORKSPACE: ControlStmt = ControlStmt::at(
-    "subject.erase_control_workspace",
-    "BEGIN TRANSACTION; \
-     LET $ms = (DELETE membership WHERE user = $u AND org = $org RETURN BEFORE); \
-     LET $tu = (DELETE tool_usage WHERE user = $u AND org = $okey RETURN BEFORE); \
-     LET $jb = (DELETE job WHERE owner = $u AND org = $okey RETURN BEFORE); \
-     LET $fc = (UPDATE failure_capsule SET user = NONE, args = '' WHERE user = <string> $u AND org = $okey RETURN BEFORE); \
-     RETURN { org_memberships: array::len($ms), usage_counters: array::len($tu), jobs: array::len($jb), failure_capsules: array::len($fc) }; \
-     COMMIT TRANSACTION;",
-    5,
-);
-
-/// The control half of the post-check for a workspace-scoped erasure that keeps the account.
-pub const CONTROL_RESIDUE_WORKSPACE: ControlStmt = ControlStmt::new(
-    "subject.control_residue_workspace",
-    "RETURN { \
-       membership: count((SELECT id FROM membership WHERE user = $u AND org = $org)), \
-       tool_usage: count((SELECT id FROM tool_usage WHERE user = $u AND org = $okey)), \
-       job: count((SELECT id FROM job WHERE owner = $u AND org = $okey)), \
-       failure_capsule: count((SELECT id FROM failure_capsule WHERE user = <string> $u AND org = $okey)) \
-     }",
-);
 
 /// Audit events about the person that an admin's export of the workspace includes: admin actions that
 /// name them, and their own space and data-rights events.
@@ -732,6 +710,7 @@ pub const CONTROL_RESIDUE: ControlStmt = ControlStmt::new(
 pub const CONTROL_ALL: &[&ControlStmt] = &[
     &ACCOUNT,
     &CONFIRM_ROW,
+    &HELD_USERS,
     &ORG_MEMBERSHIPS,
     &OPEN_SUBJECTS,
     &ORG_OWNER_TRANSFER,
@@ -752,23 +731,21 @@ pub const CONTROL_ALL: &[&ControlStmt] = &[
     &LOCKS_TAKE,
     &LOCKS_RELEASE,
     &ERASURE_WORK,
+    &ERASURE_DELETING,
     &ERASURE_HELD,
     &ERASURES_HELD_OF,
     &ERASURE_OPEN_OF,
-    &ACCOUNT_ERASURE_OPEN_OF,
     &ERASURE_DONE,
     &ERASURE_FAILED,
     &ERASURE_CANCEL,
     &ERASURE_LIST,
-    &ERASURE_IN_ORG,
+    &ERASURE_EXISTS,
     &ERASURE_REFS,
     &ERASURE_HAS_REF,
     &USERS_WITH_ORG,
     &USERS_EXISTING,
     &CLOSE_ORG,
     &READY_ORGS,
-    &ERASE_CONTROL_WORKSPACE,
-    &CONTROL_RESIDUE_WORKSPACE,
     &ORG_AUDIT_ABOUT,
     &USER_ORGS,
     &TOKEN_IDS,

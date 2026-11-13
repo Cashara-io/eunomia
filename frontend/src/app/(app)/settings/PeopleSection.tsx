@@ -130,13 +130,14 @@ function RowActions({ p, onError, onData }: { p: Person; onError: (f: Failure | 
   );
 }
 
-/* Someone's data, opened from "Data": export it for them, hold it, or delete the account and data (typing their email). */
-function PersonData({ p, onError, iOwn }: { p: Person; onError: (f: Failure | null) => void; iOwn: boolean }) {
+/* Someone's data, opened from "Data": any admin exports this workspace's data about them and places a legal hold;
+ * only a server operator lifts a hold or deletes the account (with their own password). */
+function PersonData({ p, onError, iOwn, iOperate }: { p: Person; onError: (f: Failure | null) => void; iOwn: boolean; iOperate: boolean }) {
   const exp = useStartPersonExport();
   const hold = useSetLegalHold();
   const erase = useErasePerson();
   const owner = useMakeWorkspaceOwner();
-  // the admin confirms with their own password; an admin with single sign-on only types the person's email
+  // the operator confirms with their own password; one with single sign-on only needs a recent sign-in
   const adminHasPassword = useMe().data?.has_password ?? true;
   const [confirming, setConfirming] = useState(false);
   const [typed, setTyped] = useState("");
@@ -171,6 +172,7 @@ function PersonData({ p, onError, iOwn }: { p: Person; onError: (f: Failure | nu
         >
           Export their data
         </button>
+        {(!held || (iOperate && !p.is_you)) && (
         <button
           type="button"
           className="btn btn-sm"
@@ -186,8 +188,8 @@ function PersonData({ p, onError, iOwn }: { p: Person; onError: (f: Failure | nu
                     ? "Legal hold lifted. The deletion that was waiting carries on."
                     : "Legal hold lifted."
                   : r.erasure_open
-                    ? "Legal hold placed. A deletion was already queued: it stops before its next step and waits until you lift the hold."
-                    : "Legal hold placed. The account can't be erased until you lift it."
+                    ? "Legal hold placed. A deletion was already queued: it stops before its next step and waits until the server operator lifts the hold."
+                    : "Legal hold placed. The account can't be erased until the server operator lifts it."
               );
             } catch (e) {
               onError(failure(e, held ? `Could not lift the hold on ${p.email}.` : `Could not place a hold on ${p.email}.`));
@@ -196,6 +198,7 @@ function PersonData({ p, onError, iOwn }: { p: Person; onError: (f: Failure | nu
         >
           {held ? "Lift legal hold" : "Place legal hold"}
         </button>
+        )}
         {iOwn && !p.workspace_owner && !p.is_you && (
           <button
             type="button"
@@ -207,9 +210,9 @@ function PersonData({ p, onError, iOwn }: { p: Person; onError: (f: Failure | nu
             Make workspace owner
           </button>
         )}
-        {!confirming && !p.is_you && (
+        {iOperate && !confirming && !p.is_you && (
           <button type="button" className={QUIET_DANGER} disabled={held} title={held ? "Lift the legal hold first." : undefined} onClick={() => setConfirming(true)}>
-            Remove from this workspace and erase
+            Delete account and data
           </button>
         )}
       </div>
@@ -226,9 +229,9 @@ function PersonData({ p, onError, iOwn }: { p: Person; onError: (f: Failure | nu
           }}
         >
           <span style={{ color: "var(--ink-dim)" }}>
-            Removes them from this workspace and erases what is theirs here: their personal space, chats, sources and files. What
-            they wrote in shared spaces stays, with them removed as its author. Their account and other workspaces are not touched
-            (unless this workspace made the account and it has nothing else left).{" "}
+            Deletes their whole account and everything that is theirs alone, in every workspace: their personal space, chats,
+            sources and files. What they wrote in spaces others read stays, with them removed as its author. It can be cancelled
+            only until it starts deleting.{" "}
             {adminHasPassword ? "Type your own password to confirm." : "You sign in with single sign-on: this needs a sign-in from the last 10 minutes."}
           </span>
           <span className="flex flex-wrap items-center gap-2">
@@ -267,7 +270,7 @@ const mentions = (r: { review?: unknown }) =>
   );
 
 /* The proof each erasure leaves: when, how, whether the post-check found nothing. Never who it was. */
-function Erasures() {
+function Erasures({ iOperate }: { iOperate: boolean }) {
   const query = useErasures();
   const reapply = useReapplyErasures();
   const cancel = useCancelErasure();
@@ -277,6 +280,7 @@ function Erasures() {
     <div className="flex flex-col gap-2" data-testid="erasure-records">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-reading font-semibold">Erasure records</h3>
+        {iOperate && (
         <button
           type="button"
           className="btn btn-ghost btn-sm"
@@ -293,6 +297,7 @@ function Erasures() {
         >
           Re-apply after a restore
         </button>
+        )}
       </div>
       {error && <ErrorLine error={error} />}
       {rows.length === 0 ? (
@@ -311,7 +316,7 @@ function Erasures() {
                 <span className="font-mono truncate max-w-[10rem]" title={`Reference ${r.subject_ref}`}>
                   {r.subject_ref.slice(0, 12)}
                 </span>
-                <span>{r.requested_by === "self" ? "by the person" : r.requested_by === "admin" ? "by an admin" : "re-applied after a restore"}</span>
+                <span>{r.requested_by === "self" ? "by the person" : r.requested_by === "operator" ? "by the server operator" : "re-applied after a restore"}</span>
                 <span style={{ color: r.status === "done" ? "var(--good)" : r.status === "failed" ? "var(--critical)" : "var(--ink-dim)" }}>
                   {r.status === "done"
                     ? "Done, nothing left"
@@ -323,12 +328,11 @@ function Erasures() {
                           ? "Cancelled by an operator"
                           : "In progress"}
                 </span>
-                {r.scope === "workspace" && <span style={{ color: "var(--ink-dim)" }}>this workspace only</span>}
-                {["pending", "held", "failed"].includes(r.status) && (
+                {iOperate && !r.deleting_at && ["pending", "held", "failed"].includes(r.status) && (
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
-                    title="Server operators only: stops it and clears what it held about the person."
+                    title="Stops it before it deletes anything: the account is left as it was before the request."
                     onClick={async () => {
                       setError(null);
                       try {
@@ -470,6 +474,8 @@ export function PeopleSection() {
   const toggleData = (id: string) => setDataOf((cur) => (cur === id ? null : id));
   // only the workspace owner (or a server operator, which the server checks) hands the workspace over
   const iOwn = !!people?.find((x) => x.is_you)?.workspace_owner;
+  // a server operator: the account that set up the server, or one the server's settings list (the server checks)
+  const iOperate = ["creator", "operator"].includes(people?.find((x) => x.is_you)?.admin ?? "");
 
   return (
     <div className="flex flex-col gap-5">
@@ -548,7 +554,7 @@ export function PeopleSection() {
               <div className={`pt-1 ${p.is_you ? "" : "-ml-2.5"}`}>
                 <RowActions p={p} onError={setActionError} onData={() => toggleData(p.id)} />
               </div>
-              {dataOf === p.id && <PersonData p={p} onError={setActionError} iOwn={iOwn} />}
+              {dataOf === p.id && <PersonData p={p} onError={setActionError} iOwn={iOwn} iOperate={iOperate} />}
             </li>
           ))
         )}
@@ -613,7 +619,7 @@ export function PeopleSection() {
                   dataOf === p.id ? (
                     <tr key={`${p.id}-data`}>
                       <td colSpan={7} className="h-auto! pl-8!">
-                        <PersonData p={p} onError={setActionError} iOwn={iOwn} />
+                        <PersonData p={p} onError={setActionError} iOwn={iOwn} iOperate={iOperate} />
                       </td>
                     </tr>
                   ) : null,
@@ -625,9 +631,10 @@ export function PeopleSection() {
       <p className="text-[12px] max-w-[68ch]" style={{ color: "var(--ink-faint)" }}>
         Admins can see this page, the audit log and the server settings. A suspended account can&apos;t sign in, and its API tokens
         and connected apps stop working until you restore it. Deleting an account removes everything that is theirs alone; a
-        legal hold stops that until you lift it.
+        legal hold stops that until the server operator lifts it. Only the server operator deletes someone&apos;s account; anyone
+        can delete their own in Settings &gt; Data.
       </p>
-      <Erasures />
+      <Erasures iOperate={iOperate} />
     </div>
   );
 }

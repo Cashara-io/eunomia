@@ -260,6 +260,7 @@ export function DataSection() {
 const ACTIVITY: Record<string, string> = {
   "subject.export_request": "You exported your data",
   "subject.export_request_admin": "An admin exported this workspace's data about you",
+  "subject.export_download_admin": "An admin downloaded that export",
   "subject.erase_request": "Deleting your data was requested",
   "subject.legal_hold": "A legal hold was placed on your account",
   "subject.legal_hold_lift": "The legal hold on your account was lifted",

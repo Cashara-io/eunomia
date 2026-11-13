@@ -60,8 +60,8 @@ export function useStartPersonExport() {
 export function useErasePerson() {
   const qc = useQueryClient();
   return useMutation({
-    // the admin's own password (an admin with single sign-on only needs a sign-in from the last 10 minutes);
-    // it erases the person from this workspace only
+    // server operators only: the operator's own password (one with single sign-on only needs a sign-in from
+    // the last 10 minutes); it erases the whole account
     mutationFn: ({ user_id, password }: { user_id: string; password?: string }) => call(erasePerson({ path: { user_id }, body: { password } })),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: adminKeys.people() });
@@ -107,7 +107,7 @@ export function useMakeWorkspaceOwner() {
   });
 }
 
-/** Server operators only: stop an erasure that is not running and clear its working record. */
+/** Server operators only: stop an erasure that has not started deleting; the account is left as it was. */
 export function useCancelErasure() {
   const qc = useQueryClient();
   return useMutation({

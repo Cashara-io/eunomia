@@ -2,7 +2,7 @@
 -- `legal_hold_at`: set while an admin holds the account (Settings > People). Erasure refuses, and a running
 -- erasure parks as `held`, until it is lifted.
 DEFINE FIELD IF NOT EXISTS legal_hold_at ON user TYPE option<datetime>;
--- Who placed the hold (only the workspace owner or a server operator may lift it).
+-- Who placed the hold (only a server operator lifts it, never the person it holds).
 DEFINE FIELD IF NOT EXISTS legal_hold_by ON user TYPE option<record<user>>;
 
 -- A workspace whose only member was erased is closed: its database is emptied, nobody can be served from
@@ -16,20 +16,19 @@ DEFINE FIELD IF NOT EXISTS closed_at ON org TYPE option<datetime>;
 -- erased account stand down. `subject` and `work` (the identifiers the post-check needs: the email in
 -- lowercase, the person's token ids, their key, their file paths, the plan per workspace) are held only
 -- while the erasure is open; the job clears them when it writes `counts` and `post_check`.
--- `scope` is `account` (the person or a server operator asked: every workspace and the account) or
--- `workspace` (an admin asked: only `org`; the account is kept unless nothing else is left of it).
+-- `deleting_at` is set just before the first irreversible step: until then an operator may cancel the
+-- erasure (the account is left exactly as it was: `suspended_here` says whether the request suspended it);
+-- from then on it completes or waits (`held`, `failed` and retried), never abandoned half-done.
 -- `open_slot` is the reference while the erasure is open (one open erasure per person) and the row id
 -- once finished. The table is never pruned.
 DEFINE TABLE IF NOT EXISTS erasure SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS org ON erasure TYPE string;
 DEFINE FIELD IF NOT EXISTS subject_ref ON erasure TYPE string;
 DEFINE FIELD IF NOT EXISTS subject ON erasure TYPE option<record<user>>;
-DEFINE FIELD IF NOT EXISTS requested_by ON erasure TYPE string ASSERT $value IN ["self", "admin", "operator", "reapply"];
-DEFINE FIELD IF NOT EXISTS scope ON erasure TYPE string DEFAULT "account" ASSERT $value IN ["account", "workspace"];
+DEFINE FIELD IF NOT EXISTS requested_by ON erasure TYPE string ASSERT $value IN ["self", "operator", "reapply"];
 DEFINE FIELD IF NOT EXISTS requester ON erasure TYPE option<record<user>>;
--- The workspace whose sign-up or invitation made the account (its oldest membership): a workspace erasure
--- deletes the account only when it was made there and no other workspace is left.
-DEFINE FIELD IF NOT EXISTS first_org ON erasure TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS suspended_here ON erasure TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS deleting_at ON erasure TYPE option<datetime>;
 DEFINE FIELD IF NOT EXISTS status ON erasure TYPE string ASSERT $value IN ["pending", "running", "held", "done", "failed", "cancelled"];
 DEFINE FIELD IF NOT EXISTS open_slot ON erasure TYPE string;
 DEFINE FIELD IF NOT EXISTS work ON erasure TYPE object FLEXIBLE DEFAULT {};

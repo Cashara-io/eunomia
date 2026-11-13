@@ -326,9 +326,9 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
             Some("reapply") => "A restore brought back an erased account; it is being erased again".into(),
             _ => "Asked for an account and its data to be deleted".into(),
         },
-        "subject.export_download_admin" => "Downloaded the data export of a suspended account".into(),
+        "subject.export_download_admin" => "Downloaded an export of this workspace's data about someone".into(),
         "org.owner_transfer" => format!("Made {email} the workspace owner"),
-        "subject.erase_cancel" => "Cancelled an erasure (its working record was cleared)".into(),
+        "subject.erase_cancel" => "Cancelled an erasure before it deleted anything (the account is as it was)".into(),
         "subject.erase" => return "Deleted an account and its data (the erasure record keeps the counts)".into(),
         "subject.export_request" => "Exported their data".into(),
         "subject.export_request_admin" => "Exported someone's data for them".into(),
@@ -882,7 +882,7 @@ async fn set_suspended(
         // an erasure of the whole account keeps it suspended until it finishes or an operator cancels it
         return Err(AppError::coded(
             ErrorCode::AuthForbidden,
-            "This account is being erased (or the erasure is waiting on a legal hold), so it can't be restored. A server operator can cancel the erasure first.",
+            "This account is being erased (or the erasure is waiting on a legal hold), so it can't be restored. A server operator can cancel the erasure, until it starts deleting.",
         ));
     }
     if body.suspended {

@@ -66,7 +66,6 @@ pub const ALL: &[&ControlStmt] = &[
     &USER_EMAIL_LC_BACKFILL,
     &USER_IDS_OLDEST_FIRST,
     &MEMBERSHIP_DELETE_USER,
-    &MEMBERSHIP_DELETE_ORG,
     &IDENTITY_FIND,
     &IDENTITY_CREATE,
     &IDENTITY_TOUCH,
@@ -374,9 +373,6 @@ pub const USER_IDS_OLDEST_FIRST: ControlStmt = ControlStmt::new("control.user_id
 /// Signup cleanup: every membership of a user whose signup failed.
 pub const MEMBERSHIP_DELETE_USER: ControlStmt = ControlStmt::new("control.membership_delete_user", "DELETE membership WHERE user = $user");
 
-/// A workspace admin's erasure takes the person out of that workspace (and only that one).
-pub const MEMBERSHIP_DELETE_ORG: ControlStmt =
-    ControlStmt::new("control.membership_delete_org", "DELETE membership WHERE user = $user AND org = $org");
 
 /// `/readyz`: the control database answers.
 pub const READY_PING: ControlStmt = ControlStmt::new("app.ready_ping", "RETURN 1");

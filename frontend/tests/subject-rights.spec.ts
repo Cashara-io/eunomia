@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test";
 import { registerAndOnboard, showAdminSettings, uniqueEmail } from "./helpers";
 
 // Settings > Data: the full export and "Delete my account and data" against the real API,
-// and Settings > People's data panel (export for someone, legal hold, delete with their email typed).
+// and Settings > People's data panel: any admin exports and places a hold; the server operator also lifts
+// holds and deletes accounts (with their own password).
 // docs/privacy/subject-rights.md
 
 const PASSWORD = "correct-horse-battery-staple";
@@ -43,8 +44,9 @@ test("export my data, then delete my account with my password", async ({ page })
   await expect(page).toHaveURL(/\/login/);
 });
 
-test("People: an admin exports, holds and deletes someone's data from their row", async ({ page }) => {
-  await registerAndOnboard(page, uniqueEmail("people-admin"), PASSWORD);
+test("People: the operator exports, holds and deletes someone's account from their row", async ({ page }) => {
+  const me = uniqueEmail("people-admin");
+  await registerAndOnboard(page, me, PASSWORD);
   await showAdminSettings(page);
   const person = {
     id: "user:target",
@@ -60,9 +62,11 @@ test("People: an admin exports, holds and deletes someone's data from their row"
     tokens: 0,
     workspace_owner: false,
   };
+  // this account set up the server: the operator
+  const self = { ...person, id: "user:me", email: me, admin: "creator", role: "owner", is_you: true, workspace_owner: true };
   const calls: { method: string; url: string; body: unknown }[] = [];
   await page.route("**/api/admin/people", (route) =>
-    route.fulfill({ json: { people: [person], signup: { mode: "invite", summary: "Invite only", allowlist: [], operators: [] } } })
+    route.fulfill({ json: { people: [self, person], signup: { mode: "invite", summary: "Invite only", allowlist: [], operators: [] } } })
   );
   await page.route("**/api/admin/erasures", (route) => route.fulfill({ json: [] }));
   await page.route("**/api/admin/people/user%3Atarget/**", async (route) => {
@@ -74,11 +78,11 @@ test("People: an admin exports, holds and deletes someone's data from their row"
       return route.fulfill({ json: { legal_hold_at: person.legal_hold_at, erasure_open: false } });
     }
     if (req.url().endsWith("/erasure")) {
-      // the admin confirms with their own password, and the erasure is scoped to this workspace
-      const body = req.postDataJSON() as { password?: string; scope?: string };
-      if (body.scope === "account" || body.password !== PASSWORD)
+      // the operator confirms with their own password; it is always the whole account
+      const body = req.postDataJSON() as { password?: string };
+      if (body.password !== PASSWORD)
         return route.fulfill({ status: 403, json: { code: "subject.confirmation_failed", detail: "That isn't your password. Type your own password to confirm. Nothing was deleted." } });
-      return route.fulfill({ json: { id: "erasure:x", status: "pending", scope: "workspace", requested_at: new Date().toISOString() } });
+      return route.fulfill({ json: { id: "erasure:x", status: "pending", requested_at: new Date().toISOString() } });
     }
     return route.fulfill({
       json: { id: "subject_export:x", subject: "user:target", requested_by: "user:me", scope: "organisation", status: "pending", manifest: {}, size_bytes: 0, created_at: new Date().toISOString(), expires_at: new Date().toISOString() },
@@ -96,11 +100,11 @@ test("People: an admin exports, holds and deletes someone's data from their row"
   await panel.getByRole("button", { name: "Place legal hold" }).click();
   await expect(panel.getByText("Legal hold placed.")).toBeVisible();
   await expect(row.getByText("Legal hold")).toBeVisible();
-  await expect(panel.getByRole("button", { name: "Remove from this workspace and erase" })).toBeDisabled();
+  await expect(panel.getByRole("button", { name: "Delete account and data" })).toBeDisabled();
   await panel.getByRole("button", { name: "Lift legal hold" }).click();
   await expect(panel.getByText("Legal hold lifted.")).toBeVisible();
 
-  await panel.getByRole("button", { name: "Remove from this workspace and erase" }).click();
+  await panel.getByRole("button", { name: "Delete account and data" }).click();
   await panel.getByLabel("Your password").fill("not-my-password");
   await panel.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByText("That isn't your password.")).toBeVisible();

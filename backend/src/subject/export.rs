@@ -85,7 +85,21 @@ pub fn require_schema(state: &OrgState) -> AppResult<()> {
 pub async fn request_export(app: &AppState, subject: &RecordId, admin: Option<(&RecordId, OrgId)>) -> AppResult<ExportRow> {
     let (org, by, scope) = match admin {
         None => (crate::models_user::org_of(&app.control, subject).await?, subject.clone(), "self"),
-        Some((a, org)) => (org, a.clone(), "organisation"),
+        Some((a, org)) => {
+            // The organisation export reads the person's API tokens, connected apps and audit events
+            // account-wide: that is only "this workspace's data about them" while an account belongs to
+            // exactly one workspace, as every account does today. Fail closed if that ever changes, so a
+            // second membership cannot leak another workspace's activity to this workspace's admin
+            // (tests/subject_rights.rs: an_organisation_export_refuses_an_account_in_two_workspaces).
+            let orgs: Vec<RecordId> = q::USER_ORGS.on(&app.control).bind(("u", subject.clone())).await?.take(0)?;
+            if orgs.len() != 1 {
+                return Err(AppError::coded(
+                    ErrorCode::AuthForbidden,
+                    "This account belongs to more than one workspace, so an admin export can't separate this workspace's data. Ask the server operator.",
+                ));
+            }
+            (org, a.clone(), "organisation")
+        }
     };
     let state = app.org(&org).await?;
     require_schema(&state)?;
@@ -126,7 +140,8 @@ pub async fn list_exports(state: &OrgState, user: &RecordId) -> AppResult<Vec<Ex
 
 /// The archive `user` may download from their workspace `state`, else `None`: their own export
 /// (assembled from its part in every workspace they still belong to) or an admin export they started.
-pub async fn archive(app: &AppState, state: &OrgState, user: &RecordId, id: &str) -> AppResult<Option<(Vec<u8>, String)>> {
+/// The archive, its scope and whom it is about.
+pub async fn archive(app: &AppState, state: &OrgState, user: &RecordId, id: &str) -> AppResult<Option<(Vec<u8>, String, Option<RecordId>)>> {
     require_schema(state)?;
     let Ok(rid) = crate::rid::parse(id) else { return Ok(None) };
     if rid.table() != "subject_export" {
@@ -140,6 +155,9 @@ pub async fn archive(app: &AppState, state: &OrgState, user: &RecordId, id: &str
         status: String,
         #[serde(default)]
         #[surreal(default)]
+        subject: Option<RecordId>,
+        #[serde(default)]
+        #[surreal(default)]
         archive: Option<Bytes>,
     }
     let rows: Vec<Row> = q::EXPORT_GET.on(&state.db).bind(("id", rid.clone())).bind(("u", user.clone())).await?.take(0)?;
@@ -149,7 +167,7 @@ pub async fn archive(app: &AppState, state: &OrgState, user: &RecordId, id: &str
     }
     let Some(home) = row.archive else { return Ok(None) };
     if row.scope != "self" {
-        return Ok(Some((home.to_vec(), row.scope)));
+        return Ok(Some((home.to_vec(), row.scope, row.subject)));
     }
     // the person's own: the home part, then each other workspace's part from that workspace's database
     let mut out = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
@@ -173,7 +191,7 @@ pub async fn archive(app: &AppState, state: &OrgState, user: &RecordId, id: &str
         }
     }
     let bytes = out.finish().map_err(|e| AppError::internal(e.to_string()))?.into_inner();
-    Ok(Some((bytes, row.scope)))
+    Ok(Some((bytes, row.scope, row.subject)))
 }
 
 /// Copies every entry of the zip `from` into `to`, as stored.

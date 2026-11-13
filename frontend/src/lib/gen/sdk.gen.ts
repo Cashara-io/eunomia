@@ -96,9 +96,9 @@ export const reapplyErasures = <ThrowOnError extends boolean = false>(options?: 
 });
 
 /**
- * Cancel an erasure that is not running (server operators only, browser session)
+ * Cancel an erasure that has not started deleting (server operators only, browser session)
  *
- * Stops a pending, held or failed erasure of this workspace and clears its working record (the email, token ids and file paths it held). The account stays suspended; an admin can restore it afterwards.
+ * Stops an erasure before its first irreversible step, clears its working record (the email, token ids and file paths it held) and leaves the account exactly as it was (unsuspended if the request suspended it). Refused with `db.conflict` once deletion has begun: from then on it completes, or waits while held or failed and retried.
  */
 export const cancelErasure = <ThrowOnError extends boolean = false>(options: Options<CancelErasureData, ThrowOnError>): RequestResult<CancelErasureResponses, CancelErasureErrors, ThrowOnError> => (options.client ?? client).post<CancelErasureResponses, CancelErasureErrors, ThrowOnError>({
     security: [{
@@ -143,9 +143,9 @@ export const setPersonAdmin = <ThrowOnError extends boolean = false>(options: Op
 });
 
 /**
- * Erase someone from this workspace (admin only, browser session, confirmed with your own password)
+ * Erase someone's whole account and data (server operators only, browser session, confirmed with your own password)
  *
- * By default only this workspace: the person's membership, their content and files here and what the system holds about them here. Their account and other workspaces are untouched, unless no workspace is left and the account was made by this workspace's sign-up or invitation. `scope: account` (server operators only) erases the whole account. Refused for your own account (use Settings > Data), with `subject.legal_hold` while the account is held, and with `subject.last_owner` when the person owns the workspace with other members.
+ * Only a server operator (an address in EUNOMIA_ADMIN_EMAILS, or the server's first account): the whole account in every workspace, as if the person had deleted it themselves. An admin of a workspace who is not an operator can't erase anyone in this release. Refused for your own account (use Settings > Data), for the first account and other operators' accounts, with `subject.legal_hold` while the account is held, with `subject.last_owner` when the person owns a workspace with other members, and with `subject.workspace_closes` until you confirm closing a workspace the person is the only member of.
  */
 export const erasePerson = <ThrowOnError extends boolean = false>(options: Options<ErasePersonData, ThrowOnError>): RequestResult<ErasePersonResponses, ErasePersonErrors, ThrowOnError> => (options.client ?? client).post<ErasePersonResponses, ErasePersonErrors, ThrowOnError>({
     security: [{
@@ -177,9 +177,9 @@ export const startPersonExport = <ThrowOnError extends boolean = false>(options:
 });
 
 /**
- * Place or lift a legal hold on someone's account (admin only, browser session)
+ * Place or lift a legal hold on someone's account (admin places, server operator lifts; browser session)
  *
- * Any admin places a hold; only the workspace owner or a server operator lifts it. While held, erasing the account is refused with `subject.legal_hold`, and an erasure already queued parks as `held` before its next irreversible step and resumes when the hold is lifted. Placing and lifting are both in the activity log, with who did each. A hold does not stop the audit retention window (AUDIT_RETENTION_DAYS).
+ * Any admin places a hold; only a server operator lifts it, and never a hold on their own account. Who placed it and who lifted it are recorded. While held, erasing the account is refused with `subject.legal_hold`, and an erasure already queued parks as `held` before its next irreversible step and resumes when the hold is lifted. Placing and lifting are both in the activity log, with who did each. A hold does not stop the audit retention window (AUDIT_RETENTION_DAYS).
  */
 export const setPersonLegalHold = <ThrowOnError extends boolean = false>(options: Options<SetPersonLegalHoldData, ThrowOnError>): RequestResult<SetPersonLegalHoldResponses, SetPersonLegalHoldErrors, ThrowOnError> => (options.client ?? client).put<SetPersonLegalHoldResponses, SetPersonLegalHoldErrors, ThrowOnError>({
     security: [{

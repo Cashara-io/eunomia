@@ -238,6 +238,19 @@ pub fn is_operator(user: &User) -> bool {
     operator_email_listed(&user.email)
 }
 
+/// A **server operator**, for the data-subject rights (erase any account, cancel an erasure that has
+/// not started deleting, lift legal holds, hand a workspace over): an address in `EUNOMIA_ADMIN_EMAILS`,
+/// or the install's first account. The one definition; the in-app admin flag is not enough. On a default
+/// self-hosted install the person who set it up is the operator with no extra configuration.
+pub async fn is_server_operator(db: &ControlDb, user: &User) -> AppResult<bool> {
+    Ok(is_operator(user) || crate::capsules::first_user(db).await?.as_ref() == Some(&user.id))
+}
+
+/// [`is_server_operator`] for an account known by id and email (a target, not the caller).
+pub async fn is_server_operator_account(db: &ControlDb, id: &RecordId, email: &str) -> AppResult<bool> {
+    Ok(operator_email_listed(email) || crate::capsules::first_user(db).await?.as_ref() == Some(id))
+}
+
 /// Admin = the instance's first user, an operator, or an account an admin made one (Settings > People).
 pub async fn is_admin(db: &ControlDb, user: &User) -> AppResult<bool> {
     Ok(is_operator(user) || granted_admin(db, &user.id).await? || crate::capsules::first_user(db).await?.as_ref() == Some(&user.id))

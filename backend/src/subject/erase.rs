@@ -11,9 +11,12 @@
 //!
 //! 1. Legal hold: checked at the start and again before every irreversible phase. A held erasure
 //!    parks as `held` and resumes when the hold is lifted (`subject::set_legal_hold`).
-//! 2. The workspace's running slot (unique): one erasure at a time per workspace.
-//! 3. The working record, captured once.
-//! 4. Per workspace: shared spaces keep what the person wrote, reassigned to an owner who remains;
+//! 2. A lock row per workspace touched: one running erasure at a time per workspace.
+//! 3. The working record, recaptured from live state on every run and merged with the saved one; then
+//!    `deleting_at` is set. Until then an operator may cancel; from then on it completes or waits.
+//! 4. Per workspace: shared spaces keep what the person wrote, reassigned to a reader who remains and
+//!    may inherit (not someone under a hold or being erased; with nobody, the person's own rows there
+//!    go and everyone else's stay);
 //!    spaces only the person could read are deleted with their files; everything else of theirs goes;
 //!    their email is replaced (any case) where the system holds it. A workspace whose only member
 //!    they are is emptied entirely.
@@ -50,15 +53,18 @@ struct ErasureRow {
     #[serde(default)]
     #[surreal(default)]
     closes: Vec<String>,
-    #[serde(default)]
-    #[surreal(default)]
-    scope: String,
+    /// The workspace the request was made in (for a re-apply of restored rows: the workspace they came back in).
     #[serde(default)]
     #[surreal(default)]
     org: String,
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct OrgMember {
+    user: RecordId,
     #[serde(default)]
     #[surreal(default)]
-    first_org: Option<String>,
+    role: String,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -215,7 +221,6 @@ async fn run(state: &AppState, erasure: &RecordId) -> Result<Outcome, AppError> 
     }
     let Some(subject) = row.subject.clone() else { return Err(AppError::internal("erasure has no subject")) };
     let reapply = row.requested_by == "reapply";
-    let workspace = (row.scope == "workspace").then(|| OrgId::parse(&row.org)).flatten();
 
     if !reapply && held(state, &subject).await? {
         return park(state, erasure).await;
@@ -224,13 +229,18 @@ async fn run(state: &AppState, erasure: &RecordId) -> Result<Outcome, AppError> 
     // workspaces) and merged with what was saved before (a retry after steps that already ran still checks
     // everything the first run knew)
     let saved = serde_json::from_value::<Work>(row.work.clone()).ok().filter(|w| w.captured);
-    let fresh = capture(state, &subject, &row, workspace.as_ref()).await?;
+    let fresh = capture(state, &subject, &row).await?;
     let work = match saved {
         Some(s) => merge(s, fresh),
         None => fresh,
     };
     let closes: Vec<String> = work.orgs.iter().filter(|o| o.close).map(|o| o.org.clone()).collect();
-    q::ERASURE_WORK.on(&state.control).bind(("id", erasure.clone())).bind(("work", serde_json::to_value(&work).unwrap_or_default())).bind(("closes", closes)).await?.check()?;
+    let saved: Vec<String> =
+        q::ERASURE_WORK.on(&state.control).bind(("id", erasure.clone())).bind(("work", serde_json::to_value(&work).unwrap_or_default())).bind(("closes", closes)).await?.take(0)?;
+    if saved.is_empty() {
+        // cancelled (or finished) meanwhile: nothing is written back to the row and nothing is deleted
+        return Ok(Outcome::Done);
+    }
 
     // one running erasure per workspace, over every workspace this one touches
     let orgs: Vec<String> = work.orgs.iter().map(|o| o.org.clone()).collect();
@@ -247,6 +257,11 @@ async fn run(state: &AppState, erasure: &RecordId) -> Result<Outcome, AppError> 
     // the last moment a hold placed after the request stops it: nothing is deleted yet
     if !reapply && held(state, &subject).await? {
         return park(state, erasure).await;
+    }
+    // from here the erasure deletes: it can no longer be cancelled, only complete or wait
+    let marked: Vec<String> = q::ERASURE_DELETING.on(&state.control).bind(("id", erasure.clone())).await?.take(0)?;
+    if marked.is_empty() {
+        return Ok(Outcome::Done);
     }
 
     let email_lc = work.email_lc.clone().unwrap_or_else(never_matches);
@@ -289,35 +304,7 @@ async fn run(state: &AppState, erasure: &RecordId) -> Result<Outcome, AppError> 
         }
     }
 
-    let mut account_note = json!("deleted");
-    let delete_account = match &workspace {
-        None => true,
-        Some(org) => {
-            // a workspace erasure: what the control database holds about the person in that workspace
-            let mut res = q::ERASE_CONTROL_WORKSPACE.on(&state.control).bind(("u", subject.clone())).bind(("org", org.record())).bind(("okey", org.key())).await?;
-            add_counts(&mut counts, &res.take::<Option<Value>>(q::ERASE_CONTROL_WORKSPACE.slot)?.unwrap_or_default());
-            let mut res = q::CONTROL_RESIDUE_WORKSPACE.on(&state.control).bind(("u", subject.clone())).bind(("org", org.record())).bind(("okey", org.key())).await?;
-            add_into(&mut check, &res.take::<Option<Value>>(0)?.unwrap_or_default());
-            // the account goes too only when nothing else is left of it and this workspace made it
-            let left: Vec<RecordId> = q::USER_ORGS.on(&state.control).bind(("u", subject.clone())).await?.take(0)?;
-            let made_here = row.first_org.as_deref() == Some(org.key().as_str());
-            let exists: Vec<RecordId> = q::USERS_EXISTING.on(&state.control).bind(("ids", vec![subject.clone()])).await?.take(0)?;
-            if exists.is_empty() {
-                account_note = json!("already gone (a restore of only this workspace)");
-                false
-            } else if left.is_empty() && made_here {
-                true
-            } else {
-                account_note = json!(if left.is_empty() {
-                    "kept: it was not made by this workspace's sign-up or invitation; a server operator decides"
-                } else {
-                    "kept: it belongs to other workspaces"
-                });
-                false
-            }
-        }
-    };
-    if delete_account {
+    {
         let mut res = q::ERASE_CONTROL
             .on(&state.control)
             .bind(("key", work.key.clone()))
@@ -355,7 +342,7 @@ async fn run(state: &AppState, erasure: &RecordId) -> Result<Outcome, AppError> 
         .bind(("id", erasure.clone()))
         .bind(("counts", counts.clone()))
         .bind(("post_check", Value::Object(check)))
-        .bind(("review", json!({ "mentions_left_in_others_content": Value::Object(review), "account": account_note })))
+        .bind(("review", json!({ "mentions_left_in_others_content": Value::Object(review) })))
         .await?
         .check()?;
     // filed under someone who stays in the home workspace, so that workspace's log (and only it) shows it
@@ -433,7 +420,7 @@ fn merge(saved: Work, fresh: Work) -> Work {
 }
 
 /// Builds a working record from live state.
-async fn capture(state: &AppState, subject: &RecordId, row: &ErasureRow, workspace: Option<&OrgId>) -> Result<Work, AppError> {
+async fn capture(state: &AppState, subject: &RecordId, row: &ErasureRow) -> Result<Work, AppError> {
     #[derive(Deserialize, SurrealValue)]
     struct EmailRow {
         #[serde(default)]
@@ -446,33 +433,25 @@ async fn capture(state: &AppState, subject: &RecordId, row: &ErasureRow, workspa
     actors.push(subject.to_string());
     let key = crate::rid::key_string(subject.key()).unwrap_or_else(never_matches);
 
-    let pending = pending_others(state, subject).await?;
-    let plans = match workspace {
-        // a workspace erasure took the person out of the workspace at request time: its plan is that
-        // workspace, inherited by its owner (or longest-standing member) who stays
-        Some(org) => {
-            #[derive(Deserialize, SurrealValue)]
-            struct Member {
-                user: RecordId,
-                #[serde(default)]
-                #[surreal(default)]
-                role: String,
-            }
-            let members: Vec<Member> = q::ORG_MEMBERSHIPS.on(&state.control).bind(("org", org.record())).await?.take(0)?;
-            let staying: Vec<&Member> = members.iter().filter(|m| &m.user != subject && !pending.contains(&m.user)).collect();
-            let heir = staying.iter().find(|m| m.role == "owner").or(staying.first()).map(|m| m.user.clone());
-            vec![super::OrgPlan { org: *org, heir, close: false, transfer: false, joint: Vec::new() }]
-        }
-        None => {
-            let allow_close = !row.closes.is_empty() || row.requested_by == "reapply";
-            match super::plan(&state.control, subject, &pending, allow_close, row.requested_by == "reapply", None).await {
-                Ok(p) => p,
-                // the account is already gone (a retry after the control step): the saved plan stands
-                Err(e) if e.code == ErrorCode::AuthNotFound => Vec::new(),
-                Err(e) => return Err(e),
-            }
-        }
+    let (pending, held) = super::pending_and_held(&state.control, subject).await?;
+    // nobody with an erasure open and nobody under a legal hold inherits anything (they stay readers)
+    let excluded: HashSet<String> = pending.iter().chain(held.iter()).map(|u| u.to_string()).collect();
+    let reapply = row.requested_by == "reapply";
+    let allow_close = !row.closes.is_empty() || reapply;
+    let mut plans = match super::plan(&state.control, subject, &pending, &held, allow_close, reapply).await {
+        Ok(p) => p,
+        // the account is already gone (a retry after the control step): the saved plan stands
+        Err(e) if e.code == ErrorCode::AuthNotFound => Vec::new(),
+        Err(e) => return Err(e),
     };
+    // no membership left: rows a restore of only an org database brought back are erased in the
+    // workspace they came back in, inherited by its owner (or longest-standing member) who may inherit
+    if let (true, true, Some(org)) = (plans.is_empty(), reapply, OrgId::parse(&row.org)) {
+        let members: Vec<OrgMember> = q::ORG_MEMBERSHIPS.on(&state.control).bind(("org", org.record())).await?.take(0)?;
+        let staying: Vec<&OrgMember> = members.iter().filter(|m| &m.user != subject && !excluded.contains(&m.user.to_string())).collect();
+        let heir = staying.iter().find(|m| m.role == "owner").or(staying.first()).map(|m| m.user.clone());
+        plans.push(super::OrgPlan { org, heir, close: false, transfer: false, joint: Vec::new() });
+    }
     let mut orgs = Vec::new();
     for p in plans {
         if !p.joint.is_empty() {
@@ -485,10 +464,16 @@ async fn capture(state: &AppState, subject: &RecordId, row: &ErasureRow, workspa
             Err(e) => return Err(e),
         };
         let db = &org_state.db;
-        let others: Vec<MemberRow> = q::OTHER_MEMBERS.on(db).bind(("u", subject.clone())).bind(("pending", pending.clone())).await?.take(0)?;
-        let mut heir_of: HashMap<String, (RecordId, bool)> = HashMap::new();
+        let others: Vec<MemberRow> = q::OTHER_MEMBERS.on(db).bind(("u", subject.clone())).await?.take(0)?;
+        // every space someone else reads stays; its heir is the first reader who may inherit (none: the
+        // person's own rows there go, everyone else's stay)
+        let mut heir_of: HashMap<String, Option<(RecordId, bool)>> = HashMap::new();
         for m in others {
-            heir_of.entry(m.vault).or_insert((m.user, m.role == "owner"));
+            let eligible = !excluded.contains(&m.user.to_string());
+            let entry = heir_of.entry(m.vault).or_insert(None);
+            if entry.is_none() && eligible {
+                *entry = Some((m.user, m.role == "owner"));
+            }
         }
         let mine: Vec<MyMembership> = q::MEMBERSHIPS.on(db).bind(("u", subject.clone())).await?.take(0)?;
         let mut w = OrgWork { org: p.org.key(), heir: p.heir.as_ref().map(|h| h.to_string()), close: p.close, transfer: p.transfer, ..OrgWork::default() };
@@ -502,7 +487,10 @@ async fn capture(state: &AppState, subject: &RecordId, row: &ErasureRow, workspa
             let my_owned: HashSet<&str> = mine.iter().filter(|m| m.status == "active" && m.role == "owner").map(|m| m.vault.as_str()).collect();
             w.kept = heir_of
                 .iter()
-                .map(|(v, (to, is_owner))| Kept { vault: v.clone(), to: to.to_string(), promote: my_owned.contains(v.as_str()) && !is_owner })
+                .map(|(v, h)| match h {
+                    Some((to, is_owner)) => Kept { vault: v.clone(), to: to.to_string(), promote: my_owned.contains(v.as_str()) && !is_owner },
+                    None => Kept { vault: v.clone(), to: String::new(), promote: false },
+                })
                 .collect();
             let mine_all: HashSet<&str> = mine.iter().map(|m| m.vault.as_str()).collect();
             w.member_of = w.kept.iter().filter(|k| mine_all.contains(k.vault.as_str())).map(|k| k.vault.clone()).collect();
@@ -558,12 +546,13 @@ async fn erase_in_org(state: &OrgState, subject: &RecordId, o: &OrgWork, actors:
     let heir = o.heir.as_deref().map(rid).transpose()?.unwrap_or_else(|| RecordId::new("user", "erased"));
 
     // shared spaces: hand over ownership where the person was the only owner, then reassign their rows
-    for k in o.kept.iter().filter(|k| k.promote) {
+    for k in o.kept.iter().filter(|k| k.promote && !k.to.is_empty()) {
         q::PROMOTE.on(db).bind(("vault", rid(&k.vault)?)).bind(("to", rid(&k.to)?)).await?.check()?;
         *counts.entry("ownership_handed_over".into()).or_insert(0) += 1;
     }
     let with_rows: HashSet<String> = q::VAULTS_WITH_ROWS.on(db).bind(("u", subject.clone())).await?.take::<Vec<String>>(0)?.into_iter().collect();
-    for k in o.kept.iter().filter(|k| with_rows.contains(&k.vault)) {
+    // a kept space with nobody who may inherit: the person's own rows there are deleted below (ERASE_OWNED)
+    for k in o.kept.iter().filter(|k| with_rows.contains(&k.vault) && !k.to.is_empty()) {
         let (vault, to) = (rid(&k.vault)?, rid(&k.to)?);
         let mut res = crate::tx::with_retry(|| async { q::REASSIGN.on(db).bind(("u", subject.clone())).bind(("vault", vault.clone())).bind(("to", to.clone())).bind(("email_re", email_re.to_string())).await }).await?;
         #[derive(Deserialize, SurrealValue)]
