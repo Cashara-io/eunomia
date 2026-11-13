@@ -163,6 +163,8 @@ their local-dev defaults in production:
 | `OIDC_CLIENT_SECRET` | none | The client secret. Leave it out for a public client: PKCE is always used, so the secret is optional. Never logged. |
 | `OIDC_SCOPES` | `openid email profile` | Scopes requested. `openid` is always added. The email claim is required to create or match an account. |
 | `OIDC_PROVIDER_NAME` | `single sign-on` | The label on the button: "Continue with {name}", and "Signed in with {name}" in Settings. |
+| `OIDC_REQUIRE_MFA` | `false` | `true` refuses a single sign-on sign-in unless the ID token says a second factor was used (`amr`, RFC 8176, or an `acr` in `OIDC_MFA_ACR`). Any other value stops the backend at boot. See [security/mfa.md](security/mfa.md). |
+| `OIDC_MFA_ACR` | none | Comma-separated `acr` values your provider uses for multi-factor sign-in. |
 | `COOKIE_SECURE` | `auto` | `auto`: the session cookie is `Secure` when `PUBLIC_URL` is https or a trusted proxy (`TRUSTED_PROXIES`) sent `X-Forwarded-Proto: https`; the browser usually talks to the frontend origin, which can be https while `PUBLIC_URL` is not. `true` / `false` force it. |
 | `CAPSULE_ARGS` | `off` | `off`: failure capsules keep only a hash and the JSON shape of a failed call's arguments. `redacted`: keep the arguments with secrets masked, so `eunomia replay` can re-run them. See [debugging](debugging.md). |
 | `AUDIT_RETENTION_DAYS` | `365` | The `prune_auth` job deletes audit events older than this. `0` keeps them forever. |

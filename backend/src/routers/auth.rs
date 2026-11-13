@@ -194,14 +194,10 @@ pub(crate) async fn session_response(
     https: Option<Extension<ForwardedHttps>>,
     via: auth::Via,
     mfa: bool,
-    body: Option<AuthOut>,
     extra_cookie: Option<String>,
 ) -> AppResult<Response> {
     let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(headers).as_deref(), via, mfa).await?;
-    let body = match body {
-        Some(b) => b,
-        None => auth_out(state, user).await?,
-    };
+    let body = auth_out(state, user).await?;
     let mut resp = (StatusCode::OK, Json(SignInOut::Session(body))).into_response();
     let mut cookies = vec![session_cookie_header(&token, &state.settings.public_url, https)];
     cookies.extend(extra_cookie);
@@ -331,10 +327,7 @@ async fn register(
     if crate::mfa::require_mfa(&state.control).await? {
         return challenge_response(&state, &user, &headers, https, crate::mfa::AfterPassword::Enrol).await;
     }
-
-    let is_admin = crate::authz::is_admin(&state.control, &user).await?;
-    let body = AuthOut { id: user.id.to_string(), email: user.email.clone(), onboarded: false, has_password: true, oidc_provider: None, is_admin };
-    session_response(&state, user, &headers, https, auth::Via::Password, false, Some(body), None).await
+    session_response(&state, user, &headers, https, auth::Via::Password, false, None).await
 }
 
 #[utoipa::path(
@@ -388,7 +381,7 @@ async fn login(
         return challenge_response(&state, &user, &headers, https, next).await;
     }
     audit::record_as_caller(&state.control, &user.id, "auth.login", "", "ok").await;
-    session_response(&state, user, &headers, https, auth::Via::Password, false, None, None).await
+    session_response(&state, user, &headers, https, auth::Via::Password, false, None).await
 }
 
 #[utoipa::path(

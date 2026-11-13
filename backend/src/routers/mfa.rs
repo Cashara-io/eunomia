@@ -185,8 +185,8 @@ async fn challenge_verify(State(state): State<AppState>, https: Option<Extension
         Err(e) => return Err(e),
     };
     let user = finish(&state, &c, &format!("second step: {}", factor.words())).await?;
-    let clear = mfa::clear_challenge_cookie(&state.settings.public_url, https.clone());
-    session_response(&state, user, &headers, https, Via::parse(&c.via), true, None, Some(clear)).await
+    let clear = mfa::clear_challenge_cookie(&state.settings.public_url, https);
+    session_response(&state, user, &headers, https, Via::parse(&c.via), true, Some(clear)).await
 }
 
 #[utoipa::path(
@@ -232,7 +232,7 @@ async fn challenge_enrol_confirm(State(state): State<AppState>, https: Option<Ex
     let me = auth_out(&state, user).await?;
     let mut resp = (StatusCode::OK, Json(EnrolledOut { me, recovery_codes })).into_response();
     for cookie in [
-        crate::routers::auth::session_cookie_header(&token, &state.settings.public_url, https.clone()),
+        crate::routers::auth::session_cookie_header(&token, &state.settings.public_url, https),
         mfa::clear_challenge_cookie(&state.settings.public_url, https),
     ] {
         if let Ok(v) = header::HeaderValue::from_str(&cookie) {
