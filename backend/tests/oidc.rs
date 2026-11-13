@@ -180,6 +180,12 @@ async fn link_as(app: &App, link_cookie: &str, body: Value) -> ((StatusCode, Val
     http(&app.router, "POST", "/api/auth/oidc/link", Some(body), None, Some(link_cookie)).await
 }
 
+/// A browser session for alice, by password.
+async fn set_session(app: &App) -> String {
+    let (_, set) = http(&app.router, "POST", "/api/auth/login", Some(json!({"email": "alice@example.test", "password": PASSWORD})), None, None).await;
+    set.unwrap().split(';').next().unwrap().to_string()
+}
+
 async fn password_login(app: &App, email: &str, password: &str) -> StatusCode {
     http(&app.router, "POST", "/api/auth/login", Some(json!({"email": email, "password": password})), None, None).await.0 .0
 }
@@ -288,10 +294,15 @@ async fn the_owner_proves_the_password_and_keeps_everything() {
     assert_eq!(http(&app.router, "GET", "/api/vaults", None, Some(&token), None).await.0 .0, StatusCode::OK, "the token survives");
     assert_eq!(password_login(&app, "alice@example.test", PASSWORD).await, StatusCode::OK, "and the password");
     let issuer = app.idp.inner.lock().unwrap().issuer.clone();
-    assert_eq!(models_user::user_by_identity(&app.state.control, &issuer, "alice-sub").await.unwrap().map(|u| u.id), Some(alice.id));
-    // the cookie is spent: replaying it starts nothing
+    assert_eq!(models_user::user_by_identity(&app.state.control, &issuer, "alice-sub").await.unwrap().map(|u| u.id), Some(alice.id.clone()));
+    // the cookie is spent: replaying it starts nothing, and starting fresh with it sets nothing aside
     let ((status, _), set) = link_as(&app, &link_cookie, json!({"password": PASSWORD})).await;
     assert_eq!((status, set.is_none()), (StatusCode::UNAUTHORIZED, true));
+    let session = set_session(&app).await;
+    let ((status, _), set) = link_as(&app, &link_cookie, json!({"start_fresh": true})).await;
+    assert_eq!((status, set.is_none()), (StatusCode::UNAUTHORIZED, true));
+    assert!(!models_user::is_suspended(&app.state.control, &alice.id).await.unwrap(), "the owner's account is untouched");
+    assert_eq!(app.get_as(&session, "/api/auth/me").await.0, StatusCode::OK, "and their sessions survive");
     // the next sign-in does not ask again
     let again = app.sign_in().await;
     assert!(again.link.is_none());
