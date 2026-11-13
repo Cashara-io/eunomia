@@ -612,9 +612,9 @@ struct SignupPolicy {
     mode: String,
     /// The policy in words.
     summary: String,
-    /// The emails that may sign up when `mode` is `invite`.
+    /// The emails that may sign up when `mode` is `invite`. Empty unless you are the server's operator.
     allowlist: Vec<String>,
-    /// Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`).
+    /// Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`). Empty unless you are the server's operator.
     operators: Vec<String>,
 }
 
@@ -723,7 +723,15 @@ async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport>
         .collect();
 
     let env = |k: &str| std::env::var(k).unwrap_or_default();
-    Ok(PeopleReport { people, signup: signup_policy(&env("SIGNUP"), &env("SIGNUP_ALLOWLIST"), &env("EUNOMIA_ADMIN_EMAILS")) })
+    let mut signup = signup_policy(&env("SIGNUP"), &env("SIGNUP_ALLOWLIST"), &env("EUNOMIA_ADMIN_EMAILS"));
+    // the operator list and the instance-wide allowlist (other organisations' invitees) are the server
+    // operator's: an admin granted in the app sees the policy in words only
+    let operator = authz::is_operator(user) || creator.as_ref() == Some(&user.id);
+    if !operator {
+        signup.allowlist.clear();
+        signup.operators.clear();
+    }
+    Ok(PeopleReport { people, signup })
 }
 
 #[utoipa::path(
