@@ -223,12 +223,16 @@ pub fn require_unrestricted() -> AppResult<()> {
     }
 }
 
-/// True for an email listed in `EUNOMIA_ADMIN_EMAILS` (comma separated).
+/// True for an email listed in `EUNOMIA_ADMIN_EMAILS` (comma separated), compared in normalized form.
 pub fn operator_email_listed(email: &str) -> bool {
-    std::env::var("EUNOMIA_ADMIN_EMAILS")
-        .unwrap_or_default()
-        .split(',')
-        .any(|e| !e.trim().is_empty() && e.trim().eq_ignore_ascii_case(email.trim()))
+    email_listed_in(&std::env::var("EUNOMIA_ADMIN_EMAILS").unwrap_or_default(), email)
+}
+
+/// Whether `email` is in the comma-separated `list`, both sides normalized the way accounts are stored
+/// (`models_user::normalize_email`), so an address cannot slip past a list by being written differently.
+pub fn email_listed_in(list: &str, email: &str) -> bool {
+    let email = crate::models_user::normalize_email(email);
+    !email.is_empty() && list.split(',').map(crate::models_user::normalize_email).any(|e| !e.is_empty() && e == email)
 }
 
 /// An email listed in `EUNOMIA_ADMIN_EMAILS`: an operator of the whole instance. Emails are not
@@ -298,6 +302,18 @@ pub async fn authorize(db: &OrgDb, user: &RecordId, action: Action, vault: &Reco
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn listed_addresses_compare_normalized() {
+        let list = " Kate@Corp.com, ops@corp.com ,";
+        assert!(email_listed_in(list, "kate@corp.com"));
+        assert!(email_listed_in(list, "  KATE@CORP.COM "));
+        // a look-alike that would be stored as the listed address counts as listed
+        assert!(email_listed_in(list, "\u{212A}ate@corp.com"));
+        assert!(!email_listed_in(list, "kate@corp.co"));
+        assert!(!email_listed_in(list, ""));
+        assert!(!email_listed_in("", "kate@corp.com"));
+    }
 
     #[test]
     fn role_matrix() {

@@ -681,3 +681,15 @@ async fn an_mcp_client_signs_in_through_the_provider_and_gets_a_working_token() 
     assert!(mcp.to_string().contains("alice@example.test") || mcp.to_string().contains("personal") || mcp.to_string().contains("Personal"), "{mcp}");
     assert!(app.idp.token_hits() >= 1);
 }
+
+#[tokio::test]
+async fn a_provider_email_written_with_look_alike_letters_makes_no_account() {
+    let app = app(AuthMode::Both).await;
+    expect_signed_in(&app.sign_in().await);
+    for (sub, email) in [("kelvin-sub", "\u{212A}ate@example.test"), ("angstrom-sub", "\u{212B}sa@example.test")] {
+        app.idp.behave(Behavior { sub: sub.into(), email: Some(email.into()), ..Default::default() });
+        expect_refused(&app.sign_in().await, "no_email");
+    }
+    assert_eq!(app.user_count().await, 1);
+    assert!(models_user::user_by_email(&app.state.control, "kate@example.test").await.unwrap().is_none());
+}
