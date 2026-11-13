@@ -141,6 +141,9 @@ struct SpaceRow {
     vault_kind: Option<String>,
 }
 
+/// One person's spaces, API tokens, apps and live session count.
+type PersonAccess = (Vec<Value>, Vec<Value>, Vec<Value>, i64);
+
 /// Who has access to what in the caller's workspace, right now. Names and dates only.
 async fn snapshot(state: &AppState, user: &User) -> AppResult<Value> {
     let org = state.org(&user.org).await?;
@@ -152,7 +155,7 @@ async fn snapshot(state: &AppState, user: &User) -> AppResult<Value> {
     let sessions: Vec<SessionCount> = store::control::ACCESS_SESSIONS.on(&state.control).bind(("ids", ids.clone())).await?.take(0)?;
     let spaces: Vec<SpaceRow> = store::access_reviews::VAULT_ACCESS.on(&org.db).bind(("ids", ids)).await?.take(0)?;
 
-    let mut by_user: HashMap<String, (Vec<Value>, Vec<Value>, Vec<Value>, i64)> = HashMap::new();
+    let mut by_user: HashMap<String, PersonAccess> = HashMap::new();
     for t in tokens {
         by_user.entry(chain::rid(&t.owner)).or_default().1.push(json!({
             "id": chain::rid(&t.id),
@@ -621,7 +624,7 @@ async fn complete(State(state): State<AppState>, user: User, Path(review_id): Pa
     let count = |d: &str| decisions.iter().filter(|x| x.decision == d).count();
     let not_reviewed = doc["not_reviewed"].as_array().map(Vec::len).unwrap_or(0);
     let summary = json!({ "keep": count("keep"), "remove": count("remove"), "suspend": count("suspend"), "not_reviewed": not_reviewed });
-    let latest = decisions.iter().filter_map(|d| d.decided_at.clone()).max_by_key(|d| crate::sources::base::datetime_to_chrono(d));
+    let latest = decisions.iter().filter_map(|d| d.decided_at).max_by_key(crate::sources::base::datetime_to_chrono);
     #[derive(Deserialize, SurrealValue)]
     struct Id {
         #[allow(dead_code)]
@@ -703,7 +706,7 @@ async fn export(State(state): State<AppState>, user: User, Path(review_id): Path
     super::admin::require_admin(&state, &user).await?;
     let org = state.org(&user.org).await?;
     let (row, decisions) = load(&org.db, &review_id).await?;
-    let (Some(by), Some(at), Some(result_hash)) = (row.completed_by.clone(), row.completed_at.clone(), row.result_hash.clone()) else {
+    let (Some(by), Some(at), Some(result_hash)) = (row.completed_by.clone(), row.completed_at, row.result_hash.clone()) else {
         return Err(AppError::coded(ErrorCode::AccessReviewIncomplete, "Only a completed access review can be downloaded."));
     };
     let result = result_doc(&row, &decisions, &by, time(&Some(at)).as_str().unwrap_or_default());

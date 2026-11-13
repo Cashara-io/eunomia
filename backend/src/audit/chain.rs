@@ -454,8 +454,7 @@ pub async fn seal(db: &ControlDb, ledger: &str) -> AppResult<u64> {
             .map(|r| {
                 seq += 1;
                 let hash = event_hash(&r.canonical(ledger, seq, &prev));
-                let row = SealRow { id: r.id.clone(), seq, prev_hash: std::mem::replace(&mut prev, hash.clone()), hash };
-                row
+                SealRow { id: r.id.clone(), seq, prev_hash: std::mem::replace(&mut prev, hash.clone()), hash }
             })
             .collect();
         let n = seals.len() as u64;
@@ -1000,7 +999,7 @@ mod tests {
         let mut none = c.clone();
         none.user = None;
         none.target = "q\"\n\u{1}é".into();
-        assert!(canonical(&none).contains(r#","user:u1","user","user:u1""#) == false);
+        assert!(!canonical(&none).contains(r#","user:u1","user","user:u1""#));
         assert!(canonical(&none).contains(r#"null,"user""#));
         assert!(canonical(&none).contains(r#""q\"\n\u0001é""#), "{}", canonical(&none));
     }
