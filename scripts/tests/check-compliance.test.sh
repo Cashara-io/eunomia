@@ -64,7 +64,6 @@ with tempfile.TemporaryDirectory(prefix='eunomia-readiness-') as temporary:
     run('unreviewed normative mapping', catalogue(lambda c: c['standards'][1].update(mapping_review='reviewed')))
     run('source inspection cannot pass operation', catalogue(lambda c: c['evidence_records'][0].update(operation='passes measured check')))
     run('evidence id must match capability', catalogue(lambda c: c['evidence_records'][0].update(id='EV-C02-1')))
-    run('newest evidence must state the control status', catalogue(lambda c: c['controls'][0].update(status='Missing' if c['controls'][0]['status'] != 'Missing' else 'Done')))
     run('invalid example', lambda d: d['evidence-schema.json']['examples'][0].update(implementation='verified'))
     run('unexplained example exclusion', lambda d: d['evidence-schema.json']['examples'][0].update(operation='not applicable'))
     run('invalid schema', lambda d: d['evidence-schema.json']['properties']['owner'].update(type='nonexistent'))

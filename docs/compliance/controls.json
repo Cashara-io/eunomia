@@ -698,17 +698,16 @@
     {
       "id": "C02",
       "name": "Enforced MFA with passkeys and safe recovery",
-      "status": "Partial",
+      "status": "Missing",
       "owner": "shared",
       "track": [
         "code",
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. TOTP with encrypted secrets, replay refusal, single-use recovery codes, lockout, an instance require-MFA switch, step-up for new tokens and an optional OIDC amr/acr check exist (PR04). Passkeys and admin-assisted recovery remain. E02-E03.",
+      "finding": "Missing. No native TOTP/passkey implementation; OIDC alone does not prove MFA. E02-E03.",
       "evidence": [
-        "EV-C02-1",
-        "EV-C02-2"
+        "EV-C02-1"
       ],
       "mappings": [
         {
@@ -3050,101 +3049,6 @@
         "Missing means no end-to-end workflow found in the inspected routes, schema, Settings navigation and docs."
       ],
       "summary": "Missing. No native TOTP/passkey implementation; OIDC alone does not prove MFA. E02-E03."
-    },
-    {
-      "schema_version": "1.0.0",
-      "id": "EV-C02-2",
-      "capability_id": "C02",
-      "kind": "source-inspection",
-      "owner": "Eunomia",
-      "source": "Eunomia",
-      "operation": "unknown",
-      "implementation": "Partial",
-      "captured_on": "2026-11-13",
-      "subject": {
-        "repository": "Cashara-io/eunomia",
-        "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
-        "scope": "Source and test inventory of compliance PR04 (branch compliance/04-mfa) against the catalogue snapshot; no deployed installation assessed."
-      },
-      "references": [
-        {
-          "path": "backend/migrations/control/0009_mfa.surql",
-          "line_start": 1,
-          "line_end": 49,
-          "inventory_id": "E02",
-          "summary": "Control migration 0009 adds the encrypted TOTP secret, the last accepted TOTP step, hashed single-use recovery codes, the short-lived sign-in challenge, session markers (mfa_at, via) and the instance require_mfa setting."
-        },
-        {
-          "path": "backend/src/mfa.rs",
-          "line_start": 250,
-          "line_end": 259,
-          "inventory_id": "E02",
-          "summary": "While an admin requires MFA, a password session that never passed a second factor is refused; single sign-on sessions are left to the provider."
-        },
-        {
-          "path": "backend/src/mfa.rs",
-          "line_start": 281,
-          "line_end": 300,
-          "inventory_id": "E02",
-          "summary": "A TOTP code (totp-rs, RFC 6238, one step of skew) is accepted once per step per account, so a replay inside its window is refused; a recovery code is matched by SHA-256 and spent atomically."
-        },
-        {
-          "path": "backend/src/mfa.rs",
-          "line_start": 313,
-          "line_end": 337,
-          "inventory_id": "E02",
-          "summary": "Wrong codes count per account in the shared fail throttle (10 per 15 minutes, per process) and are audited as auth.mfa_failed; recovery code use is audited."
-        },
-        {
-          "path": "backend/src/mfa.rs",
-          "line_start": 533,
-          "line_end": 564,
-          "inventory_id": "E02",
-          "summary": "Creating an API token and changing the admin switch from a browser session need a second factor from the last 10 minutes when the account has MFA. Token callers are not stepped up."
-        },
-        {
-          "path": "backend/src/routers/auth.rs",
-          "line_start": 379,
-          "line_end": 384,
-          "inventory_id": "E02",
-          "summary": "A correct password yields a challenge cookie, not a session, for an account with MFA or while MFA is required."
-        },
-        {
-          "path": "backend/src/routers/oidc.rs",
-          "line_start": 340,
-          "line_end": 342,
-          "inventory_id": "E03",
-          "summary": "OIDC_REQUIRE_MFA refuses a single sign-on sign-in whose ID token has no amr/acr asserting a second factor. Off by default."
-        },
-        {
-          "path": "backend/tests/mfa.rs",
-          "line_start": 56,
-          "line_end": 148,
-          "inventory_id": "E02",
-          "summary": "Real-database test: enrolment, encrypted secret, challenge is not a session, replay refusal, single-use recovery codes, audit sentences."
-        },
-        {
-          "path": "backend/tests/mfa.rs",
-          "line_start": 183,
-          "line_end": 255,
-          "inventory_id": "E02",
-          "summary": "Real-database test: the admin switch, refusal of old sessions, enrolment before session on login and signup, tokens unaffected."
-        },
-        {
-          "path": "backend/tests/oidc.rs",
-          "line_start": 698,
-          "line_end": 715,
-          "inventory_id": "E03",
-          "summary": "Mock-provider test: OIDC_REQUIRE_MFA refuses an ID token without a second-factor amr and creates no account."
-        }
-      ],
-      "limitations": [
-        "Source inspection plus local test runs; does not establish deployed settings, runtime effectiveness or audit-period operation.",
-        "Passkeys (WebAuthn) with origin and replay checks are not implemented, so C02's acceptance check is not fully exercised.",
-        "Fail counters are per process; several replicas allow several times the budget.",
-        "OIDC MFA is trusted to the identity provider unless OIDC_REQUIRE_MFA is set; amr/acr values are provider specific."
-      ],
-      "summary": "Partial. TOTP enrolment with a confirming code, AES-GCM encrypted secret, per-step replay refusal, hashed single-use recovery codes, a challenge-not-session second step with per-challenge and per-account lockout, an instance require-MFA switch refusing unverified password sessions and signups, step-up for new API tokens, an optional OIDC amr/acr check, and audit events. Passkeys remain."
     },
     {
       "schema_version": "1.0.0",

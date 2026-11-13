@@ -78,9 +78,7 @@ def check(root):
         require(control['evidence'] and set(control['evidence']) <= records.keys(), 'dangling/missing evidence')
         for eid in control['evidence']:
             require(records[eid]['capability_id'] == control['id'], 'cross-capability evidence')
-        # earlier captures stay as history (README: history preserved); the newest one states the current status
-        latest = max(control['evidence'], key=lambda eid: int(eid.rsplit('-', 1)[1]))
-        require(records[latest]['implementation'] == control['status'], 'evidence status mismatch')
+            require(records[eid]['implementation'] == control['status'], 'evidence status mismatch')
         used_evidence.update(control['evidence'])
         require(control['mappings'], 'missing mappings')
         require(len(control['mappings']) == len({m['standard'] for m in control['mappings']}), 'duplicate standard mapping')
