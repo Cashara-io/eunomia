@@ -76,6 +76,39 @@ pub const CONTROL_MIGRATIONS: &[(u32, &str, &str)] = &[
     (10, "audit_chain", include_str!("../migrations/control/0010_audit_chain.surql")),
 ];
 
+/// The first number missing from `list`, which must run 1, 2, 3, ... with no gap. A gap is final:
+/// the scheduler queues an org's migration only while its version is below the latest, so a number
+/// skipped now would never be applied once it lands (backend/migrations/QUEUE.md).
+pub fn first_gap(list: &[(u32, &str, &str)]) -> Option<u32> {
+    list.iter().enumerate().find(|(i, m)| m.0 != *i as u32 + 1).map(|(i, _)| i as u32 + 1)
+}
+
+/// Refuses to boot when the registered tenant or control migrations are not contiguous.
+/// `scripts/ci/check-migrations.sh` checks the same in CI; this makes a binary built past that
+/// check refuse to start instead of skipping a migration for good. Builds with the `test-support`
+/// feature (the test suite) and `EUNOMIA_ALLOW_MIGRATION_GAP=1` (a developer running a lane before
+/// the numbers ahead of it have landed) only log it.
+pub fn require_contiguous() -> crate::error::AppResult<()> {
+    let gaps: Vec<String> = [("tenant", MIGRATIONS), ("control", CONTROL_MIGRATIONS)]
+        .iter()
+        .filter_map(|(set, list)| first_gap(list).map(|n| format!("{set} migration {n:04}")))
+        .collect();
+    if gaps.is_empty() {
+        return Ok(());
+    }
+    let msg = format!(
+        "this build registers migrations with a gap ({} is missing): it would skip that migration for good. \
+         Build it after the missing migration lands, or renumber (backend/migrations/QUEUE.md).",
+        gaps.join(", ")
+    );
+    let allowed = cfg!(feature = "test-support") || std::env::var("EUNOMIA_ALLOW_MIGRATION_GAP").is_ok_and(|v| v.trim() == "1");
+    if allowed {
+        tracing::warn!("{msg} (allowed: test build or EUNOMIA_ALLOW_MIGRATION_GAP=1)");
+        return Ok(());
+    }
+    Err(crate::error::AppError::internal(msg))
+}
+
 /// The last tenant migration the legacy single database may be brought to before its data moves out
 /// (0009 drops the tables the move is about to read).
 pub const LEGACY_TENANT_VERSION: u32 = 8;
@@ -419,3 +452,17 @@ async fn merge_into(db: &Db, winner: &mut Entity, loser: &Entity) -> surrealdb::
     Ok(())
 }
 
+
+#[cfg(test)]
+mod contiguity_tests {
+    use super::first_gap;
+
+    #[test]
+    fn a_gap_in_registered_migrations_is_found() {
+        assert_eq!(first_gap(&[(1, "a", ""), (2, "b", ""), (3, "c", "")]), None);
+        assert_eq!(first_gap(&[(1, "a", ""), (2, "b", ""), (4, "d", "")]), Some(3), "a number skipped");
+        assert_eq!(first_gap(&[(2, "b", "")]), Some(1), "a missing first");
+        assert_eq!(first_gap(&[(1, "a", ""), (1, "a", "")]), Some(2), "a number twice");
+        assert_eq!(first_gap(&[]), None);
+    }
+}
