@@ -273,6 +273,8 @@ struct Landed {
     location: String,
     /// `name=value` of the session cookie when one was set
     session: Option<String>,
+    /// `name=value` of the cookie a sign-in leaves when it must ask before linking to a password account
+    link: Option<String>,
 }
 
 impl Landed {
@@ -338,7 +340,8 @@ impl App {
         let (status, headers, _) = raw(&self.router, req.body(Body::empty()).unwrap()).await;
         let location = headers.get(header::LOCATION).map(|v| v.to_str().unwrap().to_string()).unwrap_or_default();
         let session = cookie_pairs(&headers).into_iter().find(|c| c.starts_with("eunomia_session=") && c.len() > "eunomia_session=".len());
-        Landed { status, location, session }
+        let link = cookie_pairs(&headers).into_iter().find(|c| c.starts_with("eunomia_oidc_link=") && c.len() > "eunomia_oidc_link=".len());
+        Landed { status, location, session, link }
     }
 
     async fn sign_in(&self) -> Landed {
@@ -525,25 +528,114 @@ async fn an_unverified_email_does_not_take_over_a_password_account() {
     app.idp.behave(Behavior { sub: "carol-sub".into(), email: Some("carol@example.test".into()), email_verified: json!(false), ..Default::default() });
     expect_signed_in(&app.sign_in().await);
 
-    // verified: it links to the password account, which keeps its password
-    let cookie_before = {
+    // verified: it does not link silently to an account with a password; it asks first
+    app.idp.behave(Behavior { email_verified: json!(true), ..Default::default() });
+    let landed = app.sign_in().await;
+    assert_eq!((landed.location.as_str(), landed.session.is_some()), ("/login/link", false));
+    assert!(landed.link.is_some());
+    assert!(models_user::user_by_identity(&app.state.control, &issuer, "alice-sub").await.unwrap().is_none());
+    let _ = victim;
+}
+
+/// POST /api/auth/oidc/link with the cookie the provider sign-in left.
+async fn link_as(app: &App, link_cookie: &str, body: Value) -> ((StatusCode, Value), Option<String>) {
+    http(&app.router, "POST", "/api/auth/oidc/link", Some(body), None, Some(link_cookie)).await
+}
+
+async fn password_login(app: &App, email: &str, password: &str) -> StatusCode {
+    http(&app.router, "POST", "/api/auth/login", Some(json!({"email": email, "password": password})), None, None).await.0 .0
+}
+
+/// Someone registered alice's address with their own password and holds a token and a session. Alice's
+/// verified sign-in does not link into it silently; taking it over removes every credential they hold.
+#[tokio::test]
+async fn a_squatted_password_account_is_taken_over_and_the_squatter_loses_everything() {
+    let app = app(AuthMode::Both).await;
+    let squatted = common::register(&app.state, "alice@example.test").await;
+    let token = models_user::create_api_token_with(&app.state.control, &squatted.id, "squatter", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
+    let squatter_session = {
         let (_, set) = http(&app.router, "POST", "/api/auth/login", Some(json!({"email": "alice@example.test", "password": PASSWORD})), None, None).await;
         set.unwrap().split(';').next().unwrap().to_string()
     };
-    assert_eq!(app.get_as(&cookie_before, "/api/auth/me").await.0, StatusCode::OK);
-    app.idp.behave(Behavior { email_verified: json!(true), ..Default::default() });
-    let cookie = expect_signed_in(&app.sign_in().await);
-    let (_, me) = app.get_as(&cookie, "/api/auth/me").await;
-    assert_eq!(me["id"], victim.id.to_string());
-    assert_eq!(me["email"], "alice@example.test");
-    assert_eq!(me["has_password"], true);
-    assert_eq!(me["oidc_provider"], "Mock IdP");
-    assert_eq!(app.user_count().await, 2);
-    // linking signed the account's earlier browser sessions out
-    assert_eq!(app.get_as(&cookie_before, "/api/auth/me").await.0, StatusCode::UNAUTHORIZED);
-    // the password still works
-    let (status, _) = http(&app.router, "POST", "/api/auth/login", Some(json!({"email": "alice@example.test", "password": PASSWORD})), None, None).await.0;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(http(&app.router, "GET", "/api/vaults", None, Some(&token), None).await.0 .0, StatusCode::OK);
+
+    let landed = app.sign_in().await;
+    assert_eq!(landed.location, "/login/link");
+    assert!(landed.session.is_none(), "no session before the person chooses");
+    let link_cookie = landed.link.expect("the pending-link cookie");
+    let (status, info) = app.get_as(&link_cookie, "/api/auth/oidc/link").await;
+    assert_eq!((status, info["email"].as_str(), info["provider"].as_str()), (StatusCode::OK, Some("alice@example.test"), Some("Mock IdP")));
+    // the squatter still holds everything until the person chooses
+    assert_eq!(password_login(&app, "alice@example.test", PASSWORD).await, StatusCode::OK);
+
+    let ((status, done), set) = link_as(&app, &link_cookie, json!({"take_over": true})).await;
+    assert_eq!(status, StatusCode::OK, "{done}");
+    assert_eq!(done["took_over"], true);
+    let session = set.expect("a session").split(';').next().unwrap().to_string();
+    let (_, me) = app.get_as(&session, "/api/auth/me").await;
+    assert_eq!((me["id"].as_str(), me["has_password"].as_bool(), me["oidc_provider"].as_str()), (Some(squatted.id.to_string().as_str()), Some(false), Some("Mock IdP")));
+
+    // the squatter's password, token and session are all gone
+    assert_eq!(password_login(&app, "alice@example.test", PASSWORD).await, StatusCode::UNAUTHORIZED);
+    assert_eq!(http(&app.router, "GET", "/api/vaults", None, Some(&token), None).await.0 .0, StatusCode::UNAUTHORIZED);
+    assert_eq!(app.get_as(&squatter_session, "/api/auth/me").await.0, StatusCode::UNAUTHORIZED);
+    let rows: Vec<Value> = app.state.control.test_raw().query("SELECT count() AS n FROM api_token WHERE owner = $u GROUP ALL").bind(("u", squatted.id.clone())).await.unwrap().take(0).unwrap();
+    assert_eq!(rows.first().map_or(0, |r| r["n"].as_i64().unwrap()), 0, "no API token left: {rows:?}");
+    let audit: Vec<Value> = app.state.control.test_raw().query("SELECT action FROM audit_event WHERE action = 'auth.oidc_takeover'").await.unwrap().take(0).unwrap();
+    assert_eq!(audit.len(), 1);
+
+    // the cookie is spent; the next provider sign-in just signs in
+    assert_eq!(link_as(&app, &link_cookie, json!({"take_over": true})).await.0 .0, StatusCode::OK, "a replay in the same browser only re-links the same identity");
+    expect_signed_in(&app.sign_in().await);
+}
+
+/// The person who made the account proves its password: linked, and nothing is removed.
+#[tokio::test]
+async fn the_owner_proves_the_password_and_keeps_everything() {
+    let app = app(AuthMode::Both).await;
+    let alice = common::register(&app.state, "alice@example.test").await;
+    let token = models_user::create_api_token_with(&app.state.control, &alice.id, "laptop", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
+    let link_cookie = app.sign_in().await.link.expect("asks first");
+    let ((status, body), set) = link_as(&app, &link_cookie, json!({"password": "not-the-password"})).await;
+    assert_eq!((status, body["code"].as_str(), set.is_none()), (StatusCode::UNAUTHORIZED, Some("auth.unauthorized"), true));
+    let ((status, done), set) = link_as(&app, &link_cookie, json!({"password": PASSWORD})).await;
+    assert_eq!((status, done["took_over"].as_bool()), (StatusCode::OK, Some(false)), "{done}");
+    assert!(set.is_some());
+    assert_eq!(http(&app.router, "GET", "/api/vaults", None, Some(&token), None).await.0 .0, StatusCode::OK, "the token survives");
+    assert_eq!(password_login(&app, "alice@example.test", PASSWORD).await, StatusCode::OK, "and the password");
+    let issuer = app.idp.inner.lock().unwrap().issuer.clone();
+    assert_eq!(models_user::user_by_identity(&app.state.control, &issuer, "alice-sub").await.unwrap().map(|u| u.id), Some(alice.id));
+    // the next sign-in does not ask again
+    let again = app.sign_in().await;
+    assert!(again.link.is_none());
+    expect_signed_in(&again);
+}
+
+/// Guessing the password here counts against the same throttle as the login form.
+#[tokio::test]
+async fn a_wrong_password_is_throttled_like_login() {
+    let app = app(AuthMode::Both).await;
+    common::register(&app.state, "alice@example.test").await;
+    let link_cookie = app.sign_in().await.link.expect("asks first");
+    for _ in 0..eunomia_backend::ratelimit::LOGIN_FAILS {
+        assert_eq!(link_as(&app, &link_cookie, json!({"password": "guess-guess"})).await.0 .0, StatusCode::UNAUTHORIZED);
+    }
+    assert_eq!(link_as(&app, &link_cookie, json!({"password": PASSWORD})).await.0 .0, StatusCode::TOO_MANY_REQUESTS, "even the right one, for a while");
+    assert_eq!(password_login(&app, "alice@example.test", PASSWORD).await, StatusCode::TOO_MANY_REQUESTS, "the login form shares the count");
+    // and no cookie, no link
+    assert_eq!(http(&app.router, "POST", "/api/auth/oidc/link", Some(json!({"take_over": true})), None, None).await.0 .0, StatusCode::UNAUTHORIZED);
+}
+
+/// An account with no password (made by single sign-on) links a second verified identity without asking.
+#[tokio::test]
+async fn an_sso_only_account_links_without_asking() {
+    let app = app(AuthMode::Both).await;
+    expect_signed_in(&app.sign_in().await);
+    app.idp.behave(Behavior { sub: "alice-second-sub".into(), ..Default::default() });
+    let landed = app.sign_in().await;
+    assert!(landed.link.is_none());
+    expect_signed_in(&landed);
+    assert_eq!(app.user_count().await, 1);
 }
 
 #[tokio::test]

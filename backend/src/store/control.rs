@@ -72,6 +72,7 @@ pub const ALL: &[&ControlStmt] = &[
     &IDENTITY_LIST_FOR_USER,
     &IDENTITY_DELETE_USER,
     &AUTH_SESSION_REVOKE_OWNER,
+    &AUTH_TAKE_OVER,
     &ADMIN_AUDIT_PAGE,
     &ADMIN_PEOPLE,
     &ADMIN_LAST_SEEN,
@@ -404,6 +405,20 @@ pub const IDENTITY_DELETE_USER: ControlStmt = ControlStmt::new("control.identity
 /// Ends every browser session of a user (linking a provider to an existing account signs its other sessions out).
 pub const AUTH_SESSION_REVOKE_OWNER: ControlStmt =
     ControlStmt::new("control.auth_session_revoke_owner", "UPDATE session SET revoked = true WHERE owner = $owner AND revoked = false");
+
+/// Single sign-on takes over an account it could not prove it owned the password of (`routers/oidc.rs`,
+/// `take_over`): every credential anyone else may hold goes, in one transaction.
+pub const AUTH_TAKE_OVER: ControlStmt = ControlStmt::new(
+    "control.auth_take_over",
+    "BEGIN TRANSACTION; \
+     UPDATE $user SET password_hash = NONE; \
+     DELETE api_token WHERE owner = $user; \
+     DELETE oauth_token WHERE family IN (SELECT VALUE id FROM oauth_grant WHERE owner = $user); \
+     DELETE oauth_grant WHERE owner = $user; \
+     DELETE oauth_code WHERE owner = $user; \
+     UPDATE session SET revoked = true WHERE owner = $user AND revoked = false; \
+     COMMIT TRANSACTION;",
+);
 
 // workspace admin (routers/admin.rs)
 
