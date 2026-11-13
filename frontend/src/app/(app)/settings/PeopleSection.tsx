@@ -8,6 +8,7 @@ import Tooltip from "@/components/bits/Tooltip";
 import CopyButton from "@/components/bits/CopyButton";
 import { usePeople, usePersonTokens, useRevokePersonToken, useSetAdmin, useSetSuspended } from "@/lib/queries/admin";
 import type { Person } from "@/lib/gen";
+import { useErasePerson, useErasures, useReapplyErasures, useSetLegalHold, useStartPersonExport } from "@/lib/queries/subject";
 import { ICON, PanelHead, QUIET_DANGER, RevokeButton, TableSkeleton, expiryLabel, relativeTime } from "./shared";
 
 /* Why an admin can't be changed here, for the tooltip on the disabled button. */
@@ -38,7 +39,7 @@ function Locked({ label, reason }: { label: string; reason: string }) {
   );
 }
 
-function RowActions({ p, onError }: { p: Person; onError: (f: Failure | null) => void }) {
+function RowActions({ p, onError, onData }: { p: Person; onError: (f: Failure | null) => void; onData: () => void }) {
   const setAdmin = useSetAdmin();
   const setSuspended = useSetSuspended();
   const [confirming, setConfirming] = useState<keyof typeof CONFIRM | null>(null);
@@ -95,6 +96,9 @@ function RowActions({ p, onError }: { p: Person; onError: (f: Failure | null) =>
 
   return (
     <span className="inline-flex flex-wrap items-center justify-start sm:justify-end gap-1">
+      <button type="button" className="btn btn-ghost btn-sm" aria-label={`Data of ${p.email}`} onClick={onData}>
+        Data
+      </button>
       {locked ? (
         <Locked label="Remove admin" reason={locked} />
       ) : p.is_you && p.role === "admin" ? (
@@ -122,6 +126,155 @@ function RowActions({ p, onError }: { p: Person; onError: (f: Failure | null) =>
         </button>
       )}
     </span>
+  );
+}
+
+/* Someone's data, opened from "Data": export it for them, hold it, or delete the account and data (typing their email). */
+function PersonData({ p, onError }: { p: Person; onError: (f: Failure | null) => void }) {
+  const exp = useStartPersonExport();
+  const hold = useSetLegalHold();
+  const erase = useErasePerson();
+  const [confirming, setConfirming] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [done, setDone] = useState<string | null>(null);
+  const held = !!p.legal_hold_at;
+
+  async function run(action: () => Promise<unknown>, fallback: string, ok: string) {
+    onError(null);
+    setDone(null);
+    try {
+      await action();
+      setDone(ok);
+    } catch (e) {
+      onError(failure(e, fallback));
+    }
+  }
+
+  return (
+    <div className="py-2 flex flex-col gap-2 text-[13px]" data-testid={`person-data-${p.email}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={exp.isPending}
+          onClick={() => run(() => exp.mutateAsync(p.id), `Could not start an export for ${p.email}.`, "Export started. It appears in Settings > Data when it is ready.")}
+        >
+          Export their data
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={hold.isPending}
+          onClick={() =>
+            run(
+              () => hold.mutateAsync({ user_id: p.id, hold: !held }),
+              held ? `Could not lift the hold on ${p.email}.` : `Could not place a hold on ${p.email}.`,
+              held ? "Legal hold lifted." : "Legal hold placed. The account can't be erased until you lift it."
+            )
+          }
+        >
+          {held ? "Lift legal hold" : "Place legal hold"}
+        </button>
+        {!confirming && !p.is_you && (
+          <button type="button" className={QUIET_DANGER} disabled={held} title={held ? "Lift the legal hold first." : undefined} onClick={() => setConfirming(true)}>
+            Delete account and data
+          </button>
+        )}
+      </div>
+      {confirming && (
+        <form
+          className="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void run(
+              () => erase.mutateAsync({ user_id: p.id, confirm_email: typed }),
+              `${p.email} was not deleted.`,
+              "Deletion started. They are signed out, and their data is removed in the next few minutes."
+            ).then(() => setConfirming(false));
+          }}
+        >
+          <span style={{ color: "var(--ink-dim)" }}>
+            Signs them out and deletes their account and everything that is theirs alone. What they wrote in shared spaces stays,
+            with them removed as its author. Type <span className="font-mono">{p.email}</span> to confirm.
+          </span>
+          <span className="flex flex-wrap items-center gap-2">
+            <input className="field h-8 px-3 min-w-[16rem]" aria-label={`Type ${p.email} to confirm`} value={typed} onChange={(e) => setTyped(e.target.value)} />
+            <button type="submit" className="btn btn-danger-solid btn-sm" disabled={!typed || erase.isPending}>
+              {erase.isPending ? "Deleting…" : "Delete"}
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label="Cancel" onClick={() => setConfirming(false)}>
+              <XIcon {...ICON} />
+            </button>
+          </span>
+        </form>
+      )}
+      {done && (
+        <span role="status" style={{ color: "var(--ink-dim)" }}>
+          {done}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* The proof each erasure leaves: when, how, whether the post-check found nothing. Never who it was. */
+function Erasures() {
+  const query = useErasures();
+  const reapply = useReapplyErasures();
+  const [error, setError] = useState<Failure | null>(null);
+  const rows = query.data ?? [];
+  return (
+    <div className="flex flex-col gap-2" data-testid="erasure-records">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-reading font-semibold">Erasure records</h3>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          disabled={reapply.isPending}
+          title="After restoring a backup: erase again anyone erased after the backup was taken. This also runs when the server starts."
+          onClick={async () => {
+            setError(null);
+            try {
+              await reapply.mutateAsync();
+            } catch (e) {
+              setError(failure(e, "Could not re-apply the erasures."));
+            }
+          }}
+        >
+          Re-apply after a restore
+        </button>
+      </div>
+      {error && <ErrorLine error={error} />}
+      {rows.length === 0 ? (
+        <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+          No accounts have been erased.
+        </p>
+      ) : (
+        <ul className="hairline-rows text-[13px]">
+          {rows.map((r) => {
+            const left = Object.entries((r.post_check ?? {}) as Record<string, number>).filter(([, n]) => n > 0);
+            return (
+              <li key={r.id} className="py-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                <span className="tabular-nums" style={{ color: "var(--ink-dim)" }}>
+                  {new Date(r.completed_at ?? r.requested_at).toLocaleString()}
+                </span>
+                <span className="font-mono truncate max-w-[10rem]" title={`Reference ${r.subject_ref}`}>
+                  {r.subject_ref.slice(0, 12)}
+                </span>
+                <span>{r.requested_by === "self" ? "by the person" : r.requested_by === "admin" ? "by an admin" : "re-applied after a restore"}</span>
+                <span style={{ color: r.status === "done" ? "var(--good)" : r.status === "failed" ? "var(--critical)" : "var(--ink-dim)" }}>
+                  {r.status === "done"
+                    ? "Done, nothing left"
+                    : r.status === "failed"
+                      ? `Failed: still in ${left.map(([t]) => t).join(", ") || "unknown"}`
+                      : "In progress"}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -206,6 +359,12 @@ function Email({ p }: { p: Person }) {
           </span>
         )}
       </span>
+      {p.legal_hold_at && (
+        <span className="text-[12px] inline-flex items-center gap-1.5" style={{ color: "var(--warning)" }} title={`Held since ${new Date(p.legal_hold_at).toLocaleString()}`}>
+          <span className="dot" style={{ background: "var(--warning)" }} aria-hidden />
+          Legal hold
+        </span>
+      )}
       {suspended && (
         <span
           className="text-[12px] inline-flex items-center gap-1.5"
@@ -229,6 +388,9 @@ export function PeopleSection() {
   // whose API tokens are open under their row
   const [tokensOf, setTokensOf] = useState<string | null>(null);
   const toggleTokens = (id: string) => setTokensOf((cur) => (cur === id ? null : id));
+  // whose data panel is open under their row
+  const [dataOf, setDataOf] = useState<string | null>(null);
+  const toggleData = (id: string) => setDataOf((cur) => (cur === id ? null : id));
 
   return (
     <div className="flex flex-col gap-5">
@@ -305,8 +467,9 @@ export function PeopleSection() {
               )}
               {/* pulled left by the buttons' own padding, so the actions line up with the email above */}
               <div className={`pt-1 ${p.is_you ? "" : "-ml-2.5"}`}>
-                <RowActions p={p} onError={setActionError} />
+                <RowActions p={p} onError={setActionError} onData={() => toggleData(p.id)} />
               </div>
+              {dataOf === p.id && <PersonData p={p} onError={setActionError} />}
             </li>
           ))
         )}
@@ -322,7 +485,7 @@ export function PeopleSection() {
               <th className="text-left w-[100px]">Last active</th>
               <th className="text-right w-[70px] hidden lg:table-cell">Spaces</th>
               <th className="text-left w-[90px]">API tokens</th>
-              <th className="text-right w-[210px]">
+              <th className="text-right w-[260px]">
                 <span className="sr-only">Actions</span>
               </th>
             </tr>
@@ -358,13 +521,20 @@ export function PeopleSection() {
                       <TokenCount p={p} open={tokensOf === p.id} onToggle={() => toggleTokens(p.id)} />
                     </td>
                     <td className="text-right whitespace-nowrap">
-                      <RowActions p={p} onError={setActionError} />
+                      <RowActions p={p} onError={setActionError} onData={() => toggleData(p.id)} />
                     </td>
                   </tr>,
                   tokensOf === p.id ? (
                     <tr key={`${p.id}-tokens`} data-testid={`person-tokens-${p.email}`}>
                       <td colSpan={7} className="h-auto! pl-8!">
                         <PersonTokens p={p} onError={setActionError} />
+                      </td>
+                    </tr>
+                  ) : null,
+                  dataOf === p.id ? (
+                    <tr key={`${p.id}-data`}>
+                      <td colSpan={7} className="h-auto! pl-8!">
+                        <PersonData p={p} onError={setActionError} />
                       </td>
                     </tr>
                   ) : null,
@@ -375,8 +545,10 @@ export function PeopleSection() {
       </div>
       <p className="text-[12px] max-w-[68ch]" style={{ color: "var(--ink-faint)" }}>
         Admins can see this page, the audit log and the server settings. A suspended account can&apos;t sign in, and its API tokens
-        and connected apps stop working until you restore it.
+        and connected apps stop working until you restore it. Deleting an account removes everything that is theirs alone; a
+        legal hold stops that until you lift it.
       </p>
+      <Erasures />
     </div>
   );
 }
