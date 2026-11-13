@@ -281,6 +281,8 @@ struct Landed {
     location: String,
     /// `name=value` of the session cookie when one was set
     session: Option<String>,
+    /// `name=value` of the pending two-step verification cookie when one was set
+    mfa: Option<String>,
 }
 
 impl Landed {
@@ -346,7 +348,8 @@ impl App {
         let (status, headers, _) = raw(&self.router, req.body(Body::empty()).unwrap()).await;
         let location = headers.get(header::LOCATION).map(|v| v.to_str().unwrap().to_string()).unwrap_or_default();
         let session = cookie_pairs(&headers).into_iter().find(|c| c.starts_with("eunomia_session=") && c.len() > "eunomia_session=".len());
-        Landed { status, location, session }
+        let mfa = cookie_pairs(&headers).into_iter().find(|c| c.starts_with("eunomia_mfa=") && c.len() > "eunomia_mfa=".len());
+        Landed { status, location, session, mfa }
     }
 
     async fn sign_in(&self) -> Landed {
@@ -712,6 +715,43 @@ async fn oidc_require_mfa_refuses_a_sign_in_without_a_second_factor_claim() {
     app.idp.behave(Behavior { amr: Some(json!(["pwd", "otp"])), ..Default::default() });
     let cookie = expect_signed_in(&app.sign_in().await);
     assert_eq!(app.get_as(&cookie, "/api/auth/me").await.0, StatusCode::OK);
+}
+
+/// An account with its own authenticator passes it on single sign-on too (the same pending second step as a
+/// password sign-in, no session), unless the ID token says the provider already used a second factor.
+#[tokio::test]
+async fn sso_into_an_account_with_its_own_authenticator_asks_for_its_code() {
+    let app = app(AuthMode::Both).await;
+    // alice signs up with a password and turns on TOTP
+    common::register(&app.state, "alice@example.test").await;
+    let ((_, _), set) = http(&app.router, "POST", "/api/auth/login", Some(json!({"email": "alice@example.test", "password": PASSWORD})), None, None).await;
+    let cookie = set.unwrap().split(';').next().unwrap().to_string();
+    let ((status, e), _) = http(&app.router, "POST", "/api/auth/mfa/enrol", Some(json!({"password": PASSWORD})), None, Some(&cookie)).await;
+    assert_eq!(status, StatusCode::OK, "{e}");
+    let secret = e["secret"].as_str().unwrap().to_string();
+    let t0 = u64::try_from(chrono::Utc::now().timestamp()).unwrap();
+    let ((status, _), _) = http(&app.router, "POST", "/api/auth/mfa/enrol/confirm", Some(json!({"code": eunomia_backend::mfa::code_at(&secret, t0).unwrap()})), None, Some(&cookie)).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // single sign-on (the provider maps the verified email to alice): no session, the second step instead
+    let landed = app.sign_in_with("/vaults", Tamper::default()).await;
+    assert_eq!(landed.status, StatusCode::SEE_OTHER);
+    assert!(landed.session.is_none(), "no session before the code: {}", landed.location);
+    assert_eq!(landed.location, "/login?mfa=verify&next=%2Fvaults");
+    let pending = landed.mfa.expect("the pending second-step cookie");
+    assert_eq!(app.get_as(&pending, "/api/auth/me").await.0, StatusCode::UNAUTHORIZED);
+    let ((status, me), set) = http(&app.router, "POST", "/api/auth/mfa/challenge/verify", Some(json!({"code": eunomia_backend::mfa::code_at(&secret, t0 + 30).unwrap()})), None, Some(&pending)).await;
+    assert_eq!(status, StatusCode::OK, "{me}");
+    let session = set.unwrap().split(';').next().unwrap().to_string();
+    assert_eq!(app.get_as(&session, "/api/auth/me").await.0, StatusCode::OK);
+
+    // the provider says a second factor was used: straight in, and the session counts as verified
+    app.idp.behave(Behavior { amr: Some(json!(["pwd", "otp"])), ..Default::default() });
+    let landed = app.sign_in().await;
+    let session = expect_signed_in(&landed);
+    eunomia_backend::mfa::set_require_mfa(&app.state.control, true, &models_user::user_by_email(&app.state.control, "alice@example.test").await.unwrap().unwrap().id).await.unwrap();
+    app.state.credentials.clear();
+    assert_eq!(app.get_as(&session, "/api/auth/me").await.0, StatusCode::OK, "an asserted second factor counts while MFA is required");
 }
 
 /// With the server requiring MFA, a single sign-on session is not asked for a TOTP code (the provider owns

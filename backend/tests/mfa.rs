@@ -36,7 +36,7 @@ async fn enrol(app: &common::TestApp, cookie: &str) -> (String, Vec<String>) {
 }
 
 async fn enrol_at(app: &common::TestApp, cookie: &str) -> (String, Vec<String>, u64) {
-    let ((status, e), _) = post(app, "/api/auth/mfa/enrol", json!({}), Some(cookie)).await;
+    let ((status, e), _) = post(app, "/api/auth/mfa/enrol", json!({ "password": common::PASSWORD }), Some(cookie)).await;
     assert_eq!(status, StatusCode::OK, "{e}");
     let secret = e["secret"].as_str().unwrap().to_string();
     let t0 = now();
@@ -61,11 +61,17 @@ async fn enrol_sign_in_with_a_code_refuse_replay_and_spend_recovery_codes_once()
     assert_eq!((st["enabled"].as_bool(), st["available"].as_bool()), (Some(false), Some(true)));
 
     // an API token cannot manage two-step verification
-    let (status, _) = app.http("POST", "/api/auth/mfa/enrol", Some(json!({})), true).await;
+    let (status, _) = app.http("POST", "/api/auth/mfa/enrol", Some(json!({ "password": common::PASSWORD })), true).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+    // a session alone is not enough: setup needs the password (a 403, so the session itself stays signed in)
+    for body in [json!({}), json!({ "password": "not-the-password" })] {
+        let ((status, err), _) = post(&app, "/api/auth/mfa/enrol", body, Some(&cookie)).await;
+        assert_eq!((status, err["code"].as_str()), (StatusCode::FORBIDDEN, Some("auth.forbidden")), "{err}");
+    }
+    assert_eq!(common::http(&app.router, "GET", "/api/auth/me", None, None, Some(&cookie)).await.0 .0, StatusCode::OK);
 
     // a secret shown but not confirmed changes nothing: sign-in still needs only the password
-    let ((_, shown), _) = post(&app, "/api/auth/mfa/enrol", json!({}), Some(&cookie)).await;
+    let ((_, shown), _) = post(&app, "/api/auth/mfa/enrol", json!({ "password": common::PASSWORD }), Some(&cookie)).await;
     assert!(shown["otpauth_uri"].as_str().unwrap().starts_with("otpauth://totp/Eunomia:tester%40example.com?"), "{shown}");
     assert!(shown["qr_svg"].as_str().unwrap().contains("<svg"));
     let ((_, body), _) = login(&app, &app.user.email).await;
@@ -91,7 +97,7 @@ async fn enrol_sign_in_with_a_code_refuse_replay_and_spend_recovery_codes_once()
     assert_eq!((st["enabled"].as_bool(), st["recovery_codes_left"].as_i64()), (Some(true), Some(10)), "{st}");
     assert!(!st.to_string().contains(&secret));
     // and a second enrolment is refused while it is on
-    let ((status, _), _) = post(&app, "/api/auth/mfa/enrol", json!({}), Some(&cookie)).await;
+    let ((status, _), _) = post(&app, "/api/auth/mfa/enrol", json!({ "password": common::PASSWORD }), Some(&cookie)).await;
     assert_eq!(status, StatusCode::CONFLICT);
 
     // the password alone now gives a pending second step, not a session
@@ -100,11 +106,21 @@ async fn enrol_sign_in_with_a_code_refuse_replay_and_spend_recovery_codes_once()
     let set = set.unwrap();
     assert!(set.starts_with("eunomia_mfa=") && set.contains("HttpOnly") && set.contains("Path=/api/auth/mfa") && set.contains("Max-Age=300"), "{set}");
     let pending = set.split(';').next().unwrap().to_string();
-    // the pending cookie is not a session, anywhere
-    for path in ["/api/auth/me", "/api/auth/tokens", "/api/auth/mfa"] {
-        let ((status, _), _) = common::http(&app.router, "GET", path, None, None, Some(&pending)).await;
-        assert_eq!(status, StatusCode::UNAUTHORIZED, "{path}");
+    // the pending token is not a session anywhere: not under its own cookie, not presented as the session
+    // cookie, not as a bearer token, on routes that answer any signed-in caller
+    let raw_token = pending.trim_start_matches("eunomia_mfa=").to_string();
+    let as_session = format!("eunomia_session={raw_token}");
+    for path in ["/api/auth/me", "/api/auth/tokens", "/api/auth/mfa", "/api/vaults", "/api/settings"] {
+        for cookie in [pending.as_str(), as_session.as_str()] {
+            let ((status, _), _) = common::http(&app.router, "GET", path, None, None, Some(cookie)).await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED, "{path} with {}", cookie.split('=').next().unwrap());
+        }
+        let ((status, _), _) = common::http(&app.router, "GET", path, None, Some(&raw_token), None).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{path} as a bearer token");
     }
+    // and enrolment is closed to it too
+    let ((status, _), _) = post(&app, "/api/auth/mfa/enrol", json!({ "password": common::PASSWORD }), Some(&as_session)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 
     // the code that confirmed enrolment was spent in its window: the same one again is a replay
     let same = mfa::code_at(&secret, t0).unwrap();
@@ -314,4 +330,211 @@ async fn sessions_from_before_the_upgrade_keep_working_until_mfa_is_required() {
     app.state.credentials.clear();
     let ((_, body), _) = common::http(&app.router, "GET", "/api/auth/me", None, None, Some(&cookie)).await;
     assert_eq!(body["code"], "auth.mfa_required", "{body}");
+}
+
+/// Counts the `auth.mfa_failed` rows: one per code actually evaluated and found wrong.
+async fn failed_evaluations(app: &common::TestApp) -> usize {
+    audit_actions(app).await.iter().filter(|a| *a == "auth.mfa_failed").count()
+}
+
+/// Many wrong codes at once against one sign-in, then against the account through every step-up route: the
+/// attempts are reserved before any code is checked, so no more than the limits are ever evaluated.
+#[tokio::test]
+async fn parallel_wrong_codes_never_exceed_the_limits() {
+    let app = common::TestApp::new().await;
+    let cookie = app.session_cookie().await;
+    enrol(&app, &cookie).await;
+
+    // one challenge, 30 wrong codes at once: at most CHALLENGE_MAX_FAILS are checked
+    let pending = pair(&login(&app, &app.user.email).await.1);
+    let calls = (0..30).map(|i| {
+        let (router, pending) = (app.router.clone(), pending.clone());
+        async move { common::http(&router, "POST", "/api/auth/mfa/challenge/verify", Some(json!({ "code": format!("{:06}", 100_000 + i) })), None, Some(&pending)).await.0 }
+    });
+    let answers = futures::future::join_all(calls).await;
+    let invalid = answers.iter().filter(|(_, b)| b["code"] == "auth.mfa_invalid").count();
+    let evaluated = failed_evaluations(&app).await;
+    assert!(evaluated <= mfa::CHALLENGE_MAX_FAILS as usize, "{evaluated} codes checked on one challenge");
+    assert_eq!(evaluated, mfa::CHALLENGE_MAX_FAILS as usize, "the challenge's attempts were all used");
+    assert!(invalid < mfa::CHALLENGE_MAX_FAILS as usize, "the last one ends the challenge: {answers:?}");
+    assert!(answers.iter().all(|(s, _)| *s == StatusCode::UNAUTHORIZED || *s == StatusCode::TOO_MANY_REQUESTS), "{answers:?}");
+
+    // the account's remaining budget, spent at once across token creation, the admin switch, disable and regenerate
+    app.control().test_raw().query("UPDATE session SET mfa_at = time::now() - 1h WHERE owner = $u").bind(("u", app.user.id.clone())).await.unwrap().check().unwrap();
+    app.state.credentials.clear();
+    let routes: [(&str, &str, Value); 4] = [
+        ("POST", "/api/auth/tokens", json!({ "name": "x", "mfa_code": "222222" })),
+        ("PUT", "/api/admin/security", json!({ "require_mfa": true, "mfa_code": "222222" })),
+        ("POST", "/api/auth/mfa/disable", json!({ "code": "222222" })),
+        ("POST", "/api/auth/mfa/recovery-codes", json!({ "code": "222222" })),
+    ];
+    let calls = (0..40).map(|i| {
+        let (router, cookie) = (app.router.clone(), cookie.clone());
+        let (method, path, body) = routes[i % 4].clone();
+        async move { (path, common::http(&router, method, path, Some(body), None, Some(&cookie)).await.0) }
+    });
+    let answers = futures::future::join_all(calls).await;
+    let evaluated = failed_evaluations(&app).await;
+    assert_eq!(evaluated, mfa::MFA_FAILS as usize, "the account's window allows exactly MFA_FAILS codes: {answers:?}");
+    for (path, (status, body)) in &answers {
+        assert!(*status == StatusCode::UNAUTHORIZED || *status == StatusCode::TOO_MANY_REQUESTS, "{path}: {status} {body}");
+    }
+    // nothing was created or changed by any of them
+    let tokens: Vec<Value> = app.control().test_raw().query("SELECT * FROM api_token WHERE name = 'x'").await.unwrap().take(0).unwrap();
+    assert!(tokens.is_empty());
+    assert!(!mfa::require_mfa(app.control()).await.unwrap());
+    assert!(mfa::enabled(app.control(), &app.user.id).await.unwrap());
+}
+
+/// The same code on two sign-ins at once, and the same recovery code twice at once: one wins, one does not.
+#[tokio::test]
+async fn a_code_used_twice_at_once_signs_in_once() {
+    let app = common::TestApp::new().await;
+    let cookie = app.session_cookie().await;
+    let (secret, recovery, t0) = enrol_at(&app, &cookie).await;
+    let code = mfa::code_at(&secret, t0 + 30).unwrap();
+    for c in [code.as_str(), recovery[0].as_str()] {
+        let a = pair(&login(&app, &app.user.email).await.1);
+        let b = pair(&login(&app, &app.user.email).await.1);
+        let (ra, rb) = tokio::join!(
+            post(&app, "/api/auth/mfa/challenge/verify", json!({ "code": c }), Some(&a)),
+            post(&app, "/api/auth/mfa/challenge/verify", json!({ "code": c }), Some(&b)),
+        );
+        let ok = [&ra, &rb].iter().filter(|r| r.0 .0 == StatusCode::OK).count();
+        assert_eq!(ok, 1, "{c}: {:?} {:?}", ra.0, rb.0);
+    }
+    // and two answers on one challenge at once with two different recovery codes: one session, one code spent
+    let p = pair(&login(&app, &app.user.email).await.1);
+    let (ra, rb) = tokio::join!(
+        post(&app, "/api/auth/mfa/challenge/verify", json!({ "code": recovery[1] }), Some(&p)),
+        post(&app, "/api/auth/mfa/challenge/verify", json!({ "code": recovery[2] }), Some(&p)),
+    );
+    assert_eq!([&ra, &rb].iter().filter(|r| r.0 .0 == StatusCode::OK).count(), 1);
+    let ((_, st), _) = common::http(&app.router, "GET", "/api/auth/mfa", None, None, Some(&cookie)).await;
+    assert_eq!(st["recovery_codes_left"], 8, "the losing request spent no recovery code: {st}");
+}
+
+/// Turning MFA on signs out the account's other browser sessions that never passed a second factor.
+#[tokio::test]
+async fn enrolling_signs_out_unverified_sessions() {
+    let app = common::TestApp::new().await;
+    let other = app.session_cookie().await;
+    let cookie = app.session_cookie().await;
+    enrol(&app, &cookie).await;
+    assert_eq!(common::http(&app.router, "GET", "/api/auth/me", None, None, Some(&cookie)).await.0 .0, StatusCode::OK, "this one passed it");
+    assert_eq!(common::http(&app.router, "GET", "/api/auth/me", None, None, Some(&other)).await.0 .0, StatusCode::UNAUTHORIZED, "the other one ends");
+    assert_eq!(app.http("GET", "/api/auth/me", None, true).await.0, StatusCode::OK, "API tokens are separate credentials");
+}
+
+/// The instance switch is the server operator's: an admin granted in the app cannot read or change it, and
+/// the count before switching covers every organisation.
+#[tokio::test]
+async fn only_the_server_operator_controls_the_switch_and_sees_every_org() {
+    let app = common::TestApp::new().await;
+    let owner = app.session_cookie().await;
+    enrol(&app, &owner).await;
+    let bob = common::register(&app.state, "bob@example.com").await;
+    let ((status, _), _) = common::http(&app.router, "PUT", &format!("/api/admin/people/{}/admin", eunomia_backend::rid::RecordIdExt::to_string(&bob.id)), Some(json!({ "admin": true })), None, Some(&owner)).await;
+    assert_eq!(status, StatusCode::OK);
+    // an account in another organisation on the same host
+    common::register_personal(&app.state, "carol@other.example").await;
+
+    let bob_cookie = pair(&login(&app, "bob@example.com").await.1);
+    for (method, body) in [("GET", None), ("PUT", Some(json!({ "require_mfa": true })))] {
+        let ((status, body), _) = common::http(&app.router, method, "/api/admin/security", body, None, Some(&bob_cookie)).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "a granted admin: {body}");
+        assert!(!body.to_string().contains(app.user.email.as_str()), "no operator email leaks: {body}");
+    }
+    let ((_, st), _) = common::http(&app.router, "GET", "/api/auth/mfa", None, None, Some(&bob_cookie)).await;
+    assert_eq!(st["can_require"], false);
+    let ((_, st), _) = common::http(&app.router, "GET", "/api/auth/mfa", None, None, Some(&owner)).await;
+    assert_eq!(st["can_require"], true);
+
+    let ((status, s), _) = common::http(&app.router, "GET", "/api/admin/security", None, None, Some(&owner)).await;
+    assert_eq!(status, StatusCode::OK, "{s}");
+    assert_eq!(s["without_mfa"], 2, "bob and carol, across both organisations: {s}");
+}
+
+/// Approving an OAuth app is a sensitive action like a new token: a fresh second factor first. Denying never asks.
+#[tokio::test]
+async fn connecting_an_oauth_app_needs_a_fresh_second_factor() {
+    let app = common::TestApp::new().await;
+    let cookie = app.session_cookie().await;
+    let (_, recovery) = enrol(&app, &cookie).await;
+    let ((status, client), _) = common::http(&app.router, "POST", "/oauth/register", Some(json!({"client_name": "Agent", "redirect_uris": ["http://127.0.0.1:9/cb"], "token_endpoint_auth_method": "none"})), None, None).await;
+    assert_eq!(status, StatusCode::CREATED, "{client}");
+    let request = |approve: bool, code: Option<&str>| {
+        let mut b = json!({
+            "response_type": "code", "client_id": client["client_id"], "redirect_uri": "http://127.0.0.1:9/cb",
+            "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", "code_challenge_method": "S256",
+            "state": "s", "resource": "http://localhost:8001/mcp", "approve": approve,
+        });
+        if let Some(c) = code {
+            b["mfa_code"] = json!(c);
+        }
+        b
+    };
+    // just verified: allowed
+    let ((status, body), _) = post(&app, "/api/oauth/consent", request(true, None), Some(&cookie)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    app.control().test_raw().query("UPDATE session SET mfa_at = time::now() - 1h WHERE owner = $u").bind(("u", app.user.id.clone())).await.unwrap().check().unwrap();
+    app.state.credentials.clear();
+    let ((status, body), _) = post(&app, "/api/oauth/consent", request(true, None), Some(&cookie)).await;
+    assert_eq!((status, body["code"].as_str()), (StatusCode::FORBIDDEN, Some("auth.step_up_required")), "{body}");
+    let ((status, _), _) = post(&app, "/api/oauth/consent", request(false, None), Some(&cookie)).await;
+    assert_eq!(status, StatusCode::OK, "denying needs no code");
+    let ((status, body), _) = post(&app, "/api/oauth/consent", request(true, Some(&recovery[0])), Some(&cookie)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body["redirect_to"].as_str().unwrap().contains("code="));
+}
+
+/// A two-step verification request that fails with a 5xx leaves a capsule without the typed code.
+#[tokio::test]
+async fn a_failing_mfa_request_leaves_no_code_in_its_capsule() {
+    // SAFETY: set before any other thread reads it, to the same value the capsule tests use
+    unsafe { std::env::set_var("CAPSULE_ARGS", "redacted") };
+    let app = common::TestApp::new().await;
+    let cookie = app.session_cookie().await;
+    let (_, recovery) = enrol(&app, &cookie).await;
+    // a row the typed reader cannot decode: the next MFA read fails with a database error
+    app.control()
+        .test_raw()
+        .query("DEFINE FIELD OVERWRITE mfa_pending_at ON user TYPE any; UPDATE $u SET mfa_pending_at = 'not a date'")
+        .bind(("u", app.user.id.clone()))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    let ((status, body), _) = post(&app, "/api/auth/mfa/recovery-codes", json!({ "code": recovery[0] }), Some(&cookie)).await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{body}");
+    let c = eunomia_backend::capsules::get(app.control(), body["trace_id"].as_str().unwrap()).await.unwrap().expect("a capsule");
+    let text = serde_json::to_string(&c).unwrap();
+    assert!(!text.contains(&recovery[0]) && !text.contains(&recovery[0].replace('-', "")), "{text}");
+}
+
+/// A changed ENCRYPTION_KEY: the authenticator answers a clear 409 (not a 500), costs no attempt and is audited;
+/// a recovery code still signs in, and turns it off for re-enrolment even while MFA is required.
+#[tokio::test]
+async fn an_unreadable_secret_points_to_recovery_codes_not_a_500() {
+    let app = common::TestApp::new().await;
+    let cookie = app.session_cookie().await;
+    let (secret, recovery, t0) = enrol_at(&app, &cookie).await;
+    mfa::set_require_mfa(app.control(), true, &app.user.id).await.unwrap();
+    let other_key = eunomia_backend::connectors::crypto::encrypt("an-older-key-that-is-gone-0123456789", &secret);
+    app.control().test_raw().query("UPDATE $u SET mfa_secret_enc = $e").bind(("u", app.user.id.clone())).bind(("e", other_key)).await.unwrap().check().unwrap();
+
+    let pending = pair(&login(&app, &app.user.email).await.1);
+    for _ in 0..(mfa::MFA_FAILS + 2) {
+        let ((status, body), _) = post(&app, "/api/auth/mfa/challenge/verify", json!({ "code": mfa::code_at(&secret, t0 + 30).unwrap() }), Some(&pending)).await;
+        assert_eq!((status, body["code"].as_str()), (StatusCode::CONFLICT, Some("auth.mfa_unreadable")), "no attempt counted, never a 500: {body}");
+        assert!(body["detail"].as_str().unwrap().contains("recovery code"), "{body}");
+    }
+    assert!(audit_actions(&app).await.iter().any(|a| a == "auth.mfa_secret_unreadable"));
+    let ((status, _), set) = post(&app, "/api/auth/mfa/challenge/verify", json!({ "code": recovery[0] }), Some(&pending)).await;
+    assert_eq!(status, StatusCode::OK);
+    let session = pair(&set);
+    let ((_, st), _) = common::http(&app.router, "GET", "/api/auth/mfa", None, None, Some(&session)).await;
+    assert_eq!(st["unreadable"], true, "{st}");
+    let ((status, st), _) = post(&app, "/api/auth/mfa/disable", json!({ "code": recovery[1] }), Some(&session)).await;
+    assert_eq!(status, StatusCode::OK, "turning it off is allowed to re-enrol, even while required: {st}");
 }
