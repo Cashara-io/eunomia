@@ -1,5 +1,5 @@
 {
-  "about": "Fixed labeled corpus for recall-eval.spec.ts. Change it only deliberately: metrics are comparable across retrieval changes only on the same corpus. 'owner' writes the personal and shared memories; 'outsider' is another user whose decoys share keywords and must never be returned.",
+  "about": "Fixed labeled corpus for recall-eval.spec.ts. Change it only deliberately: metrics are comparable across retrieval changes only on the same corpus. 'owner' writes the personal and shared memories; 'outsider' is another user whose decoys share keywords and must never be returned. A memory with 'occurred_at' is written with that date; a query with 'time_range' passes it to recall (the dated cases).",
   "memories": [
     { "key": "p-ada-async", "vault": "personal", "subject": "Ada Lovelace", "kind": "person", "text": "Ada prefers async written updates over meetings." },
     { "key": "p-ada-peanuts", "vault": "personal", "subject": "Ada Lovelace", "kind": "person", "text": "Ada is allergic to peanuts." },
@@ -26,7 +26,9 @@
     { "key": "o-ada", "vault": "outsider", "subject": "Ada Lovelace", "kind": "person", "text": "OUTSIDER Ada loves meetings and peanuts." },
     { "key": "o-atlas", "vault": "outsider", "subject": "Project Atlas", "kind": "organisation", "text": "OUTSIDER Project Atlas search service launch is cancelled." },
     { "key": "o-deploy", "vault": "outsider", "subject": "Grace Hopper", "kind": "person", "text": "OUTSIDER the deploy pipeline and TLS certificate belong to Mallory." },
-    { "key": "o-misc", "vault": "outsider", "subject": "Notes", "kind": "organisation", "text": "OUTSIDER dental appointment, marathon training and cloud budget notes." }
+    { "key": "o-misc", "vault": "outsider", "subject": "Notes", "kind": "organisation", "text": "OUTSIDER dental appointment, marathon training and cloud budget notes." },
+    { "key": "p-acme-pilot-2024", "vault": "personal", "subject": "Acme Corp", "kind": "organisation", "text": "Acme signed the pilot agreement for the analytics rollout.", "occurred_at": "2024-03-14" },
+    { "key": "p-grace-berlin-2022", "vault": "personal", "subject": "Grace Hopper", "kind": "person", "text": "Grace moved to the Berlin office.", "occurred_at": "2022-08-01" }
   ],
   "queries": [
     { "kind": "lexical", "vault": "personal", "query": "peanuts", "expected": ["p-ada-peanuts"] },
@@ -43,6 +45,8 @@
     { "kind": "temporal", "vault": "personal", "query": "What happens in October?", "expected": ["p-lisbon-offsite"] },
     { "kind": "cross-vault", "vault": "personal", "query": "Project Atlas search service launch", "expected": [] },
     { "kind": "cross-vault", "vault": "shared", "query": "Ada peanuts allergy", "expected": [] },
-    { "kind": "no-answer", "vault": "personal", "query": "quantum chromodynamics lecture notes", "expected": [] }
+    { "kind": "no-answer", "vault": "personal", "query": "quantum chromodynamics lecture notes", "expected": [] },
+    { "kind": "dated", "vault": "personal", "query": "Acme pilot agreement", "time_range": ["2024-01-01", "2024-12-31T23:59:59Z"], "expected": ["p-acme-pilot-2024"] },
+    { "kind": "dated", "vault": "personal", "query": "where did Grace move", "time_range": ["2022-01-01", "2022-12-31T23:59:59Z"], "expected": ["p-grace-berlin-2022"] }
   ]
 }

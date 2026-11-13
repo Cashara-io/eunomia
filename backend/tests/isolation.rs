@@ -459,6 +459,8 @@ const NO_SECRET_ROWS: &[&str] = &[
     "change_seq",    // one counter per vault
     "peer_instance",  // one random identifier per database (peer vaults), no content
     "redact_backfill", // one progress row: a stage, a cursor id and counts, never content
+    "fact_dates_backfill", // one progress row: a cursor id, a cutoff and counts, never content
+    "fact_dates_redated",  // the backfill's ledger: memory and record ids and dates, never content
 ];
 
 // ---- the attack -----------------------------------------------------------------------------

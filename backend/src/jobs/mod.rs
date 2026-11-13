@@ -20,6 +20,7 @@ use crate::sources::base::owner_key_str;
 use crate::store::jobs as q;
 use crate::tx::{stable_key, with_retry, with_retry_dup};
 
+pub mod fact_dates;
 pub mod handlers;
 pub mod leader;
 pub mod redact_backfill;
@@ -42,6 +43,8 @@ pub mod kind {
     pub const SUPERSEDE: &str = "supersede";
     /// Redact secrets stored before writes were redacted, once per org per detector version (`redact_backfill`).
     pub const REDACT_BACKFILL: &str = "redact_backfill";
+    /// Date facts extracted before extraction passed the record's date on, once per org (`fact_dates`).
+    pub const FACT_DATES_BACKFILL: &str = "fact_dates_backfill";
 }
 
 /// Which loops this process runs (`EUNOMIA_ROLE`). `all` keeps the one-container install working.

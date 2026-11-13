@@ -60,6 +60,7 @@ pub async fn tick(state: &AppState, n: u64) {
         if n.is_multiple_of(SLOW_EVERY) {
             reconcile_embeddings(&org_state).await;
             reconcile_redact_backfill(&org_state, super::window(3600)).await;
+            reconcile_fact_dates_backfill(&org_state, super::window(3600)).await;
             if let Err(e) = crate::vaults::service::discard_stale_copies(&org_state.db).await {
                 tracing::warn!(error = %e.message, "deleting stale vault copies failed");
             }
@@ -168,6 +169,19 @@ pub async fn reconcile_redact_backfill(state: &OrgState, window: u64) {
     let Some(owner) = owners.into_iter().next() else { return };
     let key = format!("{}:{}:{}:{window}", kind::REDACT_BACKFILL, state.db.org().key(), crate::redact::DETECTOR_VERSION);
     super::enqueue_lossy(&state.control, NewJob::new(kind::REDACT_BACKFILL, owner, key).in_org(state.db.org())).await;
+}
+
+/// The fact-date backfill, until this org's marker says it is done; queued like the secret backfill
+/// (an hourly `window` in the key, the marker keeps it to one finished run).
+pub async fn reconcile_fact_dates_backfill(state: &OrgState, window: u64) {
+    // an error: the org is still at the schema before the marker table; the tick after its migration queues it
+    if super::fact_dates::done(state).await.unwrap_or(true) {
+        return;
+    }
+    let Ok(owners) = owners(state).await else { return };
+    let Some(owner) = owners.into_iter().next() else { return };
+    let key = format!("{}:{}:{}:{window}", kind::FACT_DATES_BACKFILL, state.db.org().key(), super::fact_dates::VERSION);
+    super::enqueue_lossy(&state.control, NewJob::new(kind::FACT_DATES_BACKFILL, owner, key).in_org(state.db.org())).await;
 }
 
 /// Cache records still missing an embedding, for owners that can embed.

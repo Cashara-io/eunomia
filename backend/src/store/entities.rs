@@ -20,19 +20,20 @@ pub const WRITE_OBSERVATION: Stmt = Stmt::at(
         };
         LET $target = array::concat($cur, $legacy);
         LET $row = IF array::len($target) > 0 {
-            (UPDATE $target[0] SET text = $text, version = version + 1, status = "fresh", updated_at = time::now() RETURN *, vault.name AS vault_name)
+            (UPDATE $target[0] SET text = $text, version = version + 1, status = "fresh", updated_at = time::now(), occurred_at = $occurred_at ?? occurred_at RETURN *, vault.name AS vault_name)
         } ELSE {
-            (CREATE $obs_id SET owner = $owner, vault = $vault, subject = $subject, text = $text, type = "observation", status = "fresh", source = $source RETURN *, vault.name AS vault_name)
+            (CREATE $obs_id SET owner = $owner, vault = $vault, subject = $subject, text = $text, type = "observation", status = "fresh", source = $source, occurred_at = $occurred_at RETURN *, vault.name AS vault_name)
         };
         RETURN $row;
         COMMIT TRANSACTION;"#,
     5, // BEGIN 0, four LETs 1 to 4, RETURN 5
 );
 
+/// `$occurred_at` (when the fact happened; NONE: unknown) is written with the fact, never after it.
 pub const WRITE_FACT: Stmt = Stmt::at(
     "entities.write_fact",
     r#"BEGIN TRANSACTION;
-        CREATE memory SET owner = $owner, vault = $vault, subject = $subject, text = $text, type = $type, source = $source RETURN *, vault.name AS vault_name;
+        CREATE memory SET owner = $owner, vault = $vault, subject = $subject, text = $text, type = $type, source = $source, occurred_at = $occurred_at RETURN *, vault.name AS vault_name;
         LET $cur = (SELECT VALUE id FROM $obs_id);
         IF array::len($cur) > 0 {
             UPDATE $obs_id SET status = "stale", version = version + 1
@@ -274,17 +275,19 @@ pub const SET_SUMMARY: Stmt = Stmt::new(
 );
 
 // consolidate.rs
-/// The facts being checked (the new ones), dated by their last write.
+// Supersession dates a fact by when it happened (`occurred_at`), else when it was first written
+// (`created_at`): never by its last edit. `written` breaks ties between facts about the same moment.
+/// The facts being checked (the new ones).
 pub const FACTS_BY_ID: Stmt = Stmt::new(
     "entities.facts_by_id",
-    r#"SELECT id, text, updated_at ?? created_at AS at FROM $ids
+    r#"SELECT id, text, occurred_at ?? created_at AS at, created_at AS written FROM $ids
        WHERE type IN ["world","experience"] AND status != "superseded""#,
 );
 /// The subject's live raw facts with no vector for `$spec` yet (their embed job has not run), newest first.
 /// The supersede check embeds these itself, or a contradiction written right after a fact would miss it.
 pub const UNEMBEDDED_LIVE_FACTS: Stmt = Stmt::new(
     "entities.unembedded_live_facts",
-    r#"SELECT id, text, updated_at ?? created_at AS at FROM memory
+    r#"SELECT id, text, occurred_at ?? created_at AS at, created_at AS written FROM memory
        WHERE subject = $subject AND id NOTINSIDE $new AND type IN ["world","experience"]
        AND status != "superseded" AND (embedding_spec = NONE OR embedding_spec != $spec)
        ORDER BY at DESC LIMIT $limit"#,
@@ -293,7 +296,7 @@ pub const UNEMBEDDED_LIVE_FACTS: Stmt = Stmt::new(
 /// Only these can be superseded by it: a fact about something else can't be made untrue by it.
 pub const SIMILAR_LIVE_FACTS: Stmt = Stmt::new(
     "entities.similar_live_facts",
-    r#"SELECT id, text, updated_at ?? created_at AS at, vector::similarity::cosine(embedding, $vector) AS sim
+    r#"SELECT id, text, occurred_at ?? created_at AS at, created_at AS written, vector::similarity::cosine(embedding, $vector) AS sim
        FROM memory WHERE subject = $subject AND id != $new AND type IN ["world","experience"]
        AND status != "superseded" AND embedding_spec = $spec ORDER BY sim DESC LIMIT $limit"#,
 );

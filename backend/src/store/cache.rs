@@ -70,8 +70,6 @@ pub const RELATIONS_FOR_RECALL: Stmt = Stmt::new(
     "cache.relations_for_recall",
     "SELECT id, label, in.name AS a, out.name AS b, created_at FROM $ids WHERE in.vault = $vault AND out.vault = $vault",
 );
-/// When a fact happened, as its writer said (`memory_write`'s `occurred_at`).
-pub const SET_MEMORY_OCCURRED_AT: Stmt = Stmt::new("cache.set_memory_occurred_at", "UPDATE $id SET occurred_at = $at");
 /// A vector for a memory, unless its text changed since it was read for embedding.
 pub const SET_MEMORY_EMBEDDING: Stmt =
     Stmt::new("cache.set_memory_embedding", "UPDATE $id SET embedding = $embedding, embedding_spec = $spec WHERE text = $text");
@@ -230,7 +228,6 @@ pub const ALL: &[&Stmt] = &[
     &LIVE_NEIGHBOURS,
     &SET_EMBEDDING,
     &SET_MEMORY_EMBEDDING,
-    &SET_MEMORY_OCCURRED_AT,
     &RELATIONS_FOR_RECALL,
     &LINKS_OUT,
     &LINKS_OUT_REL,

@@ -340,6 +340,7 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "connector.move_data" => format!("Moved the data from {}", if target.is_empty() { "a source" } else { target }),
         "source.reextract" => "Re-read a source".into(),
         "redact.backfill" => "Removed secrets from stored history".into(),
+        "facts.backfill_dates" => "Dated earlier facts by when their source records happened".into(),
         "legacy.move" => "Moved data over from the previous version".into(),
         other => other.to_string(),
     };

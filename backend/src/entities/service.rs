@@ -841,6 +841,20 @@ pub async fn add_memory(
     source_record_id: Option<&str>,
     mem_type: &str,
 ) -> AppResult<MemoryOut> {
+    add_memory_at(db, owner, subject_id, text, source_record_id, mem_type, None).await
+}
+
+/// [`add_memory`] for a fact that happened at `occurred_at` (`None`: unknown, so recall and supersession
+/// date it by when it was written). The date is written in the same statement as the fact.
+pub async fn add_memory_at(
+    db: &OrgDb,
+    owner: &RecordId,
+    subject_id: &RecordId,
+    text: &str,
+    source_record_id: Option<&str>,
+    mem_type: &str,
+    occurred_at: Option<Datetime>,
+) -> AppResult<MemoryOut> {
     let subject_row = select_entity(db, subject_id)
         .await?
         .ok_or_else(|| AppError::bad_request(format!("subject entity not found: {}", subject_id.to_string())))?;
@@ -850,10 +864,11 @@ pub async fn add_memory(
             format!("not a member of {}'s vault", subject_row.vault.to_string()),
         ));
     }
-    Ok(insert_memory(db, owner, subject_id, &subject_row.vault, text, source_record_id, mem_type).await?.0)
+    Ok(insert_memory(db, owner, subject_id, &subject_row.vault, text, source_record_id, mem_type, occurred_at).await?.0)
 }
 
 /// [`add_memory`] once the subject and its vault are known and the caller may write there.
+#[allow(clippy::too_many_arguments)]
 async fn insert_memory(
     db: &OrgDb,
     owner: &RecordId,
@@ -862,6 +877,7 @@ async fn insert_memory(
     text: &str,
     source_record_id: Option<&str>,
     mem_type: &str,
+    occurred_at: Option<Datetime>,
 ) -> AppResult<(MemoryOut, String)> {
     // every memory write (tools, REST, extraction) lands here, so this is the one place secrets are dropped
     let mut redacted = Vec::new();
@@ -891,6 +907,7 @@ async fn insert_memory(
             .bind(("type", mem_type.to_string()))
             .bind(("source", source.clone()))
             .bind(("obs_id", obs_id.clone()))
+            .bind(("occurred_at", occurred_at))
             .await?
             .check()?;
         let rows: Vec<MemoryRow> = res.take(stmt.slot)?;
@@ -926,6 +943,7 @@ pub async fn write_memory(
     source_record_id: Option<&str>,
     mem_type: &str,
     vault_id: Option<&RecordId>,
+    occurred_at: Option<Datetime>,
 ) -> AppResult<WriteMemoryOut> {
     authz::require_scope(Action::WriteMemories.scope())?;
     // upsert_grounded resolved and checked the vault for a write, and the entity lives in it:
@@ -934,7 +952,7 @@ pub async fn write_memory(
     let entity_rid: RecordId =
         crate::rid::parse(&entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
     let vault: RecordId = crate::rid::parse(&entity.vault).map_err(|_| AppError::internal("vault id did not round-trip"))?;
-    let (memory, vault_name) = insert_memory(db, owner, &entity_rid, &vault, text, source_record_id, mem_type).await?;
+    let (memory, vault_name) = insert_memory(db, owner, &entity_rid, &vault, text, source_record_id, mem_type, occurred_at).await?;
     let possible_duplicates = if created { possible_duplicates(db, &entity).await? } else { Vec::new() };
     Ok(WriteMemoryOut { entity, memory, possible_duplicates, kind_mapped, vault_name })
 }

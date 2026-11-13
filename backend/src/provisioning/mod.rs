@@ -126,7 +126,8 @@ impl Provisioner {
         Ok(())
     }
 
-    /// A new org has nothing stored before write redaction: mark its secret backfill done, so the leader
+    /// A new org has nothing stored before write redaction: mark its secret backfill (and its fact-date
+    /// backfill) done, so the leader
     /// queues no backfill job for it (one per org per hour until done, which crowded the job queue when
     /// many orgs are created at once). Best effort: without the marker the backfill just runs once.
     async fn mark_redacted(&self, rt: &Db, db: &str) {
@@ -134,6 +135,11 @@ impl Provisioner {
         let done = async {
             let s = self.session(rt, db).await?;
             root(&s, "provisioning.redact_done", "UPSERT $id SET stage = 'done', done_at = time::now(), updated_at = time::now()").bind(("id", id)).await?.check()?;
+            // nor any fact extracted before facts carried their record's date (jobs::fact_dates)
+            root(&s, "provisioning.fact_dates_done", "UPSERT $id SET done_at = time::now(), updated_at = time::now()")
+                .bind(("id", crate::jobs::fact_dates::marker_id()))
+                .await?
+                .check()?;
             AppResult::Ok(())
         };
         if let Err(e) = done.await {

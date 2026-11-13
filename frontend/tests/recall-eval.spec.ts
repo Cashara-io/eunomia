@@ -13,8 +13,8 @@ import { uniqueEmail } from "./helpers";
 // paraphrase misses); one query losing a rank drops MRR below 0.85.
 const FLOOR = { recallAt5: 0.9, mrr: 0.85 };
 
-type Memory = { key: string; vault: "personal" | "shared" | "outsider"; subject: string; kind: string; text: string };
-type Query = { kind: string; vault: "personal" | "shared"; query: string; expected: string[] };
+type Memory = { key: string; vault: "personal" | "shared" | "outsider"; subject: string; kind: string; text: string; occurred_at?: string };
+type Query = { kind: string; vault: "personal" | "shared"; query: string; expected: string[]; time_range?: [string, string] };
 const fixture: { memories: Memory[]; queries: Query[] } = JSON.parse(
   fs.readFileSync(path.join(__dirname, "fixtures", "recall-eval.json"), "utf8"),
 );
@@ -61,6 +61,7 @@ test("recall evaluation on the fixed corpus", async ({}, testInfo) => {
       subject_name: m.subject,
       subject_kind: m.kind,
       text: m.text,
+      ...(m.occurred_at ? { occurred_at: m.occurred_at } : {}),
       ...(m.vault === "shared" ? { vault_id: shared } : {}),
     });
   }
@@ -70,7 +71,7 @@ test("recall evaluation on the fixed corpus", async ({}, testInfo) => {
   const perQuery = [];
   for (const q of fixture.queries) {
     const started = Date.now();
-    const { results } = await owner("recall", { query: q.query, limit: 10, vault_id: q.vault === "shared" ? shared : personal });
+    const { results } = await owner("recall", { query: q.query, limit: 10, vault_id: q.vault === "shared" ? shared : personal, ...(q.time_range ? { time_range: q.time_range } : {}) });
     const ms = Date.now() - started;
     const texts: string[] = results.map((r: Json) => r.text);
     const allowed = vaultTexts(q.vault);

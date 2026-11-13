@@ -53,6 +53,8 @@ pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (40, "object_paging", include_str!("../migrations/tenant/0040_object_paging.surql")),
     (41, "composio_connector", include_str!("../migrations/tenant/0041_composio_connector.surql")),
     (42, "ontology_activity", include_str!("../migrations/tenant/0042_ontology_activity.surql")),
+    // 0043 to 0045 are reserved by other lanes (migrations/QUEUE.md) and land before this one
+    (46, "fact_dates", include_str!("../migrations/tenant/0046_fact_dates.surql")),
 ];
 
 /// The tenant schema version this code writes. An org database is current at this version.

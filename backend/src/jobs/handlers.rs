@@ -27,6 +27,7 @@ pub fn registry() -> Registry {
         .register(kind::INDEX_DOCUMENT, crate::documents::index_job)
         .register(kind::SUPERSEDE, supersede)
         .register(kind::REDACT_BACKFILL, redact_backfill)
+        .register(kind::FACT_DATES_BACKFILL, fact_dates_backfill)
 }
 
 /// The org database a job works in. A missing org is permanent; a database that is not ready or is
@@ -254,6 +255,13 @@ async fn supersede(state: AppState, job: Job) -> Result<(), JobError> {
 async fn redact_backfill(state: AppState, job: Job) -> Result<(), JobError> {
     let state = org_state(&state, &job).await?;
     super::redact_backfill::run(&state, None).await?;
+    Ok(())
+}
+
+/// The org's fact-date backfill, from its saved cursor to the end. A crash or a lost lease resumes it there.
+async fn fact_dates_backfill(state: AppState, job: Job) -> Result<(), JobError> {
+    let state = org_state(&state, &job).await?;
+    super::fact_dates::run(&state, None).await?;
     Ok(())
 }
 

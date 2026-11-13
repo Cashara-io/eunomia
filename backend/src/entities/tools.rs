@@ -128,11 +128,8 @@ pub async fn memory_write(
     occurred_at: Option<&str>,
 ) -> AppResult<service::WriteMemoryOut> {
     let occurred_at = occurred_at.map(|s| crate::cache::search::parse_datetime("occurred_at", s).map(surrealdb::types::Datetime::from)).transpose()?;
-    let out = service::write_memory(&state.db, owner, subject_name, subject_kind, text, source_record_id, mem_type, vault_id).await?;
-    let memory_rid = crate::rid::parse(&out.memory.id).map_err(|_| crate::error::AppError::internal("memory id did not round-trip"))?;
-    if let Some(at) = occurred_at {
-        crate::store::cache::SET_MEMORY_OCCURRED_AT.on(&state.db).bind(("id", memory_rid.clone())).bind(("at", at)).await?.check()?;
-    }
+    // the date goes in with the fact, in one statement: no reader ever sees it undated
+    let out = service::write_memory(&state.db, owner, subject_name, subject_kind, text, source_record_id, mem_type, vault_id, occurred_at).await?;
     embed_soon(state, owner);
     if out.memory.mem_type != "observation" && super::supersede::enabled(&state.db, &state.settings, owner).await {
         let subject = crate::rid::parse(&out.entity.id).map_err(|_| crate::error::AppError::internal("entity id did not round-trip"))?;
