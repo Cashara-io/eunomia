@@ -50,3 +50,34 @@ async fn look_alikes_are_refused_even_when_nothing_is_reserved() {
     assert_eq!(register(&app, "Ken@Acme.test").await.0, StatusCode::OK);
     assert_eq!(register(&app, "anna@xn--bcher-kva.example").await.0, StatusCode::OK);
 }
+
+#[tokio::test]
+async fn ordinary_capitals_outside_ascii_still_sign_up() {
+    env();
+    let app = common::TestApp::new().await;
+    assert_eq!(register(&app, "\u{d8}lsen@firma.no").await.0, StatusCode::OK);
+    assert!(models_user::user_by_email(&app.state.control, "\u{f8}lsen@firma.no").await.unwrap().is_some());
+}
+
+/// Operator status is read from the stored normalized address. A legacy row whose raw email only
+/// normalizes to a listed address (its `email_lc` is a `duplicate:` placeholder) is not an operator.
+#[tokio::test]
+async fn a_legacy_duplicate_of_an_operator_address_is_not_an_operator() {
+    env();
+    let app = common::TestApp::new().await;
+    let make = |email: &'static str, email_lc: &'static str| {
+        let db = app.state.control.clone();
+        async move {
+            let mut res = db.test_raw().query("CREATE user SET email = $e, email_lc = $l RETURN VALUE id").bind(("e", email)).bind(("l", email_lc)).await.unwrap();
+            res.take::<Vec<surrealdb::types::RecordId>>(0).unwrap().remove(0)
+        }
+    };
+    let real = make("kate@corp.com", "kate@corp.com").await;
+    let legacy = make("\u{212A}ate@corp.com", "duplicate:legacy").await;
+    let user = |id: surrealdb::types::RecordId, email: &str| models_user::User { id, email: email.into(), org: app.user.org };
+    assert!(eunomia_backend::authz::is_operator(&app.state.control, &user(real.clone(), "kate@corp.com")).await.unwrap());
+    assert!(eunomia_backend::authz::is_admin(&app.state.control, &user(real, "kate@corp.com")).await.unwrap());
+    let legacy_user = user(legacy, "\u{212A}ate@corp.com");
+    assert!(!eunomia_backend::authz::is_operator(&app.state.control, &legacy_user).await.unwrap());
+    assert!(!eunomia_backend::authz::is_admin(&app.state.control, &legacy_user).await.unwrap());
+}

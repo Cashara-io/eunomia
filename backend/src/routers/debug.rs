@@ -59,10 +59,11 @@ async fn get_capsule(State(state): State<AppState>, user: User, Path(trace_id): 
         return Err(AppError::coded(ErrorCode::AuthForbidden, "Only an instance admin can read failure capsules."));
     }
     // another org's capsule does not exist as far as this admin can tell (instance operators see all)
+    let operator = crate::authz::is_operator(&state.control, &user).await?;
     let found: Vec<Capsule> = capsules::get_all(&state.control, &trace_id)
         .await?
         .into_iter()
-        .filter(|c| crate::authz::is_operator(&user) || c.org.as_deref().is_none_or(|o| o == user.org.key()))
+        .filter(|c| operator || c.org.as_deref().is_none_or(|o| o == user.org.key()))
         .collect();
     if found.is_empty() {
         return Err(AppError::not_found(format!("No failure capsule for trace {trace_id}.")));
