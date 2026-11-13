@@ -26,6 +26,11 @@ pub enum ErrorCode {
     AuthSessionExpired,
     AuthPasswordDisabled,
     AuthSuspended,
+    InvitationNotFound,
+    InvitationExpired,
+    InvitationEmailMismatch,
+    InvitationOtherOrg,
+    InvitationExists,
     RateLimited,
     TenantDenied,
     TenantNotFound,
@@ -77,6 +82,11 @@ impl ErrorCode {
         ErrorCode::AuthSessionExpired,
         ErrorCode::AuthPasswordDisabled,
         ErrorCode::AuthSuspended,
+        ErrorCode::InvitationNotFound,
+        ErrorCode::InvitationExpired,
+        ErrorCode::InvitationEmailMismatch,
+        ErrorCode::InvitationOtherOrg,
+        ErrorCode::InvitationExists,
         ErrorCode::RateLimited,
         ErrorCode::TenantDenied,
         ErrorCode::TenantNotFound,
@@ -128,6 +138,11 @@ impl ErrorCode {
             ErrorCode::AuthSessionExpired => "auth.session_expired",
             ErrorCode::AuthPasswordDisabled => "auth.password_disabled",
             ErrorCode::AuthSuspended => "auth.suspended",
+            ErrorCode::InvitationNotFound => "invitation.not_found",
+            ErrorCode::InvitationExpired => "invitation.expired",
+            ErrorCode::InvitationEmailMismatch => "invitation.email_mismatch",
+            ErrorCode::InvitationOtherOrg => "invitation.other_org",
+            ErrorCode::InvitationExists => "invitation.exists",
             ErrorCode::RateLimited => "rate.limited",
             ErrorCode::TenantDenied => "tenant.denied",
             ErrorCode::TenantNotFound => "tenant.not_found",
@@ -181,7 +196,10 @@ impl ErrorCode {
             ErrorCode::TenantSchemaBehind | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             ErrorCode::DocumentTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             ErrorCode::DocumentUnsupportedType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            ErrorCode::ChangesResync => StatusCode::GONE,
+            ErrorCode::ChangesResync | ErrorCode::InvitationExpired => StatusCode::GONE,
+            ErrorCode::InvitationNotFound => StatusCode::NOT_FOUND,
+            ErrorCode::InvitationEmailMismatch => StatusCode::FORBIDDEN,
+            ErrorCode::InvitationOtherOrg | ErrorCode::InvitationExists => StatusCode::CONFLICT,
             ErrorCode::TenantProvisioningDisabled => StatusCode::NOT_IMPLEMENTED,
             ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision => StatusCode::CONFLICT,
             ErrorCode::AuthNotFound
@@ -375,6 +393,7 @@ mod tests {
             match c {
                 ErrorCode::AuthUnauthorized | ErrorCode::AuthForbidden | ErrorCode::AuthEmailTaken | ErrorCode::AuthNotFound
                 | ErrorCode::AuthScope | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::RateLimited
+                | ErrorCode::InvitationNotFound | ErrorCode::InvitationExpired | ErrorCode::InvitationEmailMismatch | ErrorCode::InvitationOtherOrg | ErrorCode::InvitationExists
                 | ErrorCode::TenantDenied | ErrorCode::TenantNotFound | ErrorCode::TenantSchemaBehind
                 | ErrorCode::TenantProvisioningDisabled | ErrorCode::VaultNotFound | ErrorCode::VaultForbidden | ErrorCode::VaultNameTaken | ErrorCode::EntityNotFound
                 | ErrorCode::MemoryNotFound | ErrorCode::ChatThreadNotFound | ErrorCode::ConnectorNotFound

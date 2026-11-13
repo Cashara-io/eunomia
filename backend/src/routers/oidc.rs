@@ -19,6 +19,8 @@
 //!    the address does not survive it.
 //! 3. otherwise a new account with no password, through the same signup gate and setup (org membership,
 //!    personal vault) as password signup. On an empty install the first sign-in is the first user, the admin.
+//!    When the provider verified the email and an organisation invitation for it is open, that invitation is
+//!    the permission (whatever `SIGNUP` says) and the account joins the inviting org (`invitations.rs`).
 
 use axum::{
     extract::{Extension, Query, State},
@@ -395,6 +397,19 @@ async fn map_identity(state: &AppState, id: &Identity) -> Result<(User, Mapped),
             }
         }
 
+        // a pending organisation invitation for a provider-verified email is the permission to sign up,
+        // and the account joins that org (an unverified email never claims one)
+        let invitation = if id.email_verified { crate::invitations::open_for_email(db, &email).await? } else { None };
+        if let Some(p) = &invitation {
+            return match models_user::register_oidc_user_invited(state, &email, &id.issuer, &id.subject, p).await {
+                Ok(user) => {
+                    crate::invitations::record_accepted(db, &user.id, p, "oidc").await;
+                    Ok((user, Mapped::Created))
+                }
+                Err(e) if raced(&e) => continue,
+                Err(e) => Err(e.into()),
+            };
+        }
         let has_users = crate::capsules::first_user(db).await?.is_some();
         let allowed = signup_decision(
             has_users,

@@ -48,6 +48,10 @@ struct AuthOut {
     oidc_provider: Option<String>,
     /// True for an instance admin: the first user, or an email in `EUNOMIA_ADMIN_EMAILS`.
     is_admin: bool,
+    /// The account's role in its organisation: `owner`, `admin` or `member`.
+    org_role: String,
+    /// May invite people to the organisation and see its seats (an owner or admin of it, or an instance admin).
+    can_manage_org: bool,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -83,6 +87,16 @@ enum AuthModeOut {
 struct Credentials {
     email: String,
     password: String,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+struct RegisterBody {
+    email: String,
+    password: String,
+    /// The token from an organisation invitation link. The account joins that organisation, and a valid
+    /// invitation is the permission to sign up even when `SIGNUP` is `invite` or `closed`. The email must be the invited one.
+    #[serde(default)]
+    invitation: Option<String>,
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -155,6 +169,7 @@ async fn auth_out(state: &AppState, user: User) -> AppResult<AuthOut> {
         None => None,
     };
     let is_admin = crate::authz::is_admin(&state.control, &user).await?;
+    let (org_role, can_manage_org) = org_standing(state, &user, is_admin).await?;
     Ok(AuthOut {
         id: user.id.to_string(),
         email: user.email,
@@ -162,7 +177,16 @@ async fn auth_out(state: &AppState, user: User) -> AppResult<AuthOut> {
         has_password: row.is_some_and(|r| r.password_hash.is_some()),
         oidc_provider,
         is_admin,
+        org_role,
+        can_manage_org,
     })
+}
+
+/// The account's role in its org, and whether it may manage the org's invitations.
+async fn org_standing(state: &AppState, user: &User, is_admin: bool) -> AppResult<(String, bool)> {
+    let role = crate::invitations::org_role(&state.control, user).await?.unwrap_or_else(|| "member".into());
+    let manager = is_admin || role == "owner" || role == "admin";
+    Ok((role, manager))
 }
 
 /// Password sign-in and signup are off when `AUTH_MODE=oidc`.
@@ -196,7 +220,8 @@ pub(crate) fn session_cookie_header(token: &str, public_url: &str, https: Option
 /// `SIGNUP`: who may create an account once the install has a first user.
 /// `open` lets anyone who can reach the server sign up; `invite` only emails the operator listed in
 /// `SIGNUP_ALLOWLIST` or `EUNOMIA_ADMIN_EMAILS` (a vault invitation needs an existing account, so it
-/// cannot be the invitation); `closed` nobody. The first user can always sign up. Unknown values close.
+/// cannot be the invitation); `closed` nobody. Under any mode, a valid organisation invitation for the
+/// email is the permission on its own (checked by `register` and the OIDC callback, not here). The first user can always sign up. Unknown values close.
 pub(crate) fn signup_allowed(mode: &str, has_users: bool, email: &str, allowlist: &str) -> bool {
     if !has_users {
         return true;
@@ -233,42 +258,60 @@ fn signup_refusal_reason(mode: &str, reserved: bool) -> &'static str {
     path = "/api/auth/register",
     tag = "auth",
     summary = "Create an account and start a session",
-    request_body = Credentials,
+    request_body = RegisterBody,
     responses((status = 200, body = AuthOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(()),
 )]
 async fn register(
     State(state): State<AppState>,
     https: Option<Extension<ForwardedHttps>>,
+    ip: Option<Extension<crate::gate::ClientIp>>,
     headers: HeaderMap,
-    Json(body): Json<Credentials>,
+    Json(body): Json<RegisterBody>,
 ) -> AppResult<Response> {
     require_password_enabled(&state)?;
     let has_users = crate::capsules::first_user(&state.control).await?.is_some();
     // an operator address is not verified, so whoever signed up with it first would become operator:
-    // it must already have an account before it is listed (same refusal text, nothing to probe)
+    // it must already have an account before it is listed (same refusal text, nothing to probe).
+    // An invitation does not change that: the link proves who holds it, not who owns the address.
     let reserved = has_users && authz::operator_email_listed(&body.email);
+    // a valid organisation invitation for this email is itself the permission to sign up
+    let invitation = match body.invitation.as_deref().filter(|t| !t.trim().is_empty()) {
+        Some(token) if !reserved => {
+            let ip = ip.as_ref().map_or("", |i| i.0 .0.as_str());
+            let p = crate::invitations::usable(&state, token, crate::invitations::Who::Address(ip)).await?;
+            crate::invitations::email_matches(&p, &body.email)?;
+            Some(p)
+        }
+        _ => None,
+    };
     let mode = std::env::var("SIGNUP").unwrap_or_default();
-    if reserved || !signup_allowed(&mode, has_users, &body.email, &std::env::var("SIGNUP_ALLOWLIST").unwrap_or_default()) {
+    if invitation.is_none() && (reserved || !signup_allowed(&mode, has_users, &body.email, &std::env::var("SIGNUP_ALLOWLIST").unwrap_or_default())) {
         tracing::info!(signup = %mode, reserved, reason = signup_refusal_reason(&mode, reserved), "signup refused by the SIGNUP policy");
         return Err(AppError::coded(ErrorCode::AuthForbidden, SIGNUP_REFUSED));
     }
-    let user = models_user::register_user(&state, &body.email, &body.password)
-        .await
-        .map_err(|e| {
-            if e.code == ErrorCode::DbDuplicate {
-                AppError::coded(ErrorCode::AuthEmailTaken, "A user with that email already exists.")
-            } else {
-                e
-            }
-        })?;
+    let created = match &invitation {
+        Some(p) => models_user::register_invited(&state, &body.email, &body.password, p).await,
+        None => models_user::register_user(&state, &body.email, &body.password).await,
+    };
+    let user = created.map_err(|e| {
+        if e.code == ErrorCode::DbDuplicate {
+            AppError::coded(ErrorCode::AuthEmailTaken, "A user with that email already exists.")
+        } else {
+            e
+        }
+    })?;
+    if let Some(p) = &invitation {
+        crate::invitations::record_accepted(&state.control, &user.id, p, "signup").await;
+    }
 
     let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref())
         .await?;
     audit::record_as_caller(&state.control, &user.id, "auth.register", "", "ok").await;
 
     let is_admin = crate::authz::is_admin(&state.control, &user).await?;
-    let body = AuthOut { id: user.id.to_string(), email: user.email, onboarded: false, has_password: true, oidc_provider: None, is_admin };
+    let (org_role, can_manage_org) = org_standing(&state, &user, is_admin).await?;
+    let body = AuthOut { id: user.id.to_string(), email: user.email, onboarded: false, has_password: true, oidc_provider: None, is_admin, org_role, can_manage_org };
     Ok((
         StatusCode::OK,
         [(header::SET_COOKIE, session_cookie_header(&token, &state.settings.public_url, https))],

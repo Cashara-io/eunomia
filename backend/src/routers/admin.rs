@@ -48,7 +48,8 @@ pub enum AuditCategory {
     Signins,
     Tokens,
     Apps,
-    /// Admin rights granted or taken back, accounts suspended or restored, other people's API tokens revoked.
+    /// Admin rights granted or taken back, accounts suspended or restored, other people's API tokens revoked,
+    /// organisation invitations sent, resent, withdrawn, accepted or refused.
     Admin,
     /// Spaces shared with another Eunomia: share codes, joins, links stopped. These copy data off the server.
     Sharing,
@@ -57,7 +58,18 @@ pub enum AuditCategory {
 }
 
 const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.failed"];
-const ADMIN_ACTIONS: &[&str] = &["admin.grant", "admin.revoke", "user.suspend", "user.restore", "admin.token_revoke"];
+const ADMIN_ACTIONS: &[&str] = &[
+    "admin.grant",
+    "admin.revoke",
+    "user.suspend",
+    "user.restore",
+    "admin.token_revoke",
+    "org.invite",
+    "org.invite_resend",
+    "org.invite_revoke",
+    "org.invite_accept",
+    "org.invite_expired",
+];
 
 impl AuditCategory {
     /// `(prefix, exact actions, excluded actions)` for the ledger query; all empty means every event.
@@ -206,6 +218,7 @@ fn base_verb(past: &str) -> Option<&'static str> {
     Some(match past {
         "Invited" => "invite",
         "Withdrew" => "withdraw",
+        "Sent" => "send",
         "Removed" => "remove",
         "Made" => "make",
         "Handed" => "hand",
@@ -301,6 +314,18 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
             (None, true) => "Replaced the AI provider's key".into(),
             (None, false) => "Changed the AI provider".into(),
         },
+        "org.invite" => match kv(detail, "role") {
+            Some("admin") => format!("Invited {email} to the organisation as an admin"),
+            _ => format!("Invited {email} to the organisation"),
+        },
+        "org.invite_resend" => format!("Sent {email} a new invitation link"),
+        "org.invite_revoke" => format!("Withdrew the organisation invitation for {email}"),
+        "org.invite_accept" if ok => match kv(detail, "role") {
+            Some("admin") => "Joined the organisation as an admin".into(),
+            _ => "Joined the organisation".into(),
+        },
+        "org.invite_accept" => return format!("The invitation for {email} was refused: that account is already in another organisation"),
+        "org.invite_expired" => return format!("Someone used the expired invitation link for {email}"),
         "admin.grant" => format!("Made {email} an admin"),
         "admin.revoke" => format!("Took admin rights away from {email}"),
         "user.suspend" => format!("Suspended {email}"),
@@ -347,7 +372,7 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
 }
 
 /// Actions whose failed sentence already says why ([`describe`] returns early for them).
-const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.failed", "oauth.consent", "authz.denied"];
+const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.failed", "oauth.consent", "authz.denied", "org.invite_accept", "org.invite_expired"];
 
 /// Why an action failed, from the error code it ended with, in words; empty when it worked.
 /// The exact cause a failed attempt recorded in its detail (`why=...`), when it recorded one.
@@ -996,6 +1021,23 @@ mod tests {
         assert_eq!(AuditCategory::of("admin.token_revoke"), AuditCategory::Admin);
         assert_eq!(AuditCategory::of("user.suspend"), AuditCategory::Admin);
         assert_eq!(AuditCategory::Changes.filter().2, SIGNIN_ACTIONS);
+    }
+
+    #[test]
+    fn invitation_events_read_as_sentences() {
+        let n = HashMap::new();
+        let d = |a: &str, detail: &str, ok: bool| describe(a, "org_invitation:x", detail, ok, &n);
+        assert_eq!(d("org.invite", "email=pat@acme.test role=member", true), "Invited pat@acme.test to the organisation");
+        assert_eq!(d("org.invite", "email=pat@acme.test role=admin", true), "Invited pat@acme.test to the organisation as an admin");
+        assert_eq!(d("org.invite_resend", "email=pat@acme.test role=member", true), "Sent pat@acme.test a new invitation link");
+        assert_eq!(d("org.invite_revoke", "email=pat@acme.test role=member", true), "Withdrew the organisation invitation for pat@acme.test");
+        assert_eq!(d("org.invite_accept", "email=pat@acme.test role=member via=signup", true), "Joined the organisation");
+        assert!(d("org.invite_accept", "email=pat@acme.test", false).contains("another organisation"));
+        assert_eq!(d("org.invite_expired", "email=pat@acme.test", false), "Someone used the expired invitation link for pat@acme.test");
+        assert_eq!(reason_words("org.invite_expired", "invitation.expired"), "");
+        for a in ["org.invite", "org.invite_resend", "org.invite_revoke", "org.invite_accept", "org.invite_expired"] {
+            assert_eq!(AuditCategory::of(a), AuditCategory::Admin, "{a}");
+        }
     }
 
     #[test]

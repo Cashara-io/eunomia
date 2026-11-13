@@ -38,7 +38,7 @@ export const isSessionEnded = (e: unknown) =>
 async function onSessionEnded(e: unknown) {
   if (typeof window === "undefined" || !isSessionEnded(e)) return;
   const { pathname, search } = window.location;
-  if (/^\/(login|register|consent|onboarding)/.test(pathname)) return;
+  if (/^\/(login|register|consent|onboarding|invite)/.test(pathname)) return;
   // a fresh install has no account to sign in to: register, as AuthGuard does
   const { has_users } = await call(getBootstrap()).catch(() => ({ has_users: true }));
   // full reload on purpose: drops every cached query of the ended session

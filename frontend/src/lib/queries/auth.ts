@@ -74,7 +74,9 @@ const useSessionMutation = <V>(fn: (v: V) => Promise<Me>) => {
 export const useLogin = () =>
   useSessionMutation(({ email, password }: { email: string; password: string }) => call(login({ body: { email, password } })));
 export const useRegister = () =>
-  useSessionMutation(({ email, password }: { email: string; password: string }) => call(register({ body: { email, password } })));
+  useSessionMutation(({ email, password, invitation }: { email: string; password: string; invitation?: string }) =>
+    call(register({ body: { email, password, invitation } }))
+  );
 
 export function useLogout() {
   const qc = useQueryClient();

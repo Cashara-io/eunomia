@@ -681,3 +681,35 @@ async fn an_mcp_client_signs_in_through_the_provider_and_gets_a_working_token() 
     assert!(mcp.to_string().contains("alice@example.test") || mcp.to_string().contains("personal") || mcp.to_string().contains("Personal"), "{mcp}");
     assert!(app.idp.token_hits() >= 1);
 }
+
+#[tokio::test]
+async fn a_pending_organisation_invitation_places_a_new_sso_account_in_the_inviting_org() {
+    let app = app(AuthMode::Both).await;
+    // the install's first user, then the owner of a second org on the same host
+    expect_signed_in(&app.sign_in().await);
+    let owner_b = models_user::register_user_with(&app.state, "owner-b@example.test", PASSWORD, true).await.unwrap();
+    let first_org = models_user::user_by_email(&app.state.control, "alice@example.test").await.unwrap().unwrap().org;
+    assert_ne!(owner_b.org, first_org);
+    eunomia_backend::invitations::create(&app.state, &owner_b, "Bob@Example.test", eunomia_backend::invitations::OrgInviteRole::Admin).await.unwrap();
+    eunomia_backend::invitations::create(&app.state, &owner_b, "carol@example.test", eunomia_backend::invitations::OrgInviteRole::Member).await.unwrap();
+
+    // bob's provider verified the email: he lands in org B with the invited role, and the invitation is used up
+    app.idp.behave(Behavior { sub: "bob-sub".into(), email: Some("bob@example.test".into()), ..Default::default() });
+    let cookie = expect_signed_in(&app.sign_in().await);
+    let (_, me) = app.get_as(&cookie, "/api/auth/me").await;
+    assert_eq!((me["org_role"].as_str(), me["can_manage_org"].as_bool()), (Some("admin"), Some(true)), "{me}");
+    let bob = models_user::user_by_email(&app.state.control, "bob@example.test").await.unwrap().unwrap();
+    assert_eq!(bob.org, owner_b.org);
+    assert!(eunomia_backend::invitations::open_for_email(&app.state.control, "bob@example.test").await.unwrap().is_none());
+    let mut res = app.state.control.test_raw().query("SELECT detail FROM audit_event WHERE action = 'org.invite_accept'").await.unwrap();
+    let rows: Vec<Value> = res.take(0).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert!(rows[0]["detail"].as_str().unwrap().contains("via=oidc"), "{rows:?}");
+
+    // carol's provider did not verify it: the invitation is not honoured, she gets the ordinary signup
+    app.idp.behave(Behavior { sub: "carol-sub".into(), email: Some("carol@example.test".into()), email_verified: json!(false), ..Default::default() });
+    expect_signed_in(&app.sign_in().await);
+    let carol = models_user::user_by_email(&app.state.control, "carol@example.test").await.unwrap().unwrap();
+    assert_ne!(carol.org, owner_b.org);
+    assert!(eunomia_backend::invitations::open_for_email(&app.state.control, "carol@example.test").await.unwrap().is_some(), "still open");
+}

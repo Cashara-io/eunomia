@@ -742,7 +742,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Credentials"
+                "$ref": "#/components/schemas/RegisterBody"
               }
             }
           },
@@ -4403,6 +4403,98 @@
         ]
       }
     },
+    "/api/invitations/accept": {
+      "post": {
+        "tags": [
+          "org"
+        ],
+        "summary": "Accept an organisation invitation with the signed-in account (browser session)",
+        "description": "The account's email must be the invited one. An account that already belongs to another organisation is refused (`invitation.other_org`): an account is in one organisation for now.",
+        "operationId": "acceptOrgInvitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationToken"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationAccepted"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/invitations/lookup": {
+      "post": {
+        "tags": [
+          "org"
+        ],
+        "summary": "What an invitation link is for: the organisation, the invited email and whether it has expired",
+        "description": "Public, limited per client address. An unknown, used or withdrawn link is `invitation.not_found`. Says nothing about whether the email has an account.",
+        "operationId": "lookupOrgInvitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationToken"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationLookup"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/oauth/consent": {
       "get": {
         "tags": [
@@ -4655,6 +4747,226 @@
         },
         "security": [
           {}
+        ]
+      }
+    },
+    "/api/org/invitations": {
+      "get": {
+        "tags": [
+          "org"
+        ],
+        "summary": "Your organisation's open invitations, newest first (owner or admin)",
+        "description": "Expired invitations are listed too, so they can be resent. Never returns a link or token.",
+        "operationId": "listOrgInvitations",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrgInvitation"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "org"
+        ],
+        "summary": "Invite someone to your organisation by email (owner or admin, browser session)",
+        "description": "Returns the link once; only its hash is stored. Eunomia sends no email: send the link yourself. The link expires after 7 days and works once. It is refused for an email already in this organisation or already invited here.",
+        "operationId": "createOrgInvitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrgInvitationCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgInvitationLink"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/org/invitations/{invitation_id}": {
+      "delete": {
+        "tags": [
+          "org"
+        ],
+        "summary": "Withdraw an open invitation (owner or admin, browser session)",
+        "operationId": "revokeOrgInvitation",
+        "parameters": [
+          {
+            "name": "invitation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkBody"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/org/invitations/{invitation_id}/resend": {
+      "post": {
+        "tags": [
+          "org"
+        ],
+        "summary": "Make a new link for an open invitation (owner or admin, browser session)",
+        "description": "The old link stops working and the expiry starts again.",
+        "operationId": "resendOrgInvitation",
+        "parameters": [
+          {
+            "name": "invitation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgInvitationLink"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/org/seats": {
+      "get": {
+        "tags": [
+          "org"
+        ],
+        "summary": "OrgSeats in your organisation: active and suspended members, pending invitations (owner or admin)",
+        "operationId": "getOrgSeats",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgSeats"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -9216,9 +9528,15 @@
           "email",
           "onboarded",
           "has_password",
-          "is_admin"
+          "is_admin",
+          "org_role",
+          "can_manage_org"
         ],
         "properties": {
+          "can_manage_org": {
+            "type": "boolean",
+            "description": "May invite people to the organisation and see its seats (an owner or admin of it, or an instance admin)."
+          },
           "email": {
             "type": "string"
           },
@@ -9242,6 +9560,10 @@
           },
           "onboarded": {
             "type": "boolean"
+          },
+          "org_role": {
+            "type": "string",
+            "description": "The account's role in its organisation: `owner`, `admin` or `member`."
           }
         }
       },
@@ -12016,6 +12338,28 @@
           }
         }
       },
+      "InvitationAccepted": {
+        "type": "object",
+        "description": "What accepting while signed in did.",
+        "required": [
+          "org_name",
+          "role",
+          "already_member"
+        ],
+        "properties": {
+          "already_member": {
+            "type": "boolean",
+            "description": "The account was already in the organisation; the invitation is now used up."
+          },
+          "org_name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "description": "`member` or `admin`."
+          }
+        }
+      },
       "InvitationList": {
         "type": "object",
         "required": [
@@ -12027,6 +12371,43 @@
             "items": {
               "$ref": "#/components/schemas/InvitationOut"
             }
+          }
+        }
+      },
+      "InvitationLookup": {
+        "type": "object",
+        "description": "What the invitation page shows before anyone accepts.",
+        "required": [
+          "org_name",
+          "email",
+          "role",
+          "invited_by",
+          "expires_at",
+          "status"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The invited email: the account that accepts must have this one."
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "invited_by": {
+            "type": "string",
+            "description": "Who sent it."
+          },
+          "org_name": {
+            "type": "string",
+            "description": "The organisation's name."
+          },
+          "role": {
+            "type": "string",
+            "description": "`member` or `admin`."
+          },
+          "status": {
+            "type": "string",
+            "description": "`open`, or `expired` (ask for a new link)."
           }
         }
       },
@@ -12063,6 +12444,18 @@
           },
           "vault_name": {
             "type": "string"
+          }
+        }
+      },
+      "InvitationToken": {
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The token from the invitation link (the part after `#`)."
           }
         }
       },
@@ -13471,6 +13864,120 @@
           "in"
         ]
       },
+      "OrgInvitation": {
+        "type": "object",
+        "description": "An open invitation, as an org admin sees it. Never carries the token.",
+        "required": [
+          "id",
+          "email",
+          "role",
+          "created_at",
+          "sent_at",
+          "expires_at",
+          "expired",
+          "invited_by"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "expired": {
+            "type": "boolean",
+            "description": "The link has expired; resend it to make a new one."
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "invited_by": {
+            "type": "string",
+            "description": "The email of the admin who sent it."
+          },
+          "role": {
+            "type": "string",
+            "description": "`member` or `admin`."
+          },
+          "sent_at": {
+            "type": "string",
+            "description": "When the current link was made (a resend makes a new one)."
+          }
+        }
+      },
+      "OrgInvitationCreate": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/OrgInviteRole",
+            "description": "`member` (default) or `admin` (can invite people and see seats; not an instance admin)."
+          }
+        }
+      },
+      "OrgInvitationLink": {
+        "type": "object",
+        "description": "A new or resent invitation, with its link. The link is shown once: only its hash is kept.",
+        "required": [
+          "invitation",
+          "link",
+          "token"
+        ],
+        "properties": {
+          "invitation": {
+            "$ref": "#/components/schemas/OrgInvitation"
+          },
+          "link": {
+            "type": "string",
+            "description": "`<frontend>/invite#<token>`. The token rides in the fragment, which browsers never send to a server."
+          },
+          "token": {
+            "type": "string",
+            "description": "The token alone, for clients that build their own link."
+          }
+        }
+      },
+      "OrgInviteRole": {
+        "type": "string",
+        "description": "The role an invitation gives.",
+        "enum": [
+          "member",
+          "admin"
+        ]
+      },
+      "OrgSeats": {
+        "type": "object",
+        "description": "OrgSeats for one org (the hosted business bills on these). Counts only.",
+        "required": [
+          "active_members",
+          "suspended_members",
+          "pending_invitations"
+        ],
+        "properties": {
+          "active_members": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Members whose account is not suspended."
+          },
+          "pending_invitations": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open invitations that have not expired."
+          },
+          "suspended_members": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "Origin": {
         "type": "string",
         "description": "Who proposed a row: the server's model, an agent over MCP, or a person in the app.",
@@ -14633,6 +15140,28 @@
             "type": "string"
           },
           "vault_id": {
+            "type": "string"
+          }
+        }
+      },
+      "RegisterBody": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "invitation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The token from an organisation invitation link. The account joins that organisation, and a valid\ninvitation is the permission to sign up even when `SIGNUP` is `invite` or `closed`. The email must be the invited one."
+          },
+          "password": {
             "type": "string"
           }
         }

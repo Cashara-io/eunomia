@@ -72,6 +72,8 @@ pub const CONTROL_MIGRATIONS: &[(u32, &str, &str)] = &[
     (6, "oidc_identity", include_str!("../migrations/control/0006_oidc_identity.surql")),
     (7, "secret_audit_index", include_str!("../migrations/control/0007_secret_audit_index.surql")),
     (8, "user_admin_suspend", include_str!("../migrations/control/0008_user_admin_suspend.surql")),
+    // 0009 to 0011 are reserved for other lanes (backend/migrations/QUEUE.md); the runner applies by number, gaps allowed
+    (12, "org_invitations", include_str!("../migrations/control/0012_org_invitations.surql")),
 ];
 
 /// The last tenant migration the legacy single database may be brought to before its data moves out

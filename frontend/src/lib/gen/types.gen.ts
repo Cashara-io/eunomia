@@ -132,6 +132,10 @@ export type AuditPage = {
 export type AuthModeOut = 'password' | 'both' | 'oidc';
 
 export type AuthOut = {
+    /**
+     * May invite people to the organisation and see its seats (an owner or admin of it, or an instance admin).
+     */
+    can_manage_org: boolean;
     email: string;
     /**
      * False for an account made by an OpenID Connect provider: it has no password to change or use.
@@ -147,6 +151,10 @@ export type AuthOut = {
      */
     oidc_provider?: string | null;
     onboarded: boolean;
+    /**
+     * The account's role in its organisation: `owner`, `admin` or `member`.
+     */
+    org_role: string;
 };
 
 export type AuthzParams = {
@@ -1225,8 +1233,50 @@ export type IntegrityReport = {
     vault: string;
 };
 
+/**
+ * What accepting while signed in did.
+ */
+export type InvitationAccepted = {
+    /**
+     * The account was already in the organisation; the invitation is now used up.
+     */
+    already_member: boolean;
+    org_name: string;
+    /**
+     * `member` or `admin`.
+     */
+    role: string;
+};
+
 export type InvitationList = {
     results: Array<InvitationOut>;
+};
+
+/**
+ * What the invitation page shows before anyone accepts.
+ */
+export type InvitationLookup = {
+    /**
+     * The invited email: the account that accepts must have this one.
+     */
+    email: string;
+    expires_at: string;
+    /**
+     * Who sent it.
+     */
+    invited_by: string;
+    /**
+     * The organisation's name.
+     */
+    org_name: string;
+    /**
+     * `member` or `admin`.
+     */
+    role: string;
+    /**
+     * `open`, or `expired` (ask for a new link).
+     */
+    status: string;
 };
 
 export type InvitationOut = {
@@ -1240,6 +1290,13 @@ export type InvitationOut = {
     vault_id: string;
     vault_kind: string;
     vault_name: string;
+};
+
+export type InvitationToken = {
+    /**
+     * The token from the invitation link (the part after `#`).
+     */
+    token: string;
 };
 
 export type InviteOut = {
@@ -1753,6 +1810,75 @@ export type OntologyOut = {
 export type Op = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in';
 
 /**
+ * An open invitation, as an org admin sees it. Never carries the token.
+ */
+export type OrgInvitation = {
+    created_at: string;
+    email: string;
+    /**
+     * The link has expired; resend it to make a new one.
+     */
+    expired: boolean;
+    expires_at: string;
+    id: string;
+    /**
+     * The email of the admin who sent it.
+     */
+    invited_by: string;
+    /**
+     * `member` or `admin`.
+     */
+    role: string;
+    /**
+     * When the current link was made (a resend makes a new one).
+     */
+    sent_at: string;
+};
+
+export type OrgInvitationCreate = {
+    email: string;
+    /**
+     * `member` (default) or `admin` (can invite people and see seats; not an instance admin).
+     */
+    role?: OrgInviteRole;
+};
+
+/**
+ * A new or resent invitation, with its link. The link is shown once: only its hash is kept.
+ */
+export type OrgInvitationLink = {
+    invitation: OrgInvitation;
+    /**
+     * `<frontend>/invite#<token>`. The token rides in the fragment, which browsers never send to a server.
+     */
+    link: string;
+    /**
+     * The token alone, for clients that build their own link.
+     */
+    token: string;
+};
+
+/**
+ * The role an invitation gives.
+ */
+export type OrgInviteRole = 'member' | 'admin';
+
+/**
+ * OrgSeats for one org (the hosted business bills on these). Counts only.
+ */
+export type OrgSeats = {
+    /**
+     * Members whose account is not suspended.
+     */
+    active_members: number;
+    /**
+     * Open invitations that have not expired.
+     */
+    pending_invitations: number;
+    suspended_members: number;
+};
+
+/**
  * Who proposed a row: the server's model, an agent over MCP, or a person in the app.
  */
 export type Origin = 'suggested' | 'agent' | 'human';
@@ -2227,6 +2353,16 @@ export type RefOut = {
     reference: string;
     updated_at: string;
     vault_id: string;
+};
+
+export type RegisterBody = {
+    email: string;
+    /**
+     * The token from an organisation invitation link. The account joins that organisation, and a valid
+     * invitation is the permission to sign up even when `SIGNUP` is `invite` or `closed`. The email must be the invited one.
+     */
+    invitation?: string | null;
+    password: string;
 };
 
 export type RelationCreate = {
@@ -3417,7 +3553,7 @@ export type OidcStartResponses = {
 export type OidcStartResponse = OidcStartResponses[keyof OidcStartResponses];
 
 export type RegisterData = {
-    body: Credentials;
+    body: RegisterBody;
     path?: never;
     query?: never;
     url: '/api/auth/register';
@@ -5209,6 +5345,50 @@ export type GetHttpsStatusResponses = {
 
 export type GetHttpsStatusResponse = GetHttpsStatusResponses[keyof GetHttpsStatusResponses];
 
+export type AcceptOrgInvitationData = {
+    body: InvitationToken;
+    path?: never;
+    query?: never;
+    url: '/api/invitations/accept';
+};
+
+export type AcceptOrgInvitationErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type AcceptOrgInvitationError = AcceptOrgInvitationErrors[keyof AcceptOrgInvitationErrors];
+
+export type AcceptOrgInvitationResponses = {
+    200: InvitationAccepted;
+};
+
+export type AcceptOrgInvitationResponse = AcceptOrgInvitationResponses[keyof AcceptOrgInvitationResponses];
+
+export type LookupOrgInvitationData = {
+    body: InvitationToken;
+    path?: never;
+    query?: never;
+    url: '/api/invitations/lookup';
+};
+
+export type LookupOrgInvitationErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type LookupOrgInvitationError = LookupOrgInvitationErrors[keyof LookupOrgInvitationErrors];
+
+export type LookupOrgInvitationResponses = {
+    200: InvitationLookup;
+};
+
+export type LookupOrgInvitationResponse = LookupOrgInvitationResponses[keyof LookupOrgInvitationResponses];
+
 export type GetOauthConsentData = {
     body?: never;
     path?: never;
@@ -5325,6 +5505,120 @@ export type GetOpenapiResponses = {
 };
 
 export type GetOpenapiResponse = GetOpenapiResponses[keyof GetOpenapiResponses];
+
+export type ListOrgInvitationsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/org/invitations';
+};
+
+export type ListOrgInvitationsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListOrgInvitationsError = ListOrgInvitationsErrors[keyof ListOrgInvitationsErrors];
+
+export type ListOrgInvitationsResponses = {
+    200: Array<OrgInvitation>;
+};
+
+export type ListOrgInvitationsResponse = ListOrgInvitationsResponses[keyof ListOrgInvitationsResponses];
+
+export type CreateOrgInvitationData = {
+    body: OrgInvitationCreate;
+    path?: never;
+    query?: never;
+    url: '/api/org/invitations';
+};
+
+export type CreateOrgInvitationErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type CreateOrgInvitationError = CreateOrgInvitationErrors[keyof CreateOrgInvitationErrors];
+
+export type CreateOrgInvitationResponses = {
+    200: OrgInvitationLink;
+};
+
+export type CreateOrgInvitationResponse = CreateOrgInvitationResponses[keyof CreateOrgInvitationResponses];
+
+export type RevokeOrgInvitationData = {
+    body?: never;
+    path: {
+        invitation_id: string;
+    };
+    query?: never;
+    url: '/api/org/invitations/{invitation_id}';
+};
+
+export type RevokeOrgInvitationErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RevokeOrgInvitationError = RevokeOrgInvitationErrors[keyof RevokeOrgInvitationErrors];
+
+export type RevokeOrgInvitationResponses = {
+    200: OkBody;
+};
+
+export type RevokeOrgInvitationResponse = RevokeOrgInvitationResponses[keyof RevokeOrgInvitationResponses];
+
+export type ResendOrgInvitationData = {
+    body?: never;
+    path: {
+        invitation_id: string;
+    };
+    query?: never;
+    url: '/api/org/invitations/{invitation_id}/resend';
+};
+
+export type ResendOrgInvitationErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ResendOrgInvitationError = ResendOrgInvitationErrors[keyof ResendOrgInvitationErrors];
+
+export type ResendOrgInvitationResponses = {
+    200: OrgInvitationLink;
+};
+
+export type ResendOrgInvitationResponse = ResendOrgInvitationResponses[keyof ResendOrgInvitationResponses];
+
+export type GetOrgSeatsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/org/seats';
+};
+
+export type GetOrgSeatsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetOrgSeatsError = GetOrgSeatsErrors[keyof GetOrgSeatsErrors];
+
+export type GetOrgSeatsResponses = {
+    200: OrgSeats;
+};
+
+export type GetOrgSeatsResponse = GetOrgSeatsResponses[keyof GetOrgSeatsResponses];
 
 export type PeerHelloData = {
     body?: never;
