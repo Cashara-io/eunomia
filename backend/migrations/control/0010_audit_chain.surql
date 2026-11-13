@@ -8,6 +8,11 @@ DEFINE FIELD OVERWRITE pending ON audit_event TYPE option<bool>;
 DEFINE FIELD OVERWRITE seq ON audit_event TYPE option<int>;
 DEFINE FIELD OVERWRITE prev_hash ON audit_event TYPE option<string>;
 DEFINE FIELD OVERWRITE hash ON audit_event TYPE option<string>;
+-- `detail_digest`: HMAC-SHA256 of `detail` under a key derived from ENCRYPTION_KEY, set when the row is
+-- written; the hash covers it, so an export can carry it instead of the detail. `digest_key`: that
+-- key's fingerprint, so a later key change reads as "cannot check" rather than as tampering.
+DEFINE FIELD OVERWRITE detail_digest ON audit_event TYPE option<string>;
+DEFINE FIELD OVERWRITE digest_key ON audit_event TYPE option<string>;
 DEFINE INDEX OVERWRITE audit_event_chain_idx ON audit_event FIELDS ledger, seq;
 DEFINE INDEX OVERWRITE audit_event_pending_idx ON audit_event FIELDS pending;
 DEFINE INDEX OVERWRITE audit_event_ledger_time_idx ON audit_event FIELDS ledger, created_at;

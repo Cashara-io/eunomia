@@ -293,8 +293,8 @@ pub const OAUTH_PRUNE: ControlStmt = ControlStmt::new(
 pub const AUDIT_EVENT_CREATE: ControlStmt = ControlStmt::new(
     "app.audit_event_create",
     "CREATE $id SET user = $user, actor_kind = $actor_kind, actor_id = $actor_id, action = $action, \
-     target = $target, outcome = $outcome, trace_id = $trace_id, detail = $detail, created_at = $created_at, \
-     ledger = $ledger, pending = true RETURN NONE",
+     target = $target, outcome = $outcome, trace_id = $trace_id, detail = $detail, detail_digest = $detail_digest, \
+     digest_key = $digest_key, created_at = $created_at, ledger = $ledger, pending = true RETURN NONE",
 );
 
 /// Retention for rows written before the chain started (no `ledger`). Chained rows are cut per
@@ -309,7 +309,7 @@ pub const AUDIT_PENDING_LEDGERS: ControlStmt =
 /// The oldest rows of one ledger still waiting to be sealed, in write order.
 pub const AUDIT_PENDING: ControlStmt = ControlStmt::new(
     "control.audit_pending",
-    "SELECT id, ledger, created_at, user, actor_kind, actor_id, action, target, outcome, trace_id, detail FROM audit_event \
+    "SELECT id, ledger, created_at, user, actor_kind, actor_id, action, target, outcome, trace_id, detail, detail_digest, digest_key FROM audit_event \
      WHERE pending = true AND ledger = $ledger ORDER BY created_at, id LIMIT $limit",
 );
 
@@ -353,8 +353,8 @@ pub const AUDIT_SEAL: ControlStmt = ControlStmt::new(
 /// Sealed rows of one ledger with `$after < seq <= $until`, in chain order.
 pub const AUDIT_CHAIN_PAGE: ControlStmt = ControlStmt::new(
     "control.audit_chain_page",
-    "SELECT id, ledger, seq, prev_hash, hash, created_at, user, actor_kind, actor_id, action, target, outcome, trace_id, detail \
-     FROM audit_event WHERE ledger = $ledger AND seq > $after AND seq <= $until ORDER BY seq LIMIT $limit",
+    "SELECT id, ledger, seq, prev_hash, hash, created_at, user, actor_kind, actor_id, action, target, outcome, trace_id, detail, \
+     detail_digest, digest_key FROM audit_event WHERE ledger = $ledger AND seq > $after AND seq <= $until ORDER BY seq LIMIT $limit",
 );
 
 /// The lowest sealed sequence number still stored for a ledger.
@@ -559,13 +559,14 @@ pub const AUTH_SESSION_REVOKE_OWNER: ControlStmt =
 
 // workspace admin (routers/admin.rs)
 
-/// A page of the security ledger for one org, newest first: rows of its members plus the
-/// anonymous rows (failed sign-ins), never the per-tool-call `tool.*` rows (Usage covers those).
+/// A page of the security ledger for one org, newest first: rows of its members plus, when
+/// `$instance` (the caller may see what belongs to no org, `authz::sees_instance`), the anonymous
+/// rows (failed sign-ins), never the per-tool-call `tool.*` rows (Usage covers those).
 /// `$prefix` and `$actions` narrow it to one kind of event, `$exclude` leaves some out; empty means all.
 pub const ADMIN_AUDIT_PAGE: ControlStmt = ControlStmt::new(
     "control.admin_audit_page",
     "SELECT id, user, user.email AS email, actor_kind, action, target, outcome, detail, created_at FROM audit_event \
-     WHERE (user IS NONE OR user IN (SELECT VALUE user FROM membership WHERE org = $org)) \
+     WHERE ((user IS NONE AND $instance = true) OR user IN (SELECT VALUE user FROM membership WHERE org = $org)) \
      AND !string::starts_with(action, 'tool.') \
      AND ($prefix = '' OR string::starts_with(action, $prefix)) \
      AND (array::len($actions) = 0 OR action IN $actions) \

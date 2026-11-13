@@ -47,6 +47,8 @@ async fn main() {
     // Tell the job loops to finish or release their leases, and give them the grace period.
     let _ = stop.send(true);
     let _ = tokio::time::timeout(cfg.grace + Duration::from_secs(5), futures::future::join_all(background)).await;
+    // audit events this process could not write yet: one last try before it exits
+    eunomia_backend::audit::chain::shutdown_flush(Duration::from_secs(10)).await;
 }
 
 /// Resolves on SIGTERM (docker stop) or Ctrl-C.

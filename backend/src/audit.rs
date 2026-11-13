@@ -7,9 +7,10 @@
 //!
 //! Delivery is durable within the process, and never silently dropped: the write runs in a task of
 //! its own, so a caller that is cancelled mid-write (a client that disconnects) does not lose it; a
-//! failed write is retried, then queued and replayed by the scheduler (`chain::replay`); a row written
-//! but not yet sealed (a crash between the two) is sealed by the same replay. A failure is logged,
-//! never surfaced to the caller.
+//! route can run its action and its event together with [`detached`]; a failed write is retried,
+//! then queued in this process and drained by its own timer (`chain::spawn_drain`) and at shutdown;
+//! a row written but not yet sealed (a crash between the two) is sealed by the scheduler's replay
+//! (`chain::replay`). A failure is logged, never surfaced to the caller.
 
 use surrealdb::types::RecordId;
 
@@ -52,11 +53,39 @@ pub async fn record_in_org(db: &ControlDb, org: &OrgId, e: Event<'_>) {
     deliver(db, chain::Pending::new(Event { detail: &detail, ..e }, Some(chain::org_ledger(org)))).await;
 }
 
-/// Writes and seals in a task of its own and waits for it. Dropping the caller's future (a
-/// cancelled request) leaves the task running, so the event still lands (issue #219).
+/// Writes in a task of its own and waits for the write (the seal follows in the background).
+/// Dropping the caller's future (a cancelled request) leaves the task running, so the event still
+/// lands. A panic inside the task is logged: the event is then lost, and the log says which.
 async fn deliver(db: &ControlDb, pending: chain::Pending) {
     let db = db.clone();
-    let _ = tokio::spawn(chain::append(db, pending)).await;
+    let action = pending.action().to_string();
+    if let Err(e) = tokio::spawn(chain::append(db, pending)).await {
+        tracing::error!(action = %action, panicked = e.is_panic(), error = %e, "audit delivery task failed: event lost");
+    }
+}
+
+/// Runs an audited action and the audit events it records in a task of their own, with the
+/// caller's credential and trace id, and waits for it. A client that disconnects drops only the
+/// wait: the action and its event finish together, so a committed action is never left without
+/// its event (issue #219). A panic in the task is raised again here, as it would have been inline.
+pub async fn detached<F, T>(fut: F) -> T
+where
+    F: std::future::Future<Output = T> + Send + 'static,
+    T: Send + 'static,
+{
+    let caller = crate::authz::current();
+    let trace = crate::telemetry::current_trace_id();
+    let task = tokio::spawn(crate::telemetry::with_trace_id(trace, async move {
+        match caller {
+            Some(c) => crate::authz::with_caller(c, fut).await,
+            None => fut.await,
+        }
+    }));
+    match task.await {
+        Ok(v) => v,
+        Err(e) if e.is_panic() => std::panic::resume_unwind(e.into_panic()),
+        Err(e) => panic!("audited action task was cancelled: {e}"),
+    }
 }
 
 /// Records an event for the current request's credential (the gate's caller), or

@@ -14,11 +14,13 @@
 //!
 //! **Hash.** `hash = sha256_hex(canonical)` where `canonical` is the compact JSON array
 //! `["eunomia.audit.v1", ledger, seq, prev_hash, id, created_at, user, actor_kind, actor_id, action,
-//! target, outcome, trace_id, sha256_hex(detail)]` ([`canonical`]). `created_at` is RFC 3339 UTC
+//! target, outcome, trace_id, detail_digest]` ([`canonical`]). `created_at` is RFC 3339 UTC
 //! with exactly six fractional digits and `Z`; `id` and `user` are `table:key`, `user` is `null`
 //! when absent; strings use JSON's minimal escaping (serde_json, the same as Python's
-//! `json.dumps(..., ensure_ascii=False, separators=(",", ":"))`). The detail is committed by its
-//! hash, so an export can leave the free text out and still verify. The first event's `prev_hash` is
+//! `json.dumps(..., ensure_ascii=False, separators=(",", ":"))`). The detail is committed by
+//! `detail_digest`, HMAC-SHA256 of the detail under a key derived from `ENCRYPTION_KEY` ([`digest`]),
+//! stored on the row when it is written: an export can leave the free text out and still verify, and
+//! a digest in an export cannot be reversed by guessing the detail (an email address, say). The first event's `prev_hash` is
 //! the genesis hash `sha256_hex(["eunomia.audit.v1","genesis",ledger,genesis_at])`, recorded as
 //! checkpoint 0.
 
@@ -44,6 +46,9 @@ pub const VERSION: &str = "eunomia.audit.v1";
 pub const INSTANCE: &str = "instance";
 /// Rows sealed per transaction.
 const SEAL_BATCH: i64 = 200;
+/// Batches one [`seal`] call commits at most before it returns (the background sealer and the
+/// replay come back for the rest).
+const MAX_SEAL_BATCHES: u32 = 25;
 /// Rows read per page while verifying or exporting.
 const PAGE: i64 = 1000;
 /// An export holds at most this many events; `next_seq` says where the next one starts.
@@ -61,6 +66,38 @@ pub fn org_ledger(org: &OrgId) -> String {
 
 pub fn sha256_hex(bytes: impl AsRef<[u8]>) -> String {
     hex::encode(Sha256::digest(bytes.as_ref()))
+}
+
+static DETAIL_KEY: std::sync::OnceLock<(String, String)> = std::sync::OnceLock::new();
+
+/// Sets this process's detail key from `ENCRYPTION_KEY` (at boot, `AppState::build`). Derived like
+/// the control database password: nothing about it is stored. The first call wins.
+pub fn set_detail_key(encryption_key: &str) {
+    DETAIL_KEY.get_or_init(|| derive_detail_key(encryption_key));
+}
+
+fn derive_detail_key(encryption_key: &str) -> (String, String) {
+    let key = crate::pool::derived_password(encryption_key, "eunomia/audit-detail");
+    let id = crate::pool::derived_password(&key, "eunomia/audit-detail-id")[..16].to_string();
+    (key, id)
+}
+
+fn detail_key() -> &'static (String, String) {
+    DETAIL_KEY.get_or_init(|| derive_detail_key(""))
+}
+
+/// The fingerprint of the current detail key, stored with each digest so a later key change shows
+/// as "not checkable" rather than as tampering.
+pub fn detail_key_id() -> &'static str {
+    &detail_key().1
+}
+
+/// HMAC-SHA256 of an event's detail under the detail key, hex.
+pub fn digest(detail: &str) -> String {
+    use hmac::{Hmac, Mac};
+    let mut mac = Hmac::<Sha256>::new_from_slice(detail_key().0.as_bytes()).expect("hmac takes any key length");
+    mac.update(detail.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
 }
 
 /// The canonical time: RFC 3339, UTC, six fractional digits, `Z`.
@@ -93,7 +130,7 @@ pub struct AuditEventFields {
     pub target: String,
     pub outcome: String,
     pub trace_id: String,
-    pub detail_sha256: String,
+    pub detail_digest: String,
 }
 
 /// The exact bytes an event's hash is taken over.
@@ -112,7 +149,7 @@ pub fn canonical(c: &AuditEventFields) -> String {
         c.target.clone().into(),
         c.outcome.clone().into(),
         c.trace_id.clone().into(),
-        c.detail_sha256.clone().into(),
+        c.detail_digest.clone().into(),
     ])
     .to_string()
 }
@@ -140,10 +177,16 @@ pub(crate) struct Pending {
     outcome: String,
     trace_id: String,
     detail: String,
+    detail_digest: String,
+    digest_key: String,
     created_at: DateTime<Utc>,
 }
 
 impl Pending {
+    pub(crate) fn action(&self) -> &str {
+        &self.action
+    }
+
     pub(crate) fn new(e: Event<'_>, ledger: Option<String>) -> Self {
         Pending {
             id: uuid::Uuid::new_v4().simple().to_string(),
@@ -156,42 +199,163 @@ impl Pending {
             outcome: e.outcome.to_string(),
             trace_id: crate::telemetry::current_trace_id(),
             detail: e.detail.to_string(),
+            detail_digest: digest(e.detail),
+            digest_key: detail_key_id().to_string(),
             created_at: now_micros(),
         }
     }
 }
 
-/// Events whose write failed, waiting for [`replay`]. Each keeps its own database handle.
-static OUTBOX: Mutex<VecDeque<(ControlDb, Pending)>> = Mutex::new(VecDeque::new());
-/// Events dropped because the outbox was full (logged at error level each time).
+/// Events dropped because a replay queue was full (logged at error level each time).
 pub static DROPPED: AtomicU64 = AtomicU64::new(0);
+
+/// A process's queue of events whose write failed. Every process (each replica, leader or not)
+/// has its own and drains it on its own timer ([`spawn_drain`]) and at graceful shutdown
+/// ([`shutdown_flush`]); nothing else reads it. An event held only here is lost if the process
+/// dies before the database accepts it (docs/audit-chain.md, "What can go wrong").
+pub struct Outbox {
+    q: Mutex<VecDeque<(ControlDb, Pending)>>,
+}
+
+impl Default for Outbox {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Outbox {
+    pub const fn new() -> Self {
+        Outbox { q: Mutex::new(VecDeque::new()) }
+    }
+
+    /// Events waiting in this queue.
+    pub fn len(&self) -> usize {
+        self.q.lock().unwrap_or_else(|e| e.into_inner()).len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    fn push(&self, db: ControlDb, p: Pending) {
+        let mut q = self.q.lock().unwrap_or_else(|e| e.into_inner());
+        if q.len() >= OUTBOX_CAP
+            && let Some((_, lost)) = q.pop_front()
+        {
+            DROPPED.fetch_add(1, Ordering::Relaxed);
+            tracing::error!(action = %lost.action, id = %lost.id, "audit replay queue full: oldest event dropped");
+        }
+        q.push_back((db, p));
+    }
+
+    /// Writes up to `max` queued events, oldest first, each to its own database, and schedules their
+    /// ledgers' seals. Those that still fail go back to the front, in order. Returns how many it wrote.
+    pub async fn flush(&self, max: usize) -> usize {
+        let batch: Vec<(ControlDb, Pending)> = {
+            let mut q = self.q.lock().unwrap_or_else(|e| e.into_inner());
+            let n = max.min(q.len());
+            q.drain(..n).collect()
+        };
+        let mut written = 0;
+        let mut failed = Vec::new();
+        for (db, mut p) in batch {
+            // after one failure the database is likely still away: keep the rest for the next pass
+            if !failed.is_empty() {
+                failed.push((db, p));
+                continue;
+            }
+            match write(&db, &mut p).await {
+                Ok(()) => {
+                    written += 1;
+                    schedule_seal(&db, p.ledger.clone().unwrap_or_else(|| INSTANCE.into()));
+                }
+                Err(_) => failed.push((db, p)),
+            }
+        }
+        let mut q = self.q.lock().unwrap_or_else(|e| e.into_inner());
+        for item in failed.into_iter().rev() {
+            q.push_front(item);
+        }
+        written
+    }
+
+    /// Test-only (feature `test-support`): queues one event as if its write had failed.
+    #[cfg(feature = "test-support")]
+    pub fn queue_for_test(&self, db: &ControlDb, user: &RecordId, action: &str) {
+        let actor = crate::authz::Actor { kind: "user", id: rid(user) };
+        let p = Pending::new(Event { user: Some(user), actor: &actor, action, target: "", outcome: "ok", detail: "" }, None);
+        self.push(db.clone(), p);
+    }
+}
+
+/// This process's queue.
+static OUTBOX: Outbox = Outbox::new();
+
+pub fn outbox() -> &'static Outbox {
+    &OUTBOX
+}
+
+/// Events waiting in this process's replay queue.
+pub fn queued() -> usize {
+    OUTBOX.len()
+}
+
+/// Queued events one drain pass writes at most (the rest wait for the next pass).
+const DRAIN_BATCH: usize = 500;
+
+/// Drains `outbox` every `every` until the process ends. [`crate::state::AppState::build`] starts
+/// one for this process's queue; tests start their own.
+pub fn spawn_drain(outbox: &'static Outbox, every: Duration) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(every);
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tick.tick().await;
+            if !outbox.is_empty() {
+                let n = outbox.flush(DRAIN_BATCH).await;
+                if n > 0 {
+                    tracing::info!(written = n, left = outbox.len(), "audit replay queue drained");
+                }
+            }
+        }
+    })
+}
+
+/// Starts this process's drain once, however many app states the process builds.
+pub fn start_drain() {
+    static STARTED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    STARTED.get_or_init(|| {
+        spawn_drain(&OUTBOX, Duration::from_secs(5));
+    });
+}
+
+/// Graceful shutdown: tries to write every queued event before the process exits, for up to `wait`.
+/// What is still queued after that is lost, and logged at error level.
+pub async fn shutdown_flush(wait: Duration) {
+    let deadline = tokio::time::Instant::now() + wait;
+    while !OUTBOX.is_empty() && tokio::time::Instant::now() < deadline {
+        if tokio::time::timeout_at(deadline, OUTBOX.flush(DRAIN_BATCH)).await.map(|n| n == 0).unwrap_or(true) {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    }
+    let left = OUTBOX.len();
+    if left > 0 {
+        tracing::error!(left, "audit events still queued at shutdown were lost");
+    }
+}
 
 /// Test-only fault injection (feature `test-support`): the next this-many writes fail as if the
 /// database refused them. Process-global, so the tests that use it serialise on a lock.
 #[cfg(feature = "test-support")]
 pub static FAIL_WRITES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-/// Test-only: when set, a write is not sealed inline (as if the process died right after the
-/// write), so only [`replay`] can seal it.
+/// Test-only: when set, a written event is not scheduled for sealing (as if the process died right
+/// after the write), so only [`replay`] or an explicit [`seal`] can seal it.
 #[cfg(feature = "test-support")]
 pub static SKIP_INLINE_SEAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Events waiting in the in-memory replay queue.
-pub fn queued() -> usize {
-    OUTBOX.lock().unwrap_or_else(|e| e.into_inner()).len()
-}
-
-fn enqueue(db: ControlDb, p: Pending) {
-    let mut q = OUTBOX.lock().unwrap_or_else(|e| e.into_inner());
-    if q.len() >= OUTBOX_CAP
-        && let Some((_, lost)) = q.pop_front()
-    {
-        DROPPED.fetch_add(1, Ordering::Relaxed);
-        tracing::error!(action = %lost.action, id = %lost.id, "audit replay queue full: oldest event dropped");
-    }
-    q.push_back((db, p));
-}
-
-/// Writes then seals one event. Never fails: a write that cannot be made is queued for [`replay`].
+/// Writes one event, then schedules its ledger's seal in the background. The caller waits only
+/// for the write (one statement, at most two quick retries): never for a seal, a lock, another
+/// writer or the replay queue. A write that cannot be made goes to this process's queue.
 pub(crate) async fn append(db: ControlDb, mut p: Pending) {
     match write(&db, &mut p).await {
         Ok(()) => {
@@ -199,19 +363,49 @@ pub(crate) async fn append(db: ControlDb, mut p: Pending) {
             if SKIP_INLINE_SEAL.load(Ordering::SeqCst) {
                 return;
             }
-            let ledger = p.ledger.clone().unwrap_or_else(|| INSTANCE.into());
-            if let Err(e) = seal(&db, &ledger).await {
-                tracing::warn!(ledger = %ledger, error = %e.message, "audit seal deferred to replay");
-            }
-            if queued() > 0 {
-                flush_outbox().await;
-            }
+            schedule_seal(&db, p.ledger.clone().unwrap_or_else(|| INSTANCE.into()));
         }
         Err(e) => {
             tracing::warn!(action = %p.action, error = %e, "audit_event write failed; queued for replay");
-            enqueue(db, p);
+            OUTBOX.push(db, p);
         }
     }
+}
+
+/// Ledgers with a background sealer running in this process, keyed by database and ledger; the
+/// flag asks it to go round once more. However many events arrive at once, one task per ledger
+/// seals them, in batches.
+type SealKey = (usize, String);
+static SEALING: Mutex<Option<std::collections::HashMap<SealKey, bool>>> = Mutex::new(None);
+
+fn schedule_seal(db: &ControlDb, ledger: String) {
+    let key = (db.identity(), ledger.clone());
+    {
+        let mut m = SEALING.lock().unwrap_or_else(|e| e.into_inner());
+        let m = m.get_or_insert_with(Default::default);
+        if let Some(again) = m.get_mut(&key) {
+            *again = true;
+            return;
+        }
+        m.insert(key.clone(), false);
+    }
+    let db = db.clone();
+    tokio::spawn(async move {
+        loop {
+            if let Err(e) = seal(&db, &ledger).await {
+                tracing::warn!(ledger = %ledger, error = %e.message, "audit seal deferred to replay");
+            }
+            let mut m = SEALING.lock().unwrap_or_else(|e| e.into_inner());
+            let m = m.get_or_insert_with(Default::default);
+            match m.get_mut(&key) {
+                Some(again) if *again => *again = false,
+                _ => {
+                    m.remove(&key);
+                    return;
+                }
+            }
+        }
+    });
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -251,6 +445,8 @@ async fn write(db: &ControlDb, p: &mut Pending) -> surrealdb::Result<()> {
             .bind(("outcome", p.outcome.clone()))
             .bind(("trace_id", p.trace_id.clone()))
             .bind(("detail", p.detail.clone()))
+            .bind(("detail_digest", p.detail_digest.clone()))
+            .bind(("digest_key", p.digest_key.clone()))
             .bind(("created_at", Datetime::from(p.created_at)))
             .bind(("ledger", p.ledger.clone()))
             .await;
@@ -267,31 +463,6 @@ async fn write(db: &ControlDb, p: &mut Pending) -> surrealdb::Result<()> {
     }
 }
 
-/// Writes every queued event (each to its own database); those that still fail go back in the queue.
-async fn flush_outbox() -> usize {
-    let batch: Vec<(ControlDb, Pending)> = OUTBOX.lock().unwrap_or_else(|e| e.into_inner()).drain(..).collect();
-    let mut written = 0;
-    let mut ledgers: Vec<(ControlDb, String)> = Vec::new();
-    for (db, mut p) in batch {
-        match write(&db, &mut p).await {
-            Ok(()) => {
-                written += 1;
-                let ledger = p.ledger.clone().unwrap_or_else(|| INSTANCE.into());
-                if !ledgers.iter().any(|(_, l)| *l == ledger) {
-                    ledgers.push((db, ledger));
-                }
-            }
-            Err(_) => enqueue(db, p),
-        }
-    }
-    for (db, ledger) in ledgers {
-        if let Err(e) = seal(&db, &ledger).await {
-            tracing::warn!(ledger = %ledger, error = %e.message, "audit seal deferred to replay");
-        }
-    }
-    written
-}
-
 /// What one [`replay`] pass did.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Replayed {
@@ -301,10 +472,12 @@ pub struct Replayed {
     pub sealed: u64,
 }
 
-/// The durable replay: writes the queued events, then seals every pending row of every ledger.
-/// Run by the scheduler leader each tick; safe to run anywhere, any number of times at once.
+/// The durable replay: writes a batch of this process's queued events, then seals every pending
+/// row of every ledger (whichever process wrote it). The scheduler leader runs it each tick; every
+/// process also drains its own queue on its own timer ([`spawn_drain`]). Safe to run anywhere, any
+/// number of times at once.
 pub async fn replay(db: &ControlDb) -> AppResult<Replayed> {
-    let written = flush_outbox().await;
+    let written = OUTBOX.flush(DRAIN_BATCH).await;
     #[derive(Deserialize, SurrealValue)]
     struct L {
         #[serde(default)]
@@ -362,9 +535,30 @@ pub(crate) struct Row {
     #[serde(default)]
     #[surreal(default)]
     pub detail: String,
+    #[serde(default)]
+    #[surreal(default)]
+    pub detail_digest: Option<String>,
+    #[serde(default)]
+    #[surreal(default)]
+    pub digest_key: Option<String>,
 }
 
 impl Row {
+    /// The digest the hash covers: the one stored when the row was written.
+    fn stored_digest(&self) -> String {
+        self.detail_digest.clone().unwrap_or_else(|| digest(&self.detail))
+    }
+
+    /// `Some(false)` when the detail no longer matches its digest, `None` when the digest was made
+    /// under another detail key (the encryption key changed since), so it cannot be checked here.
+    fn detail_matches(&self) -> Option<bool> {
+        match self.digest_key.as_deref() {
+            Some(k) if k == detail_key_id() => Some(digest(&self.detail) == self.stored_digest()),
+            None if self.detail_digest.is_none() => Some(true),
+            _ => None,
+        }
+    }
+
     /// The canonical fields of this row placed at `seq` after `prev_hash` in `ledger`.
     fn canonical(&self, ledger: &str, seq: i64, prev_hash: &str) -> AuditEventFields {
         AuditEventFields {
@@ -380,7 +574,7 @@ impl Row {
             target: self.target.clone(),
             outcome: self.outcome.clone(),
             trace_id: self.trace_id.clone(),
-            detail_sha256: sha256_hex(&self.detail),
+            detail_digest: self.stored_digest(),
         }
     }
 
@@ -434,6 +628,7 @@ pub async fn seal(db: &ControlDb, ledger: &str) -> AppResult<u64> {
     let _guard = crate::tx::lock(&format!("audit-chain:{ledger}")).await;
     let mut sealed = 0u64;
     let mut lost = 0u32;
+    let mut batches = 0u32;
     loop {
         let head = read_head(db, ledger).await?;
         let rows: Vec<Row> =
@@ -441,6 +636,10 @@ pub async fn seal(db: &ControlDb, ledger: &str) -> AppResult<u64> {
         if rows.is_empty() {
             return Ok(sealed);
         }
+        // a short batch means this call has caught up: rows written from now on are the next
+        // call's (the background sealer goes round again for them), so a busy ledger cannot keep
+        // one call, or a `verify` waiting on it, sealing forever
+        let caught_up = (rows.len() as i64) < SEAL_BATCH;
         let (expect, mut seq, mut prev, genesis) = match &head {
             Some(h) => (h.seq, h.seq, h.hash.clone(), None),
             None => {
@@ -470,7 +669,14 @@ pub async fn seal(db: &ControlDb, ledger: &str) -> AppResult<u64> {
             .bind(("genesis_at", genesis.map(|g| Datetime::from(g.1))))
             .await;
         match res {
-            Ok(_) => sealed += n,
+            Ok(_) if caught_up => return Ok(sealed + n),
+            Ok(_) => {
+                sealed += n;
+                batches += 1;
+                if batches >= MAX_SEAL_BATCHES {
+                    return Ok(sealed);
+                }
+            }
             Err(e) if lost_race(&e) && lost < 50 => {
                 lost += 1;
                 let ms = rand::random::<u64>() % (5 * lost as u64).min(100) + 1;
@@ -534,55 +740,73 @@ struct SeqHash {
     hash: Option<String>,
 }
 
-/// Retention for chained ledgers: everything sealed before `cutoff` is deleted, and the last
-/// deleted event's sequence and hash are kept as a `retention` checkpoint in the same transaction.
+/// Retention for chained ledgers: the events sealed before the first one written at or after
+/// `cutoff` are deleted, and the last deleted event's sequence and hash are kept as a `retention`
+/// checkpoint in the same transaction. The cut is found from the newest events down, so one row with
+/// an old timestamp sealed late (a replayed event, a replica with a slow clock) can never pull newer
+/// events inside the window into the cut.
 pub async fn prune(db: &ControlDb, cutoff: DateTime<Utc>) -> AppResult<()> {
     replay(db).await?;
     for head in heads(db).await? {
-        let last: Vec<SeqHash> = store::control::AUDIT_LAST_SEQ_BEFORE
-            .on(db)
-            .bind(("ledger", head.ledger.clone()))
-            .bind(("to", Datetime::from(cutoff)))
-            .await?
-            .take(0)?;
-        let Some(SeqHash { seq, hash: Some(hash) }) = last.into_iter().next() else { continue };
-        store::control::AUDIT_RETENTION_CUT
-            .on(db)
-            .bind(("ledger", head.ledger.clone()))
-            .bind(("seq", seq))
-            .bind(("hash", hash))
-            .await?
-            .check()?;
-        tracing::info!(ledger = %head.ledger, through_seq = seq, "audit retention cut, checkpoint kept");
+        let ledger = head.ledger.clone();
+        let since: Vec<SeqHash> =
+            store::control::AUDIT_FIRST_SEQ_SINCE.on(db).bind(("ledger", ledger.clone())).bind(("from", Datetime::from(cutoff))).await?.take(0)?;
+        let cut = match since.first() {
+            Some(r) => r.seq - 1,
+            // nothing inside the window: everything sealed so far is older
+            None => head.seq,
+        };
+        if cut < 1 {
+            continue;
+        }
+        let rows = page(db, &ledger, cut - 1, cut, 1).await?;
+        let Some(hash) = rows.first().and_then(|r| r.hash.clone()) else { continue }; // already cut
+        store::control::AUDIT_RETENTION_CUT.on(db).bind(("ledger", ledger.clone())).bind(("seq", cut)).bind(("hash", hash)).await?.check()?;
+        tracing::info!(ledger = %ledger, through_seq = cut, "audit retention cut, checkpoint kept");
     }
     Ok(())
 }
 
 /// Writes a `periodic` checkpoint (a copy of the head) for every ledger whose head moved since its
-/// newest checkpoint, at most once per `every`. Run by the scheduler; the checkpoints are what an
-/// operator copies off the server to anchor the chain (docs/audit-chain.md).
+/// newest checkpoint, at most once per `every`. It first checks the events since that checkpoint,
+/// so it never endorses a head that does not follow from the last one; a ledger that fails gets no
+/// checkpoint and an error in the log. Run by the scheduler; these checkpoints are what an operator
+/// copies off the server to anchor the chain (docs/audit-chain.md).
 pub async fn checkpoint_due(db: &ControlDb, every: TimeDelta) -> AppResult<usize> {
     let mut written = 0;
     for head in heads(db).await? {
         let latest: Vec<CheckpointRow> =
             store::control::AUDIT_LATEST_CHECKPOINT.on(db).bind(("ledger", head.ledger.clone())).await?.take(0)?;
-        let due = match latest.first() {
-            None => true,
-            Some(c) => {
-                c.seq < head.seq && crate::sources::base::datetime_to_chrono(&c.at).is_none_or(|at| Utc::now() - at >= every)
-            }
-        };
-        if due {
-            store::control::AUDIT_CHECKPOINT_CREATE
-                .on(db)
-                .bind(("ledger", head.ledger.clone()))
-                .bind(("seq", head.seq))
-                .bind(("hash", head.hash.clone()))
-                .bind(("kind", "periodic"))
-                .await?
-                .check()?;
-            written += 1;
+        let Some(from) = latest.first() else { continue }; // no genesis: verify reports it
+        let due = from.seq < head.seq && crate::sources::base::datetime_to_chrono(&from.at).is_none_or(|at| Utc::now() - at >= every);
+        if !due {
+            continue;
         }
+        let mut walk = Walk::new(from.seq, from.hash.clone());
+        let mut after = from.seq;
+        while after < head.seq && walk.broken.is_none() {
+            let rows = page(db, &head.ledger, after, head.seq, PAGE).await?;
+            let Some(last) = rows.last() else { break };
+            after = last.seq.unwrap_or(head.seq);
+            for r in &rows {
+                if !walk.step(&r.stored(), r.hash.as_deref().unwrap_or_default()) {
+                    break;
+                }
+            }
+        }
+        if walk.broken.is_some() || walk.last_seq() != head.seq || walk.prev_hash != head.hash {
+            tracing::error!(ledger = %head.ledger, from = from.seq, head = head.seq, "audit chain does not follow from its last checkpoint: no new checkpoint written");
+            continue;
+        }
+        store::control::AUDIT_CHECKPOINT_CREATE
+            .on(db)
+            .bind(("ledger", head.ledger.clone()))
+            .bind(("seq", head.seq))
+            .bind(("hash", head.hash.clone()))
+            .bind(("kind", "periodic"))
+            .await?
+            .check()?;
+        written += 1;
     }
     Ok(written)
 }
@@ -628,6 +852,9 @@ pub struct AuditVerification {
     pub pending: i64,
     /// For the `instance` ledger: events written before the chain started, which have no hash.
     pub before_chain: i64,
+    /// Events whose detail could not be checked against its digest because the encryption key
+    /// changed since they were written (their hash and link were still checked).
+    pub detail_unchecked: u64,
     /// When the check ran, RFC 3339.
     pub checked_at: String,
 }
@@ -724,17 +951,27 @@ pub async fn verify(db: &ControlDb, ledger: &str) -> AppResult<AuditVerification
         broken: None,
         pending: count(db, &store::control::AUDIT_PENDING_COUNT, ledger).await?,
         before_chain: if ledger == INSTANCE { count(db, &store::control::AUDIT_LEGACY_COUNT, ledger).await? } else { 0 },
+        detail_unchecked: 0,
         checked_at: ts(&Utc::now()),
     };
-    let Some(head) = read_head(db, ledger).await? else { return Ok(v) };
-    v.head_seq = Some(head.seq);
-    v.head_hash = Some(head.hash.clone());
-    let cps = checkpoints(db, ledger).await?;
     let fail = |mut v: AuditVerification, b: AuditChainBreak| {
         v.ok = false;
         v.broken = Some(b);
         Ok(v)
     };
+    // Checkpoints first, then the head: a checkpoint is a copy of an earlier head, so every one read
+    // here is at or below the head read next, however busy the ledger is.
+    let cps = checkpoints(db, ledger).await?;
+    let first: Vec<SeqHash> = store::control::AUDIT_FIRST_SEQ.on(db).bind(("ledger", ledger.to_string())).await?.take(0)?;
+    let first = first.first().map(|r| r.seq);
+    let Some(head) = read_head(db, ledger).await? else {
+        if first.is_some() || !cps.is_empty() {
+            return fail(v, brk(None, "head", "This log has events or checkpoints but no head: the record of its newest event was deleted.".into()));
+        }
+        return Ok(v);
+    };
+    v.head_seq = Some(head.seq);
+    v.head_hash = Some(head.hash.clone());
 
     for c in cps.iter().filter(|c| c.kind == "genesis") {
         let at = crate::sources::base::datetime_to_chrono(&c.at).map(|t| ts(&t)).unwrap_or_default();
@@ -742,13 +979,14 @@ pub async fn verify(db: &ControlDb, ledger: &str) -> AppResult<AuditVerification
             return fail(v, brk(Some(0), "genesis", "The chain's starting point was changed.".into()));
         }
     }
-
+    if !cps.iter().any(|c| c.kind == "genesis") {
+        return fail(v, brk(Some(0), "genesis", "The chain's starting point is missing.".into()));
+    }
     // a checkpoint past the head means the newest events were deleted and the head wound back
     if let Some(c) = cps.iter().find(|c| c.seq > head.seq) {
         return fail(v, brk(Some(head.seq + 1), "checkpoint", format!("A checkpoint records event {}, but the log ends at event {}: the newest events are missing.", c.seq, head.seq)));
     }
-    let first: Vec<SeqHash> = store::control::AUDIT_FIRST_SEQ.on(db).bind(("ledger", ledger.to_string())).await?.take(0)?;
-    let Some(first) = first.first().map(|r| r.seq) else {
+    let Some(first) = first else {
         // nothing stored: every event was cut by retention, or the newest were deleted
         return match anchor_for(&cps, head.seq) {
             Some(a) if a.hash == head.hash => {
@@ -770,23 +1008,33 @@ pub async fn verify(db: &ControlDb, ledger: &str) -> AppResult<AuditVerification
         m
     });
 
+    // the walk stops at the head read above; events sealed since are newer, not errors
     let mut walk = Walk::new(anchor.seq, anchor.hash.clone());
     let mut after = anchor.seq;
-    loop {
+    'pages: loop {
         let rows = page(db, ledger, after, head.seq, PAGE).await?;
         let Some(last) = rows.last() else { break };
         after = last.seq.unwrap_or(after);
         for r in &rows {
             if !walk.step(&r.stored(), r.hash.as_deref().unwrap_or_default()) {
-                break;
+                break 'pages;
+            }
+            match r.detail_matches() {
+                Some(false) => {
+                    walk.broken = Some(brk(Some(walk.last_seq()), "altered", format!("The detail of event {} was changed after it was written.", walk.last_seq())));
+                    break 'pages;
+                }
+                None => v.detail_unchecked += 1,
+                Some(true) => {}
             }
             if let Some(cs) = by_seq.get(&walk.last_seq())
                 && cs.iter().any(|c| c.hash != walk.prev_hash)
             {
                 walk.broken = Some(brk(Some(walk.last_seq()), "checkpoint", format!("A checkpoint disagrees with event {}.", walk.last_seq())));
+                break 'pages;
             }
         }
-        if walk.broken.is_some() || (rows.len() as i64) < PAGE {
+        if (rows.len() as i64) < PAGE {
             break;
         }
     }
@@ -806,9 +1054,17 @@ pub async fn verify(db: &ControlDb, ledger: &str) -> AppResult<AuditVerification
     if walk.prev_hash != head.hash {
         return fail(v, brk(Some(head.seq), "head", "The newest event does not match the recorded head.".into()));
     }
+    // Events above the head read at the start: fine if the head has moved past them since and the
+    // first of them follows the last event checked; a break if the head did not move (or moved back).
     let beyond = page(db, ledger, head.seq, i64::MAX, 1).await?;
     if let Some(r) = beyond.first() {
-        return fail(v, brk(r.seq, "head", format!("Event {} is newer than the recorded head.", r.seq.unwrap_or_default())));
+        let now = read_head(db, ledger).await?;
+        let seq = r.seq.unwrap_or_default();
+        let moved_on = now.as_ref().is_some_and(|h| h.seq >= seq);
+        let follows = seq == head.seq + 1 && r.prev_hash.as_deref() == Some(head.hash.as_str());
+        if !(moved_on && follows) {
+            return fail(v, brk(Some(seq), "head", format!("Event {seq} is newer than the recorded head.")));
+        }
     }
     Ok(v)
 }
@@ -969,7 +1225,7 @@ mod tests {
             target: "vault:v1".into(),
             outcome: "ok".into(),
             trace_id: "t".into(),
-            detail_sha256: sha256_hex(""),
+            detail_digest: sha256_hex(""),
         }
     }
 
@@ -1047,7 +1303,7 @@ mod tests {
         relinked[3].1 = event_hash(&relinked[3].0);
         assert_eq!(run(relinked), Some(("link".into(), Some(4))));
         let mut detail = c;
-        detail[4].0.detail_sha256 = sha256_hex("changed");
+        detail[4].0.detail_digest = sha256_hex("changed");
         assert_eq!(run(detail), Some(("altered".into(), Some(5))));
     }
 }

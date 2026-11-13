@@ -149,6 +149,12 @@ pub struct OrgDb {
 }
 
 impl ControlDb {
+    /// Identifies this handle (and its clones) within the process: the audit chain keys its
+    /// background sealers by database, so two app states in one process (tests) never share one.
+    pub fn identity(&self) -> usize {
+        Arc::as_ptr(&self.raw) as *const () as usize
+    }
+
     /// The raw client. The `RawKey` token can only be made inside `store/`, so nothing else compiles a call.
     pub(crate) fn raw(&self, _: crate::store::RawKey) -> &Db {
         self.raw.pick()
