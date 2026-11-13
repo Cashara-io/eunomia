@@ -260,7 +260,8 @@ results that several arms agree on and recent ones:
    records, then one hop along their relations: the relations themselves (a hit
    of kind `relation`, e.g. "Ada works at Acme") and the neighbours' newest
    facts, only inside the vault being searched
-6. **temporal**: an explicit `time_range`
+6. **temporal**: with an explicit `time_range` and nothing else to rank by
+   (an empty query, or no match in the range), the newest items in the range
 7. **relation**: relations joining two entities the question names ("how is
    Ada connected to Acme"), counted as their own signal
 
@@ -271,8 +272,12 @@ semantic hit must reach a minimum similarity, so an unrelated nearest
 neighbour never rides in on rank alone.
 
 A fact can carry when it happened: `memory_write` takes `occurred_at` (a fact
-written today about last March). The temporal arm and recency use it, and with
-a `time_range` "recent" means "inside that range". Superseded facts are left
+written today about last March). A `time_range` is a filter, not a boost: only
+items dated inside it come back (a memory by `occurred_at`, else when it was
+last written; a synced record by its date; a relation by when it was recorded),
+ranked by relevance to the query, newest first among equal scores. Results from
+all your vaults are ranked together, so a strong match in one vault outranks a
+weak one in another. Superseded facts are left
 out unless `include_history` is true, which returns them marked
 `status: "superseded"`.
 

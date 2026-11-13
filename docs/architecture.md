@@ -243,19 +243,30 @@ follows their memories, includes eligible source records and linked
 neighbours, then takes one bounded hop along `relates_to` (at most 40 edges
 and 10 neighbours, 5 facts each), keeping an edge only when both of its ends
 are in the vault being searched. Edges joining two entities the query names
-also form their own ranked list (the relation arm). The temporal arm requires an explicit
-`time_range`; it does not parse phrases such as “last week”. A memory is dated
-by `occurred_at` (when it happened, if its writer said) or else when it was
-written.
+also form their own ranked list (the relation arm). Dates come only from an explicit
+`time_range`; phrases such as “last week” are not parsed. A `time_range` is a
+filter: every arm searches inside it, and anything dated outside it (or undated)
+is dropped after hydration. A memory is dated by `occurred_at` (when it
+happened, if its writer said) or else when it was last written (`updated_at`), a
+synced record by its `occurred_at`, a relation by when it was recorded. With a
+range and no relevance candidates (an empty query, or nothing in the range
+matches), the newest items in the range are returned instead (the temporal list).
+
+Candidates from every vault of the recall are ranked together: the record arms
+run once over all of them, and the memory arms' per-vault lists are merged into
+one list per arm before fusion, by BM25 score (memory text) or cosine similarity
+(memory semantic); the graph and relation lists, which carry no score, are
+interleaved rank by rank. So a strong match in one vault outranks a weak match in
+another.
 
 Reciprocal Rank Fusion sums `1 / (60 + rank)` across the ranked candidate
 lists, with rank starting at 1. Hydration rechecks record ownership and vault scope and excludes stale
 observations and superseded facts. Agreement adds 5% for each additional arm
 that found the same item. Recency decreases linearly from 1.0 to a floor of
 0.5 over 365 days; undated items receive a neutral multiplier. With a
-`time_range`, items dated inside it get 1.0 and items dated outside it the
-floor. Scores are
-normalised relative to the best returned hit. “Proof” here means retrieval
+`time_range` there is no recency multiplier (everything left is inside the
+range); among equal scores the newer item comes first. Scores are
+normalised relative to the best returned hit of the whole recall. “Proof” here means retrieval
 agreement, not independent evidence that a fact is true.
 
 Results retain their IDs, source, date, vault and number of matching arms.

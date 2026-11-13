@@ -1,6 +1,7 @@
-//! Recall pipeline: 7 arms (semantic over records, keyword, graph, temporal, memory text, semantic
-//! over memories, and relations joining two entities the query names), fused via Reciprocal Rank Fusion, then boosted by recency + "proof" (how many arms
-//! agreed on an item), then truncated to a token budget.
+//! Recall pipeline: 6 relevance arms (semantic over records, keyword, graph, memory text, semantic
+//! over memories, and relations joining two entities the query names), fused via Reciprocal Rank
+//! Fusion, then boosted by recency + "proof" (how many arms agreed on an item), then truncated to a
+//! token budget.
 //!
 //! The query is embedded once, concurrently with the database arms, and both semantic arms share the
 //! vector. A memory is only compared with vectors made by the same provider and model
@@ -9,10 +10,20 @@
 //! memories and then one bounded `relates_to` hop: the relations themselves (kind `relation`) and the
 //! neighbours' newest facts, only where both ends are in the vault being searched.
 //!
+//! One ranking across vaults: the arms run per vault (memory arms) or once over every vault (record
+//! arms), and each arm's per-vault lists are merged into one list for the whole recall before fusion,
+//! ordered by the arm's own absolute score where it has one (BM25 for memory text, cosine similarity
+//! for memory semantic; the record arms are already one list over every vault). RRF then runs once,
+//! so a strong match in one vault outranks a weak match in another, instead of every vault's best
+//! hit scoring the same `1/61`. The graph and relation arms have no score (a named entity matched or
+//! not), so their per-vault lists are interleaved rank by rank.
+//!
 //! Pipeline, matching the reference diagram:
 //!
 //! ```text
-//!     [semantic | keyword, graph, temporal, memory text, memory semantic]  (query embedded alongside the DB arms)
+//!     [semantic | keyword, graph, memory text, memory semantic, relation]  (query embedded alongside the DB arms)
+//!                      |      (time_range: a filter inside every arm, and again after hydration)
+//!          per-vault lists merged into one list per arm
 //!                      |
 //!                 RRF fusion (k=60, reusing cache::search's rrf_scores)
 //!                      |
@@ -24,15 +35,18 @@
 //! ```
 //!
 //! Cross-encoder: the diagram has a cross-encoder re-ranking step between RRF
-//! fusion and boosts. This is skipped on purpose, for the same reason: OpenAI has no cross-encoder/rerank
-//! API endpoint, and `EMBEDDINGS_BACKEND` is OpenAI-only for the user-facing
-//! path. We go straight from RRF fusion to boosts rather than fake a
-//! cross-encoder with a cheap heuristic pretending to be one.
+//! fusion and boosts. It is not built yet: we go straight from RRF fusion to boosts rather than fake
+//! a cross-encoder with a cheap heuristic pretending to be one.
 //!
-//! Natural-language date parsing ("last week", "in March") is also out of
-//! scope for v1 -- the temporal arm only activates when an explicit
-//! `time_range` is given. A memory is dated by when it happened if its writer said so
-//! (`memory.occurred_at`), else by when it was written.
+//! Dates. Natural-language date parsing ("last week", "in March") is out of scope -- only an explicit
+//! `time_range` restricts by date, and then it is a filter: only items whose date falls in the range
+//! are eligible, ranked by relevance to the query, newest first among equal scores. An item's date
+//! (the `occurred_at` it reports) is, for a memory, when it happened if its writer said so
+//! (`memory.occurred_at`), else when it was last written (`updated_at`, which starts as `created_at`);
+//! for a synced record its own `occurred_at` (a record with none is in no range); for a relation when
+//! it was recorded (`created_at`). With a range and nothing for the relevance arms to go on (an empty
+//! query, or one that matches nothing in the range), the newest items in the range are returned: the
+//! date arm is only a way to find candidates then, never an equal arm beside a real match.
 //!
 //! The graph arm's entity matching queries the
 //! `person`/`organisation`/`location`/`repository`/`file`/`symbol` tables
@@ -77,6 +91,28 @@ const NEIGHBOUR_MEMORIES: usize = 5;
 pub(crate) const MIN_SIMILARITY: f64 = 0.15;
 const NAME_WORDS: usize = 6;
 const MAX_NAME_WORDS: usize = 64;
+
+/// A memory's date in recall (see the module docs): what `time_range` filters on and what the hit
+/// reports as `occurred_at`.
+const MEMORY_DATE: &str = "(occurred_at ?? updated_at ?? created_at)";
+
+/// An explicit date range, `(since, until)`, both inclusive.
+type Window = Option<(Datetime, Datetime)>;
+
+/// The `memory` predicate for `window` (empty without one); [`bind_window`] binds it.
+fn memory_window_sql(window: Window) -> String {
+    match window {
+        Some(_) => format!(" AND {MEMORY_DATE} >= $since AND {MEMORY_DATE} <= $until"),
+        None => String::new(),
+    }
+}
+
+fn bind_window(q: store::Q<'_>, window: Window) -> store::Q<'_> {
+    match window {
+        Some((since, until)) => q.bind(("since", since)).bind(("until", until)),
+        None => q,
+    }
+}
 
 // recency boost floor/ceiling; see `boost` below.
 const RECENCY_FLOOR: f64 = 0.5;
@@ -187,7 +223,7 @@ fn name_phrases(query: &str) -> Vec<String> {
 ///
 /// A followed record shows only if it is filed in this vault (or, in the caller's personal vault, is
 /// the caller's own unrouted record): [`hydrate`] drops the rest.
-async fn graph_arm(db: &OrgDb, vault: &RecordId, query: &str, limit: usize) -> AppResult<GraphHits> {
+async fn graph_arm(db: &OrgDb, vault: &RecordId, query: &str, limit: usize, window: Window) -> AppResult<GraphHits> {
     let phrases = name_phrases(query);
     if phrases.is_empty() {
         return Ok(GraphHits::default());
@@ -249,14 +285,16 @@ async fn graph_arm(db: &OrgDb, vault: &RecordId, query: &str, limit: usize) -> A
     // WITH INDEX: left to itself the planner walks the whole vault's memories (memory_vault_idx)
     // for each entity
     let mut sql = String::new();
+    let in_window = memory_window_sql(window);
     for i in 0..matches.len() {
         sql.push_str(&format!(
             "SELECT id, source, created_at FROM memory WITH INDEX memory_subject_idx \
-             WHERE subject = $e{i} AND vault = $vault ORDER BY created_at DESC LIMIT $limit;"
+             WHERE subject = $e{i} AND vault = $vault{in_window} ORDER BY created_at DESC LIMIT $limit;"
         ));
     }
     // dynamic: one statement per matched entity.
-    let mut q = store::dynamic(db, "cache.graph_memories", sql).bind(("vault", vault.clone())).bind(("limit", limit as i64));
+    let q = store::dynamic(db, "cache.graph_memories", sql).bind(("vault", vault.clone())).bind(("limit", limit as i64));
+    let mut q = bind_window(q, window);
     for (i, (_, id)) in matches.iter().enumerate() {
         q = q.bind((format!("e{i}"), id.clone()));
     }
@@ -283,7 +321,7 @@ async fn graph_arm(db: &OrgDb, vault: &RecordId, query: &str, limit: usize) -> A
     }
 
     let matched: Vec<RecordId> = matches.into_iter().map(|(_, id)| id).collect();
-    let (between, around) = Box::pin(relation_hop(db, vault, &matched)).await?;
+    let (between, around) = Box::pin(relation_hop(db, vault, &matched, window)).await?;
     // a relation joining two entities the question names is the most direct answer it has
     keys.splice(0..0, between.iter().cloned());
     keys.extend(around);
@@ -307,8 +345,9 @@ struct GraphHits {
 /// two named entities (so "how is Ada related to Acme" finds the edge), then the other relations and
 /// up to [`GRAPH_NEIGHBOURS`] neighbours' newest facts, as two lists. Bounded at every step
 /// ([`GRAPH_EDGES`], [`NEIGHBOUR_MEMORIES`]); an edge counts only when both its ends are in `vault`,
-/// so a hop never leaves the vault being searched. Two queries.
-async fn relation_hop(db: &OrgDb, vault: &RecordId, matched: &[RecordId]) -> AppResult<(Vec<String>, Vec<String>)> {
+/// so a hop never leaves the vault being searched. Two queries. With a date window the neighbours'
+/// facts come from inside it; the relations themselves are dated (and filtered) after hydration.
+async fn relation_hop(db: &OrgDb, vault: &RecordId, matched: &[RecordId], window: Window) -> AppResult<(Vec<String>, Vec<String>)> {
     if matched.is_empty() {
         return Ok((Vec::new(), Vec::new()));
     }
@@ -350,16 +389,17 @@ async fn relation_hop(db: &OrgDb, vault: &RecordId, matched: &[RecordId]) -> App
     }
     neighbours.truncate(GRAPH_NEIGHBOURS);
     if !neighbours.is_empty() {
+        let in_window = memory_window_sql(window);
         let sql: String = (0..neighbours.len())
             .map(|i| {
                 format!(
                     "SELECT VALUE id FROM memory WITH INDEX memory_subject_idx \
-                     WHERE subject = $n{i} AND vault = $vault ORDER BY created_at DESC LIMIT {NEIGHBOUR_MEMORIES};"
+                     WHERE subject = $n{i} AND vault = $vault{in_window} ORDER BY created_at DESC LIMIT {NEIGHBOUR_MEMORIES};"
                 )
             })
             .collect();
         // dynamic: one statement per neighbour.
-        let mut q = store::dynamic(db, "cache.graph_neighbour_memories", sql).bind(("vault", vault.clone()));
+        let mut q = bind_window(store::dynamic(db, "cache.graph_neighbour_memories", sql).bind(("vault", vault.clone())), window);
         for (i, id) in neighbours.iter().enumerate() {
             q = q.bind((format!("n{i}"), id.clone()));
         }
@@ -371,18 +411,41 @@ async fn relation_hop(db: &OrgDb, vault: &RecordId, matched: &[RecordId]) -> App
     Ok((between, keys))
 }
 
-/// Semantic arm over this vault's remembered facts: the memories nearest the query vector among those
-/// embedded by the same provider and model, best first, each at least [`MIN_SIMILARITY`]. HNSW first;
-/// when the shared index underfills for this vault (a small vault among big ones) the exact cosine
-/// scan over the vault's vectors is the answer, as for records (`cache::search::nearest_ids`).
-async fn memory_semantic_arm(db: &OrgDb, vault: &RecordId, query: Option<&QueryVector>, limit: usize) -> AppResult<Vec<String>> {
+/// Semantic arm over this vault's remembered facts, with each hit's cosine similarity (comparable
+/// across vaults: one query vector, one embedding spec), best first; see [`nearest_memories`].
+async fn memory_semantic_arm(
+    db: &OrgDb,
+    vault: &RecordId,
+    query: Option<&QueryVector>,
+    limit: usize,
+    window: Window,
+) -> AppResult<Vec<(String, f64)>> {
     let Some(q) = query else { return Ok(Vec::new()) };
-    Ok(nearest_memories(db, vault, &q.vector, &q.spec, limit).await?.into_iter().map(|id| format!("memory:{}", id.to_string())).collect())
+    Ok(nearest_memories_in(db, vault, &q.vector, &q.spec, limit, window)
+        .await?
+        .into_iter()
+        .map(|(id, sim)| (format!("memory:{}", id.to_string()), sim))
+        .collect())
 }
 
 /// The `limit` memories of `vault` nearest `vector` among those embedded under `spec`, best first,
-/// each at least [`MIN_SIMILARITY`] (see [`memory_semantic_arm`]).
+/// each at least [`MIN_SIMILARITY`]. HNSW first; when the shared index underfills for this vault (a
+/// small vault among big ones) the exact cosine scan over the vault's vectors is the answer, as for
+/// records (`cache::search::nearest_ids`).
 pub async fn nearest_memories(db: &OrgDb, vault: &RecordId, vector: &[f32], spec: &str, limit: usize) -> AppResult<Vec<RecordId>> {
+    Ok(nearest_memories_in(db, vault, vector, spec, limit, None).await?.into_iter().map(|(id, _)| id).collect())
+}
+
+/// [`nearest_memories`] with their similarities, restricted to memories dated in `window` (the
+/// exact fallback then scans only the vault's memories in it).
+async fn nearest_memories_in(
+    db: &OrgDb,
+    vault: &RecordId,
+    vector: &[f32],
+    spec: &str,
+    limit: usize,
+    window: Window,
+) -> AppResult<Vec<(RecordId, f64)>> {
     #[derive(Deserialize, SurrealValue)]
     struct SimRow {
         id: RecordId,
@@ -391,22 +454,27 @@ pub async fn nearest_memories(db: &OrgDb, vault: &RecordId, vector: &[f32], spec
         sim: f64,
     }
     let ef = (limit * 2).max(64);
+    let in_window = memory_window_sql(window);
     // dynamic: the KNN `<|K,EF|>` operator needs literal integers.
     let knn = format!(
         "SELECT id, vector::similarity::cosine(embedding, $vec) AS sim FROM memory \
-         WHERE vault = $vault AND embedding_spec = $spec AND embedding <|{limit},{ef}|> $vec ORDER BY sim DESC"
+         WHERE vault = $vault AND embedding_spec = $spec{in_window} AND embedding <|{limit},{ef}|> $vec ORDER BY sim DESC"
     );
     let bind = |sql: String, name: &'static str| {
-        store::dynamic(db, name, sql).bind(("vault", vault.clone())).bind(("spec", spec.to_string())).bind(("vec", vector.to_vec()))
+        bind_window(
+            store::dynamic(db, name, sql).bind(("vault", vault.clone())).bind(("spec", spec.to_string())).bind(("vec", vector.to_vec())),
+            window,
+        )
     };
     let mut rows: Vec<SimRow> = bind(knn, "cache.memory_semantic").await?.take(0)?;
     if rows.len() < limit {
-        let exact = "SELECT id, vector::similarity::cosine(embedding, $vec) AS sim FROM memory \
-                     WHERE vault = $vault AND embedding_spec = $spec ORDER BY sim DESC LIMIT $limit"
-            .to_string();
+        let exact = format!(
+            "SELECT id, vector::similarity::cosine(embedding, $vec) AS sim FROM memory \
+             WHERE vault = $vault AND embedding_spec = $spec{in_window} ORDER BY sim DESC LIMIT $limit"
+        );
         rows = bind(exact, "cache.memory_semantic_exact").bind(("limit", limit as i64)).await?.take(0)?;
     }
-    Ok(rows.into_iter().filter(|r| r.sim >= MIN_SIMILARITY).map(|r| r.id).collect())
+    Ok(rows.into_iter().filter(|r| r.sim >= MIN_SIMILARITY).map(|r| (r.id, r.sim)).collect())
 }
 
 /// The query's vector, made once per recall and shared by both semantic arms, with the
@@ -468,11 +536,14 @@ fn memory_text_terms(query: &str) -> Vec<String> {
     out
 }
 
-/// Full-text arm over remembered facts (`memory.text`), BM25-ranked. This is
+/// Full-text arm over remembered facts (`memory.text`), BM25-scored. This is
 /// what makes a fact an agent wrote with `memory_write` findable by what it
 /// says, not just by its subject's name -- no embeddings required. Works for
-/// any vault the caller can read.
-async fn memory_text_arm(db: &OrgDb, vault: &RecordId, query: &str, limit: usize) -> AppResult<Vec<String>> {
+/// any vault the caller can read. Returns one `(key, score)` list per term of
+/// `terms` ([`memory_text_terms`]), so the lists of every vault are fused into
+/// one ranking ([`cs::rank_term_hits`]): BM25 statistics are those of the one
+/// `memory` index, so scores from different vaults compare.
+async fn memory_text_arm(db: &OrgDb, vault: &RecordId, terms: &[String], limit: usize, window: Window) -> AppResult<Vec<Vec<(String, f64)>>> {
     #[derive(Deserialize, SurrealValue)]
     struct ScoredRow {
         id: RecordId,
@@ -482,20 +553,21 @@ async fn memory_text_arm(db: &OrgDb, vault: &RecordId, query: &str, limit: usize
     }
     // one BM25 match per term (`@@` with a whole question needs every word to
     // match), all in one round trip
-    let terms = memory_text_terms(query);
     if terms.is_empty() {
         return Ok(Vec::new());
     }
+    let in_window = memory_window_sql(window);
     let sql: String = (0..terms.len())
         .map(|i| {
             format!(
                 "SELECT id, search::score(1) AS score FROM memory \
-                 WHERE vault = $vault AND text @1@ $t{i} ORDER BY score DESC LIMIT $limit;"
+                 WHERE vault = $vault AND text @1@ $t{i}{in_window} ORDER BY score DESC LIMIT $limit;"
             )
         })
         .collect();
     // dynamic: one statement per term.
-    let mut q = store::dynamic(db, "cache.memory_text_terms", sql).bind(("vault", vault.clone())).bind(("limit", limit as i64));
+    let q = store::dynamic(db, "cache.memory_text_terms", sql).bind(("vault", vault.clone())).bind(("limit", limit as i64));
+    let mut q = bind_window(q, window);
     for (i, t) in terms.iter().enumerate() {
         q = q.bind((format!("t{i}"), t.clone()));
     }
@@ -505,7 +577,7 @@ async fn memory_text_arm(db: &OrgDb, vault: &RecordId, query: &str, limit: usize
         let rows: Vec<ScoredRow> = res.take(i)?;
         per_term.push(rows.into_iter().map(|r| (format!("memory:{}", r.id.to_string()), r.score)).collect());
     }
-    Ok(cs::rank_term_hits(per_term, limit))
+    Ok(per_term)
 }
 
 /// A record's candidate key in recall: its internal key, whoever owns it.
@@ -513,44 +585,34 @@ fn record_key(id: &RecordId) -> String {
     format!("cache_record:{}", cs::key_of(id))
 }
 
-/// The newest `limit` records of `scope` in the range (`occurred_at`), newest first: the records half
-/// of the temporal arm, run once for every vault of the recall ([`RecordArms`]).
-async fn temporal_records(db: &OrgDb, scope: &cs::RecordScope, time_range: Option<(Datetime, Datetime)>, limit: usize) -> AppResult<Vec<String>> {
-    let Some((since, until)) = time_range else {
+/// The newest `limit` records of `scope` in the range (`occurred_at`), newest first, with their
+/// dates: the records half of the date fallback (see [`newest_in_window`]).
+async fn temporal_records(db: &OrgDb, scope: &cs::RecordScope, window: Window, limit: usize) -> AppResult<Vec<(Datetime, String)>> {
+    let Some((since, until)) = window else {
         return Ok(Vec::new());
     };
     #[derive(Deserialize, SurrealValue)]
     struct CacheRow {
         id: RecordId,
+        occurred_at: Datetime,
     }
     let q = store::cache::CACHE_RECORDS_IN_RANGE.on(db).bind(("since", since)).bind(("until", until)).bind(("limit", limit as i64));
     let rows: Vec<CacheRow> = scope.bind(q).await?.take(0)?;
-    Ok(rows.iter().map(|r| record_key(&r.id)).collect())
+    Ok(rows.into_iter().map(|r| (r.occurred_at, record_key(&r.id))).collect())
 }
 
-/// Explicit date-range filter only -- no NL date parsing in v1. Merges the
-/// newest `limit` of `records` (this vault's share of [`temporal_records`], dated `occurred_at`) and
-/// `memory` rows (vault-scoped, dated when they happened if known, else when written) in the range,
-/// ranked by recency. Each side is ordered and
-/// limited in the database, so a broad range never loads the whole range.
-async fn temporal_ids(
-    db: &OrgDb,
-    vault: &RecordId,
-    time_range: Option<(Datetime, Datetime)>,
-    limit: usize,
-    records: Vec<(Datetime, String)>,
-) -> AppResult<Vec<String>> {
-    let Some((since, until)) = time_range else {
+/// The newest `limit` memories of `vault` dated in the range ([`MEMORY_DATE`]), newest first, with
+/// their dates: the memories half of the date fallback. Ordered and limited in the database, so a
+/// broad range never loads the whole range.
+async fn temporal_memories(db: &OrgDb, vault: &RecordId, window: Window, limit: usize) -> AppResult<Vec<(Datetime, String)>> {
+    let Some((since, until)) = window else {
         return Ok(Vec::new());
     };
-
     #[derive(Deserialize, SurrealValue)]
     struct MemRow {
         id: RecordId,
         at: Datetime,
     }
-
-    let mut dated = records;
     let mut res = store::cache::MEMORIES_IN_RANGE
         .on(db)
         .bind(("vault", vault.clone()))
@@ -559,10 +621,39 @@ async fn temporal_ids(
         .bind(("limit", limit as i64))
         .await?;
     let rows: Vec<MemRow> = res.take(0)?;
-    dated.extend(rows.into_iter().map(|r| (r.at, format!("memory:{}", r.id.to_string()))));
+    Ok(rows.into_iter().map(|r| (r.at, format!("memory:{}", r.id.to_string()))).collect())
+}
 
-    dated.sort_by_key(|d| std::cmp::Reverse(d.0));
-    Ok(dated.into_iter().take(limit).map(|(_, k)| k).collect())
+/// The newest `limit` of several date-ordered lists, newest first.
+fn newest_in_window(lists: Vec<Vec<(Datetime, String)>>, limit: usize) -> Vec<String> {
+    let mut dated: Vec<(Datetime, String)> = lists.into_iter().flatten().collect();
+    dated.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    dated.into_iter().take(limit).map(|(_, k)| k).collect()
+}
+
+/// Per-vault ranked lists of an arm without a score, as one list: rank 1 of every vault, then rank 2,
+/// and so on (vaults in `lists` order), each key once, at most `limit`.
+fn interleave<'a>(lists: impl IntoIterator<Item = &'a Vec<String>>, limit: usize) -> Vec<String> {
+    let lists: Vec<&Vec<String>> = lists.into_iter().collect();
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for rank in 0..lists.iter().map(|l| l.len()).max().unwrap_or(0) {
+        for key in lists.iter().filter_map(|l| l.get(rank)) {
+            if seen.insert(key) {
+                out.push(key.clone());
+            }
+        }
+    }
+    out.truncate(limit);
+    out
+}
+
+/// Per-vault `(key, similarity)` lists as one list, most similar first, at most `limit`.
+fn by_similarity(lists: impl IntoIterator<Item = Vec<(String, f64)>>, limit: usize) -> Vec<String> {
+    let mut all: Vec<(String, f64)> = lists.into_iter().flatten().collect();
+    all.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal).then_with(|| a.0.cmp(&b.0)));
+    let mut seen = HashSet::new();
+    all.into_iter().filter(|(k, _)| seen.insert(k.clone())).take(limit).map(|(k, _)| k).collect()
 }
 
 struct Hydrated {
@@ -740,15 +831,19 @@ fn boost(arms_hit: usize, occurred_at: Option<DateTime<Utc>>, now: DateTime<Utc>
     proof * recency
 }
 
-/// [`boost`], except that with an explicit date range "recent" means "in the range asked about": an
-/// item dated inside it gets the full recency factor and one dated outside it the floor, whatever its
-/// age (a question about last year must not prefer this week's facts). Undated items stay neutral.
-fn boost_in(arms_hit: usize, occurred_at: Option<DateTime<Utc>>, now: DateTime<Utc>, range: Option<(DateTime<Utc>, DateTime<Utc>)>) -> f64 {
-    let Some((since, until)) = range else { return boost(arms_hit, occurred_at, now) };
-    let proof = boost(arms_hit, None, now);
-    match occurred_at {
-        Some(at) if at < since || at > until => proof * RECENCY_FLOOR,
-        _ => proof,
+/// [`boost`], except that with an explicit date range only the proof factor applies: every item
+/// left is in the range (the range is a filter), so a recency factor measured from today would just
+/// prefer the end of the range over the better match. Recency then only breaks ties (see [`recall`]).
+fn boost_in(arms_hit: usize, occurred_at: Option<DateTime<Utc>>, now: DateTime<Utc>, ranged: bool) -> f64 {
+    if ranged { boost(arms_hit, None, now) } else { boost(arms_hit, occurred_at, now) }
+}
+
+/// Whether `at` is in `range` (inclusive); everything is, without a range, and an undated item is in
+/// no range.
+fn in_range(at: Option<DateTime<Utc>>, range: Option<(DateTime<Utc>, DateTime<Utc>)>) -> bool {
+    match range {
+        None => true,
+        Some((since, until)) => at.is_some_and(|at| at >= since && at <= until),
     }
 }
 
@@ -779,34 +874,32 @@ fn validate(
 /// Runs one arm under [`ARM_DEADLINE`]. A timeout -- or, for an `optional`
 /// arm (semantic: an external provider), an error -- drops just that arm's
 /// candidates, so one slow or broken arm never blocks the others' results.
-async fn arm(
-    name: &str,
-    optional: bool,
-    fut: impl std::future::Future<Output = AppResult<Vec<String>>>,
-) -> AppResult<Vec<String>> {
+async fn arm<T: Default>(name: &str, optional: bool, fut: impl std::future::Future<Output = AppResult<T>>) -> AppResult<T> {
     let started = std::time::Instant::now();
     match tokio::time::timeout(ARM_DEADLINE, fut).await {
         Ok(Ok(keys)) => {
-            tracing::debug!(arm = name, candidates = keys.len(), elapsed_ms = started.elapsed().as_millis() as u64, "recall: arm done");
+            tracing::debug!(arm = name, elapsed_ms = started.elapsed().as_millis() as u64, "recall: arm done");
             Ok(keys)
         }
         Ok(Err(e)) if optional => {
             tracing::warn!("recall: {name} arm skipped: {}", e.message);
-            Ok(Vec::new())
+            Ok(T::default())
         }
         Ok(Err(e)) => Err(e),
         Err(_) => {
             tracing::warn!("recall: {name} arm timed out after {ARM_DEADLINE:?}");
-            Ok(Vec::new())
+            Ok(T::default())
         }
     }
 }
 
 /// Recall in `vault_ids`, or -- when there are none -- in the caller's personal
 /// vault and every org vault they belong to (facts kept in an org vault must
-/// not look absent to a caller that forgot to pass it). Each hit names its vault; scores are scaled so
-/// the best hit is 1. `history` also returns facts a later one superseded, marked `status: superseded`
-/// (for "what did we think before"); otherwise only current facts.
+/// not look absent to a caller that forgot to pass it). Each hit names its vault. Candidates from
+/// every vault are fused in one ranking (see the module docs), and scores are scaled so the best hit
+/// of the whole recall is 1. `time_range` is a filter (module docs). `history` also returns facts a
+/// later one superseded, marked `status: superseded` (for "what did we think before"); otherwise
+/// only current facts.
 #[allow(clippy::too_many_arguments)]
 pub async fn recall(
     db: &OrgDb,
@@ -820,131 +913,48 @@ pub async fn recall(
     vault_ids: &[RecordId],
     history: bool,
 ) -> AppResult<Vec<RecallItem>> {
-    let time_range = validate(query, time_range, limit, max_tokens)?;
+    let window = validate(query, time_range, limit, max_tokens)?;
     let pool = limit.saturating_mul(4).max(40);
+    let started = std::time::Instant::now();
 
     let rs = vaults_service::read_scope(db, owner, vault_ids).await?;
     let scope = cs::RecordScope::vaults(owner, rs.personal.as_ref(), &rs.vaults);
-    let records = record_arms(db, settings, &scope, query, time_range, pool).await?;
+    let mut records = record_arms(db, settings, &scope, query, window, pool).await?;
 
-    let mut scored = Vec::new();
+    // The memory arms, vault by vault. These only query SurrealDB and run one after another (running
+    // them concurrently made each several times slower, they contend inside the database).
+    let terms = memory_text_terms(query);
+    let mut passes: Vec<VaultArms> = Vec::with_capacity(rs.vaults.len());
     for vault in &rs.vaults {
-        let mut hits = recall_in(db, &scope.narrow(vault), query, time_range, pool, types, vault, &records, history).await?;
-        let (id, name) = (vault.to_string(), rs.names.get(&vault.to_string()).cloned().unwrap_or_default());
-        for h in &mut hits {
-            (h.vault, h.vault_name) = (id.clone(), name.clone());
+        passes.push(vault_arms(db, vault, query, &terms, window, pool, records.query.as_ref()).await?);
+    }
+
+    // one list per arm for the whole recall
+    let mut per_term: Vec<Vec<(String, f64)>> = vec![Vec::new(); terms.len()];
+    for p in &mut passes {
+        for (i, hits) in std::mem::take(&mut p.text).into_iter().enumerate() {
+            per_term[i].extend(hits);
         }
-        scored.extend(hits);
     }
+    let graph = interleave(passes.iter().map(|p| &p.graph), pool);
+    let relation = interleave(passes.iter().map(|p| &p.between), pool);
+    let memory = cs::rank_term_hits(per_term, pool);
+    let memory_semantic = by_similarity(passes.iter_mut().map(|p| std::mem::take(&mut p.semantic)), pool);
+    let mut arms = [records.semantic.clone(), records.keyword.clone(), graph, Vec::new(), memory, memory_semantic, relation];
 
-    scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal).then_with(|| a.id.cmp(&b.id)));
-    scored.truncate(limit);
-    let top = scored.first().map(|i| i.score).unwrap_or(1.0);
-    for item in &mut scored {
-        item.score = (item.score / top * 1000.0).round() / 1000.0;
-    }
-
-    Ok(match max_tokens {
-        Some(budget) => fit_budget(scored, budget),
-        None => scored,
-    })
-}
-
-/// The synced-record arms (semantic, keyword, and the records half of temporal), run once over every
-/// vault of a recall rather than once per vault; `found` holds every record they hit, read once, so
-/// each vault's pass ([`RecordArms::in_vault`]) keeps the ones filed in it.
-struct RecordArms {
-    semantic: Vec<String>,
-    keyword: Vec<String>,
-    temporal: Vec<String>,
-    found: HashMap<String, cs::CacheRecord>,
-    /// The query's vector, for the memory semantic arm of each vault's pass.
-    query: Option<QueryVector>,
-}
-
-impl RecordArms {
-    /// The keys of `arm` whose records are filed in `scope`'s vault, in order.
-    fn in_vault(&self, arm: &[String], scope: &cs::RecordScope, vault: &RecordId) -> Vec<String> {
-        arm.iter().filter(|k| self.found.get(*k).is_some_and(|r| scope.vault_of(r.vault.as_ref()).as_ref() == Some(vault))).cloned().collect()
-    }
-}
-
-/// Embedding the query waits on an external provider: it runs concurrently with the keyword and
-/// temporal arms, so a slow or hanging provider costs at most its deadline. Every arm has its own deadline.
-async fn record_arms(
-    db: &OrgDb,
-    settings: &Settings,
-    scope: &cs::RecordScope,
-    query: &str,
-    time_range: Option<(Datetime, Datetime)>,
-    pool: usize,
-) -> AppResult<RecordArms> {
-    let no_filter = cs::RecordFilter::default();
-    let keys = |ids: Vec<RecordId>| ids.iter().map(record_key).collect::<Vec<_>>();
-    let local = async {
-        let keyword = arm("keyword", false, async { Ok(keys(cs::keyword_ids(db, scope, query, &no_filter, pool).await?)) }).await;
-        let temporal = arm("temporal", false, temporal_records(db, scope, time_range, pool)).await;
-        (keyword, temporal)
-    };
-    let (qv, (keyword, temporal)) = tokio::join!(query_vector(db, settings, scope.owner(), query), local);
-    let (keyword, temporal) = (keyword?, temporal?);
-    let semantic = match &qv {
-        Some(q) => arm("semantic", true, async { Ok(keys(cs::nearest_ids(db, scope, q.vector.clone(), &no_filter, pool).await?)) }).await?,
-        None => Vec::new(),
-    };
-
-    let mut seen = HashSet::new();
-    let ids: Vec<RecordId> = semantic
-        .iter()
-        .chain(&keyword)
-        .chain(&temporal)
-        .filter(|k| seen.insert(*k))
-        .map(|k| RecordId::from_table_key("cache_record", k["cache_record:".len()..].to_string()))
-        .collect();
-    let found = cs::get_many(db, scope, &ids).await?.into_iter().filter_map(|r| Some((record_key(r.rid.as_ref()?), r))).collect();
-    Ok(RecordArms { semantic, keyword, temporal, found, query: qv })
-}
-
-/// One vault's ranked hits (raw scores, unsorted): its share of the record arms, plus the graph,
-/// temporal and memory text arms over its memories. `scope` is the recall's scope narrowed to `vault`.
-#[allow(clippy::too_many_arguments)]
-async fn recall_in(
-    db: &OrgDb,
-    scope: &cs::RecordScope,
-    query: &str,
-    time_range: Option<(Datetime, Datetime)>,
-    pool: usize,
-    types: Option<&[MemoryType]>,
-    vault: &RecordId,
-    records: &RecordArms,
-    history: bool,
-) -> AppResult<Vec<RecallItem>> {
-    let started = std::time::Instant::now();
-    let semantic_keys = records.in_vault(&records.semantic, scope, vault);
-    let keyword_keys = records.in_vault(&records.keyword, scope, vault);
-    let dated: Vec<(Datetime, String)> = records
-        .in_vault(&records.temporal, scope, vault)
-        .into_iter()
-        .filter_map(|k| Some((records.found.get(&k)?.occurred_at?, k)))
-        .collect();
-
-    // These arms only query SurrealDB and run one after another (running them concurrently made each
-    // several times slower, they contend inside the database).
-    let started_graph = std::time::Instant::now();
-    // boxed: the graph arm's future is large, and inline it pushes a debug build past a thread's stack
-    let GraphHits { keys: graph, between: relation } = match tokio::time::timeout(ARM_DEADLINE, Box::pin(graph_arm(db, vault, query, pool))).await {
-        Ok(hits) => hits?,
-        Err(_) => {
-            tracing::warn!("recall: graph arm timed out after {ARM_DEADLINE:?}");
-            GraphHits::default()
+    // With a range and nothing to rank by relevance, the newest items in the range.
+    if window.is_some() && arms.iter().all(Vec::is_empty) {
+        let mut lists = vec![arm("temporal", false, temporal_records(db, &scope, window, pool)).await?];
+        for (vault, p) in rs.vaults.iter().zip(&mut passes) {
+            let mems = arm("temporal", false, temporal_memories(db, vault, window, pool)).await?;
+            p.temporal = mems.iter().map(|(_, k)| k.clone()).collect();
+            lists.push(mems);
         }
-    };
-    tracing::debug!(arm = "graph", candidates = graph.len(), elapsed_ms = started_graph.elapsed().as_millis() as u64, "recall: arm done");
-    let temporal = arm("temporal", false, temporal_ids(db, vault, time_range, pool, dated)).await?;
-    let memory = arm("memory_text", false, memory_text_arm(db, vault, query, pool)).await?;
-    let memory_semantic = arm("memory_semantic", true, Box::pin(memory_semantic_arm(db, vault, records.query.as_ref(), pool))).await?;
-    let arms = [semantic_keys, keyword_keys, graph, temporal, memory, memory_semantic, relation];
+        arms[3] = newest_in_window(lists, pool);
+        records.fetch(db, &scope, &arms[3]).await?;
+    }
     tracing::debug!(
+        vaults = rs.vaults.len(),
         semantic = arms[0].len(),
         keyword = arms[1].len(),
         graph = arms[2].len(),
@@ -960,41 +970,186 @@ async fn recall_in(
     if rrf.is_empty() {
         return Ok(Vec::new());
     }
-    let keys: Vec<&String> = rrf.keys().collect();
-    let mut hydrated = hydrate(db, scope, vault, &keys, &records.found, history).await?;
+
+    // Hydrate each candidate in the vault it came from; authorization is re-checked there.
+    let mut hydrated: HashMap<String, (Hydrated, usize)> = HashMap::new();
+    for (i, (vault, p)) in rs.vaults.iter().zip(&passes).enumerate() {
+        let narrowed = scope.narrow(vault);
+        let keys: Vec<&String> = rrf
+            .keys()
+            .filter(|k| match records.found.get(*k) {
+                Some(rec) => narrowed.vault_of(rec.vault.as_ref()).as_ref() == Some(vault),
+                None => p.contains(k),
+            })
+            .collect();
+        if keys.is_empty() {
+            continue;
+        }
+        for (key, item) in hydrate(db, &narrowed, vault, &keys, &records.found, history).await? {
+            hydrated.entry(key).or_insert((item, i));
+        }
+    }
 
     let now = Utc::now();
-    let range = time_range.map(|(a, b)| (to_chrono(a), to_chrono(b)));
-    let mut scored: Vec<RecallItem> = Vec::new();
+    let range = window.map(|(a, b)| (to_chrono(a), to_chrono(b)));
+    let mut scored: Vec<(RecallItem, Option<DateTime<Utc>>)> = Vec::new();
     for (key, base_score) in &rrf {
-        let Some(item) = hydrated.remove(key) else {
+        let Some((item, vault)) = hydrated.remove(key) else {
             continue;
         };
         if let Some(types) = types
             && item.kind == "memory"
+            && !types.iter().any(|t| t.as_str() == item.mem_type)
         {
-            let allowed = types.iter().any(|t| t.as_str() == item.mem_type);
-            if !allowed {
-                continue;
-            }
+            continue;
+        }
+        // every arm already searched inside the range; this also covers what the graph arm reached
+        // without a date in its query (linked records, relations)
+        if !in_range(item.occurred_at, range) {
+            continue;
         }
         let arms_hit = arms.iter().filter(|arm| arm.contains(key)).count();
-        let b = boost_in(arms_hit, item.occurred_at, now, range);
-        scored.push(RecallItem {
-            id: item.id,
-            kind: item.kind,
-            text: item.text,
-            source: item.source,
-            occurred_at: item.occurred_at.map(|d| d.to_rfc3339()),
-            score: base_score * b,
-            arms_hit,
-            vault: String::new(),
-            vault_name: String::new(),
-            document: item.document,
-            status: item.status,
-        });
+        let b = boost_in(arms_hit, item.occurred_at, now, range.is_some());
+        let vault_id = &rs.vaults[vault];
+        scored.push((
+            RecallItem {
+                id: item.id,
+                kind: item.kind,
+                text: item.text,
+                source: item.source,
+                occurred_at: item.occurred_at.map(|d| d.to_rfc3339()),
+                score: base_score * b,
+                arms_hit,
+                vault: vault_id.to_string(),
+                vault_name: rs.names.get(&vault_id.to_string()).cloned().unwrap_or_default(),
+                document: item.document,
+                status: item.status,
+            },
+            item.occurred_at,
+        ));
     }
-    Ok(scored)
+
+    // best first; among equal scores the newer, then by id so the order is stable
+    scored.sort_by(|(a, at), (b, bt)| {
+        b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal).then_with(|| bt.cmp(at)).then_with(|| a.id.cmp(&b.id))
+    });
+    let mut scored: Vec<RecallItem> = scored.into_iter().take(limit).map(|(item, _)| item).collect();
+    let top = scored.first().map(|i| i.score).unwrap_or(1.0);
+    for item in &mut scored {
+        item.score = (item.score / top * 1000.0).round() / 1000.0;
+    }
+
+    Ok(match max_tokens {
+        Some(budget) => fit_budget(scored, budget),
+        None => scored,
+    })
+}
+
+/// The synced-record arms (semantic and keyword), run once over every vault of a recall rather than
+/// once per vault, so each is already one ranking across vaults; with a date range both search only
+/// inside it (`occurred_at`, as the `search` tool's `since`/`until` do). `found` holds every record
+/// they hit, read once.
+struct RecordArms {
+    semantic: Vec<String>,
+    keyword: Vec<String>,
+    found: HashMap<String, cs::CacheRecord>,
+    /// The query's vector, for the memory semantic arm of each vault's pass.
+    query: Option<QueryVector>,
+}
+
+impl RecordArms {
+    /// Reads the records among `keys` not read yet into `found`.
+    async fn fetch(&mut self, db: &OrgDb, scope: &cs::RecordScope, keys: &[String]) -> AppResult<()> {
+        let ids: Vec<RecordId> = keys
+            .iter()
+            .filter(|k| k.starts_with("cache_record:") && !self.found.contains_key(*k))
+            .map(|k| RecordId::from_table_key("cache_record", k["cache_record:".len()..].to_string()))
+            .collect();
+        for r in cs::get_many(db, scope, &ids).await? {
+            if let Some(rid) = r.rid.as_ref() {
+                self.found.insert(record_key(rid), r);
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Embedding the query waits on an external provider: it runs concurrently with the keyword arm, so a
+/// slow or hanging provider costs at most its deadline. Every arm has its own deadline.
+async fn record_arms(
+    db: &OrgDb,
+    settings: &Settings,
+    scope: &cs::RecordScope,
+    query: &str,
+    window: Window,
+    pool: usize,
+) -> AppResult<RecordArms> {
+    let filter = cs::RecordFilter { since: window.map(|w| w.0), until: window.map(|w| w.1), ..Default::default() };
+    let keys = |ids: Vec<RecordId>| ids.iter().map(record_key).collect::<Vec<_>>();
+    let keyword = arm("keyword", false, async { Ok(keys(cs::keyword_ids(db, scope, query, &filter, pool).await?)) });
+    let (qv, keyword) = tokio::join!(query_vector(db, settings, scope.owner(), query), keyword);
+    let keyword = keyword?;
+    let semantic = match &qv {
+        Some(q) => arm("semantic", true, async { Ok(keys(cs::nearest_ids(db, scope, q.vector.clone(), &filter, pool).await?)) }).await?,
+        None => Vec::new(),
+    };
+
+    let mut arms = RecordArms { semantic, keyword, found: HashMap::new(), query: qv };
+    let hit: Vec<String> = arms.semantic.iter().chain(&arms.keyword).cloned().collect();
+    arms.fetch(db, scope, &hit).await?;
+    Ok(arms)
+}
+
+/// One vault's memory arms: graph (and the relations joining two named entities), memory text (one
+/// scored list per term) and memory semantic (scored), each inside `window` when one is given; and,
+/// filled only for the date fallback, its newest memories in the window. `scope`-free: memories and
+/// relations are read by `vault = $vault`.
+#[derive(Default)]
+struct VaultArms {
+    graph: Vec<String>,
+    between: Vec<String>,
+    text: Vec<Vec<(String, f64)>>,
+    semantic: Vec<(String, f64)>,
+    temporal: Vec<String>,
+    /// Every key this vault's arms surfaced (text and semantic are taken out to be merged).
+    keys: HashSet<String>,
+}
+
+impl VaultArms {
+    fn contains(&self, key: &str) -> bool {
+        self.keys.contains(key) || self.temporal.iter().any(|k| k == key)
+    }
+}
+
+async fn vault_arms(
+    db: &OrgDb,
+    vault: &RecordId,
+    query: &str,
+    terms: &[String],
+    window: Window,
+    pool: usize,
+    qv: Option<&QueryVector>,
+) -> AppResult<VaultArms> {
+    // boxed: the graph arm's future is large, and inline it pushes a debug build past a thread's stack
+    let started = std::time::Instant::now();
+    let GraphHits { keys: graph, between } = match tokio::time::timeout(ARM_DEADLINE, Box::pin(graph_arm(db, vault, query, pool, window))).await {
+        Ok(hits) => hits?,
+        Err(_) => {
+            tracing::warn!("recall: graph arm timed out after {ARM_DEADLINE:?}");
+            GraphHits::default()
+        }
+    };
+    tracing::debug!(arm = "graph", candidates = graph.len(), elapsed_ms = started.elapsed().as_millis() as u64, "recall: arm done");
+    let text = arm("memory_text", false, memory_text_arm(db, vault, terms, pool, window)).await?;
+    let semantic = arm("memory_semantic", true, Box::pin(memory_semantic_arm(db, vault, qv, pool, window))).await?;
+    let keys = graph
+        .iter()
+        .chain(&between)
+        .cloned()
+        .chain(text.iter().flatten().map(|(k, _)| k.clone()))
+        .chain(semantic.iter().map(|(k, _)| k.clone()))
+        .collect();
+    Ok(VaultArms { graph, between, text, semantic, temporal: Vec::new(), keys })
 }
 
 /// Fits ranked items into a token budget (~4 chars/token). Each item is
@@ -1036,15 +1191,33 @@ mod tests {
     use chrono::Duration;
 
     #[test]
-    fn a_date_range_makes_in_range_items_recent_and_the_rest_old() {
+    fn a_date_range_is_a_filter_and_drops_the_recency_factor() {
         let now = Utc::now();
-        let range = Some((now - Duration::days(600), now - Duration::days(300)));
-        let inside = boost_in(1, Some(now - Duration::days(400)), now, range);
-        let outside = boost_in(1, Some(now), now, range);
-        assert!((inside - 1.0).abs() < 1e-9);
-        assert!((outside - RECENCY_FLOOR).abs() < 1e-9);
-        assert!((boost_in(1, None, now, range) - 1.0).abs() < 1e-9);
-        assert_eq!(boost_in(2, Some(now), now, None), boost(2, Some(now), now));
+        let (since, until) = (now - Duration::days(600), now - Duration::days(300));
+        let range = Some((since, until));
+        assert!(in_range(Some(now - Duration::days(400)), range));
+        assert!(in_range(Some(since), range) && in_range(Some(until), range), "both ends are inclusive");
+        assert!(!in_range(Some(now), range));
+        assert!(!in_range(Some(now - Duration::days(700)), range));
+        assert!(!in_range(None, range), "an undated item is in no range");
+        assert!(in_range(None, None) && in_range(Some(now), None));
+        // inside a range only proof counts: the start of the range scores as the end does
+        assert_eq!(boost_in(1, Some(now - Duration::days(599)), now, true), boost_in(1, Some(now - Duration::days(301)), now, true));
+        assert!(boost_in(2, Some(now), now, true) > boost_in(1, Some(now), now, true));
+        assert_eq!(boost_in(2, Some(now), now, false), boost(2, Some(now), now));
+    }
+
+    #[test]
+    fn per_vault_lists_merge_into_one_ranking() {
+        let l = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(interleave([&l(&["a1", "a2", "a3"]), &l(&["b1"]), &l(&[])], 10), l(&["a1", "b1", "a2", "a3"]));
+        assert_eq!(interleave([&l(&["x", "y"]), &l(&["x", "z"])], 2), l(&["x", "y"]));
+        // by absolute similarity, not by rank within a vault
+        let sims = by_similarity([vec![("a1".into(), 0.9), ("a2".into(), 0.8)], vec![("b1".into(), 0.2)]], 10);
+        assert_eq!(sims, l(&["a1", "a2", "b1"]));
+        let d = |s: &str| Datetime::from(chrono::DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc));
+        let newest = newest_in_window(vec![vec![(d("2026-03-02T00:00:00Z"), "r".into())], vec![(d("2026-03-05T00:00:00Z"), "m".into()), (d("2026-03-01T00:00:00Z"), "o".into())]], 2);
+        assert_eq!(newest, l(&["m", "r"]));
     }
 
     #[test]

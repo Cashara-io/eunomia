@@ -22,11 +22,14 @@ pub const CACHE_RECORDS_IN_RANGE: Stmt = Stmt::new(
     "SELECT id, occurred_at FROM cache_record WHERE (vault IN $vaults OR ($own AND vault = NONE AND owner = $owner)) \
      AND deleted = false AND occurred_at >= $since AND occurred_at <= $until ORDER BY occurred_at DESC LIMIT $limit",
 );
-/// Dated by when the fact happened (`occurred_at`) if its writer said, else when it was written.
+/// Dated by when the fact happened (`occurred_at`) if its writer said, else when it was last written
+/// (`updated_at`, which starts as `created_at`): the date recall reports and filters every memory by
+/// (`cache::recall::MEMORY_DATE`).
 pub const MEMORIES_IN_RANGE: Stmt = Stmt::new(
     "cache.memories_in_range",
-    "SELECT id, occurred_at ?? created_at AS at FROM memory WHERE vault = $vault \
-     AND (occurred_at ?? created_at) >= $since AND (occurred_at ?? created_at) <= $until ORDER BY at DESC LIMIT $limit",
+    "SELECT id, occurred_at ?? updated_at ?? created_at AS at FROM memory WHERE vault = $vault \
+     AND (occurred_at ?? updated_at ?? created_at) >= $since AND (occurred_at ?? updated_at ?? created_at) <= $until \
+     ORDER BY at DESC LIMIT $limit",
 );
 
 /// A record's sync links, to tell whether a replay changed only them.
