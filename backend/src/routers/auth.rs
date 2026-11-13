@@ -203,10 +203,7 @@ pub(crate) fn signup_allowed(mode: &str, has_users: bool, email: &str, allowlist
     }
     match mode.trim().to_ascii_lowercase().as_str() {
         "" | "open" => true,
-        "invite" => {
-            let email = models_user::normalize_email(email);
-            allowlist.split(',').map(models_user::normalize_email).any(|e| !e.is_empty() && e == email)
-        }
+        "invite" => models_user::folds_like_ascii(email.trim()) && authz::email_listed_in(allowlist, email),
         _ => false,
     }
 }
@@ -717,6 +714,9 @@ mod tests {
         assert!(!signup_allowed("junk", true, "a@x.com", "a@x.com"), "a typo closes");
         assert!(signup_allowed("invite", true, "A@x.com", "b@x.com, a@X.com"));
         assert!(!signup_allowed("invite", true, "c@x.com", "b@x.com,"));
+        // compared in the stored form, and a look-alike of an allowed address is not allowed
+        assert!(signup_allowed("invite", true, "  KATE@x.com", "kate@x.com"));
+        assert!(!signup_allowed("invite", true, "\u{212A}ate@x.com", "kate@x.com"));
     }
 
     #[test]

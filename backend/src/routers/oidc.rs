@@ -376,7 +376,7 @@ async fn map_identity(state: &AppState, id: &Identity) -> Result<(User, Mapped),
                 .await;
             return Ok((user, Mapped::Existing));
         }
-        let email = id.email.as_deref().map(models_user::normalize_email).filter(|e| models_user::validate_email(e).is_ok()).ok_or(Fail::NoEmail)?;
+        let email = id.email.as_deref().and_then(|e| models_user::normalize_new_email(e).ok()).ok_or(Fail::NoEmail)?;
         let raced = |e: &AppError| matches!(e.code, ErrorCode::DbDuplicate | ErrorCode::AuthEmailTaken) && attempt == 0;
 
         if let Some(user) = models_user::user_by_email(db, &email).await? {
