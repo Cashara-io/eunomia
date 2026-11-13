@@ -508,7 +508,7 @@ pub(crate) fn parse_range(
     until: Option<&str>,
 ) -> AppResult<(Option<Utc>, Option<Utc>)> {
     let since = since.map(|s| parse_datetime("since", s)).transpose()?;
-    let until = until.map(|s| parse_until(s)).transpose()?;
+    let until = until.map(parse_until).transpose()?;
     if let (Some(a), Some(b)) = (since, until)
         && a > b
     {

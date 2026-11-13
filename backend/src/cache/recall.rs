@@ -672,7 +672,7 @@ async fn temporal_memories(db: &OrgDb, vault: &RecordId, window: Window, limit: 
     // facts, then (only when asked for) observations
     let mut rows: Vec<MemRow> = res.take(0)?;
     rows.extend(res.take::<Vec<MemRow>>(1)?);
-    rows.sort_by(|a, b| b.at.cmp(&a.at));
+    rows.sort_by_key(|r| std::cmp::Reverse(r.at));
     rows.truncate(limit);
     Ok(rows.into_iter().map(|r| (r.at, format!("memory:{}", r.id.to_string()))).collect())
 }

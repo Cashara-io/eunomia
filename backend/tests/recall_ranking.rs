@@ -249,25 +249,36 @@ async fn a_date_only_range_covers_whole_days_and_timestamps_are_exact() {
 async fn observations_join_a_range_only_when_asked_for_and_are_dated_by_their_last_update() {
     let app = TestApp::new().await;
     write(&app, "Ada Lovelace", "person", "Ada moved the budget review to Friday", json!({"occurred_at": "2026-03-12"})).await;
-    let obs = write(&app, "Ada Lovelace", "person", "Ada owns the budget review", json!({"type": "observation"})).await;
-    let obs_id = obs["memory"]["id"].as_str().unwrap();
-    raw(&app, &format!("UPDATE {obs_id} SET updated_at = d'2026-03-20T10:00:00Z', occurred_at = d'2024-01-01T00:00:00Z'")).await;
+    // Ada's observation: last updated in March, nothing else dates it
+    let ada = write(&app, "Ada Lovelace", "person", "Ada owns the budget review", json!({"type": "observation"})).await;
+    raw(&app, &format!("UPDATE {} SET updated_at = d'2026-03-20T10:00:00Z'", ada["memory"]["id"].as_str().unwrap())).await;
+    // Bob's: an occurred_at in March, but last updated in June
+    let bob = write(&app, "Bob Builder", "person", "Bob chairs the budget review", json!({"type": "observation"})).await;
+    raw(&app, &format!("UPDATE {} SET occurred_at = d'2026-03-15T00:00:00Z', updated_at = d'2026-06-01T10:00:00Z'", bob["memory"]["id"].as_str().unwrap())).await;
 
     let q = "budget review";
-    let has_obs = |hits: &[Value]| texts(hits).iter().any(|t| t == "Ada owns the budget review");
-    let hits = recall(&app, json!({"query": q, "time_range": MARCH})).await;
-    assert!(!has_obs(&hits), "an observation is not an event: {hits:?}");
-    assert!(texts(&hits).iter().any(|t| t.contains("Friday")), "{hits:?}");
-    assert!(!has_obs(&recall(&app, json!({"query": "", "time_range": MARCH})).await), "nor in the newest-in-range list");
+    let has = |hits: &[Value], text: &str| texts(hits).iter().any(|t| t == text);
+    let (ada, bob) = ("Ada owns the budget review", "Bob chairs the budget review");
 
+    // not asked for: left out of a range, though in it
+    let hits = recall(&app, json!({"query": q, "time_range": MARCH})).await;
+    assert!(!has(&hits, ada), "an observation is not an event: {hits:?}");
+    assert!(texts(&hits).iter().any(|t| t.contains("Friday")), "{hits:?}");
+    assert!(!has(&recall(&app, json!({"query": "", "time_range": MARCH})).await, ada), "nor in the newest-in-range list");
+
+    // asked for: in, dated by its last update
     let hits = recall(&app, json!({"query": q, "time_range": MARCH, "types": ["observation", "world"]})).await;
-    let o = hits.iter().find(|h| h["text"] == "Ada owns the budget review").unwrap_or_else(|| panic!("asked for: {hits:?}"));
-    assert!(o["occurred_at"].as_str().unwrap().starts_with("2026-03-20"), "dated by its last update: {o}");
-    assert!(has_obs(&recall(&app, json!({"query": "", "time_range": MARCH, "types": ["observation"]})).await));
-    // dated by its update, so a range around its occurred_at does not find it
-    assert!(!has_obs(&recall(&app, json!({"query": q, "time_range": ["2024-01-01", "2024-01-01"], "types": ["observation"]})).await));
+    let o = hits.iter().find(|h| h["text"] == ada).unwrap_or_else(|| panic!("asked for: {hits:?}"));
+    assert!(o["occurred_at"].as_str().unwrap().starts_with("2026-03-20"), "{o}");
+    assert!(has(&recall(&app, json!({"query": "", "time_range": MARCH, "types": ["observation"]})).await, ada));
+    // by its update, not its occurred_at: Bob's is a June observation
+    assert!(!has(&hits, bob), "dated by its last update, not occurred_at: {hits:?}");
+    let june = recall(&app, json!({"query": q, "time_range": ["2026-06-01", "2026-06-30"], "types": ["observation"]})).await;
+    let o = june.iter().find(|h| h["text"] == bob).unwrap_or_else(|| panic!("{june:?}"));
+    assert!(o["occurred_at"].as_str().unwrap().starts_with("2026-06-01"), "{o}");
+
     // no range: observations as before
-    assert!(has_obs(&recall(&app, json!({"query": q})).await));
+    assert!(has(&recall(&app, json!({"query": q})).await, ada));
 }
 
 /// A relation is dated by when it held if it carries such a date (a field no relation has yet; the
