@@ -293,9 +293,12 @@ async fn new_tokens_and_mfa_changes_need_a_fresh_second_factor() {
     let ((status, _), _) = post(&app, "/api/auth/tokens", json!({ "name": "after" }), Some(&cookie)).await;
     assert_eq!(status, StatusCode::OK);
 
-    // existing personal access tokens keep working, and may still mint (bounded by their own scopes and expiry)
-    let (status, _) = app.http("POST", "/api/auth/tokens", Some(json!({ "name": "by token" })), true).await;
-    assert_eq!(status, StatusCode::OK);
+    // existing personal access tokens keep working, but cannot mint another token once the account has MFA
+    assert_eq!(app.http("GET", "/api/auth/me", None, true).await.0, StatusCode::OK);
+    let (status, body) = app.http("POST", "/api/auth/tokens", Some(json!({ "name": "by token" })), true).await;
+    assert_eq!((status, body["code"].as_str()), (StatusCode::FORBIDDEN, Some("auth.step_up_required")), "{body}");
+    let (status, body) = app.http("POST", "/api/auth/tokens", Some(json!({ "name": "by token", "mfa_code": recovery[4] })), true).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "not even with a code: a token is not a browser session: {body}");
 
     // new recovery codes and turning MFA off each need a code every time
     let ((status, _), _) = post(&app, "/api/auth/mfa/recovery-codes", json!({ "code": "nope" }), Some(&cookie)).await;
@@ -537,4 +540,74 @@ async fn an_unreadable_secret_points_to_recovery_codes_not_a_500() {
     assert_eq!(st["unreadable"], true, "{st}");
     let ((status, st), _) = post(&app, "/api/auth/mfa/disable", json!({ "code": recovery[1] }), Some(&session)).await;
     assert_eq!(status, StatusCode::OK, "turning it off is allowed to re-enrol, even while required: {st}");
+}
+
+
+/// Before MFA, an API token may mint another (agent setup scripts rely on it); while MFA is required it may not.
+#[tokio::test]
+async fn tokens_mint_tokens_only_without_mfa() {
+    let app = common::TestApp::new().await;
+    let (status, _) = app.http("POST", "/api/auth/tokens", Some(json!({ "name": "agent" })), true).await;
+    assert_eq!(status, StatusCode::OK, "no MFA anywhere: unchanged");
+    mfa::set_require_mfa(app.control(), true, &app.user.id).await.unwrap();
+    let (status, body) = app.http("POST", "/api/auth/tokens", Some(json!({ "name": "agent" })), true).await;
+    assert_eq!((status, body["code"].as_str()), (StatusCode::FORBIDDEN, Some("auth.step_up_required")), "{body}");
+}
+
+/// An authenticator lockout (a password holder spending the 10 tries) never blocks the owner's recovery code,
+/// which also clears the lockout. Wrong recovery codes are bounded on their own counter.
+#[tokio::test]
+async fn a_recovery_code_gets_past_an_authenticator_lockout() {
+    let app = common::TestApp::new().await;
+    let cookie = app.session_cookie().await;
+    let (secret, recovery, t0) = enrol_at(&app, &cookie).await;
+    // the attacker uses up the authenticator budget over a few sign-ins
+    for _ in 0..(mfa::MFA_FAILS as usize).div_ceil(mfa::CHALLENGE_MAX_FAILS as usize) {
+        let pending = pair(&login(&app, &app.user.email).await.1);
+        for _ in 0..mfa::CHALLENGE_MAX_FAILS {
+            post(&app, "/api/auth/mfa/challenge/verify", json!({ "code": "000000" }), Some(&pending)).await;
+        }
+    }
+    let pending = pair(&login(&app, &app.user.email).await.1);
+    let ((status, _), _) = post(&app, "/api/auth/mfa/challenge/verify", json!({ "code": mfa::code_at(&secret, t0 + 30).unwrap() }), Some(&pending)).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "the authenticator is locked out");
+    // the owner's recovery code still signs in, and ends the lockout
+    let ((status, body), set) = post(&app, "/api/auth/mfa/challenge/verify", json!({ "code": recovery[0] }), Some(&pending)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(pair(&set).starts_with("eunomia_session="));
+    let pending = pair(&login(&app, &app.user.email).await.1);
+    let ((status, body), _) = post(&app, "/api/auth/mfa/challenge/verify", json!({ "code": mfa::code_at(&secret, t0 + 30).unwrap() }), Some(&pending)).await;
+    assert_eq!(status, StatusCode::OK, "the authenticator works again: {body}");
+
+    // wrong recovery codes have a budget of their own (through step-up, so no sign-in budget gets in the way)
+    let mut refused = None;
+    for i in 0..(mfa::RECOVERY_FAILS + 1) {
+        let ((status, _), _) = post(&app, "/api/auth/mfa/recovery-codes", json!({ "code": format!("zzzzz-{i:05}") }), Some(&cookie)).await;
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            refused = Some(i);
+            break;
+        }
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+    assert_eq!(refused, Some(mfa::RECOVERY_FAILS), "the {}th wrong recovery code is refused", mfa::RECOVERY_FAILS + 1);
+    let ((status, _), _) = post(&app, "/api/auth/mfa/recovery-codes", json!({ "code": recovery[1] }), Some(&cookie)).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "even a right one, until the window ends");
+}
+
+/// The password typed again to set up an authenticator is limited per account in the database: 10 wrong
+/// ones and even the right one is refused for the rest of the window.
+#[tokio::test]
+async fn the_setup_password_retry_limit_is_shared() {
+    let app = common::TestApp::new().await;
+    let cookie = app.session_cookie().await;
+    for _ in 0..mfa::REAUTH_FAILS {
+        let ((status, _), _) = post(&app, "/api/auth/mfa/enrol", json!({ "password": "wrong-password" }), Some(&cookie)).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+    let ((status, body), _) = post(&app, "/api/auth/mfa/enrol", json!({ "password": common::PASSWORD }), Some(&cookie)).await;
+    assert_eq!((status, body["code"].as_str()), (StatusCode::TOO_MANY_REQUESTS, Some("rate.limited")), "{body}");
+    // counted in the control database, not in this process: clearing the process's throttle changes nothing
+    let mut res = app.control().test_raw().query("SELECT VALUE reauth_attempts FROM ONLY $u").bind(("u", app.user.id.clone())).await.unwrap();
+    let n: Option<i64> = res.take(0).unwrap();
+    assert_eq!(n, Some(i64::from(mfa::REAUTH_FAILS)));
 }
