@@ -80,12 +80,31 @@ pub const ALL: &[&ControlStmt] = &[
     &USER_ADMIN_FLAG,
     &USER_SET_ADMIN,
     &USER_SET_SUSPENDED,
+    &MFA_USER_STATE,
+    &MFA_PENDING_SET,
+    &MFA_CONFIRM,
+    &MFA_DISABLE,
+    &MFA_STEP_ACCEPT,
+    &MFA_RECOVERY_REPLACE,
+    &MFA_RECOVERY_SPEND,
+    &MFA_RECOVERY_LEFT,
+    &MFA_CHALLENGE_CREATE,
+    &MFA_CHALLENGE_FIND,
+    &MFA_CHALLENGE_FAIL,
+    &MFA_CHALLENGE_TAKE,
+    &MFA_CHALLENGE_PRUNE,
+    &MFA_SESSION_MARK,
+    &MFA_SESSION_BY_SID,
+    &INSTANCE_SECURITY_GET,
+    &INSTANCE_SECURITY_SET,
 ];
 
+/// `$via` is how the browser signed in (`password` or `oidc`); `$mfa` marks a session that passed a second factor.
 pub const AUTH_SESSION_CREATE: ControlStmt =
     ControlStmt::new(
     "app.auth_session_create",
-    "CREATE session SET owner = $owner, sid = $sid, user_agent = $user_agent, expires_at = $expires_at",
+    "CREATE session SET owner = $owner, sid = $sid, user_agent = $user_agent, expires_at = $expires_at, \
+     via = $via, mfa_at = IF $mfa THEN time::now() ELSE NONE END",
 );
 
 pub const AUTH_SESSION_FIND: ControlStmt = ControlStmt::new(
@@ -423,7 +442,8 @@ pub const ADMIN_AUDIT_PAGE: ControlStmt = ControlStmt::new(
 /// Every account in an org, oldest first.
 pub const ADMIN_PEOPLE: ControlStmt = ControlStmt::new(
     "control.admin_people",
-    "SELECT id, email, created_at, admin, suspended_at FROM user WHERE id IN (SELECT VALUE user FROM membership WHERE org = $org) ORDER BY created_at, id",
+    "SELECT id, email, created_at, admin, suspended_at, mfa_secret_enc != NONE AS mfa, password_hash != NONE AS has_password \
+     FROM user WHERE id IN (SELECT VALUE user FROM membership WHERE org = $org) ORDER BY created_at, id",
 );
 
 /// When each of `$ids` was last seen: browser sessions, then API tokens (the caller takes the latest).
@@ -471,4 +491,107 @@ pub const SECRET_SINCE: ControlStmt = ControlStmt::new(
     "control.secret_since",
     "SELECT id, actor_kind, actor_id, outcome, trace_id, detail, created_at FROM audit_event \
      WHERE action = 'secret.resolve' AND target = $org AND created_at > $since",
+);
+
+// two-step verification (mfa.rs, control 0009)
+
+/// What the second step needs to know about an account. Never sent to a client as is.
+pub const MFA_USER_STATE: ControlStmt = ControlStmt::new(
+    "control.mfa_user_state",
+    "SELECT id, email, password_hash != NONE AS has_password, mfa_secret_enc, mfa_enabled_at, mfa_pending_enc, mfa_pending_at \
+     FROM ONLY $id",
+);
+
+/// Starts (or restarts) enrolment: a new secret waits for a code; the confirmed one, if any, is untouched.
+pub const MFA_PENDING_SET: ControlStmt = ControlStmt::new(
+    "control.mfa_pending_set",
+    "UPDATE $id SET mfa_pending_enc = $enc, mfa_pending_at = time::now() WHERE mfa_secret_enc = NONE RETURN id",
+);
+
+/// Turns the pending secret into the account's secret, only if it is still the one the code was checked
+/// against (a second enrolment started meanwhile loses). `$step` is the step the confirming code used.
+pub const MFA_CONFIRM: ControlStmt = ControlStmt::new(
+    "control.mfa_confirm",
+    "UPDATE $id SET mfa_secret_enc = mfa_pending_enc, mfa_enabled_at = time::now(), mfa_pending_enc = NONE, \
+     mfa_pending_at = NONE, mfa_last_step = $step WHERE mfa_pending_enc = $enc AND mfa_secret_enc = NONE RETURN id",
+);
+
+/// Turns two-step verification off: the secret, any pending one and every recovery code go.
+pub const MFA_DISABLE: ControlStmt = ControlStmt::new(
+    "control.mfa_disable",
+    "UPDATE $id SET mfa_secret_enc = NONE, mfa_enabled_at = NONE, mfa_pending_enc = NONE, mfa_pending_at = NONE, \
+     mfa_last_step = NONE RETURN id; DELETE mfa_recovery_code WHERE user = $id",
+);
+
+/// Accepts a TOTP step once: a code from a step at or before the last accepted one is a replay (empty result).
+pub const MFA_STEP_ACCEPT: ControlStmt = ControlStmt::new(
+    "control.mfa_step_accept",
+    "UPDATE $id SET mfa_last_step = $step WHERE mfa_secret_enc != NONE AND (mfa_last_step = NONE OR mfa_last_step < $step) RETURN id",
+);
+
+/// Replaces every recovery code of a user with `$hashes` (SHA-256 of each code).
+pub const MFA_RECOVERY_REPLACE: ControlStmt = ControlStmt::new(
+    "control.mfa_recovery_replace",
+    r#"BEGIN TRANSACTION;
+        DELETE mfa_recovery_code WHERE user = $user;
+        FOR $h IN $hashes { CREATE mfa_recovery_code SET user = $user, code_hash = $h; };
+        COMMIT TRANSACTION;"#,
+);
+
+/// Spends one recovery code: the first use marks it, a second finds nothing (empty result).
+pub const MFA_RECOVERY_SPEND: ControlStmt = ControlStmt::new(
+    "control.mfa_recovery_spend",
+    "UPDATE mfa_recovery_code SET used_at = time::now() WHERE user = $user AND code_hash = $hash AND used_at = NONE RETURN id",
+);
+
+pub const MFA_RECOVERY_LEFT: ControlStmt = ControlStmt::new(
+    "control.mfa_recovery_left",
+    "SELECT count() FROM mfa_recovery_code WHERE user = $user AND used_at = NONE GROUP ALL",
+);
+
+pub const MFA_CHALLENGE_CREATE: ControlStmt = ControlStmt::new(
+    "control.mfa_challenge_create",
+    "CREATE mfa_challenge SET user = $user, token_hash = $hash, purpose = $purpose, via = $via, user_agent = $user_agent, \
+     expires_at = time::now() + <duration> $ttl RETURN NONE",
+);
+
+/// A live challenge by the hash of the browser's token.
+pub const MFA_CHALLENGE_FIND: ControlStmt = ControlStmt::new(
+    "control.mfa_challenge_find",
+    "SELECT id, user, user.email AS email, purpose, via, user_agent, failures FROM mfa_challenge \
+     WHERE token_hash = $hash AND expires_at > time::now() LIMIT 1",
+);
+
+/// Counts a wrong code; past `$max` the challenge is deleted and the person must sign in again.
+pub const MFA_CHALLENGE_FAIL: ControlStmt = ControlStmt::new(
+    "control.mfa_challenge_fail",
+    "UPDATE $id SET failures += 1 RETURN failures; DELETE $id WHERE failures >= $max RETURN BEFORE",
+);
+
+/// Single use: the first successful second step deletes the challenge; a racing second finds nothing.
+pub const MFA_CHALLENGE_TAKE: ControlStmt = ControlStmt::new("control.mfa_challenge_take", "DELETE $id RETURN BEFORE");
+
+pub const MFA_CHALLENGE_PRUNE: ControlStmt =
+    ControlStmt::new("control.mfa_challenge_prune", "DELETE mfa_challenge WHERE expires_at < time::now() - 1h");
+
+/// Marks the session with this `sid` as having just passed a second factor (step-up).
+pub const MFA_SESSION_MARK: ControlStmt = ControlStmt::new(
+    "control.mfa_session_mark",
+    "UPDATE session SET mfa_at = time::now() WHERE sid = $sid AND owner = $owner AND revoked = false",
+);
+
+pub const MFA_SESSION_BY_SID: ControlStmt = ControlStmt::new(
+    "control.mfa_session_by_sid",
+    "SELECT mfa_at, via FROM session WHERE sid = $sid AND owner = $owner AND revoked = false LIMIT 1",
+);
+
+/// The instance's security settings (one row; absent = defaults).
+pub const INSTANCE_SECURITY_GET: ControlStmt = ControlStmt::new(
+    "control.instance_security_get",
+    "SELECT require_mfa, updated_at, updated_by.email AS updated_by FROM ONLY instance_setting:security",
+);
+
+pub const INSTANCE_SECURITY_SET: ControlStmt = ControlStmt::new(
+    "control.instance_security_set",
+    "UPSERT instance_setting:security SET require_mfa = $require_mfa, updated_at = time::now(), updated_by = $by RETURN NONE",
 );

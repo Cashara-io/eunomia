@@ -82,5 +82,6 @@ pub async fn prune(db: &ControlDb, audit_days: u32, session_days: u32) -> crate:
         store::control::AUDIT_PRUNE.on(db).bind(("age", format!("{audit_days}d"))).await?.check()?;
     }
     store::control::SESSION_PRUNE.on(db).bind(("age", format!("{session_days}d"))).await?.check()?;
+    crate::mfa::prune(db).await?;
     Ok(())
 }

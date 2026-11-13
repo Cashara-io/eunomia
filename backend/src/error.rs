@@ -26,6 +26,10 @@ pub enum ErrorCode {
     AuthSessionExpired,
     AuthPasswordDisabled,
     AuthSuspended,
+    AuthMfaRequired,
+    AuthMfaInvalid,
+    AuthMfaChallengeExpired,
+    AuthStepUpRequired,
     RateLimited,
     TenantDenied,
     TenantNotFound,
@@ -77,6 +81,10 @@ impl ErrorCode {
         ErrorCode::AuthSessionExpired,
         ErrorCode::AuthPasswordDisabled,
         ErrorCode::AuthSuspended,
+        ErrorCode::AuthMfaRequired,
+        ErrorCode::AuthMfaInvalid,
+        ErrorCode::AuthMfaChallengeExpired,
+        ErrorCode::AuthStepUpRequired,
         ErrorCode::RateLimited,
         ErrorCode::TenantDenied,
         ErrorCode::TenantNotFound,
@@ -128,6 +136,10 @@ impl ErrorCode {
             ErrorCode::AuthSessionExpired => "auth.session_expired",
             ErrorCode::AuthPasswordDisabled => "auth.password_disabled",
             ErrorCode::AuthSuspended => "auth.suspended",
+            ErrorCode::AuthMfaRequired => "auth.mfa_required",
+            ErrorCode::AuthMfaInvalid => "auth.mfa_invalid",
+            ErrorCode::AuthMfaChallengeExpired => "auth.mfa_challenge_expired",
+            ErrorCode::AuthStepUpRequired => "auth.step_up_required",
             ErrorCode::RateLimited => "rate.limited",
             ErrorCode::TenantDenied => "tenant.denied",
             ErrorCode::TenantNotFound => "tenant.not_found",
@@ -171,8 +183,8 @@ impl ErrorCode {
 
     pub fn default_status(self) -> StatusCode {
         match self {
-            ErrorCode::AuthUnauthorized | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired => StatusCode::UNAUTHORIZED,
-            ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled
+            ErrorCode::AuthUnauthorized | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthMfaRequired | ErrorCode::AuthMfaInvalid | ErrorCode::AuthMfaChallengeExpired => StatusCode::UNAUTHORIZED,
+            ErrorCode::AuthStepUpRequired | ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled
             | ErrorCode::SecretHostDenied
             | ErrorCode::SecretOutboundBlocked => StatusCode::FORBIDDEN,
             ErrorCode::SecretOutboundFailed => StatusCode::BAD_GATEWAY,
@@ -375,6 +387,7 @@ mod tests {
             match c {
                 ErrorCode::AuthUnauthorized | ErrorCode::AuthForbidden | ErrorCode::AuthEmailTaken | ErrorCode::AuthNotFound
                 | ErrorCode::AuthScope | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::RateLimited
+                | ErrorCode::AuthMfaRequired | ErrorCode::AuthMfaInvalid | ErrorCode::AuthMfaChallengeExpired | ErrorCode::AuthStepUpRequired
                 | ErrorCode::TenantDenied | ErrorCode::TenantNotFound | ErrorCode::TenantSchemaBehind
                 | ErrorCode::TenantProvisioningDisabled | ErrorCode::VaultNotFound | ErrorCode::VaultForbidden | ErrorCode::VaultNameTaken | ErrorCode::EntityNotFound
                 | ErrorCode::MemoryNotFound | ErrorCode::ChatThreadNotFound | ErrorCode::ConnectorNotFound
