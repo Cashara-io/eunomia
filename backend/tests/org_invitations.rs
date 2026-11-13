@@ -118,7 +118,8 @@ async fn an_invited_person_signs_up_into_the_inviting_org_even_on_a_closed_perso
     // the page can show what the link is for
     let (status, seen) = lookup(&h.app, &token).await;
     assert_eq!(status, StatusCode::OK, "{seen}");
-    assert_eq!((seen["email"].as_str(), seen["status"].as_str(), seen["invited_by"].as_str()), (Some("pat@example.com"), Some("open"), Some("alpha@example.com")));
+    assert_eq!((seen["email"].as_str(), seen["status"].as_str()), (Some("pat@example.com"), Some("open")));
+    assert!(seen.get("invited_by").is_none(), "no unverified inviter address on the page: {seen}");
 
     // without the invitation, signup is closed; with someone else's email, the invitation does not count
     let ((status, body), _) = register(&h.app, "pat@example.com", None).await;
@@ -153,8 +154,11 @@ async fn an_invited_person_signs_up_into_the_inviting_org_even_on_a_closed_perso
     assert_eq!(created.len(), 1);
     assert_eq!(created[0]["user"], json!(h.alpha.id.to_string()));
     assert_eq!(created[0]["detail"], "email=pat@example.com role=member");
-    let accepted = audit_rows(&h.app.state, "org.invite_accept").await;
-    assert_eq!((accepted.len(), accepted[0]["outcome"].as_str()), (1, Some("ok")));
+    // the wrong-email attempt above left the generic "not accepted" row; the signup left the accepted one
+    let rows = audit_rows(&h.app.state, "org.invite_accept").await;
+    assert_eq!(rows.iter().filter(|r| r["outcome"] == invitations::NOT_ACCEPTED).count(), 1, "{rows:?}");
+    let accepted: Vec<&Value> = rows.iter().filter(|r| r["outcome"] == "ok").collect();
+    assert_eq!(accepted.len(), 1, "{rows:?}");
     assert_eq!(accepted[0]["user"], json!(pat.id.to_string()));
     let dump = control_dump(&h.app.state).await;
     assert!(!dump.contains(&token), "the invitation token is stored somewhere");
@@ -258,7 +262,7 @@ async fn an_expired_invitation_is_refused_audited_and_can_be_resent() {
     assert_eq!((status, seen["status"].as_str()), (StatusCode::OK, Some("expired")), "{seen}");
     let ((status, body), _) = register(&h.app, "pat@example.com", Some(&token)).await;
     assert_eq!((status, body["code"].as_str()), (StatusCode::GONE, Some("invitation.expired")), "{body}");
-    assert!(body["detail"].as_str().unwrap_or_default().contains("alpha@example.com"), "{body}");
+    assert!(body["detail"].as_str().unwrap_or_default().contains("Ask an admin of"), "{body}");
     assert!(models_user::user_by_email(&h.app.state.control, "pat@example.com").await.unwrap().is_none(), "no account was made");
     // the refusal is in the inviting org's log
     let refused = audit_rows(&h.app.state, "org.invite_expired").await;
@@ -500,4 +504,42 @@ async fn creation_and_acceptance_are_rate_limited() {
     }
     let (status, body) = as_cookie(&h3.app, &beta_cookie, "POST", "/api/invitations/accept", Some(json!({ "token": link }))).await;
     assert_eq!((status, body["code"].as_str()), (StatusCode::TOO_MANY_REQUESTS, Some("rate.limited")), "{body}");
+}
+
+/// A link a resend has just replaced cannot win: the claim only succeeds under the hash it started with.
+#[tokio::test]
+async fn a_link_replaced_by_a_resend_cannot_claim() {
+    let h = host().await;
+    let first = invite(&h, "pat@example.com", "member").await;
+    let old = invitations::by_hash(&h.app.state.control, &invitations::token_hash(first["token"].as_str().unwrap())).await.unwrap().expect("open");
+    // an acceptance with the old link got this far; meanwhile the admin resends
+    let id = first["invitation"]["id"].as_str().unwrap();
+    assert_eq!(as_cookie(&h.app, &h.alpha_cookie, "POST", &format!("/api/org/invitations/{id}/resend"), None).await.0, StatusCode::OK);
+    let mut res = h.app.state.control.test_raw().query("CREATE user SET email = 'pat@example.com', email_lc = 'pat@example.com' RETURN VALUE id").await.unwrap();
+    let pat: surrealdb::types::RecordId = res.take::<Vec<surrealdb::types::RecordId>>(0).unwrap().remove(0);
+    let err = invitations::claim(&h.app.state.control, &pat, &old, true).await.unwrap_err();
+    assert_eq!(err.code.as_str(), "invitation.not_found");
+    assert!(memberships(&h.app.state, &pat).await.is_empty());
+}
+
+/// Every refusal at acceptance writes the same generic row to the inviting org's ledger, whatever the reason.
+#[tokio::test]
+async fn every_refusal_at_acceptance_reads_the_same_to_the_inviter() {
+    let h = host().await;
+    let to_pat = invite(&h, "pat@example.com", "member").await;
+    let to_beta = invite(&h, "beta@example.com", "member").await;
+    // another email, by password signup
+    let ((status, _), _) = register(&h.app, "mallory@example.com", Some(to_pat["token"].as_str().unwrap())).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    // an account in another organisation, signed in
+    common::register_personal(&h.app.state, "beta@example.com").await;
+    let beta = login(&h.app, "beta@example.com").await;
+    assert_eq!(as_cookie(&h.app, &beta, "POST", "/api/invitations/accept", Some(json!({ "token": to_beta["token"] }))).await.0, StatusCode::CONFLICT);
+    let rows = audit_rows(&h.app.state, "org.invite_accept").await;
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    for r in &rows {
+        assert_eq!((r["outcome"].as_str(), r["actor_kind"].as_str()), (Some(invitations::NOT_ACCEPTED), Some("anonymous")), "{r}");
+        assert_eq!(r["user"], json!(h.alpha.id.to_string()));
+        assert!(r["detail"].as_str().unwrap().starts_with("email=") && !r["detail"].as_str().unwrap().contains(' '), "only the invited address: {r}");
+    }
 }

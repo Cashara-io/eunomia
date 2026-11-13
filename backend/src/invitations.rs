@@ -139,9 +139,8 @@ pub struct Pending {
     pub email: String,
     pub role: String,
     pub invited_by: RecordId,
-    #[serde(default)]
-    #[surreal(default)]
-    pub invited_by_email: Option<String>,
+    /// The hash of the link this acceptance started from: the claim only succeeds while it is current.
+    pub token_hash: String,
     #[serde(default)]
     #[surreal(default)]
     accepted_at: Option<Datetime>,
@@ -173,8 +172,9 @@ fn admin_not_found() -> AppError {
 }
 
 fn expired_error(p: &Pending) -> AppError {
-    let who = p.invited_by_email.as_deref().filter(|e| !e.is_empty()).map(|e| format!("Ask {e}")).unwrap_or_else(|| "Ask the person who invited you".into());
-    AppError::coded(ErrorCode::InvitationExpired, format!("This invitation has expired. {who} to send a new one."))
+    // the organisation, not the inviter's email: nobody verified that address
+    let org = p.org_name.as_deref().filter(|n| !n.is_empty()).unwrap_or("the organisation");
+    AppError::coded(ErrorCode::InvitationExpired, format!("This invitation has expired. Ask an admin of {org} to send a new one."))
 }
 
 /// The email check every accept makes: the accepting account's email, normalized, is the invited one.
@@ -417,8 +417,6 @@ pub struct InvitationLookup {
     pub email: String,
     /// `member` or `admin`.
     pub role: String,
-    /// Who sent it.
-    pub invited_by: String,
     #[schema(value_type = String)]
     pub expires_at: Datetime,
     /// `open`, or `expired` (ask for a new link).
@@ -455,7 +453,6 @@ pub async fn lookup(state: &AppState, token: &str, who: Who<'_>) -> AppResult<In
         org_name: p.org_name.clone().unwrap_or_default(),
         email: p.email.clone(),
         role: p.role.clone(),
-        invited_by: p.invited_by_email.clone().unwrap_or_default(),
         expires_at: p.expires_at,
         status: if p.expired { "expired" } else { "open" }.into(),
     })
@@ -488,6 +485,7 @@ pub async fn check_usable(control: &ControlDb, p: Pending) -> AppResult<Pending>
     }
     if authz::operator_email_listed(&p.email) {
         tracing::info!("organisation invitation refused at acceptance: the address is in EUNOMIA_ADMIN_EMAILS");
+        record_not_accepted(control, &p).await;
         return Err(not_found());
     }
     if p.expired {
@@ -507,6 +505,7 @@ pub async fn claim(control: &ControlDb, user: &RecordId, p: &Pending, join: bool
             .bind(("id", p.id.clone()))
             .bind(("user", user.clone()))
             .bind(("email", p.email.clone()))
+            .bind(("hash", p.token_hash.clone()))
             .bind(("join", join))
             .await?
             .check()
@@ -545,7 +544,7 @@ pub struct InvitationAccepted {
 /// org cannot accept (one org per account for now).
 pub async fn accept_signed_in(state: &AppState, user: &User, token: &str) -> AppResult<InvitationAccepted> {
     let p = usable(state, token, Who::Account(&user.id)).await?;
-    email_matches(&p, &user.email)?;
+    require_email(&state.control, &p, &user.email).await?;
     let org = p.org_id().ok_or_else(not_found)?;
     let already = org == user.org || {
         let mut res = q::ROLE_IN_ORG.on(&state.control).bind(("user", user.id.clone())).bind(("org", p.org.clone())).await?;
@@ -555,7 +554,7 @@ pub async fn accept_signed_in(state: &AppState, user: &User, token: &str) -> App
         // the inviting org learns only that it was not accepted; why (an account in another org) is for
         // the server's operators, in the log
         tracing::info!(invitation = %p.id.to_string(), "organisation invitation not accepted: the account belongs to another organisation");
-        record(&state.control, &p.invited_by, &audit::anonymous(), "org.invite_accept", &p.id.to_string(), NOT_ACCEPTED, &format!("email={}", p.email)).await;
+        record_not_accepted(&state.control, &p).await;
         return Err(AppError::coded(
             ErrorCode::InvitationOtherOrg,
             "Your account already belongs to another organisation, and an account can only be in one for now. Ask for an invitation to a different email address.",
@@ -573,6 +572,24 @@ pub async fn accept_signed_in(state: &AppState, user: &User, token: &str) -> App
 /// The outcome the inviting org's ledger records when an invitation could not be accepted.
 pub const NOT_ACCEPTED: &str = "invitation.not_accepted";
 
+/// The one row the inviting org's ledger gets for every refusal at acceptance (another email, an
+/// account in another org, an unverified provider email, an address that may never be invited), so the
+/// row never tells the inviter why. The reason is in the server log. An expired link has its own
+/// `org.invite_expired` row: that says something about the link, not about the person.
+pub async fn record_not_accepted(control: &ControlDb, p: &Pending) {
+    record(control, &p.invited_by, &audit::anonymous(), "org.invite_accept", &p.id.to_string(), NOT_ACCEPTED, &format!("email={}", p.email)).await;
+}
+
+/// [`email_matches`], and a refusal goes to the inviter's ledger as "not accepted".
+pub async fn require_email(control: &ControlDb, p: &Pending, email: &str) -> AppResult<()> {
+    let r = email_matches(p, email);
+    if r.is_err() {
+        tracing::info!(invitation = %p.id.to_string(), "organisation invitation not accepted: a different email");
+        record_not_accepted(control, p).await;
+    }
+    r
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -581,11 +598,11 @@ mod tests {
         Pending {
             id: crate::rid::parse("org_invitation:a").unwrap(),
             org: crate::rid::parse("org:b").unwrap(),
-            org_name: None,
+            org_name: Some("Acme".into()),
             email: email.into(),
             role: "member".into(),
             invited_by: crate::rid::parse("user:c").unwrap(),
-            invited_by_email: Some("boss@acme.test".into()),
+            token_hash: "h".into(),
             accepted_at: None,
             revoked_at: None,
             expires_at: Datetime::now(),
@@ -609,7 +626,7 @@ mod tests {
         assert!(serde_json::from_str::<OrgInviteRole>("\"owner\"").is_err(), "an invitation never makes an owner");
         let e = expired_error(&pending("pat@acme.test"));
         assert_eq!((e.code, e.status.as_u16()), (ErrorCode::InvitationExpired, 410));
-        assert!(e.message.contains("boss@acme.test"), "{}", e.message);
+        assert!(e.message.contains("an admin of Acme"), "{}", e.message);
     }
 
     #[test]

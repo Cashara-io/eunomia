@@ -1263,10 +1263,6 @@ export type InvitationLookup = {
     email: string;
     expires_at: string;
     /**
-     * Who sent it.
-     */
-    invited_by: string;
-    /**
      * The organisation's name.
      */
     org_name: string;

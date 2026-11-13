@@ -25,7 +25,15 @@ fn host(signup: &str, signup_org: &str) {
         std::env::set_var("SIGNUP", signup);
         std::env::set_var("EUNOMIA_SIGNUP_ORG", signup_org);
         std::env::set_var("EUNOMIA_ADMIN_EMAILS", "op@corp.test");
+        std::env::set_var("SIGNUP_ALLOWLIST", "");
+        std::env::set_var("COOKIE_SECURE", "auto");
+        std::env::set_var("RATE_LIMIT_AUTH_PER_MIN", "1000");
     }
+}
+
+fn set_env(k: &str, v: &str) {
+    // SAFETY: as in `host`
+    unsafe { std::env::set_var(k, v) };
 }
 
 /// An install whose first account is the operator's, plus the owners of org A and org B.
@@ -75,6 +83,7 @@ async fn two_organisations_invite_one_address_and_the_link_decides() {
     as_pat(&app);
     let landed = app.sign_in_invited(&from_a.token).await;
     expect_signed_in(&landed);
+    assert_eq!(landed.location, "/onboarding", "a new member goes to onboarding, not back to the used link");
     assert_eq!(org_of(&app, "pat@example.test").await, Some(a.org), "the link's org, not the newest inviter");
     assert!(!open(&app, &from_a.token).await, "A's invitation is used up");
     assert!(open(&app, &from_b.token).await, "B's is untouched");
@@ -119,6 +128,9 @@ async fn a_link_only_works_for_its_own_email_and_while_it_is_open() {
     expect_refused(&app.sign_in_invited(&for_sam.token).await, "invitation_email");
     assert!(org_of(&app, "pat@example.test").await.is_none());
     assert!(open(&app, &for_sam.token).await);
+    // the inviting org's ledger says only that it was not accepted
+    let rows: Vec<Value> = app.state.control.test_raw().query("SELECT user, outcome FROM audit_event WHERE action = 'org.invite_accept'").await.unwrap().take(0).unwrap();
+    assert_eq!(rows, vec![json!({"user": a.id.to_string(), "outcome": invitations::NOT_ACCEPTED})]);
     // withdrawn
     let for_pat = invitations::create(&app.state, &a, "pat@example.test", OrgInviteRole::Member).await.unwrap();
     invitations::revoke(&app.state, &a, &for_pat.invitation.id).await.unwrap();
@@ -213,10 +225,99 @@ async fn an_existing_account_signing_in_through_a_link_keeps_its_org_and_the_lin
     let _g = SERIAL.lock().await;
     host("closed", "personal");
     let (app, a, b) = world(AuthMode::Both, false).await;
-    // B's owner was invited to A; signing in by SSO links to the existing account in B and joins nothing
+    // B's owner was invited to A. Their account has a password, so single sign-on asks before linking
+    // (and would link to the account in B either way); nothing joins A
     let link = invitations::create(&app.state, &a, "owner-b@example.test", OrgInviteRole::Member).await.unwrap();
     app.idp.behave(Behavior { sub: "b-sub".into(), email: Some("owner-b@example.test".into()), ..Default::default() });
-    expect_signed_in(&app.sign_in_invited(&link.token).await);
+    let landed = app.sign_in_invited(&link.token).await;
+    assert_eq!((landed.location.as_str(), landed.session.is_none()), ("/login/link", true));
+    let ((status, _), _) = http(&app.router, "POST", "/api/auth/oidc/link", Some(json!({"password": PASSWORD})), None, Some(&landed.link.unwrap())).await;
+    assert_eq!(status, axum::http::StatusCode::OK);
     assert_eq!(org_of(&app, "owner-b@example.test").await, Some(b.org));
     assert!(open(&app, &link.token).await, "accepting is a separate, confirmed step on the invitation page");
+}
+
+/// The invitation-only setting never makes a missing claim count for anything but the invitation that
+/// came with the sign-in: not for linking (to a password or an SSO-only account), not for an operator
+/// address, not for the allowlist.
+#[tokio::test]
+async fn the_unverified_invitation_setting_trusts_nothing_else() {
+    let _g = SERIAL.lock().await;
+    host("closed", "personal");
+    let missing = |sub: &str, email: &str| Behavior { sub: sub.into(), email: Some(email.into()), email_verified: Value::Null, ..Default::default() };
+    let (app, _, _) = world(AuthMode::Both, true).await;
+    // an existing password account: no link, and no take-over page either
+    models_user::register_user_with(&app.state, "pw@example.test", PASSWORD, true).await.unwrap();
+    app.idp.behave(missing("pw-sub", "pw@example.test"));
+    let landed = app.sign_in().await;
+    assert!(landed.link.is_none());
+    expect_refused(&landed, "email_unverified");
+    // an existing account made by single sign-on: no link to a second identity
+    app.idp.behave(Behavior { sub: "sso-1".into(), email: Some("sso@example.test".into()), ..Default::default() });
+    host("open", "personal");
+    expect_signed_in(&app.sign_in().await);
+    app.idp.behave(missing("sso-2", "sso@example.test"));
+    expect_refused(&app.sign_in().await, "email_unverified");
+    // an operator address with no account
+    host("closed", "personal");
+    app.idp.behave(missing("op-sub", "op@corp.test"));
+    expect_refused(&app.sign_in().await, "signup_closed");
+    assert!(org_of(&app, "op@corp.test").await.is_none());
+    // the SIGNUP=invite allowlist
+    host("invite", "personal");
+    set_env("SIGNUP_ALLOWLIST", "listed@example.test");
+    app.idp.behave(missing("listed-sub", "listed@example.test"));
+    expect_refused(&app.sign_in().await, "signup_closed");
+    assert!(org_of(&app, "listed@example.test").await.is_none());
+    // the control: the same allowlisted address with the claim sent as true signs up
+    app.idp.behave(Behavior { sub: "listed-sub".into(), email: Some("listed@example.test".into()), ..Default::default() });
+    expect_signed_in(&app.sign_in().await);
+}
+
+/// The inviter registers the invitee's address with a password of their own (the token lets them) and
+/// mints a token. The real person arrives through the link by single sign-on: they are asked before
+/// anything is linked, and taking the account over leaves the inviter nothing.
+#[tokio::test]
+async fn a_squatted_invitation_is_taken_over_by_the_real_person() {
+    let _g = SERIAL.lock().await;
+    host("closed", "personal");
+    let (app, a, _) = world(AuthMode::Both, false).await;
+    let link = invitations::create(&app.state, &a, "pat@example.test", OrgInviteRole::Member).await.unwrap();
+    let ((status, _), _) = http(&app.router, "POST", "/api/auth/register", Some(json!({"email": "pat@example.test", "password": "squatter-password", "invitation": link.token})), None, None).await;
+    assert_eq!(status, axum::http::StatusCode::OK);
+    let squatted = models_user::user_by_email(&app.state.control, "pat@example.test").await.unwrap().unwrap();
+    let token = models_user::create_api_token_with(&app.state.control, &squatted.id, "squatter", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
+
+    as_pat(&app);
+    let landed = app.sign_in_invited(&link.token).await;
+    assert_eq!(landed.location, "/login/link", "asked first, not linked");
+    assert!(landed.session.is_none());
+    let ((status, done), set) = http(&app.router, "POST", "/api/auth/oidc/link", Some(json!({"take_over": true})), None, Some(&landed.link.unwrap())).await;
+    assert_eq!((status, done["took_over"].as_bool()), (axum::http::StatusCode::OK, Some(true)), "{done}");
+    assert!(set.is_some());
+    let login = http(&app.router, "POST", "/api/auth/login", Some(json!({"email": "pat@example.test", "password": "squatter-password"})), None, None).await.0 .0;
+    assert_eq!(login, axum::http::StatusCode::UNAUTHORIZED, "the squatter's password is gone");
+    assert_eq!(http(&app.router, "GET", "/api/vaults", None, Some(&token), None).await.0 .0, axum::http::StatusCode::UNAUTHORIZED, "and their token");
+    let issuer = app.idp.inner.lock().unwrap().issuer.clone();
+    assert_eq!(models_user::user_by_identity(&app.state.control, &issuer, "pat-sub").await.unwrap().map(|u| u.id), Some(squatted.id));
+}
+
+/// Served over https, the sign-in cookie is `__Host-` (Path=/, Secure): one another host planted under the
+/// plain name is not read.
+#[tokio::test]
+async fn on_https_the_sign_in_cookie_is_host_locked() {
+    let _g = SERIAL.lock().await;
+    host("open", "personal");
+    set_env("COOKIE_SECURE", "true");
+    let app = app_with(AuthMode::Both, false).await;
+    let (status, headers, _) = raw(&app.router, axum::http::Request::get("/api/auth/oidc/start?next=/").body(axum::body::Body::empty()).unwrap()).await;
+    assert_eq!(status, axum::http::StatusCode::SEE_OTHER);
+    let set = headers.get(axum::http::header::SET_COOKIE).unwrap().to_str().unwrap().to_string();
+    assert!(set.starts_with("__Host-eunomia_oidc=") && set.contains("; Path=/;") && set.ends_with("; Secure"), "{set}");
+    // the same signed value under the plain name (as a sibling host could set it) is not a flow
+    let value = set.split(';').next().unwrap().strip_prefix("__Host-eunomia_oidc=").unwrap().to_string();
+    let req = axum::http::Request::get("/api/auth/oidc/callback?code=x&state=y").header(axum::http::header::COOKIE, format!("eunomia_oidc={value}")).body(axum::body::Body::empty()).unwrap();
+    let (_, headers, _) = raw(&app.router, req).await;
+    assert!(headers[axum::http::header::LOCATION].to_str().unwrap().contains("oidc_error=state"));
+    set_env("COOKIE_SECURE", "auto");
 }

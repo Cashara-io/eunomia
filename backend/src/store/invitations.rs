@@ -51,7 +51,7 @@ pub const REVOKE: ControlStmt = ControlStmt::new(
 /// The invitation a token belongs to, in any state (the caller tells unknown, closed and expired apart).
 pub const BY_HASH: ControlStmt = ControlStmt::new(
     "invitations.by_hash",
-    "SELECT id, org, org.name AS org_name, email, role, invited_by, invited_by.email AS invited_by_email, accepted_at, revoked_at, \
+    "SELECT id, org, org.name AS org_name, email, role, invited_by, token_hash, accepted_at, revoked_at, \
      expires_at, expires_at <= time::now() AS expired FROM org_invitation WHERE token_hash = $hash LIMIT 1",
 );
 
@@ -61,7 +61,8 @@ pub const ROLE_OF: ControlStmt = ControlStmt::new(
     "SELECT VALUE role FROM org_invitation WHERE id = $id AND org = $org AND accepted_at IS NONE AND revoked_at IS NONE LIMIT 1",
 );
 
-/// Accepts an invitation for `$user`: marks it accepted (only if it is still open, unexpired and for
+/// Accepts an invitation for `$user`: marks it accepted (only if it is still open, unexpired, still under
+/// the token hash the acceptance started with, so a link a resend just replaced cannot win, and for
 /// `$email`) and, when `$join`, adds the membership with the invited role, in one transaction. Without
 /// `$join` (already a member), an admin invitation makes a member an admin; an owner stays the owner. Two
 /// accepts of one token cannot both pass the first step, and `membership_unique` (user, org) backs it
@@ -70,7 +71,7 @@ pub const CLAIM: ControlStmt = ControlStmt::at(
     "invitations.claim",
     "BEGIN TRANSACTION; \
      LET $inv = (UPDATE org_invitation SET accepted_at = time::now(), accepted_by = $user, slot = string::concat('closed:', <string>id) \
-        WHERE id = $id AND email = $email AND accepted_at IS NONE AND revoked_at IS NONE AND expires_at > time::now() RETURN AFTER); \
+        WHERE id = $id AND token_hash = $hash AND email = $email AND accepted_at IS NONE AND revoked_at IS NONE AND expires_at > time::now() RETURN AFTER); \
      IF array::len($inv) = 0 { THROW 'invitation.unavailable' }; \
      LET $org = $inv[0].org; \
      IF $join { CREATE membership SET user = $user, org = $org, role = $inv[0].role, slot = string::concat(<string>$org, '/', <string>$user); }; \

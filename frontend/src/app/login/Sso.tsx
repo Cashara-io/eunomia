@@ -59,9 +59,26 @@ export function useOidcError(provider: string | null): Failure | null {
 
 /** "Continue with {provider}": a full-page navigation to the backend, which redirects to the provider and, after
  * sign-in, back to `next` (so the OAuth consent flow resumes where it left off). */
+/** The invitation the invitation page kept in this tab (`/invite` stores it), when sign-in returns there. */
+const pendingInvitation = () => (nextPath() === "/invite" ? sessionStorage.getItem("eunomia_invite") : null);
+
 export function SsoButton({ provider, primary }: { provider: string; primary: boolean }) {
   // the query string only exists in the browser; until hydration the link points at the dashboard
   const next = useSyncExternalStore(noSubscribe, nextPath, () => "/");
+  const invitation = useSyncExternalStore(noSubscribe, pendingInvitation, () => null);
+  // signing in on the way back to an invitation: the same form post the invitation page makes, so this
+  // sign-in can use that invitation (and only that one) instead of making an account of its own
+  if (invitation)
+    return (
+      <form method="post" action="/api/auth/oidc/start" className="w-full">
+        <input type="hidden" name="next" value="/invite" />
+        <input type="hidden" name="invitation" value={invitation} />
+        <button type="submit" className={`btn ${primary ? "btn-primary" : ""} min-h-11 w-full`}>
+          <KeyIcon weight="duotone" size={16} aria-hidden />
+          Continue with {provider}
+        </button>
+      </form>
+    );
   return (
     <a href={`/api/auth/oidc/start?next=${encodeURIComponent(next)}`} className={`btn ${primary ? "btn-primary" : ""} min-h-11 w-full`}>
       <KeyIcon weight="duotone" size={16} aria-hidden />

@@ -26,7 +26,7 @@
 //!    personal vault) as password signup. On an empty install the first sign-in is the first user, the admin.
 //!    When the sign-in started from an organisation invitation link (`POST /api/auth/oidc/start` from the
 //!    invitation page, same-site only), the flow cookie carries that invitation's token hash and only that
-//!    invitation is used: still open, for this email, verified by the provider (`OIDC_EMAIL_VERIFIED_WHEN_ABSENT`
+//!    invitation is used: still open, for this email, verified by the provider (`OIDC_INVITE_ACCEPT_UNVERIFIED_EMAIL`
 //!    decides a missing claim). It is then the permission (whatever `SIGNUP` says) and the account joins the
 //!    inviting org (`invitations.rs`). An invitation is never found by email.
 
@@ -91,17 +91,41 @@ fn decode_flow(secret: &str, token: &str) -> Option<Flow> {
     (flow.purpose == FLOW_PURPOSE).then_some(flow)
 }
 
+/// The name and path of a sign-in cookie. Served over https (`COOKIE_SECURE`, as the session cookie
+/// decides it), it is `__Host-<base>` with `Path=/`: the browser then refuses one set by any other host,
+/// such as a sibling subdomain, so nobody can plant a sign-in in someone else's browser. Plain http (a
+/// local install) keeps the plain name, scoped to `/api/auth/oidc`.
+fn cookie_name(base: &str, secure: bool) -> (String, &'static str) {
+    if secure { (format!("__Host-{base}"), "/") } else { (base.to_string(), "/api/auth/oidc") }
+}
+
+fn is_secure(state: &AppState, https: Option<Extension<ForwardedHttps>>) -> bool {
+    !cookie_flags(&state.settings.public_url, https).is_empty()
+}
+
+fn set_cookie(base: &str, value: &str, max_age: i64, state: &AppState, https: Option<Extension<ForwardedHttps>>) -> String {
+    let secure = is_secure(state, https);
+    let (name, path) = cookie_name(base, secure);
+    format!("{name}={value}; HttpOnly; SameSite=Lax; Path={path}; Max-Age={max_age}{}", cookie_flags(&state.settings.public_url, https))
+}
+
+/// The cookie's value, under the one name this mode uses (on https only the `__Host-` one counts).
+fn read_cookie(base: &str, headers: &HeaderMap, secure: bool) -> Option<String> {
+    let (name, _) = cookie_name(base, secure);
+    let all = headers.get(header::COOKIE)?.to_str().ok()?;
+    all.split(';').find_map(|p| p.trim().strip_prefix(&format!("{name}=")).map(str::to_string))
+}
+
 fn flow_cookie(token: &str, state: &AppState, https: Option<Extension<ForwardedHttps>>) -> String {
-    format!("{FLOW_COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/api/auth/oidc; Max-Age={FLOW_TTL_SECS}{}", cookie_flags(&state.settings.public_url, https))
+    set_cookie(FLOW_COOKIE, token, FLOW_TTL_SECS, state, https)
 }
 
 fn clear_flow_cookie(state: &AppState, https: Option<Extension<ForwardedHttps>>) -> String {
-    format!("{FLOW_COOKIE}=; HttpOnly; SameSite=Lax; Path=/api/auth/oidc; Max-Age=0{}", cookie_flags(&state.settings.public_url, https))
+    set_cookie(FLOW_COOKIE, "", 0, state, https)
 }
 
-fn read_flow_cookie(headers: &HeaderMap) -> Option<String> {
-    let all = headers.get(header::COOKIE)?.to_str().ok()?;
-    all.split(';').find_map(|p| p.trim().strip_prefix(&format!("{FLOW_COOKIE}=")).map(str::to_string))
+fn read_flow_cookie(state: &AppState, https: Option<Extension<ForwardedHttps>>, headers: &HeaderMap) -> Option<String> {
+    read_cookie(FLOW_COOKIE, headers, is_secure(state, https))
 }
 
 /// A same-site path to land on after sign-in: a single leading slash, no backslash or control character
@@ -336,8 +360,9 @@ enum Mapped {
 async fn callback(State(state): State<AppState>, https: Option<Extension<ForwardedHttps>>, headers: HeaderMap, Query(q): Query<CallbackQuery>) -> AppResult<Response> {
     let cfg = configured(&state)?;
     let clear = clear_flow_cookie(&state, https);
-    let flow = read_flow_cookie(&headers).and_then(|t| decode_flow(&state.settings.jwt_secret, &t));
+    let flow = read_flow_cookie(&state, https, &headers).and_then(|t| decode_flow(&state.settings.jwt_secret, &t));
     let next = flow.as_ref().map_or_else(|| "/".to_string(), |f| f.next.clone());
+    let from_invitation = flow.as_ref().is_some_and(|f| f.invite.is_some());
     match finish(&state, cfg, flow, &q, &headers).await {
         Ok((user, mapped)) => {
             let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref()).await?;
@@ -357,7 +382,10 @@ async fn callback(State(state): State<AppState>, https: Option<Extension<Forward
                 }
                 Mapped::Existing => rec("auth.oidc_login", "", "").await,
             }
-            let target = if mapped == Mapped::Created && next != "/" {
+            // a new account made through the invitation has joined: onboarding, not back to the used link
+            let target = if mapped == Mapped::Created && from_invitation {
+                "/onboarding".to_string()
+            } else if mapped == Mapped::Created && next != "/" {
                 format!("/onboarding?{}", serde_urlencoded::to_string([("next", next.as_str())]).unwrap_or_default())
             } else if mapped == Mapped::Created {
                 "/onboarding".to_string()
@@ -370,7 +398,7 @@ async fn callback(State(state): State<AppState>, https: Option<Extension<Forward
         Err(Fail::AskToLink { user, email, issuer, subject }) => {
             let pending = PendingLink { purpose: LINK_PURPOSE.into(), user: user.to_string(), email, issuer, subject, next, exp: Utc::now().timestamp() + FLOW_TTL_SECS };
             let token = encode(&Header::new(Algorithm::HS256), &pending, &EncodingKey::from_secret(state.settings.jwt_secret.as_bytes())).map_err(|e| AppError::internal(e.to_string()))?;
-            let cookie = format!("{LINK_COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/api/auth/oidc; Max-Age={FLOW_TTL_SECS}{}", cookie_flags(&state.settings.public_url, https));
+            let cookie = set_cookie(LINK_COOKIE, &token, FLOW_TTL_SECS, &state, https);
             Ok(no_store((AppendHeaders([(header::SET_COOKIE, cookie), (header::SET_COOKIE, clear)]), Redirect::to("/login/link")).into_response()))
         }
         Err(fail) => {
@@ -414,8 +442,11 @@ async fn finish(state: &AppState, cfg: &OidcConfig, flow: Option<Flow>, q: &Call
         && let Some((email, verified)) = state.oidc.userinfo(&disc, &at, &ident.subject).await
     {
         ident.email = email;
-        ident.email_verified = verified.unwrap_or(false);
-        ident.email_verified_absent = verified.is_none();
+        // an explicit claim in the ID token stands (a missing one in userinfo must not turn a false into "absent")
+        if ident.email_verified_absent {
+            ident.email_verified = verified.unwrap_or(false);
+            ident.email_verified_absent = verified.is_none();
+        }
     }
     map_identity(state, cfg, &ident, flow.invite.as_deref()).await
 }
@@ -446,7 +477,8 @@ fn signup_decision(has_users: bool, verified: bool, listed: bool, operators_conf
 /// email.
 async fn map_identity(state: &AppState, cfg: &OidcConfig, id: &Identity, invite: Option<&str>) -> Result<(User, Mapped), Fail> {
     let db = &state.control;
-    let verified = id.verified_under(cfg);
+    // linking, take-over, operator addresses and the allowlist: only the provider's explicit claim counts
+    let verified = id.email_verified;
     // two attempts: a concurrent first sign-in of the same person loses the unique index, then finds the winner
     for attempt in 0..2 {
         if let Some(user) = models_user::user_by_identity(db, &id.issuer, &id.subject).await? {
@@ -484,7 +516,7 @@ async fn map_identity(state: &AppState, cfg: &OidcConfig, id: &Identity, invite:
 
         // a new account from an invitation link: that invitation, and only for its own, verified email
         if let Some(hash) = invite {
-            let p = invited(state, hash, &email, verified).await?;
+            let p = invited(state, hash, &email, id.verified_for_invitation(cfg)).await?;
             return match models_user::register_oidc_user_invited(state, &email, &id.issuer, &id.subject, &p).await {
                 Ok(user) => {
                     crate::invitations::record_accepted(db, &user.id, &p, &p.role, "oidc").await;
@@ -530,10 +562,11 @@ async fn invited(state: &AppState, hash: &str, email: &str, verified: bool) -> R
         Err(e) if e.code == ErrorCode::InvitationNotFound => return Err(Fail::Invitation("invitation", "the invitation is used, withdrawn or not usable".into())),
         Err(e) => return Err(e.into()),
     };
-    if crate::invitations::email_matches(&p, email).is_err() {
+    if crate::invitations::require_email(db, &p, email).await.is_err() {
         return Err(Fail::Invitation("invitation_email", "the signed-in email is not the invited one".into()));
     }
     if !verified {
+        crate::invitations::record_not_accepted(db, &p).await;
         return Err(Fail::Invitation("invitation_unverified", "the provider has not verified the email".into()));
     }
     Ok(p)
@@ -557,9 +590,9 @@ struct PendingLink {
     exp: i64,
 }
 
-fn read_pending_link(state: &AppState, headers: &HeaderMap) -> Option<PendingLink> {
-    let all = headers.get(header::COOKIE)?.to_str().ok()?;
-    let token = all.split(';').find_map(|p| p.trim().strip_prefix(&format!("{LINK_COOKIE}=")))?;
+fn read_pending_link(state: &AppState, https: Option<Extension<ForwardedHttps>>, headers: &HeaderMap) -> Option<PendingLink> {
+    let token = read_cookie(LINK_COOKIE, headers, is_secure(state, https))?;
+    let token = token.as_str();
     let mut v = Validation::new(Algorithm::HS256);
     v.set_required_spec_claims(&["exp"]);
     v.leeway = 0;
@@ -568,7 +601,7 @@ fn read_pending_link(state: &AppState, headers: &HeaderMap) -> Option<PendingLin
 }
 
 fn clear_link_cookie(state: &AppState, https: Option<Extension<ForwardedHttps>>) -> String {
-    format!("{LINK_COOKIE}=; HttpOnly; SameSite=Lax; Path=/api/auth/oidc; Max-Age=0{}", cookie_flags(&state.settings.public_url, https))
+    set_cookie(LINK_COOKIE, "", 0, state, https)
 }
 
 /// Whether linking a verified provider identity to this existing account must ask first: it has a
@@ -618,9 +651,9 @@ struct LinkInfo {
     responses((status = 200, body = LinkInfo), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(()),
 )]
-async fn link_info(State(state): State<AppState>, headers: HeaderMap) -> AppResult<Json<LinkInfo>> {
+async fn link_info(State(state): State<AppState>, https: Option<Extension<ForwardedHttps>>, headers: HeaderMap) -> AppResult<Json<LinkInfo>> {
     let cfg = configured(&state)?;
-    let p = read_pending_link(&state, &headers).ok_or_else(link_expired)?;
+    let p = read_pending_link(&state, https, &headers).ok_or_else(link_expired)?;
     Ok(Json(LinkInfo { email: p.email, provider: cfg.provider_name.clone() }))
 }
 
@@ -666,7 +699,7 @@ async fn link(
     Json(body): Json<LinkChoice>,
 ) -> AppResult<Response> {
     configured(&state)?;
-    let p = read_pending_link(&state, &headers).ok_or_else(link_expired)?;
+    let p = read_pending_link(&state, https, &headers).ok_or_else(link_expired)?;
     let user_id: surrealdb::types::RecordId = crate::rid::parse(&p.user).map_err(|_| link_expired())?;
     let still_asks = ask_before_linking(&state.control, &user_id).await?;
     let took_over = if body.take_over {
@@ -748,6 +781,20 @@ mod tests {
         assert!(!signup_decision(true, false, false, false, "invite", "a@x.com", "a@x.com"), "unverified email cannot use the allow list");
         assert!(signup_decision(true, true, true, true, "closed", "", "boss@x.com"));
         assert!(!signup_decision(true, false, true, true, "open", "", "boss@x.com"));
+    }
+
+    #[test]
+    fn sign_in_cookies_are_host_locked_on_https() {
+        assert_eq!(cookie_name(FLOW_COOKIE, true), ("__Host-eunomia_oidc".to_string(), "/"));
+        assert_eq!(cookie_name(LINK_COOKIE, true), ("__Host-eunomia_oidc_link".to_string(), "/"));
+        assert_eq!(cookie_name(FLOW_COOKIE, false), ("eunomia_oidc".to_string(), "/api/auth/oidc"));
+        // on https a plain-named cookie (which another host could have set) is not read
+        let mut h = HeaderMap::new();
+        h.insert(header::COOKIE, HeaderValue::from_static("eunomia_oidc=planted"));
+        assert_eq!(read_cookie(FLOW_COOKIE, &h, true), None);
+        assert_eq!(read_cookie(FLOW_COOKIE, &h, false).as_deref(), Some("planted"));
+        h.insert(header::COOKIE, HeaderValue::from_static("eunomia_oidc=planted; __Host-eunomia_oidc=real"));
+        assert_eq!(read_cookie(FLOW_COOKIE, &h, true).as_deref(), Some("real"));
     }
 
     #[test]

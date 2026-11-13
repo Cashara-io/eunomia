@@ -28,6 +28,9 @@ function readToken(): string | null {
   return sessionStorage.getItem(KEY);
 }
 
+/** True when this visit came back to the page (after a sign-in) rather than from the link itself. */
+const cameBack = () => !window.location.hash && !!sessionStorage.getItem(KEY);
+
 /** Plain words for the refusals a link can meet. */
 const PLAIN: Record<string, string> = {
   "invitation.not_found": "This invitation link isn't valid any more. It may have been used or withdrawn. Ask for a new one.",
@@ -50,6 +53,7 @@ function Message({ title, children }: { title: string; children: React.ReactNode
 export default function InvitePage() {
   const router = useRouter();
   // the fragment only exists in the browser
+  const [returning] = useState(() => typeof window !== "undefined" && cameBack());
   const [token] = useState<string | null>(() => (typeof window === "undefined" ? null : readToken()));
   const hydrated = useSyncExternalStore(noSubscribe, () => true, () => false);
   const lookup = useInvitationLookup(token);
@@ -86,6 +90,18 @@ export default function InvitePage() {
     );
   if (lookup.isError) {
     const code = lookup.error instanceof ApiError ? lookup.error.code : "";
+    // back from a sign-in that used this link up (single sign-on joins as it signs in): that is success
+    if (returning && code === "invitation.not_found" && me.data) {
+      sessionStorage.removeItem(KEY);
+      return (
+        <Message title="You're signed in">
+          <p data-testid="invite-done">If you just joined through this invitation, you&apos;re all set.</p>
+          <Link href="/" className="btn btn-primary min-h-11 w-full">
+            Go to Eunomia
+          </Link>
+        </Message>
+      );
+    }
     return (
       <Message title="This link doesn't work">
         <p>{PLAIN[code] ?? "Could not open this invitation. Try the link again."}</p>
@@ -117,7 +133,7 @@ export default function InvitePage() {
     return (
       <Message title="This invitation has expired">
         <p>
-          {inv.invited_by ? `Ask ${inv.invited_by}` : "Ask the person who invited you"} to send a new link. Invitations last 7 days.
+          Ask an admin of {org} to send a new link. Invitations last 7 days.
         </p>
       </Message>
     );
@@ -193,7 +209,7 @@ export default function InvitePage() {
     return (
       <Message title={`Join ${org}?`}>
         <p data-testid="invite-summary">
-          {inv.invited_by ? `${inv.invited_by} invited ` : "You're invited: "}
+          An admin of {org} invited{" "}
           <strong>{inv.email}</strong> to join <strong>{org}</strong> as {roleWords}. Everything you save goes to {org}, and for now an
           account can only be in one organisation.
         </p>
@@ -210,7 +226,7 @@ export default function InvitePage() {
         <div className="mb-2">
           <h1 className="connect-title">Join {org}</h1>
           <p className="mt-3 text-reading" style={{ color: "var(--ink-dim)" }}>
-            {inv.invited_by ? `${inv.invited_by} invited ` : "You're invited: "}
+            An admin of {org} invited{" "}
             <strong>{inv.email}</strong> to {org}
             {as}. Create your account to join.
           </p>

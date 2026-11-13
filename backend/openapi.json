@@ -12494,7 +12494,6 @@
           "org_name",
           "email",
           "role",
-          "invited_by",
           "expires_at",
           "status"
         ],
@@ -12505,10 +12504,6 @@
           },
           "expires_at": {
             "type": "string"
-          },
-          "invited_by": {
-            "type": "string",
-            "description": "Who sent it."
           },
           "org_name": {
             "type": "string",

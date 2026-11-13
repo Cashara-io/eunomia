@@ -279,7 +279,7 @@ async fn register(
             models_user::normalize_new_email(&body.email)?;
             let ip = ip.as_ref().map_or("", |i| i.0 .0.as_str());
             let p = crate::invitations::usable(&state, token, crate::invitations::Who::Address(ip)).await?;
-            crate::invitations::email_matches(&p, &body.email)?;
+            crate::invitations::require_email(&state.control, &p, &body.email).await?;
             Some(p)
         }
         _ => None,

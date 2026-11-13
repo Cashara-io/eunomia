@@ -254,7 +254,7 @@ pub fn settings(mode: AuthMode, issuer: &str) -> Settings {
                 client_secret: Some(CLIENT_SECRET.into()),
                 scopes: "openid email profile".into(),
                 provider_name: "Mock IdP".into(),
-                email_verified_when_absent: false,
+                invite_accept_unverified_email: false,
             }),
         },
         ..test_settings()
@@ -267,11 +267,11 @@ pub async fn app(mode: AuthMode) -> App {
 }
 
 /// [`app`] with `OIDC_EMAIL_VERIFIED_WHEN_ABSENT` set as given.
-pub async fn app_with(mode: AuthMode, email_verified_when_absent: bool) -> App {
+pub async fn app_with(mode: AuthMode, invite_accept_unverified_email: bool) -> App {
     let (idp, issuer) = Idp::start().await;
     let mut settings = settings(mode, &issuer);
     if let Some(o) = settings.auth.oidc.as_mut() {
-        o.email_verified_when_absent = email_verified_when_absent;
+        o.invite_accept_unverified_email = invite_accept_unverified_email;
     }
     let state = AppState::build(&settings, engine_config()).await.expect("state");
     let router = eunomia_backend::app(state.clone());
