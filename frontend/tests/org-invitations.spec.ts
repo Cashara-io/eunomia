@@ -46,7 +46,7 @@ test.describe("Organisation invitations", () => {
     await expect(invitee.getByRole("heading", { name: /^Join .+\?$/ })).toBeVisible();
     await expect(invitee.getByTestId("invite-summary")).toContainText("as a member");
     // the inviter is named by organisation only: their address was never verified
-    await expect(invitee.getByTestId("invite-summary")).toContainText("An admin of");
+    await expect(invitee.getByTestId("invite-summary")).toContainText("An admin invited");
     await expect(invitee.getByTestId("invite-summary")).not.toContainText(admin.email!);
     await expect(invitee.getByLabel("Password", { exact: true })).toHaveCount(0);
     await invitee.getByRole("button", { name: /^Join / }).click();

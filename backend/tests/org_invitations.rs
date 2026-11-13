@@ -120,6 +120,9 @@ async fn an_invited_person_signs_up_into_the_inviting_org_even_on_a_closed_perso
     assert_eq!(status, StatusCode::OK, "{seen}");
     assert_eq!((seen["email"].as_str(), seen["status"].as_str()), (Some("pat@example.com"), Some("open")));
     assert!(seen.get("invited_by").is_none(), "no unverified inviter address on the page: {seen}");
+    // alpha's org is a personal workspace, named after alpha's address: the name is not shown
+    assert_eq!((seen["personal"].as_bool(), seen["org_name"].as_str()), (Some(true), Some("")), "{seen}");
+    assert!(!seen.to_string().contains("alpha@example.com"), "{seen}");
 
     // without the invitation, signup is closed; with someone else's email, the invitation does not count
     let ((status, body), _) = register(&h.app, "pat@example.com", None).await;

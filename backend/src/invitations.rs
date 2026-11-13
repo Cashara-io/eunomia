@@ -171,9 +171,15 @@ fn admin_not_found() -> AppError {
     AppError::coded(ErrorCode::InvitationNotFound, "That invitation isn't open any more.")
 }
 
+/// The organisation's name as its admins chose it, or `None` for a personal workspace, which is named after
+/// its founder's email (provisioning does that): that address is not shown to whoever holds a link.
+fn shown_org_name(p: &Pending) -> Option<String> {
+    p.org_name.as_deref().map(str::trim).filter(|n| !n.is_empty() && !n.contains('@')).map(str::to_string)
+}
+
 fn expired_error(p: &Pending) -> AppError {
     // the organisation, not the inviter's email: nobody verified that address
-    let org = p.org_name.as_deref().filter(|n| !n.is_empty()).unwrap_or("the organisation");
+    let org = shown_org_name(p).map(|n| format!("the organisation called \u{201c}{n}\u{201d}")).unwrap_or_else(|| "the workspace".into());
     AppError::coded(ErrorCode::InvitationExpired, format!("This invitation has expired. Ask an admin of {org} to send a new one."))
 }
 
@@ -411,8 +417,11 @@ impl Who<'_> {
 /// What the invitation page shows before anyone accepts.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct InvitationLookup {
-    /// The organisation's name.
+    /// The organisation's name as its admins chose it (not verified by anyone); empty for a personal
+    /// workspace, whose name is its founder's email and is not shown.
     pub org_name: String,
+    /// The invitation is to someone's personal workspace (its name is not shown).
+    pub personal: bool,
     /// The invited email: the account that accepts must have this one.
     pub email: String,
     /// `member` or `admin`.
@@ -449,8 +458,10 @@ async fn by_token(state: &AppState, token: &str, who: &Who<'_>) -> AppResult<Opt
 /// The invitation page's view of a token: unknown, used and withdrawn links are all "not found".
 pub async fn lookup(state: &AppState, token: &str, who: Who<'_>) -> AppResult<InvitationLookup> {
     let p = by_token(state, token, &who).await?.filter(Pending::open).filter(|p| !authz::operator_email_listed(&p.email)).ok_or_else(not_found)?;
+    let shown = shown_org_name(&p);
     Ok(InvitationLookup {
-        org_name: p.org_name.clone().unwrap_or_default(),
+        personal: shown.is_none(),
+        org_name: shown.unwrap_or_default(),
         email: p.email.clone(),
         role: p.role.clone(),
         expires_at: p.expires_at,
@@ -626,7 +637,11 @@ mod tests {
         assert!(serde_json::from_str::<OrgInviteRole>("\"owner\"").is_err(), "an invitation never makes an owner");
         let e = expired_error(&pending("pat@acme.test"));
         assert_eq!((e.code, e.status.as_u16()), (ErrorCode::InvitationExpired, 410));
-        assert!(e.message.contains("an admin of Acme"), "{}", e.message);
+        assert!(e.message.contains("an admin of the organisation called \u{201c}Acme\u{201d}"), "{}", e.message);
+        let mut personal = pending("pat@acme.test");
+        personal.org_name = Some("founder@acme.test".into());
+        assert_eq!(shown_org_name(&personal), None, "a personal workspace's name is its founder's address");
+        assert!(!expired_error(&personal).message.contains("founder@acme.test"));
     }
 
     #[test]

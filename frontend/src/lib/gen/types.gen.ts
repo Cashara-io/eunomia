@@ -1263,9 +1263,14 @@ export type InvitationLookup = {
     email: string;
     expires_at: string;
     /**
-     * The organisation's name.
+     * The organisation's name as its admins chose it (not verified by anyone); empty for a personal
+     * workspace, whose name is its founder's email and is not shown.
      */
     org_name: string;
+    /**
+     * The invitation is to someone's personal workspace (its name is not shown).
+     */
+    personal: boolean;
     /**
      * `member` or `admin`.
      */

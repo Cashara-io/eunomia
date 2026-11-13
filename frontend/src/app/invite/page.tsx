@@ -118,7 +118,10 @@ export default function InvitePage() {
       </AuthShell>
     );
 
-  const org = inv.org_name || "this organisation";
+  // the name is the one the organisation's admins chose, nobody verified it; a personal workspace's name
+  // is its founder's address and is not shown at all
+  const org = inv.personal || !inv.org_name ? "this workspace" : `\u201c${inv.org_name}\u201d`;
+  const orgPhrase = inv.personal || !inv.org_name ? "someone's personal workspace on this server" : `the organisation they call \u201c${inv.org_name}\u201d`;
   const roleWords = inv.role === "admin" ? "an admin (you can invite members)" : "a member";
   const as = ` as ${roleWords}`;
   if (joined)
@@ -209,8 +212,7 @@ export default function InvitePage() {
     return (
       <Message title={`Join ${org}?`}>
         <p data-testid="invite-summary">
-          An admin of {org} invited{" "}
-          <strong>{inv.email}</strong> to join <strong>{org}</strong> as {roleWords}. Everything you save goes to {org}, and for now an
+          An admin invited <strong>{inv.email}</strong> to join {orgPhrase} as {roleWords}. Everything you save goes to {org}, and for now an
           account can only be in one organisation.
         </p>
         <button type="button" className="btn btn-primary min-h-11 w-full" onClick={() => setConfirmed(true)}>
@@ -226,8 +228,7 @@ export default function InvitePage() {
         <div className="mb-2">
           <h1 className="connect-title">Join {org}</h1>
           <p className="mt-3 text-reading" style={{ color: "var(--ink-dim)" }}>
-            An admin of {org} invited{" "}
-            <strong>{inv.email}</strong> to {org}
+            An admin invited <strong>{inv.email}</strong> to join {orgPhrase}
             {as}. Create your account to join.
           </p>
         </div>

@@ -274,32 +274,42 @@ async fn the_unverified_invitation_setting_trusts_nothing_else() {
     expect_signed_in(&app.sign_in().await);
 }
 
-/// The inviter registers the invitee's address with a password of their own (the token lets them) and
-/// mints a token. The real person arrives through the link by single sign-on: they are asked before
-/// anything is linked, and taking the account over leaves the inviter nothing.
+/// The inviter registers the invitee's address with a password of their own (the token lets them),
+/// mints a token and keeps the account in their organisation. The real person arrives through a link by
+/// single sign-on: asked first, they start fresh, which sets the squatted account aside and makes them a new
+/// account through the invitation, in the inviting organisation; the squatter's credentials stop working.
 #[tokio::test]
-async fn a_squatted_invitation_is_taken_over_by_the_real_person() {
+async fn a_squatted_invitation_ends_with_the_real_person_in_a_fresh_account() {
     let _g = SERIAL.lock().await;
     host("closed", "personal");
     let (app, a, _) = world(AuthMode::Both, false).await;
-    let link = invitations::create(&app.state, &a, "pat@example.test", OrgInviteRole::Member).await.unwrap();
-    let ((status, _), _) = http(&app.router, "POST", "/api/auth/register", Some(json!({"email": "pat@example.test", "password": "squatter-password", "invitation": link.token})), None, None).await;
+    let squat_link = invitations::create(&app.state, &a, "pat@example.test", OrgInviteRole::Member).await.unwrap();
+    let ((status, _), _) = http(&app.router, "POST", "/api/auth/register", Some(json!({"email": "pat@example.test", "password": "squatter-password", "invitation": squat_link.token})), None, None).await;
     assert_eq!(status, axum::http::StatusCode::OK);
     let squatted = models_user::user_by_email(&app.state.control, "pat@example.test").await.unwrap().unwrap();
     let token = models_user::create_api_token_with(&app.state.control, &squatted.id, "squatter", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
 
+    // a fresh invitation for the real person (the first one was used up by the squatter)
+    let link = invitations::create(&app.state, &a, "pat2@example.test", OrgInviteRole::Member).await.unwrap();
+    app.state.control.test_raw().query("UPDATE org_invitation SET email = 'pat@example.test', slot = string::concat(<string>org, '/pat@example.test') WHERE email = 'pat2@example.test'").await.unwrap().check().unwrap();
     as_pat(&app);
     let landed = app.sign_in_invited(&link.token).await;
     assert_eq!(landed.location, "/login/link", "asked first, not linked");
     assert!(landed.session.is_none());
-    let ((status, done), set) = http(&app.router, "POST", "/api/auth/oidc/link", Some(json!({"take_over": true})), None, Some(&landed.link.unwrap())).await;
-    assert_eq!((status, done["took_over"].as_bool()), (axum::http::StatusCode::OK, Some(true)), "{done}");
+    let ((status, done), set) = http(&app.router, "POST", "/api/auth/oidc/link", Some(json!({"start_fresh": true})), None, Some(&landed.link.unwrap())).await;
+    assert_eq!((status, done["started_fresh"].as_bool()), (axum::http::StatusCode::OK, Some(true)), "{done}");
     assert!(set.is_some());
+
+    // a fresh account, in the inviting organisation, through the invitation
+    let fresh = models_user::user_by_email(&app.state.control, "pat@example.test").await.unwrap().unwrap();
+    assert_ne!(fresh.id, squatted.id);
+    assert_eq!(fresh.org, a.org);
+    assert!(!open(&app, &link.token).await, "the invitation was used by the fresh account");
+    // and the squatter's credentials are dead
     let login = http(&app.router, "POST", "/api/auth/login", Some(json!({"email": "pat@example.test", "password": "squatter-password"})), None, None).await.0 .0;
-    assert_eq!(login, axum::http::StatusCode::UNAUTHORIZED, "the squatter's password is gone");
-    assert_eq!(http(&app.router, "GET", "/api/vaults", None, Some(&token), None).await.0 .0, axum::http::StatusCode::UNAUTHORIZED, "and their token");
-    let issuer = app.idp.inner.lock().unwrap().issuer.clone();
-    assert_eq!(models_user::user_by_identity(&app.state.control, &issuer, "pat-sub").await.unwrap().map(|u| u.id), Some(squatted.id));
+    assert_eq!(login, axum::http::StatusCode::UNAUTHORIZED, "the squatter's password");
+    assert_ne!(http(&app.router, "GET", "/api/vaults", None, Some(&token), None).await.0 .0, axum::http::StatusCode::OK, "and their token");
+    assert!(models_user::is_suspended(&app.state.control, &squatted.id).await.unwrap());
 }
 
 /// Served over https, the sign-in cookie is `__Host-` (Path=/, Secure): one another host planted under the

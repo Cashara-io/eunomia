@@ -279,6 +279,8 @@ struct AskToLink {
     email: String,
     issuer: String,
     subject: String,
+    /// The invitation token hash this sign-in started from, if any: starting fresh accepts it.
+    invite: Option<String>,
 }
 
 /// Why the callback did not sign anyone in: the `oidc_error` code, an audit outcome and a reason for the log.
@@ -414,8 +416,8 @@ async fn callback(State(state): State<AppState>, https: Option<Extension<Forward
             Ok(no_store((AppendHeaders([(header::SET_COOKIE, session), (header::SET_COOKIE, clear)]), Redirect::to(&target)).into_response()))
         }
         Err(Fail::AskToLink(ask)) => {
-            let AskToLink { user, email, issuer, subject } = *ask;
-            let pending = PendingLink { purpose: LINK_PURPOSE.into(), user: user.to_string(), email, issuer, subject, next, exp: Utc::now().timestamp() + FLOW_TTL_SECS };
+            let AskToLink { user, email, issuer, subject, invite } = *ask;
+            let pending = PendingLink { purpose: LINK_PURPOSE.into(), user: user.to_string(), email, issuer, subject, next, exp: Utc::now().timestamp() + FLOW_TTL_SECS, invite };
             let token = encode(&Header::new(Algorithm::HS256), &pending, &EncodingKey::from_secret(state.settings.jwt_secret.as_bytes())).map_err(|e| AppError::internal(e.to_string()))?;
             let cookie = set_cookie(LINK_COOKIE, &token, FLOW_TTL_SECS, &state, https);
             Ok(no_store((AppendHeaders([(header::SET_COOKIE, cookie), (header::SET_COOKIE, clear)]), Redirect::to("/login/link")).into_response()))
@@ -523,7 +525,7 @@ async fn map_identity(state: &AppState, cfg: &OidcConfig, id: &Identity, invite:
                 return Err(Fail::IdentityTaken);
             }
             if ask_before_linking(db, &user.id).await? {
-                return Err(Fail::AskToLink(Box::new(AskToLink { user: user.id, email, issuer: id.issuer.clone(), subject: id.subject.clone() })));
+                return Err(Fail::AskToLink(Box::new(AskToLink { user: user.id, email, issuer: id.issuer.clone(), subject: id.subject.clone(), invite: invite.map(str::to_string) })));
             }
             match models_user::link_identity(db, &user.id, &id.issuer, &id.subject, &email).await {
                 Ok(()) => {
@@ -611,6 +613,9 @@ struct PendingLink {
     subject: String,
     next: String,
     exp: i64,
+    /// The invitation token hash the sign-in started from, if any (only that invitation, as at the callback).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    invite: Option<String>,
 }
 
 fn read_pending_link(state: &AppState, https: Option<Extension<ForwardedHttps>>, headers: &HeaderMap) -> Option<PendingLink> {
@@ -679,10 +684,22 @@ async fn link_target(db: &crate::pool::ControlDb, user: &surrealdb::types::Recor
 /// address, and its sessions ended. Its data stays where it is, for an operator to review, restore or
 /// erase. Then a new account is made exactly as a first sign-in would make one; if that fails, the set-aside
 /// is undone. When enforced second factors exist, an enrolled authenticator changes this (see the PR notes).
-async fn start_fresh(state: &AppState, old: &surrealdb::types::RecordId, before: &LinkTarget, email: &str, issuer: &str, subject: &str) -> AppResult<User> {
+async fn start_fresh(
+    state: &AppState,
+    old: &surrealdb::types::RecordId,
+    before: &LinkTarget,
+    email: &str,
+    issuer: &str,
+    subject: &str,
+    invitation: Option<&crate::invitations::Pending>,
+) -> AppResult<User> {
     crate::store::control::AUTH_SET_ASIDE.on(&state.control).bind(("user", old.clone())).await?.check()?;
     state.credentials.forget_user(old);
-    let made = models_user::register_oidc_user(state, email, issuer, subject).await;
+    // through the invitation the sign-in carried, the new account joins the inviting organisation
+    let made = match invitation {
+        Some(p) => models_user::register_oidc_user_invited(state, email, issuer, subject, p).await,
+        None => models_user::register_oidc_user(state, email, issuer, subject).await,
+    };
     let user = match made {
         Ok(u) => u,
         Err(e) => {
@@ -696,6 +713,9 @@ async fn start_fresh(state: &AppState, old: &surrealdb::types::RecordId, before:
             return Err(e);
         }
     };
+    if let Some(p) = invitation {
+        crate::invitations::record_accepted(&state.control, &user.id, p, &p.role, "oidc").await;
+    }
     let actor = Actor { kind: "user", id: user.id.to_string() };
     let detail = format!("email={email} set aside when a provider-verified sign-in for the address started a new account ({})", user.id.to_string());
     audit::record(&state.control, Event { user: Some(old), actor: &actor, action: "auth.oidc_set_aside", target: &old.to_string(), outcome: "ok", detail: &detail }).await;
@@ -786,6 +806,13 @@ async fn link(
         return Err(link_spent());
     }
     let (user, started_fresh) = if body.start_fresh {
+        // a sign-in that came from an invitation link starts fresh as that invitation's acceptance (it is the
+        // permission, and the account joins the inviting organisation); checked before anything is set aside
+        if let Some(hash) = p.invite.as_deref() {
+            let inv = invited(&state, hash, &models_user::normalize_email(&p.email), true).await.map_err(|f| AppError::coded(ErrorCode::InvitationNotFound, format!("The invitation can't be used: {}.", f.detail())))?;
+            let user = start_fresh(&state, &user_id, &target, &p.email, &p.issuer, &p.subject, Some(&inv)).await?;
+            (user, true)
+        } else {
         // the same rules a first sign-in with this verified address meets on this server
         let allowed = signup_decision(
             true,
@@ -799,7 +826,8 @@ async fn link(
         if !allowed {
             return Err(AppError::coded(ErrorCode::AuthForbidden, "This server isn't taking new accounts for this address. Ask a server operator for help."));
         }
-        (start_fresh(&state, &user_id, &target, &p.email, &p.issuer, &p.subject).await?, true)
+        (start_fresh(&state, &user_id, &target, &p.email, &p.issuer, &p.subject, None).await?, true)
+        }
     } else {
         let password = body.password.as_deref().filter(|p| !p.is_empty()).ok_or_else(|| AppError::bad_request("Enter the account's password, or choose to start a new account."))?;
         // the same throttle as login, on the same keys: guesses here and there add up
