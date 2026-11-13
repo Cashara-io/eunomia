@@ -290,6 +290,8 @@ fn put(zip: &mut Zip, categories: &mut Vec<Value>, workspace: Option<&str>, name
 #[derive(Default)]
 struct Redactions {
     unreadable_spaces: usize,
+    /// Other people's emails replaced in the person's audit events.
+    audit: usize,
     chat: usize,
     files_included: usize,
     files_missing: usize,
@@ -414,7 +416,7 @@ async fn account_part(app: &AppState, subject: &RecordId, zip: &mut Zip, categor
     Ok((email, audit_redacted))
 }
 
-fn manifest_for(subject: &RecordId, email: &str, requested_by: &str, workspaces: Vec<Value>, categories: Vec<Value>, red: &Redactions, audit_redacted: usize, left_out: &[&str]) -> Value {
+fn manifest_for(subject: &RecordId, email: &str, requested_by: &str, workspaces: Vec<Value>, categories: Vec<Value>, red: &Redactions, left_out: &[&str]) -> Value {
     json!({
         "format": "eunomia-subject-export/3",
         "generated_at": chrono::Utc::now().to_rfc3339(),
@@ -426,7 +428,7 @@ fn manifest_for(subject: &RecordId, email: &str, requested_by: &str, workspaces:
         "redactions": {
             "spaces_no_longer_readable": red.unreadable_spaces,
             "chat_messages_replaced": red.chat,
-            "other_peoples_emails_in_audit_events": audit_redacted,
+            "other_peoples_emails_in_audit_events": red.audit,
         },
         "left_out": left_out,
     })
@@ -455,7 +457,7 @@ async fn build_own(app: &AppState, home: &OrgState, subject: &RecordId, id: &Rec
     let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
     let mut categories = Vec::new();
     let (email, audit_redacted) = account_part(app, subject, &mut zip, &mut categories).await?;
-    let mut red = Redactions::default();
+    let mut red = Redactions { audit: audit_redacted, ..Redactions::default() };
     let mut workspaces = Vec::new();
     let orgs: Vec<RecordId> = q::USER_ORGS.on(&app.control).bind(("u", subject.clone())).await?.take(0)?;
     for org in orgs {
@@ -485,7 +487,7 @@ async fn build_own(app: &AppState, home: &OrgState, subject: &RecordId, id: &Rec
             Err(e) => workspaces.push(json!({ "workspace": oid.key(), "included": false, "why": e.message })),
         }
     }
-    let manifest = manifest_for(subject, &email, "self", workspaces, categories, &red, audit_redacted, OWN_LEFT_OUT);
+    let manifest = manifest_for(subject, &email, "self", workspaces, categories, &red, OWN_LEFT_OUT);
     Ok((finish_zip(zip, &manifest)?, manifest))
 }
 
@@ -561,7 +563,7 @@ async fn build_organisation(app: &AppState, state: &OrgState, subject: &RecordId
         "Every other workspace they belong to.",
         "Secret values of any kind.",
     ];
-    let manifest = manifest_for(subject, &email, "organisation", vec![json!({ "workspace": key, "included": true })], categories, &red, 0, &left_out);
+    let manifest = manifest_for(subject, &email, "organisation", vec![json!({ "workspace": key, "included": true })], categories, &red, &left_out);
     Ok((finish_zip(zip, &manifest)?, manifest))
 }
 
