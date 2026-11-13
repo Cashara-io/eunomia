@@ -324,7 +324,7 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
             Some("admin") => "Joined the organisation as an admin".into(),
             _ => "Joined the organisation".into(),
         },
-        "org.invite_accept" => return format!("The invitation for {email} was refused: that account is already in another organisation"),
+        "org.invite_accept" => return format!("The invitation for {email} could not be accepted"),
         "org.invite_expired" => return format!("Someone used the expired invitation link for {email}"),
         "admin.grant" => format!("Made {email} an admin"),
         "admin.revoke" => format!("Took admin rights away from {email}"),
@@ -1032,7 +1032,9 @@ mod tests {
         assert_eq!(d("org.invite_resend", "email=pat@acme.test role=member", true), "Sent pat@acme.test a new invitation link");
         assert_eq!(d("org.invite_revoke", "email=pat@acme.test role=member", true), "Withdrew the organisation invitation for pat@acme.test");
         assert_eq!(d("org.invite_accept", "email=pat@acme.test role=member via=signup", true), "Joined the organisation");
-        assert!(d("org.invite_accept", "email=pat@acme.test", false).contains("another organisation"));
+        let refused = d("org.invite_accept", "email=pat@acme.test", false);
+        assert_eq!(refused, "The invitation for pat@acme.test could not be accepted");
+        assert!(!refused.contains("organisation") && reason_words("org.invite_accept", crate::invitations::NOT_ACCEPTED).is_empty(), "the inviter is not told why");
         assert_eq!(d("org.invite_expired", "email=pat@acme.test", false), "Someone used the expired invitation link for pat@acme.test");
         assert_eq!(reason_words("org.invite_expired", "invitation.expired"), "");
         for a in ["org.invite", "org.invite_resend", "org.invite_revoke", "org.invite_accept", "org.invite_expired"] {

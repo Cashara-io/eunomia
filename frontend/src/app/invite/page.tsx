@@ -64,6 +64,8 @@ export default function InvitePage() {
   const [error, setError] = useState<Failure | null>(null);
   const [busy, setBusy] = useState(false);
   const [joined, setJoined] = useState<string | null>(null);
+  // nothing is created or joined until the person has seen the organisation and the role and said yes
+  const [confirmed, setConfirmed] = useState(false);
 
   // the token is kept in this tab only: take it out of the address bar (and so out of history and bookmarks)
   useEffect(() => {
@@ -101,7 +103,8 @@ export default function InvitePage() {
     );
 
   const org = inv.org_name || "this organisation";
-  const as = inv.role === "admin" ? " as an admin" : "";
+  const roleWords = inv.role === "admin" ? "an admin (you can invite members)" : "a member";
+  const as = ` as ${roleWords}`;
   if (joined)
     return (
       <Message title={`You're in ${joined}`}>
@@ -148,7 +151,7 @@ export default function InvitePage() {
                 }
               }}
             >
-              {busy ? "Joining…" : `Join ${org}`}
+              {busy ? "Joining…" : `Join ${org} as ${inv.role === "admin" ? "an admin" : "a member"}`}
             </button>
           </>
         ) : (
@@ -185,7 +188,22 @@ export default function InvitePage() {
   }
 
   const signIn = `/login?next=${encodeURIComponent("/invite")}&email=${encodeURIComponent(inv.email)}`;
-  const sso = `/api/auth/oidc/start?next=${encodeURIComponent("/invite")}`;
+
+  if (!confirmed)
+    return (
+      <Message title={`Join ${org}?`}>
+        <p data-testid="invite-summary">
+          {inv.invited_by ? `${inv.invited_by} invited ` : "You're invited: "}
+          <strong>{inv.email}</strong> to join <strong>{org}</strong> as {roleWords}. Everything you save goes to {org}, and for now an
+          account can only be in one organisation.
+        </p>
+        <button type="button" className="btn btn-primary min-h-11 w-full" onClick={() => setConfirmed(true)}>
+          Join {org}
+        </button>
+        <p className="text-body">Not for you? Close this page; nothing has been created.</p>
+      </Message>
+    );
+
   return (
     <AuthShell>
       <div className="flex flex-col gap-4">
@@ -199,10 +217,16 @@ export default function InvitePage() {
         </div>
         {provider && (
           <>
-            <a href={sso} className={`btn ${mode === "oidc" ? "btn-primary" : ""} min-h-11 w-full`}>
-              <KeyIcon weight="duotone" size={16} aria-hidden />
-              Continue with {provider}
-            </a>
+            {/* A form post, not a link: the invitation goes to the server in the body, which keeps it in the signed
+                sign-in cookie and out of every URL (the provider's included). Only this invitation can be used. */}
+            <form method="post" action="/api/auth/oidc/start">
+              <input type="hidden" name="next" value="/invite" />
+              <input type="hidden" name="invitation" value={token} />
+              <button type="submit" className={`btn ${mode === "oidc" ? "btn-primary" : ""} min-h-11 w-full`}>
+                <KeyIcon weight="duotone" size={16} aria-hidden />
+                Continue with {provider}
+              </button>
+            </form>
             {mode !== "oidc" && <OrDivider />}
           </>
         )}

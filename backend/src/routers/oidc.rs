@@ -19,15 +19,18 @@
 //!    the address does not survive it.
 //! 3. otherwise a new account with no password, through the same signup gate and setup (org membership,
 //!    personal vault) as password signup. On an empty install the first sign-in is the first user, the admin.
-//!    When the provider verified the email and an organisation invitation for it is open, that invitation is
-//!    the permission (whatever `SIGNUP` says) and the account joins the inviting org (`invitations.rs`).
+//!    When the sign-in started from an organisation invitation link (`POST /api/auth/oidc/start` from the
+//!    invitation page, same-site only), the flow cookie carries that invitation's token hash and only that
+//!    invitation is used: still open, for this email, verified by the provider (`OIDC_EMAIL_VERIFIED_WHEN_ABSENT`
+//!    decides a missing claim). It is then the permission (whatever `SIGNUP` says) and the account joins the
+//!    inviting org (`invitations.rs`). An invitation is never found by email.
 
 use axum::{
     extract::{Extension, Query, State},
     http::{HeaderMap, HeaderValue, header},
     response::{AppendHeaders, IntoResponse, Redirect, Response},
     routing::get,
-    Router,
+    Form, Router,
 };
 use chrono::Utc;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
@@ -45,7 +48,7 @@ use crate::routers::auth::{cookie_flags, session_cookie_header, signup_allowed, 
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/auth/oidc/start", get(start)).route("/auth/oidc/callback", get(callback))
+    Router::new().route("/auth/oidc/start", get(start).post(start_invited)).route("/auth/oidc/callback", get(callback))
 }
 
 const FLOW_COOKIE: &str = "eunomia_oidc";
@@ -61,6 +64,10 @@ struct Flow {
     verifier: String,
     next: String,
     exp: i64,
+    /// The sha256 of the invitation token this sign-in started from (the invitation page's form post), if
+    /// any. Only that invitation may be used by this sign-in; never the token itself, never in a URL.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    invite: Option<String>,
 }
 
 fn encode_flow(secret: &str, flow: &Flow) -> AppResult<String> {
@@ -138,8 +145,51 @@ struct StartQuery {
     security(()),
 )]
 async fn start(State(state): State<AppState>, https: Option<Extension<ForwardedHttps>>, Query(q): Query<StartQuery>) -> AppResult<Response> {
+    begin(&state, https, safe_next(q.next.as_deref()), None).await
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+struct StartForm {
+    /// Same-site path to open after sign-in (the invitation page).
+    #[serde(default)]
+    next: Option<String>,
+    /// The token from the organisation invitation link.
+    #[serde(default)]
+    invitation: Option<String>,
+}
+
+/// Whether a browser form post came from this site: its `Origin` is one this server serves (the frontend
+/// origins in `CORS_ALLOWED_ORIGINS`, or `PUBLIC_URL`). Browsers always send `Origin` on a form post.
+fn from_this_site(state: &AppState, headers: &HeaderMap) -> bool {
+    let Some(origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()).map(|o| o.trim_end_matches('/')) else { return false };
+    let public = url::Url::parse(&state.settings.public_url).ok().map(|u| u.origin().ascii_serialization());
+    state.settings.cors_allowed_origins.split(',').map(|o| o.trim().trim_end_matches('/')).any(|o| !o.is_empty() && o == origin)
+        || public.as_deref() == Some(origin)
+}
+
+#[utoipa::path(
+    operation_id = "oidcStartInvited",
+    post,
+    path = "/api/auth/oidc/start",
+    tag = "auth",
+    summary = "Begin signing in with the provider from an organisation invitation link",
+    description = "The invitation page's form post (same-site `Origin` only). The invitation travels in the body and is kept, hashed, in the signed sign-in cookie: it is never in a URL, so the provider never sees it. Only this invitation can be used by the sign-in that follows, and only for the invited, verified email.",
+    request_body(content = StartForm, content_type = "application/x-www-form-urlencoded"),
+    responses((status = 303, description = "Redirect to the provider"), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(()),
+)]
+async fn start_invited(State(state): State<AppState>, https: Option<Extension<ForwardedHttps>>, headers: HeaderMap, Form(f): Form<StartForm>) -> AppResult<Response> {
+    // another site could otherwise start a sign-in that uses its own invitation in this browser
+    if !from_this_site(&state, &headers) {
+        return Err(AppError::coded(ErrorCode::AuthForbidden, "This sign-in has to start from the invitation page."));
+    }
+    let token = f.invitation.as_deref().map(str::trim).filter(|t| !t.is_empty() && t.len() <= 128);
+    begin(&state, https, safe_next(f.next.as_deref()), token.map(crate::invitations::token_hash)).await
+}
+
+async fn begin(state: &AppState, https: Option<Extension<ForwardedHttps>>, next: String, invite: Option<String>) -> AppResult<Response> {
+    let state = state.clone();
     let cfg = configured(&state)?;
-    let next = safe_next(q.next.as_deref());
     let disc = match state.oidc.discovery(cfg).await {
         Ok(d) => d,
         Err(e) => {
@@ -155,6 +205,7 @@ async fn start(State(state): State<AppState>, https: Option<Extension<ForwardedH
         verifier: oidc::random_token(48),
         next,
         exp: Utc::now().timestamp() + FLOW_TTL_SECS,
+        invite,
     };
     let mut scopes: Vec<&str> = cfg.scopes.split_whitespace().collect();
     if !scopes.contains(&"openid") {
@@ -192,6 +243,8 @@ enum Fail {
     NoEmail,
     EmailUnverified,
     SignupClosed,
+    /// The invitation the sign-in started from cannot be used: (the `oidc_error` code, why).
+    Invitation(&'static str, String),
     Internal(AppError),
 }
 
@@ -205,6 +258,7 @@ impl Fail {
             Fail::NoEmail => "no_email",
             Fail::EmailUnverified => "email_unverified",
             Fail::SignupClosed => "signup_closed",
+            Fail::Invitation(code, _) => code,
             Fail::Internal(_) => "unavailable",
         }
     }
@@ -212,7 +266,7 @@ impl Fail {
     fn outcome(&self) -> ErrorCode {
         match self {
             Fail::State(_) | Fail::Denied(_) | Fail::Token(_) => ErrorCode::AuthUnauthorized,
-            Fail::NoEmail | Fail::EmailUnverified | Fail::SignupClosed => ErrorCode::AuthForbidden,
+            Fail::NoEmail | Fail::EmailUnverified | Fail::SignupClosed | Fail::Invitation(..) => ErrorCode::AuthForbidden,
             Fail::Provider(_) | Fail::Internal(_) => ErrorCode::Internal,
         }
     }
@@ -224,6 +278,7 @@ impl Fail {
             Fail::NoEmail => "the provider returned no email".into(),
             Fail::EmailUnverified => "an account has this email but the provider did not verify it".into(),
             Fail::SignupClosed => "signup is not open to this email".into(),
+            Fail::Invitation(_, why) => why.clone(),
             Fail::Internal(e) => e.source.clone().unwrap_or_else(|| e.message.clone()),
         }
     }
@@ -339,9 +394,10 @@ async fn finish(state: &AppState, cfg: &OidcConfig, flow: Option<Flow>, q: &Call
         && let Some((email, verified)) = state.oidc.userinfo(&disc, &at, &ident.subject).await
     {
         ident.email = email;
-        ident.email_verified = verified;
+        ident.email_verified = verified.unwrap_or(false);
+        ident.email_verified_absent = verified.is_none();
     }
-    map_identity(state, &ident).await
+    map_identity(state, cfg, &ident, flow.invite.as_deref()).await
 }
 
 /// `EUNOMIA_ADMIN_EMAILS` lists at least one address.
@@ -365,8 +421,12 @@ fn signup_decision(has_users: bool, verified: bool, listed: bool, operators_conf
     signup_allowed(mode, true, if verified { email } else { "" }, allowlist)
 }
 
-async fn map_identity(state: &AppState, id: &Identity) -> Result<(User, Mapped), Fail> {
+/// Maps a verified identity to an account. `invite` is the hash of the invitation token this sign-in
+/// started from (the signed flow cookie): only that invitation can place a new account, never one found by
+/// email.
+async fn map_identity(state: &AppState, cfg: &OidcConfig, id: &Identity, invite: Option<&str>) -> Result<(User, Mapped), Fail> {
     let db = &state.control;
+    let verified = id.verified_under(cfg);
     // two attempts: a concurrent first sign-in of the same person loses the unique index, then finds the winner
     for attempt in 0..2 {
         if let Some(user) = models_user::user_by_identity(db, &id.issuer, &id.subject).await? {
@@ -381,8 +441,10 @@ async fn map_identity(state: &AppState, id: &Identity) -> Result<(User, Mapped),
         let email = id.email.as_deref().and_then(|e| models_user::normalize_new_email(e).ok()).ok_or(Fail::NoEmail)?;
         let raced = |e: &AppError| matches!(e.code, ErrorCode::DbDuplicate | ErrorCode::AuthEmailTaken) && attempt == 0;
 
+        // an existing account: linked (verified email only) and signed in; an invitation is accepted, if at
+        // all, on the invitation page afterwards, as a separate confirmed step
         if let Some(user) = models_user::user_by_email(db, &email).await? {
-            if !id.email_verified {
+            if !verified {
                 return Err(Fail::EmailUnverified);
             }
             match models_user::link_identity(db, &user.id, &id.issuer, &id.subject, &email).await {
@@ -397,23 +459,25 @@ async fn map_identity(state: &AppState, id: &Identity) -> Result<(User, Mapped),
             }
         }
 
-        // a pending organisation invitation for a provider-verified email is the permission to sign up,
-        // and the account joins that org (an unverified email never claims one)
-        let invitation = if id.email_verified { crate::invitations::open_for_email(db, &email).await? } else { None };
-        if let Some(p) = &invitation {
-            return match models_user::register_oidc_user_invited(state, &email, &id.issuer, &id.subject, p).await {
+        // a new account from an invitation link: that invitation, and only for its own, verified email
+        if let Some(hash) = invite {
+            let p = invited(state, hash, &email, verified).await?;
+            return match models_user::register_oidc_user_invited(state, &email, &id.issuer, &id.subject, &p).await {
                 Ok(user) => {
-                    crate::invitations::record_accepted(db, &user.id, p, "oidc").await;
+                    crate::invitations::record_accepted(db, &user.id, &p, &p.role, "oidc").await;
                     Ok((user, Mapped::Created))
                 }
                 Err(e) if raced(&e) => continue,
+                Err(e) if e.code == ErrorCode::InvitationNotFound => Err(Fail::Invitation("invitation", "the invitation was used or withdrawn meanwhile".into())),
                 Err(e) => Err(e.into()),
             };
         }
+
+        // no link: the host's ordinary signup rules, exactly as without invitations
         let has_users = crate::capsules::first_user(db).await?.is_some();
         let allowed = signup_decision(
             has_users,
-            id.email_verified,
+            verified,
             authz::operator_email_listed(&email),
             operators_configured(),
             &std::env::var("SIGNUP").unwrap_or_default(),
@@ -432,8 +496,28 @@ async fn map_identity(state: &AppState, id: &Identity) -> Result<(User, Mapped),
     Err(Fail::Internal(AppError::internal("could not settle a concurrent sign-in")))
 }
 
+/// The invitation a sign-in started from, if this identity may use it: still open (an operator's address
+/// never is), not expired, for this email, and the email verified.
+async fn invited(state: &AppState, hash: &str, email: &str, verified: bool) -> Result<crate::invitations::Pending, Fail> {
+    let db = &state.control;
+    let p = crate::invitations::by_hash(db, hash).await?.ok_or_else(|| Fail::Invitation("invitation", "the invitation is unknown".into()))?;
+    let p = match crate::invitations::check_usable(db, p).await {
+        Ok(p) => p,
+        Err(e) if e.code == ErrorCode::InvitationExpired => return Err(Fail::Invitation("invitation_expired", "the invitation has expired".into())),
+        Err(e) if e.code == ErrorCode::InvitationNotFound => return Err(Fail::Invitation("invitation", "the invitation is used, withdrawn or not usable".into())),
+        Err(e) => return Err(e.into()),
+    };
+    if crate::invitations::email_matches(&p, email).is_err() {
+        return Err(Fail::Invitation("invitation_email", "the signed-in email is not the invited one".into()));
+    }
+    if !verified {
+        return Err(Fail::Invitation("invitation_unverified", "the provider has not verified the email".into()));
+    }
+    Ok(p)
+}
+
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(start, callback))]
+#[openapi(paths(start, start_invited, callback))]
 pub struct Doc;
 
 #[cfg(test)]
@@ -467,7 +551,7 @@ mod tests {
 
     #[test]
     fn flow_cookie_roundtrips_and_rejects_other_tokens() {
-        let flow = Flow { purpose: FLOW_PURPOSE.into(), state: "s".into(), nonce: "n".into(), verifier: "v".into(), next: "/x".into(), exp: Utc::now().timestamp() + 60 };
+        let flow = Flow { purpose: FLOW_PURPOSE.into(), state: "s".into(), nonce: "n".into(), verifier: "v".into(), next: "/x".into(), exp: Utc::now().timestamp() + 60, invite: None };
         let t = encode_flow("secret", &flow).unwrap();
         assert_eq!(decode_flow("secret", &t).unwrap().next, "/x");
         assert!(decode_flow("other", &t).is_none());

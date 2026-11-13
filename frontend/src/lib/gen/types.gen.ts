@@ -1238,12 +1238,13 @@ export type IntegrityReport = {
  */
 export type InvitationAccepted = {
     /**
-     * The account was already in the organisation; the invitation is now used up.
+     * The account was already in the organisation; the invitation is now used up (an admin invitation
+     * made a member an admin).
      */
     already_member: boolean;
     org_name: string;
     /**
-     * `member` or `admin`.
+     * The role the account holds in the organisation now: `owner`, `admin` or `member`.
      */
     role: string;
 };
@@ -2756,6 +2757,17 @@ export type SpendByDay = {
  */
 export type Stability = 'stable' | 'preview';
 
+export type StartForm = {
+    /**
+     * The token from the organisation invitation link.
+     */
+    invitation?: string | null;
+    /**
+     * Same-site path to open after sign-in (the invitation page).
+     */
+    next?: string | null;
+};
+
 /**
  * What a person decided about a kind or link, as stored.
  */
@@ -3551,6 +3563,31 @@ export type OidcStartResponses = {
 };
 
 export type OidcStartResponse = OidcStartResponses[keyof OidcStartResponses];
+
+export type OidcStartInvitedData = {
+    body: StartForm;
+    path?: never;
+    query?: never;
+    url: '/api/auth/oidc/start';
+};
+
+export type OidcStartInvitedErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcStartInvitedError = OidcStartInvitedErrors[keyof OidcStartInvitedErrors];
+
+export type OidcStartInvitedResponses = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcStartInvitedResponse = OidcStartInvitedResponses[keyof OidcStartInvitedResponses];
 
 export type RegisterData = {
     body: RegisterBody;

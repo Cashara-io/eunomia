@@ -729,6 +729,42 @@
         "security": [
           {}
         ]
+      },
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Begin signing in with the provider from an organisation invitation link",
+        "description": "The invitation page's form post (same-site `Origin` only). The invitation travels in the body and is kept, hashed, in the signed sign-in cookie: it is never in a URL, so the provider never sees it. Only this invitation can be used by the sign-in that follows, and only for the invited, verified email.",
+        "operationId": "oidcStartInvited",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/StartForm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "303": {
+            "description": "Redirect to the provider"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
       }
     },
     "/api/auth/register": {
@@ -12349,14 +12385,14 @@
         "properties": {
           "already_member": {
             "type": "boolean",
-            "description": "The account was already in the organisation; the invitation is now used up."
+            "description": "The account was already in the organisation; the invitation is now used up (an admin invitation\nmade a member an admin)."
           },
           "org_name": {
             "type": "string"
           },
           "role": {
             "type": "string",
-            "description": "`member` or `admin`."
+            "description": "The role the account holds in the organisation now: `owner`, `admin` or `member`."
           }
         }
       },
@@ -16054,6 +16090,25 @@
           "stable",
           "preview"
         ]
+      },
+      "StartForm": {
+        "type": "object",
+        "properties": {
+          "invitation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The token from the organisation invitation link."
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Same-site path to open after sign-in (the invitation page)."
+          }
+        }
       },
       "Status": {
         "type": "string",

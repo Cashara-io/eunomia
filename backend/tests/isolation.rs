@@ -990,6 +990,88 @@ async fn org_admins_cannot_see_or_touch_another_orgs_invitations_or_members() {
     assert_eq!(models_user::user_by_email(&w.state.control, "beta@example.com").await.unwrap().unwrap().org, w.b.user.org);
 }
 
+/// Every invitation statement that names an org filters on it, and the suite sees it go: each case is
+/// clean with the filter and leaks (or acts on the other org) without it. The control database is shared
+/// by every org, so for these statements the filter is the only wall.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn invitation_routes_go_red_when_their_org_filter_is_removed() {
+    let _g = SERIAL.lock().await;
+    let w = build(Mode::Normal).await;
+    let login = |email: &'static str| {
+        let router = w.router.clone();
+        async move {
+            let ((status, body), set) =
+                common::http(&router, "POST", "/api/auth/login", Some(json!({"email": email, "password": common::PASSWORD})), None, None).await;
+            assert_eq!(status, axum::http::StatusCode::OK, "{body}");
+            set.unwrap().split(';').next().unwrap().to_string()
+        }
+    };
+    let a = login("alpha@example.com").await;
+    // a plain member of A who also holds an `admin` membership row in B (newer, so A stays their home)
+    let ((_, made), _) = common::http(&w.router, "POST", "/api/org/invitations", Some(json!({"email": "mo@example.com"})), None, Some(&a)).await;
+    let ((status, _), _) = common::http(&w.router, "POST", "/api/auth/register", Some(json!({"email": "mo@example.com", "password": common::PASSWORD, "invitation": made["token"]})), None, None).await;
+    assert_eq!(status.as_u16(), 200);
+    let mo = models_user::user_by_email(&w.state.control, "mo@example.com").await.unwrap().unwrap();
+    w.state.control.test_raw()
+        .query("CREATE membership SET user = $u, org = $o, role = 'admin', slot = string::concat(<string>$o, '/', <string>$u), created_at = time::now() + 1d")
+        .bind(("u", mo.id.clone()))
+        .bind(("o", w.b.user.org.record()))
+        .await.unwrap().check().unwrap();
+    let m = login("mo@example.com").await;
+    let b_inv = path_value("invitation_id", &w.b);
+    let b_canary = w.b.canary.clone();
+
+    // (statements and the filter text to drop, what a leak looks like)
+    let call = |method: &'static str, path: String, body: Option<Value>, cookie: String| {
+        let router = w.router.clone();
+        async move { common::http(&router, method, &path, body, None, Some(&cookie)).await.0 }
+    };
+    let leaked = |case: &str| {
+        let (a, m, b_inv, b_canary) = (a.clone(), m.clone(), b_inv.clone(), b_canary.clone());
+        let case = case.to_string();
+        async move {
+            match case.as_str() {
+                "list" => call("GET", "/api/org/invitations".into(), None, a).await.1.to_string().contains(&b_canary),
+                "seats" => call("GET", "/api/org/seats".into(), None, a).await.1["pending_invitations"] != json!(1),
+                "resend" => call("POST", format!("/api/org/invitations/{b_inv}/resend"), None, a).await.0.as_u16() == 200,
+                "revoke" => call("DELETE", format!("/api/org/invitations/{b_inv}"), None, a).await.0.as_u16() == 200,
+                "member email" => {
+                    // A asks to invite B's owner: "already in this organisation" would say B's owner has an account
+                    let (status, body) = call("POST", "/api/org/invitations".into(), Some(json!({"email": "beta@example.com"})), a.clone()).await;
+                    if status.as_u16() == 200 {
+                        let id = body["invitation"]["id"].as_str().unwrap().to_string();
+                        call("DELETE", format!("/api/org/invitations/{id}"), None, a).await;
+                    }
+                    body["detail"] == "That person is already in this organisation."
+                }
+                // mo's role in A is member; with the filter gone, B's `admin` row would make mo a manager of A
+                "role" => call("GET", "/api/org/invitations".into(), None, m).await.0.as_u16() == 200,
+                _ => unreachable!(),
+            }
+        }
+    };
+    let cases: &[(&str, &[(&str, &str)])] = &[
+        ("list", &[("invitations.list", "WHERE org = $org")]),
+        ("seats", &[("invitations.seats", "WHERE org = $org")]),
+        ("resend", &[("invitations.role_of", "AND org = $org"), ("invitations.resend", "AND org = $org")]),
+        ("member email", &[("control.email_in_org", "AND id IN (SELECT VALUE user FROM membership WHERE org = $org)")]),
+        ("role", &[("invitations.role_in_org", "AND org = $org")]),
+        // last: it really withdraws B's invitation once the filter is gone
+        ("revoke", &[("invitations.role_of", "AND org = $org"), ("invitations.revoke", "AND org = $org")]),
+    ];
+    for (case, _) in cases {
+        assert!(!leaked(case).await, "{case} leaks before any mutation");
+    }
+    for (case, stmts) in cases {
+        for (stmt, from) in *stmts {
+            isolation::mutate(stmt, from, if from.starts_with("WHERE") { "WHERE true" } else { "AND true" });
+        }
+        let hit = leaked(case).await;
+        isolation::clear_mutations();
+        assert!(hit, "removing the org filter from {stmts:?} ({case}) must show or touch the other org's data");
+    }
+}
+
 /// The runtime counter is exposed to admins and reads zero.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_no_org_context_metric_is_exposed_and_zero() {

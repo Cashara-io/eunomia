@@ -55,6 +55,10 @@ pub struct OidcConfig {
     pub scopes: String,
     /// Shown on the button: "Continue with {provider_name}".
     pub provider_name: String,
+    /// `OIDC_EMAIL_VERIFIED_WHEN_ABSENT`: a sign-in whose provider sends no `email_verified` claim counts the
+    /// email as verified (for linking to an existing account and for using an invitation). A claim sent as
+    /// false is never overridden. Off by default.
+    pub email_verified_when_absent: bool,
 }
 
 impl std::fmt::Debug for OidcConfig {
@@ -65,6 +69,7 @@ impl std::fmt::Debug for OidcConfig {
             .field("client_secret", &self.client_secret.as_ref().map(|_| "<redacted>"))
             .field("scopes", &self.scopes)
             .field("provider_name", &self.provider_name)
+            .field("email_verified_when_absent", &self.email_verified_when_absent)
             .finish()
     }
 }
@@ -107,7 +112,14 @@ impl AuthConfig {
         let provider_name = var("OIDC_PROVIDER_NAME").unwrap_or_else(|| "single sign-on".into());
         Ok(AuthConfig {
             mode,
-            oidc: Some(OidcConfig { issuer, client_id, client_secret: var("OIDC_CLIENT_SECRET"), scopes, provider_name }),
+            oidc: Some(OidcConfig {
+                issuer,
+                client_id,
+                client_secret: var("OIDC_CLIENT_SECRET"),
+                scopes,
+                provider_name,
+                email_verified_when_absent: var("OIDC_EMAIL_VERIFIED_WHEN_ABSENT").is_some_and(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes")),
+            }),
         })
     }
 }
@@ -178,7 +190,18 @@ pub struct Identity {
     pub issuer: String,
     pub subject: String,
     pub email: Option<String>,
+    /// The provider said the email is verified.
     pub email_verified: bool,
+    /// The provider sent no `email_verified` claim at all (see `OidcConfig::email_verified_when_absent`).
+    pub email_verified_absent: bool,
+}
+
+impl Identity {
+    /// Whether the email counts as verified under `cfg`: the provider said so, or it said nothing and the
+    /// operator chose to trust that (`OIDC_EMAIL_VERIFIED_WHEN_ABSENT`). An explicit false stays false.
+    pub fn verified_under(&self, cfg: &OidcConfig) -> bool {
+        self.email_verified || (self.email_verified_absent && cfg.email_verified_when_absent)
+    }
 }
 
 pub struct Client {
@@ -415,11 +438,18 @@ impl Client {
         if c.sub.is_empty() || c.sub.len() > 255 {
             return Err(bad("the ID token has no usable subject"));
         }
-        Ok(Identity { issuer: cfg.issuer.clone(), subject: c.sub, email: c.email, email_verified: c.email_verified.as_ref().is_some_and(truthy) })
+        Ok(Identity {
+            issuer: cfg.issuer.clone(),
+            subject: c.sub,
+            email: c.email,
+            email_verified: c.email_verified.as_ref().is_some_and(truthy),
+            email_verified_absent: c.email_verified.is_none(),
+        })
     }
 
     /// The userinfo claims, for a provider whose ID token carries no email. The subject must match the verified one.
-    pub async fn userinfo(&self, disc: &Discovery, access_token: &str, subject: &str) -> Option<(Option<String>, bool)> {
+    /// The second value is the `email_verified` claim: `None` when the provider sent none.
+    pub async fn userinfo(&self, disc: &Discovery, access_token: &str, subject: &str) -> Option<(Option<String>, Option<bool>)> {
         let url = disc.userinfo_endpoint.as_deref()?;
         let resp = self.http.get(url).bearer_auth(access_token).header("accept", "application/json").send().await.ok()?;
         if !resp.status().is_success() {
@@ -427,7 +457,7 @@ impl Client {
         }
         let v: serde_json::Value = serde_json::from_slice(&read_capped(resp).await.ok()?).ok()?;
         (v.get("sub").and_then(|s| s.as_str()) == Some(subject))
-            .then(|| (v.get("email").and_then(|e| e.as_str()).map(String::from), v.get("email_verified").is_some_and(truthy)))
+            .then(|| (v.get("email").and_then(|e| e.as_str()).map(String::from), v.get("email_verified").filter(|c| !c.is_null()).map(truthy)))
     }
 }
 
@@ -479,6 +509,16 @@ mod tests {
         assert!(!c.password_enabled());
         let o = c.oidc.unwrap();
         assert_eq!((o.scopes.as_str(), o.provider_name.as_str(), o.client_secret), ("openid email profile", "Okta", None));
+        assert!(!o.email_verified_when_absent, "a missing email_verified claim is not trusted unless the operator says so");
+        let base = [("AUTH_MODE", "oidc"), ("OIDC_ISSUER", "https://idp.example"), ("OIDC_CLIENT_ID", "x")];
+        let with = |v: &'static str| AuthConfig::from_vars(vars(&[base[0], base[1], base[2], ("OIDC_EMAIL_VERIFIED_WHEN_ABSENT", v)])).unwrap().oidc.unwrap();
+        assert!(with("true").email_verified_when_absent && with("1").email_verified_when_absent);
+        assert!(!with("false").email_verified_when_absent && !with("nope").email_verified_when_absent);
+        let id = |verified: bool, absent: bool| Identity { issuer: "i".into(), subject: "s".into(), email: None, email_verified: verified, email_verified_absent: absent };
+        let (trusting, strict) = (with("true"), with("false"));
+        assert!(id(false, true).verified_under(&trusting) && !id(false, true).verified_under(&strict));
+        assert!(!id(false, false).verified_under(&trusting), "a claim sent as false is never overridden");
+        assert!(id(true, false).verified_under(&strict));
         let c = AuthConfig::from_vars(vars(&[("AUTH_MODE", "both"), ("OIDC_ISSUER", "http://127.0.0.1:9"), ("OIDC_CLIENT_ID", "x"), ("OIDC_CLIENT_SECRET", "hunter2-secret")])).unwrap();
         assert!(c.password_enabled());
         assert!(!format!("{c:?}").contains("hunter2-secret"), "the secret is redacted in Debug");

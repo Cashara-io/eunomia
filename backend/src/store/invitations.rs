@@ -10,7 +10,7 @@ pub const CONTROL_ALL: &[&ControlStmt] = &[
     &RESEND,
     &REVOKE,
     &BY_HASH,
-    &OPEN_FOR_EMAIL,
+    &ROLE_OF,
     &CLAIM,
     &REOPEN,
     &SEATS,
@@ -37,7 +37,7 @@ pub const LIST: ControlStmt = ControlStmt::new(
 pub const RESEND: ControlStmt = ControlStmt::new(
     "invitations.resend",
     "UPDATE org_invitation SET token_hash = $hash, sent_at = time::now(), expires_at = time::now() + <duration>$ttl \
-     WHERE id = $id AND org = $org AND accepted_at IS NONE AND revoked_at IS NONE \
+     WHERE id = $id AND org = $org AND role IN $roles AND accepted_at IS NONE AND revoked_at IS NONE \
      RETURN id, email, role, created_at, sent_at, expires_at, false AS expired, invited_by.email AS invited_by",
 );
 
@@ -45,7 +45,7 @@ pub const RESEND: ControlStmt = ControlStmt::new(
 pub const REVOKE: ControlStmt = ControlStmt::new(
     "invitations.revoke",
     "UPDATE org_invitation SET revoked_at = time::now(), slot = string::concat('closed:', <string>id) \
-     WHERE id = $id AND org = $org AND accepted_at IS NONE AND revoked_at IS NONE RETURN id, email, role",
+     WHERE id = $id AND org = $org AND role IN $roles AND accepted_at IS NONE AND revoked_at IS NONE RETURN id, email, role",
 );
 
 /// The invitation a token belongs to, in any state (the caller tells unknown, closed and expired apart).
@@ -55,16 +55,15 @@ pub const BY_HASH: ControlStmt = ControlStmt::new(
      expires_at, expires_at <= time::now() AS expired FROM org_invitation WHERE token_hash = $hash LIMIT 1",
 );
 
-/// The newest open, unexpired invitation for an email (single sign-on honours it for a new account).
-pub const OPEN_FOR_EMAIL: ControlStmt = ControlStmt::new(
-    "invitations.open_for_email",
-    "SELECT id, org, org.name AS org_name, email, role, invited_by, invited_by.email AS invited_by_email, accepted_at, revoked_at, \
-     expires_at, false AS expired FROM org_invitation \
-     WHERE email = $email AND accepted_at IS NONE AND revoked_at IS NONE AND expires_at > time::now() ORDER BY sent_at DESC LIMIT 1",
+/// The role of one of the org's open invitations (who may resend or withdraw it depends on it).
+pub const ROLE_OF: ControlStmt = ControlStmt::new(
+    "invitations.role_of",
+    "SELECT VALUE role FROM org_invitation WHERE id = $id AND org = $org AND accepted_at IS NONE AND revoked_at IS NONE LIMIT 1",
 );
 
 /// Accepts an invitation for `$user`: marks it accepted (only if it is still open, unexpired and for
-/// `$email`) and, when `$join`, adds the membership with the invited role, in one transaction. Two
+/// `$email`) and, when `$join`, adds the membership with the invited role, in one transaction. Without
+/// `$join` (already a member), an admin invitation makes a member an admin; an owner stays the owner. Two
 /// accepts of one token cannot both pass the first step, and `membership_unique` (user, org) backs it
 /// up; a lost race is a commit conflict that the caller retries into `invitation.unavailable`.
 pub const CLAIM: ControlStmt = ControlStmt::at(
@@ -75,9 +74,10 @@ pub const CLAIM: ControlStmt = ControlStmt::at(
      IF array::len($inv) = 0 { THROW 'invitation.unavailable' }; \
      LET $org = $inv[0].org; \
      IF $join { CREATE membership SET user = $user, org = $org, role = $inv[0].role, slot = string::concat(<string>$org, '/', <string>$user); }; \
+     IF !$join AND $inv[0].role = 'admin' { UPDATE membership SET role = 'admin' WHERE user = $user AND org = $org AND role = 'member'; }; \
      RETURN $org; \
      COMMIT TRANSACTION;",
-    5, // BEGIN 0, LET 1, IF 2, LET 3, IF 4, RETURN 5
+    6, // BEGIN 0, LET 1, IF 2, LET 3, IF 4, IF 5, RETURN 6
 );
 
 /// Undoes [`CLAIM`] for a signup that failed after it (the account is being deleted).
@@ -96,5 +96,7 @@ pub const SEATS: ControlStmt = ControlStmt::new(
 );
 
 /// The caller's role in an org (`owner`, `admin` or `member`), if they belong to it.
+/// Ordered so that, should the org filter ever go, a role from another org would show (the isolation
+/// mutation check relies on it); with the filter there is one row.
 pub const ROLE_IN_ORG: ControlStmt =
-    ControlStmt::new("invitations.role_in_org", "SELECT VALUE role FROM membership WHERE user = $user AND org = $org LIMIT 1");
+    ControlStmt::new("invitations.role_in_org", "SELECT VALUE role FROM membership WHERE user = $user AND org = $org ORDER BY role LIMIT 1");

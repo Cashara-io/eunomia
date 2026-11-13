@@ -42,7 +42,11 @@ test.describe("Organisation invitations", () => {
     const other = await browser.newContext();
     const invitee = await other.newPage();
     await invitee.goto(new URL(link).pathname + new URL(link).hash);
-    await expect(invitee.getByRole("heading", { name: /^Join / })).toBeVisible();
+    // first the organisation and the role, and nothing happens until the person says yes
+    await expect(invitee.getByRole("heading", { name: /^Join .+\?$/ })).toBeVisible();
+    await expect(invitee.getByTestId("invite-summary")).toContainText("as a member");
+    await expect(invitee.getByLabel("Password", { exact: true })).toHaveCount(0);
+    await invitee.getByRole("button", { name: /^Join / }).click();
     await expect(invitee.getByLabel("Email")).toHaveValue(email);
     // the token left the address bar (it stays in this tab only)
     await expect.poll(() => new URL(invitee.url()).hash).toBe("");
@@ -92,7 +96,7 @@ test.describe("Organisation invitations", () => {
     const link = await inviteFromPeople(page, uniqueEmail("someone"));
     // the admin is signed in with a different email
     await page.goto(new URL(link).pathname + new URL(link).hash);
-    await expect(page.getByText("This invitation is for")).toBeVisible();
+    await expect(page.getByText(/This invitation is for/)).toBeVisible();
     await expect(page.getByRole("button", { name: /^Sign out and use / })).toBeVisible();
     void browser;
   });

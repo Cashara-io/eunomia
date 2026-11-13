@@ -275,6 +275,8 @@ async fn register(
     // a valid organisation invitation for this email is itself the permission to sign up
     let invitation = match body.invitation.as_deref().filter(|t| !t.trim().is_empty()) {
         Some(token) if !reserved => {
+            // the same refusal a look-alike address gets without a link, before the link is looked at
+            models_user::normalize_new_email(&body.email)?;
             let ip = ip.as_ref().map_or("", |i| i.0 .0.as_str());
             let p = crate::invitations::usable(&state, token, crate::invitations::Who::Address(ip)).await?;
             crate::invitations::email_matches(&p, &body.email)?;
@@ -299,7 +301,7 @@ async fn register(
         }
     })?;
     if let Some(p) = &invitation {
-        crate::invitations::record_accepted(&state.control, &user.id, p, "signup").await;
+        crate::invitations::record_accepted(&state.control, &user.id, p, &p.role, "signup").await;
     }
 
     let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref())

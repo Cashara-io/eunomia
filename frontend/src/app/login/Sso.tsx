@@ -31,6 +31,14 @@ function oidcMessage(code: string, provider: string): string | null {
       return `${provider} did not share an email address, which Eunomia needs to find your account.`;
     case "email_unverified":
       return `An account with this email already exists, and ${provider} has not verified the address. Sign in with your password, or verify the address with ${provider}.`;
+    case "invitation":
+      return "That invitation can't be used any more. It may have been used or withdrawn. Ask for a new link.";
+    case "invitation_expired":
+      return "That invitation has expired. Ask the person who invited you to send a new link.";
+    case "invitation_email":
+      return `The invitation is for a different email address than the one ${provider} signed you in with. Use the invited address.`;
+    case "invitation_unverified":
+      return `${provider} has not verified your email address, so the invitation can't be used with it. Create an account with a password from the invitation link instead.`;
     case "signup_closed":
       return "This server is not open to new accounts from this email. Ask the admin for access.";
     case "unavailable":

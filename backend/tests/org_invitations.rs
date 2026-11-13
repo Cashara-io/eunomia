@@ -20,6 +20,8 @@ fn host_env() {
         unsafe {
             std::env::set_var("EUNOMIA_SIGNUP_ORG", "personal");
             std::env::set_var("SIGNUP", "closed");
+            // an instance operator's address: never invitable, never created through an invitation
+            std::env::set_var("EUNOMIA_ADMIN_EMAILS", "op@corp.test");
             // logins and signups in one test go past the default 20 per minute per address
             std::env::set_var("RATE_LIMIT_AUTH_PER_MIN", "1000");
         }
@@ -287,10 +289,10 @@ async fn two_accepts_of_one_token_make_one_membership() {
     assert_eq!(memberships(&h.app.state, &pat.id).await.len(), 1);
 
     // the claim itself, raced eight ways for one account with no membership yet
-    invite(&h, "sam@example.com", "member").await;
+    let sam_token = invite(&h, "sam@example.com", "member").await["token"].as_str().unwrap().to_string();
     let mut res = h.app.state.control.test_raw().query("CREATE user SET email = 'sam@example.com', email_lc = 'sam@example.com' RETURN VALUE id").await.unwrap();
     let sam: surrealdb::types::RecordId = res.take::<Vec<surrealdb::types::RecordId>>(0).unwrap().remove(0);
-    let pending = invitations::open_for_email(&h.app.state.control, "sam@example.com").await.unwrap().expect("open invitation");
+    let pending = invitations::by_hash(&h.app.state.control, &invitations::token_hash(&sam_token)).await.unwrap().expect("open invitation");
     let control = h.app.state.control.clone();
     let tries = (0..8).map(|_| {
         let (control, sam, pending) = (control.clone(), sam.clone(), pending.clone());
@@ -330,8 +332,12 @@ async fn an_account_in_another_org_cannot_accept_and_inviting_it_reveals_nothing
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["org"], json!(beta.org.record().to_string()));
     assert_eq!(lookup(&h.app, to_beta["token"].as_str().unwrap()).await.0, StatusCode::OK);
+    // the inviting org's ledger says only that it was not accepted: nothing about an account elsewhere
     let refused = audit_rows(&h.app.state, "org.invite_accept").await;
-    assert_eq!((refused.len(), refused[0]["outcome"].as_str()), (1, Some("invitation.other_org")));
+    assert_eq!((refused.len(), refused[0]["outcome"].as_str()), (1, Some(invitations::NOT_ACCEPTED)));
+    assert_eq!(refused[0]["user"], json!(h.alpha.id.to_string()));
+    let all: Vec<Value> = h.app.state.control.test_raw().query("SELECT * FROM audit_event").await.unwrap().take(0).unwrap();
+    assert!(!serde_json::to_string(&all).unwrap().contains("other_org"), "the precise reason is in no ledger row");
 
     // a signed-in account with another email is refused, whatever org it is in
     let (status, body) = as_cookie(&h.app, &beta_cookie, "POST", "/api/invitations/accept", Some(json!({ "token": to_nobody["token"] }))).await;
@@ -349,7 +355,7 @@ async fn a_member_already_in_the_org_cannot_be_invited_and_a_signed_in_member_ac
 
     // an invitation that raced the signup: the member accepts it signed in, and it is used up
     let pending = invitations::create(&h.app.state, &h.alpha, "quinn@example.com", OrgInviteRole::Member).await.unwrap();
-    let quinn = models_user::register_invited(&h.app.state, "quinn@example.com", common::PASSWORD, &invitations::open_for_email(&h.app.state.control, "quinn@example.com").await.unwrap().unwrap())
+    let quinn = models_user::register_invited(&h.app.state, "quinn@example.com", common::PASSWORD, &invitations::by_hash(&h.app.state.control, &invitations::token_hash(&pending.token)).await.unwrap().unwrap())
         .await
         .unwrap();
     assert_eq!(quinn.org, h.alpha.org);
@@ -362,6 +368,92 @@ async fn a_member_already_in_the_org_cannot_be_invited_and_a_signed_in_member_ac
     assert_eq!(memberships(&h.app.state, &quinn.id).await.len(), 1);
     assert_eq!(lookup(&h.app, again["token"].as_str().unwrap()).await.0, StatusCode::NOT_FOUND);
     assert_eq!(lookup(&h.app, &pending.token).await.0, StatusCode::NOT_FOUND, "the first one was used by the signup");
+
+    // an admin invitation that raced: accepting it makes the member an admin, and says so truthfully
+    let promote = invite(&h, "quinn3@example.com", "admin").await;
+    h.app.state.control.test_raw().query("UPDATE org_invitation SET email = 'quinn@example.com' WHERE email = 'quinn3@example.com'").await.unwrap().check().unwrap();
+    let (status, body) = as_cookie(&h.app, &quinn_cookie, "POST", "/api/invitations/accept", Some(json!({ "token": promote["token"] }))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!((body["role"].as_str(), body["already_member"].as_bool()), (Some("admin"), Some(true)), "{body}");
+    let (_, me) = as_cookie(&h.app, &quinn_cookie, "GET", "/api/auth/me", None).await;
+    assert_eq!(me["org_role"], "admin", "{me}");
+    // an owner accepting a member invitation stays the owner, and the answer says owner
+    let to_owner = invite(&h, "alpha2@example.com", "member").await;
+    h.app.state.control.test_raw().query("UPDATE org_invitation SET email = 'alpha@example.com' WHERE email = 'alpha2@example.com'").await.unwrap().check().unwrap();
+    let (status, body) = as_cookie(&h.app, &h.alpha_cookie, "POST", "/api/invitations/accept", Some(json!({ "token": to_owner["token"] }))).await;
+    assert_eq!((status, body["role"].as_str()), (StatusCode::OK, Some("owner")), "{body}");
+}
+
+#[tokio::test]
+async fn only_the_owner_manages_admin_invitations() {
+    let h = host().await;
+    let token = invite(&h, "ada@example.com", "admin").await["token"].as_str().unwrap().to_string();
+    assert_eq!(register(&h.app, "ada@example.com", Some(&token)).await.0 .0, StatusCode::OK);
+    let ada = login(&h.app, "ada@example.com").await;
+    // an org admin cannot invite an admin
+    let (status, body) = as_cookie(&h.app, &ada, "POST", "/api/org/invitations", Some(json!({ "email": "eve@example.com", "role": "admin" }))).await;
+    assert_eq!((status, body["code"].as_str()), (StatusCode::FORBIDDEN, Some("auth.forbidden")), "{body}");
+    // nor resend or withdraw the owner's admin invitation
+    let owners = invite(&h, "bea@example.com", "admin").await;
+    let id = owners["invitation"]["id"].as_str().unwrap();
+    for (method, path) in [("POST", format!("/api/org/invitations/{id}/resend")), ("DELETE", format!("/api/org/invitations/{id}"))] {
+        let (status, body) = as_cookie(&h.app, &ada, method, &path, None).await;
+        assert_eq!((status, body["code"].as_str()), (StatusCode::FORBIDDEN, Some("auth.forbidden")), "{method} {path}: {body}");
+    }
+    assert_eq!(lookup(&h.app, owners["token"].as_str().unwrap()).await.0, StatusCode::OK, "the owner's link still works");
+    // members are fine for an org admin, from start to finish
+    let mem = as_cookie(&h.app, &ada, "POST", "/api/org/invitations", Some(json!({ "email": "mo@example.com", "role": "member" }))).await.1;
+    let mid = mem["invitation"]["id"].as_str().unwrap();
+    assert_eq!(as_cookie(&h.app, &ada, "POST", &format!("/api/org/invitations/{mid}/resend"), None).await.0, StatusCode::OK);
+    assert_eq!(as_cookie(&h.app, &ada, "DELETE", &format!("/api/org/invitations/{mid}"), None).await.0, StatusCode::OK);
+    // and the owner can do all of it
+    assert_eq!(as_cookie(&h.app, &h.alpha_cookie, "POST", &format!("/api/org/invitations/{id}/resend"), None).await.0, StatusCode::OK);
+    assert_eq!(as_cookie(&h.app, &h.alpha_cookie, "DELETE", &format!("/api/org/invitations/{id}"), None).await.0, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn an_operator_address_is_never_invited_or_created_through_an_invitation() {
+    let h = host().await;
+    // creating: the same answer as any other address that can't be invited, naming no reason
+    for email in ["op@corp.test", " OP@Corp.Test "] {
+        let (status, body) = as_cookie(&h.app, &h.alpha_cookie, "POST", "/api/org/invitations", Some(json!({ "email": email }))).await;
+        assert_eq!((status, body["code"].as_str()), (StatusCode::BAD_REQUEST, Some("validation.invalid")), "{email}: {body}");
+        let detail = body["detail"].as_str().unwrap().to_lowercase();
+        assert!(detail.contains("can't be invited") && !detail.contains("admin") && !detail.contains("operator"), "{detail}");
+    }
+    // accepting: an invitation for the address that got in some other way (planted here) creates nothing
+    let token = "planted-operator-invitation-token-0123456789abcdef";
+    h.app.state.control.test_raw()
+        .query("CREATE org_invitation SET org = $org, email = 'op@corp.test', role = 'member', token_hash = $h, invited_by = $by, expires_at = time::now() + 7d, slot = string::concat(<string>$org, '/op@corp.test')")
+        .bind(("org", h.alpha.org.record()))
+        .bind(("h", invitations::token_hash(token)))
+        .bind(("by", h.alpha.id.clone()))
+        .await.unwrap().check().unwrap();
+    assert_eq!(lookup(&h.app, token).await.0, StatusCode::NOT_FOUND);
+    let ((status, body), cookie) = register(&h.app, "op@corp.test", Some(token)).await;
+    assert!(status == StatusCode::FORBIDDEN || status == StatusCode::NOT_FOUND, "{status} {body}");
+    assert!(cookie.is_none());
+    assert!(models_user::user_by_email(&h.app.state.control, "op@corp.test").await.unwrap().is_none());
+    let p = invitations::by_hash(&h.app.state.control, &invitations::token_hash(token)).await.unwrap().unwrap();
+    assert!(invitations::check_usable(&h.app.state.control, p).await.is_err(), "refused below the route too");
+}
+
+#[tokio::test]
+async fn look_alike_addresses_cannot_be_invited_or_accept_an_invitation() {
+    let h = host().await;
+    for email in ["\u{212A}en@example.com", "\u{212B}sa@example.com"] {
+        let (status, body) = as_cookie(&h.app, &h.alpha_cookie, "POST", "/api/org/invitations", Some(json!({ "email": email }))).await;
+        assert_eq!((status, body["code"].as_str()), (StatusCode::BAD_REQUEST, Some("validation.invalid")), "{email}: {body}");
+    }
+    // an invitation for the plain address cannot be taken with a look-alike of it
+    let token = invite(&h, "ken@example.com", "member").await["token"].as_str().unwrap().to_string();
+    let ((status, body), _) = register(&h.app, "\u{212A}en@example.com", Some(&token)).await;
+    assert_eq!((status, body["code"].as_str()), (StatusCode::BAD_REQUEST, Some("validation.invalid")), "{body}");
+    assert!(models_user::user_by_email(&h.app.state.control, "ken@example.com").await.unwrap().is_none());
+    assert_eq!(lookup(&h.app, &token).await.0, StatusCode::OK, "still open for the real address");
+    let token = invite(&h, "\u{e5}sa@example.com", "member").await["token"].as_str().unwrap().to_string();
+    let ((status, body), _) = register(&h.app, "\u{212B}sa@example.com", Some(&token)).await;
+    assert_eq!((status, body["code"].as_str()), (StatusCode::BAD_REQUEST, Some("validation.invalid")), "{body}");
 }
 
 #[tokio::test]
@@ -408,26 +500,4 @@ async fn creation_and_acceptance_are_rate_limited() {
     }
     let (status, body) = as_cookie(&h3.app, &beta_cookie, "POST", "/api/invitations/accept", Some(json!({ "token": link }))).await;
     assert_eq!((status, body["code"].as_str()), (StatusCode::TOO_MANY_REQUESTS, Some("rate.limited")), "{body}");
-}
-
-#[tokio::test]
-async fn the_single_org_install_keeps_working() {
-    host_env();
-    // the install's first user still creates and owns the instance org, and is its admin
-    let app = common::TestApp::new().await;
-    let cookie = app.session_cookie().await;
-    let (status, me) = as_cookie(&app, &cookie, "GET", "/api/auth/me", None).await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!((me["org_role"].as_str(), me["can_manage_org"].as_bool(), me["is_admin"].as_bool()), (Some("owner"), Some(true), Some(true)), "{me}");
-    // a join-mode member and an instance admin's invitation for a newcomer both land in the one org
-    let bob = models_user::register_user_with(&app.state, "bob@example.com", common::PASSWORD, false).await.unwrap();
-    assert_eq!(bob.org, app.user.org);
-    let (status, created) = as_cookie(&app, &cookie, "POST", "/api/org/invitations", Some(json!({ "email": "cy@example.com" }))).await;
-    assert_eq!(status, StatusCode::OK, "{created}");
-    let ((status, _), _) = register(&app, "cy@example.com", Some(created["token"].as_str().unwrap())).await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(models_user::user_by_email(&app.state.control, "cy@example.com").await.unwrap().unwrap().org, app.user.org);
-    // the API token still works
-    let (status, _) = app.http("GET", "/api/vaults", None, true).await;
-    assert_eq!(status, StatusCode::OK);
 }

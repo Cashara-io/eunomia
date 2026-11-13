@@ -246,7 +246,7 @@ pub async fn register_user_with(state: &AppState, email: &str, password: &str, p
 /// (whatever `EUNOMIA_SIGNUP_ORG` says), and the invitation is used up in the same step. The caller has
 /// checked that `email` is the invited one (`invitations::email_matches`).
 pub async fn register_invited(state: &AppState, email: &str, password: &str, invitation: &crate::invitations::Pending) -> AppResult<User> {
-    let email = normalize_email(email);
+    let email = normalize_new_email(email)?;
     validate_credentials(&email, password)?;
     Box::pin(create_account(state, &email, Some(password), None, Placement::Invitation(invitation))).await
 }
@@ -258,11 +258,11 @@ pub async fn register_oidc_user(state: &AppState, email: &str, issuer: &str, sub
     Box::pin(create_account(state, &email, None, Some((issuer, subject)), Placement::Instance { personal: signup_personal() })).await
 }
 
-/// [`register_oidc_user`] for a provider-verified email that has a pending organisation invitation: the
-/// account joins that org and the invitation is used up.
+/// [`register_oidc_user`] for a sign-in that started from an organisation invitation link and may use it
+/// (`routers/oidc.rs` checked the token, the email and its verification): the account joins that org and
+/// the invitation is used up.
 pub async fn register_oidc_user_invited(state: &AppState, email: &str, issuer: &str, subject: &str, invitation: &crate::invitations::Pending) -> AppResult<User> {
-    let email = normalize_email(email);
-    validate_email(&email)?;
+    let email = normalize_new_email(email)?;
     Box::pin(create_account(state, &email, None, Some((issuer, subject)), Placement::Invitation(invitation))).await
 }
 

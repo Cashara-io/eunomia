@@ -8,6 +8,12 @@
 //! - The product sends no email: the admin gets the link and sends it themselves.
 //! - A valid invitation is itself the permission to create an account, whatever `SIGNUP` says, and the
 //!   account lands in the inviting org (not an org of its own under `EUNOMIA_SIGNUP_ORG=personal`).
+//! - An invitation is only ever used through its token: password signup sends it, and single sign-on
+//!   carries its hash in the signed flow cookie from the invitation page's form post. Nothing looks an
+//!   invitation up by email, so a second org's invitation can never capture someone another org invited.
+//! - An address in `EUNOMIA_ADMIN_EMAILS` is never invitable ([`create`]) and never accepted
+//!   ([`check_usable`]); both refusals say nothing about why.
+//! - Only the org's owner (or an instance admin) manages `admin` invitations; an org admin, `member` ones.
 //! - An account belongs to one org for now (a credential resolves to the oldest membership, with no org
 //!   switcher; see `models_user::org_of`). So an account already in another org cannot accept: it gets
 //!   `invitation.other_org`.
@@ -173,7 +179,8 @@ fn expired_error(p: &Pending) -> AppError {
 
 /// The email check every accept makes: the accepting account's email, normalized, is the invited one.
 pub fn email_matches(p: &Pending, email: &str) -> AppResult<()> {
-    if models_user::normalize_email(email) == p.email {
+    // a look-alike that only lowercases into the invited address is not the invited address
+    if models_user::folds_like_ascii(email.trim()) && models_user::normalize_email(email) == p.email {
         Ok(())
     } else {
         Err(AppError::coded(ErrorCode::InvitationEmailMismatch, format!("This invitation is for {}. Use that email address to accept it.", p.email)))
@@ -186,20 +193,66 @@ pub async fn org_role(control: &ControlDb, user: &User) -> AppResult<Option<Stri
     Ok(res.take::<Vec<String>>(0)?.into_iter().next())
 }
 
-/// May `user` manage their org's invitations? An owner or admin of the org, or an instance admin.
-pub async fn can_manage(control: &ControlDb, user: &User) -> AppResult<bool> {
-    if authz::is_admin(control, user).await? {
-        return Ok(true);
-    }
-    Ok(org_role(control, user).await?.is_some_and(|r| r == "owner" || r == "admin"))
+/// How much of the org's invitations a caller may manage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Manager {
+    /// The org's owner, or an instance admin acting in their own org: every invitation, any role.
+    Owner,
+    /// An org admin: invitations for members only.
+    Admin,
 }
 
-async fn require_manager(state: &AppState, user: &User) -> AppResult<()> {
-    if can_manage(&state.control, user).await? {
-        Ok(())
-    } else {
-        Err(AppError::coded(ErrorCode::AuthForbidden, "Only an owner or admin of this organisation can manage its invitations."))
+impl Manager {
+    /// The invitation roles this manager may create, resend or withdraw.
+    fn roles(self) -> Vec<String> {
+        match self {
+            Manager::Owner => vec!["member".into(), "admin".into()],
+            Manager::Admin => vec!["member".into()],
+        }
     }
+
+    fn require_role(self, role: &str) -> AppResult<()> {
+        if self.roles().iter().any(|r| r == role) {
+            Ok(())
+        } else {
+            Err(AppError::coded(ErrorCode::AuthForbidden, "Only the organisation's owner can invite admins or manage admin invitations."))
+        }
+    }
+}
+
+async fn manager(control: &ControlDb, user: &User) -> AppResult<Option<Manager>> {
+    if authz::is_admin(control, user).await? {
+        return Ok(Some(Manager::Owner));
+    }
+    Ok(match org_role(control, user).await?.as_deref() {
+        Some("owner") => Some(Manager::Owner),
+        Some("admin") => Some(Manager::Admin),
+        _ => None,
+    })
+}
+
+/// May `user` manage their org's invitations? An owner or admin of the org, or an instance admin.
+pub async fn can_manage(control: &ControlDb, user: &User) -> AppResult<bool> {
+    Ok(manager(control, user).await?.is_some())
+}
+
+async fn require_manager(state: &AppState, user: &User) -> AppResult<Manager> {
+    manager(&state.control, user)
+        .await?
+        .ok_or_else(|| AppError::coded(ErrorCode::AuthForbidden, "Only an owner or admin of this organisation can manage its invitations."))
+}
+
+/// The answer for an address that may not be invited. One text whatever the reason, so it says nothing
+/// about the address; the reason goes to the server log.
+fn uninvitable() -> AppError {
+    AppError::coded(ErrorCode::ValidationInvalid, "This address can't be invited. Check it, or ask whoever runs this Eunomia server.")
+}
+
+/// The role a caller may change on an open invitation of their org, read before the change.
+async fn require_role_of(state: &AppState, by: &User, m: Manager, id: &RecordId) -> AppResult<()> {
+    let mut res = q::ROLE_OF.on(&state.control).bind(("id", id.clone())).bind(("org", by.org.record())).await?;
+    let role = res.take::<Vec<String>>(0)?.into_iter().next().ok_or_else(admin_not_found)?;
+    m.require_role(&role)
 }
 
 fn rate(state: &AppState, key: String, per_min: u32) -> AppResult<()> {
@@ -230,10 +283,15 @@ fn caller_actor(user: &RecordId) -> Actor {
 
 /// Invite `email` to the admin's org with `role`.
 pub async fn create(state: &AppState, by: &User, email: &str, role: OrgInviteRole) -> AppResult<OrgInvitationLink> {
-    require_manager(state, by).await?;
-    let email = models_user::normalize_email(email);
-    models_user::validate_email(&email)?;
+    let m = require_manager(state, by).await?;
+    m.require_role(role.as_str())?;
+    let email = models_user::normalize_new_email(email)?;
     creation_rate(state, by)?;
+    // an instance operator's address is never invitable: whoever holds the link would become an operator
+    if authz::operator_email_listed(&email) {
+        tracing::info!("organisation invitation refused: the address is in EUNOMIA_ADMIN_EMAILS");
+        return Err(uninvitable());
+    }
     // an existing member of this org: the admin already sees them in People. An account in another org
     // is not looked at, so the answer is the same as for an email with no account.
     let mut res = store::control::EMAIL_IN_ORG.on(&state.control).bind(("email", email.clone())).bind(("org", by.org.record())).await?;
@@ -273,7 +331,7 @@ pub async fn create(state: &AppState, by: &User, email: &str, role: OrgInviteRol
 
 /// The admin's org's open invitations, newest first.
 pub async fn list(state: &AppState, by: &User) -> AppResult<Vec<OrgInvitation>> {
-    require_manager(state, by).await?;
+    let _ = require_manager(state, by).await?;
     let mut res = q::LIST.on(&state.control).bind(("org", by.org.record())).await?;
     Ok(res.take::<Vec<Row>>(0)?.into_iter().map(OrgInvitation::from).collect())
 }
@@ -284,14 +342,16 @@ fn invitation_id(id: &str) -> AppResult<RecordId> {
 
 /// A new link (and a new expiry) for one of the admin's org's open invitations; the old link stops working.
 pub async fn resend(state: &AppState, by: &User, id: &str) -> AppResult<OrgInvitationLink> {
-    require_manager(state, by).await?;
+    let m = require_manager(state, by).await?;
     let id = invitation_id(id)?;
+    require_role_of(state, by, m, &id).await?;
     creation_rate(state, by)?;
     let token = models_user::generate_token();
     let mut res = q::RESEND
         .on(&state.control)
         .bind(("id", id.clone()))
         .bind(("org", by.org.record()))
+        .bind(("roles", m.roles()))
         .bind(("hash", models_user::hash_token(&token)))
         .bind(("ttl", format!("{TTL_DAYS}d")))
         .await?
@@ -304,15 +364,16 @@ pub async fn resend(state: &AppState, by: &User, id: &str) -> AppResult<OrgInvit
 
 /// Withdraws one of the admin's org's open invitations: its link stops working.
 pub async fn revoke(state: &AppState, by: &User, id: &str) -> AppResult<()> {
-    require_manager(state, by).await?;
+    let m = require_manager(state, by).await?;
     let id = invitation_id(id)?;
+    require_role_of(state, by, m, &id).await?;
     #[derive(Deserialize, SurrealValue)]
     struct Gone {
         id: RecordId,
         email: String,
         role: String,
     }
-    let mut res = q::REVOKE.on(&state.control).bind(("id", id)).bind(("org", by.org.record())).await?.check()?;
+    let mut res = q::REVOKE.on(&state.control).bind(("id", id)).bind(("org", by.org.record())).bind(("roles", m.roles())).await?.check()?;
     let gone = res.take::<Vec<Gone>>(0)?.into_iter().next().ok_or_else(admin_not_found)?;
     let actor = caller_actor(&by.id);
     record(&state.control, &by.id, &actor, "org.invite_revoke", &gone.id.to_string(), "ok", &format!("email={} role={}", gone.email, gone.role)).await;
@@ -321,7 +382,7 @@ pub async fn revoke(state: &AppState, by: &User, id: &str) -> AppResult<()> {
 
 /// Active members, suspended members and pending invitations of the admin's org.
 pub async fn seats(state: &AppState, by: &User) -> AppResult<OrgSeats> {
-    require_manager(state, by).await?;
+    let _ = require_manager(state, by).await?;
     #[derive(Deserialize, SurrealValue)]
     struct N {
         n: i64,
@@ -389,7 +450,7 @@ async fn by_token(state: &AppState, token: &str, who: &Who<'_>) -> AppResult<Opt
 
 /// The invitation page's view of a token: unknown, used and withdrawn links are all "not found".
 pub async fn lookup(state: &AppState, token: &str, who: Who<'_>) -> AppResult<InvitationLookup> {
-    let p = by_token(state, token, &who).await?.filter(Pending::open).ok_or_else(not_found)?;
+    let p = by_token(state, token, &who).await?.filter(Pending::open).filter(|p| !authz::operator_email_listed(&p.email)).ok_or_else(not_found)?;
     Ok(InvitationLookup {
         org_name: p.org_name.clone().unwrap_or_default(),
         email: p.email.clone(),
@@ -404,18 +465,37 @@ pub async fn lookup(state: &AppState, token: &str, who: Who<'_>) -> AppResult<In
 /// `invitation.expired` and the refusal goes to the inviting org's audit log.
 pub async fn usable(state: &AppState, token: &str, who: Who<'_>) -> AppResult<Pending> {
     let p = by_token(state, token, &who).await?.filter(Pending::open).ok_or_else(not_found)?;
+    check_usable(&state.control, p).await
+}
+
+/// The sha256 a token is stored under.
+pub fn token_hash(token: &str) -> String {
+    models_user::hash_token(token.trim())
+}
+
+/// The invitation stored under `hash`, in any state (no throttle: the caller holds a hash it was given,
+/// such as the signed single sign-on flow cookie, not a guess).
+pub async fn by_hash(control: &ControlDb, hash: &str) -> AppResult<Option<Pending>> {
+    let mut res = q::BY_HASH.on(control).bind(("hash", hash.to_string())).await?;
+    Ok(res.take::<Vec<Pending>>(0)?.into_iter().next())
+}
+
+/// `p` if it can still be accepted: open, not for an instance operator's address (refused as not found)
+/// and not expired (refused with `invitation.expired`; the refusal goes to the inviting org's log).
+pub async fn check_usable(control: &ControlDb, p: Pending) -> AppResult<Pending> {
+    if !p.open() {
+        return Err(not_found());
+    }
+    if authz::operator_email_listed(&p.email) {
+        tracing::info!("organisation invitation refused at acceptance: the address is in EUNOMIA_ADMIN_EMAILS");
+        return Err(not_found());
+    }
     if p.expired {
         // scoped to the inviter so the inviting org's log shows it; the actor is whoever held the link
-        record(&state.control, &p.invited_by, &audit::anonymous(), "org.invite_expired", &p.id.to_string(), ErrorCode::InvitationExpired.as_str(), &format!("email={}", p.email)).await;
+        record(control, &p.invited_by, &audit::anonymous(), "org.invite_expired", &p.id.to_string(), ErrorCode::InvitationExpired.as_str(), &format!("email={}", p.email)).await;
         return Err(expired_error(&p));
     }
     Ok(p)
-}
-
-/// The newest open, unexpired invitation for `email` (single sign-on honours it for a new account).
-pub async fn open_for_email(control: &ControlDb, email: &str) -> AppResult<Option<Pending>> {
-    let mut res = q::OPEN_FOR_EMAIL.on(control).bind(("email", models_user::normalize_email(email))).await?;
-    Ok(res.take::<Vec<Pending>>(0)?.into_iter().next())
 }
 
 /// Accepts `p` for `user` (whose email the caller has checked): marks it used and, when `join`, adds the
@@ -444,19 +524,20 @@ pub(crate) async fn reopen(control: &ControlDb, user: &RecordId, p: &Pending) {
     let _ = q::REOPEN.on(control).bind(("id", p.id.clone())).bind(("user", user.clone())).await;
 }
 
-/// The `org.invite_accept` row, in the joining org's log.
-pub async fn record_accepted(control: &ControlDb, user: &RecordId, p: &Pending, how: &str) {
+/// The `org.invite_accept` row, in the joining org's log, with the role the account holds now.
+pub async fn record_accepted(control: &ControlDb, user: &RecordId, p: &Pending, role: &str, how: &str) {
     let actor = caller_actor(user);
-    record(control, user, &actor, "org.invite_accept", &p.id.to_string(), "ok", &format!("email={} role={} via={how}", p.email, p.role)).await;
+    record(control, user, &actor, "org.invite_accept", &p.id.to_string(), "ok", &format!("email={} role={role} via={how}", p.email)).await;
 }
 
 /// What accepting while signed in did.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct InvitationAccepted {
     pub org_name: String,
-    /// `member` or `admin`.
+    /// The role the account holds in the organisation now: `owner`, `admin` or `member`.
     pub role: String,
-    /// The account was already in the organisation; the invitation is now used up.
+    /// The account was already in the organisation; the invitation is now used up (an admin invitation
+    /// made a member an admin).
     pub already_member: bool,
 }
 
@@ -471,16 +552,26 @@ pub async fn accept_signed_in(state: &AppState, user: &User, token: &str) -> App
         !res.take::<Vec<String>>(0)?.is_empty()
     };
     if !already {
-        record(&state.control, &p.invited_by, &audit::anonymous(), "org.invite_accept", &p.id.to_string(), ErrorCode::InvitationOtherOrg.as_str(), &format!("email={}", p.email)).await;
+        // the inviting org learns only that it was not accepted; why (an account in another org) is for
+        // the server's operators, in the log
+        tracing::info!(invitation = %p.id.to_string(), "organisation invitation not accepted: the account belongs to another organisation");
+        record(&state.control, &p.invited_by, &audit::anonymous(), "org.invite_accept", &p.id.to_string(), NOT_ACCEPTED, &format!("email={}", p.email)).await;
         return Err(AppError::coded(
             ErrorCode::InvitationOtherOrg,
             "Your account already belongs to another organisation, and an account can only be in one for now. Ask for an invitation to a different email address.",
         ));
     }
+    // already a member: an admin invitation makes them an admin (never touching an owner); then report
+    // the role they really hold
     claim(&state.control, &user.id, &p, false).await?;
-    record_accepted(&state.control, &user.id, &p, "signed_in").await;
-    Ok(InvitationAccepted { org_name: p.org_name.clone().unwrap_or_default(), role: p.role.clone(), already_member: true })
+    let mut res = q::ROLE_IN_ORG.on(&state.control).bind(("user", user.id.clone())).bind(("org", p.org.clone())).await?;
+    let role = res.take::<Vec<String>>(0)?.into_iter().next().unwrap_or_else(|| "member".into());
+    record_accepted(&state.control, &user.id, &p, &role, "signed_in").await;
+    Ok(InvitationAccepted { org_name: p.org_name.clone().unwrap_or_default(), role, already_member: true })
 }
+
+/// The outcome the inviting org's ledger records when an invitation could not be accepted.
+pub const NOT_ACCEPTED: &str = "invitation.not_accepted";
 
 #[cfg(test)]
 mod tests {

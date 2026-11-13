@@ -283,8 +283,9 @@ pub const LOGIN_ACCOUNT_FAILS: u32 = 100;
 pub const INVITE_TOKEN_FAILS: u32 = 10;
 /// Organisation invitations an org can create or resend per minute (a [`RateLimiter`] bucket per org and one per admin).
 pub const INVITES_PER_MIN: u32 = 20;
-/// Invitation lookups and accepts per minute per client address or account.
-pub const INVITE_ACCEPTS_PER_MIN: u32 = 10;
+/// Invitation lookups and accepts per minute per client address or account. Above
+/// [`INVITE_TOKEN_FAILS`], so a burst of bad links meets the failure throttle before this bucket.
+pub const INVITE_ACCEPTS_PER_MIN: u32 = 20;
 const FAIL_MAX_KEYS: usize = 50_000;
 const FAIL_WINDOW: Duration = Duration::from_secs(15 * 60);
 
