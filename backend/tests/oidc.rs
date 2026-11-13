@@ -717,12 +717,9 @@ async fn oidc_require_mfa_refuses_a_sign_in_without_a_second_factor_claim() {
     assert_eq!(app.get_as(&cookie, "/api/auth/me").await.0, StatusCode::OK);
 }
 
-/// An account with its own authenticator passes it on single sign-on too (the same pending second step as a
-/// password sign-in, no session), unless the ID token says the provider already used a second factor.
-#[tokio::test]
-async fn sso_into_an_account_with_its_own_authenticator_asks_for_its_code() {
-    let app = app(AuthMode::Both).await;
-    // alice signs up with a password and turns on TOTP
+/// alice: a password account with her own authenticator. Returns her password session, the TOTP secret and
+/// the time her enrolment code was used.
+async fn alice_with_totp(app: &App) -> (String, String, u64) {
     common::register(&app.state, "alice@example.test").await;
     let ((_, _), set) = http(&app.router, "POST", "/api/auth/login", Some(json!({"email": "alice@example.test", "password": PASSWORD})), None, None).await;
     let cookie = set.unwrap().split(';').next().unwrap().to_string();
@@ -732,26 +729,78 @@ async fn sso_into_an_account_with_its_own_authenticator_asks_for_its_code() {
     let t0 = u64::try_from(chrono::Utc::now().timestamp()).unwrap();
     let ((status, _), _) = http(&app.router, "POST", "/api/auth/mfa/enrol/confirm", Some(json!({"code": eunomia_backend::mfa::code_at(&secret, t0).unwrap()})), None, Some(&cookie)).await;
     assert_eq!(status, StatusCode::OK);
+    (cookie, secret, t0)
+}
 
-    // single sign-on (the provider maps the verified email to alice): no session, the second step instead
-    let landed = app.sign_in_with("/vaults", Tamper::default()).await;
-    assert_eq!(landed.status, StatusCode::SEE_OTHER);
-    assert!(landed.session.is_none(), "no session before the code: {}", landed.location);
-    assert_eq!(landed.location, "/login?mfa=verify&next=%2Fvaults");
-    let pending = landed.mfa.expect("the pending second-step cookie");
+impl App {
+    async fn identities(&self) -> usize {
+        let mut res = self.state.control.test_raw().query("SELECT count() FROM identity GROUP ALL").await.unwrap();
+        let rows: Vec<Value> = res.take(0).unwrap();
+        rows.first().map_or(0, |r| r["count"].as_u64().unwrap_or(0) as usize)
+    }
+}
+
+/// By default an account with its own authenticator passes it on single sign-on, even when the ID token says
+/// the provider used a second factor (that factor belongs to whoever holds the provider identity). Until the
+/// code passes nothing changes: no link, no session ended. Then the identity is linked and the account's
+/// other sessions end, as an immediate link would have done.
+#[tokio::test]
+async fn sso_into_an_account_with_its_own_authenticator_asks_for_its_code_by_default() {
+    let app = app(AuthMode::Both).await;
+    let (password_session, secret, t0) = alice_with_totp(&app).await;
+    // the provider says "mfa": not enough on default settings
+    app.idp.behave(Behavior { amr: Some(json!(["pwd", "mfa"])), ..Default::default() });
+
+    // an abandoned second step leaves the account exactly as it was
+    let abandoned = app.sign_in_with("/vaults", Tamper::default()).await;
+    assert!(abandoned.session.is_none(), "no session before the code: {}", abandoned.location);
+    assert_eq!(abandoned.location, "/login?mfa=verify&next=%2Fvaults");
+    let pending = abandoned.mfa.expect("the pending second-step cookie");
     assert_eq!(app.get_as(&pending, "/api/auth/me").await.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(app.identities().await, 0, "not linked before the second step");
+    app.state.credentials.clear();
+    assert_eq!(app.get_as(&password_session, "/api/auth/me").await.0, StatusCode::OK, "her sessions are intact");
+    let ((status, _), _) = http(&app.router, "POST", "/api/auth/mfa/challenge/verify", Some(json!({"code": "000000"})), None, Some(&pending)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(app.identities().await, 0, "a wrong code links nothing");
+    assert_eq!(app.get_as(&password_session, "/api/auth/me").await.0, StatusCode::OK);
+
+    // finishing it: linked now, her other sessions end, and the new session works
+    let landed = app.sign_in_with("/vaults", Tamper::default()).await;
+    let pending = landed.mfa.expect("asked again");
     let ((status, me), set) = http(&app.router, "POST", "/api/auth/mfa/challenge/verify", Some(json!({"code": eunomia_backend::mfa::code_at(&secret, t0 + 30).unwrap()})), None, Some(&pending)).await;
     assert_eq!(status, StatusCode::OK, "{me}");
     let session = set.unwrap().split(';').next().unwrap().to_string();
     assert_eq!(app.get_as(&session, "/api/auth/me").await.0, StatusCode::OK);
+    assert_eq!(app.identities().await, 1, "linked after the second step");
+    assert_eq!(app.get_as(&password_session, "/api/auth/me").await.0, StatusCode::UNAUTHORIZED, "her earlier sessions ended at the link");
+    let mut res = app.state.control.test_raw().query("SELECT VALUE action FROM audit_event WHERE action = 'auth.oidc_link'").await.unwrap();
+    assert_eq!(res.take::<Vec<String>>(0).unwrap().len(), 1);
 
-    // the provider says a second factor was used: straight in, and the session counts as verified
+    // and once linked, the next sign-in still asks
+    let again = app.sign_in().await;
+    assert!(again.session.is_none() && again.mfa.is_some(), "{}", again.location);
+}
+
+/// `OIDC_REQUIRE_MFA=true`: the operator made the provider the judge of MFA, so a token that satisfies it goes
+/// straight in (linked at once, its session counted as verified), even into an account with its own authenticator.
+#[tokio::test]
+async fn with_oidc_require_mfa_the_provider_owns_mfa() {
+    let (idp, issuer) = Idp::start().await;
+    let mut settings = settings(AuthMode::Both, &issuer);
+    if let Some(o) = settings.auth.oidc.as_mut() {
+        o.require_mfa_claim = true;
+    }
+    let state = AppState::build(&settings, engine_config()).await.expect("state");
+    let app = App { router: eunomia_backend::app(state.clone()), state, idp };
+    alice_with_totp(&app).await;
     app.idp.behave(Behavior { amr: Some(json!(["pwd", "otp"])), ..Default::default() });
-    let landed = app.sign_in().await;
-    let session = expect_signed_in(&landed);
-    eunomia_backend::mfa::set_require_mfa(&app.state.control, true, &models_user::user_by_email(&app.state.control, "alice@example.test").await.unwrap().unwrap().id).await.unwrap();
+    let session = expect_signed_in(&app.sign_in().await);
+    assert_eq!(app.identities().await, 1);
+    let alice = models_user::user_by_email(&app.state.control, "alice@example.test").await.unwrap().unwrap();
+    eunomia_backend::mfa::set_require_mfa(&app.state.control, true, &alice.id).await.unwrap();
     app.state.credentials.clear();
-    assert_eq!(app.get_as(&session, "/api/auth/me").await.0, StatusCode::OK, "an asserted second factor counts while MFA is required");
+    assert_eq!(app.get_as(&session, "/api/auth/me").await.0, StatusCode::OK, "the provider's factor counts while MFA is required");
 }
 
 /// With the server requiring MFA, a single sign-on session is not asked for a TOTP code (the provider owns

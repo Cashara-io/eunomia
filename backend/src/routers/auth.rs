@@ -217,7 +217,7 @@ async fn challenge_response(
     https: Option<Extension<ForwardedHttps>>,
     next: crate::mfa::AfterPassword,
 ) -> AppResult<Response> {
-    let token = crate::mfa::create_challenge(&state.control, &user.id, next, auth::Via::Password.as_str(), user_agent_from(headers).as_deref()).await?;
+    let token = crate::mfa::create_challenge(&state.control, &user.id, next, auth::Via::Password.as_str(), user_agent_from(headers).as_deref(), None).await?;
     let cookie = crate::mfa::challenge_cookie(&token, &state.settings.public_url, https);
     let body = SignInOut::Mfa(MfaPendingOut { mfa_required: next.purpose().to_string() });
     Ok((StatusCode::OK, [(header::SET_COOKIE, cookie)], Json(body)).into_response())
@@ -424,7 +424,7 @@ async fn me(State(state): State<AppState>, user: User) -> AppResult<Json<AuthOut
     path = "/api/auth/tokens",
     tag = "auth",
     summary = "Create an API token",
-    description = "From a browser session of an account with two-step verification, the last second factor must be under 10 minutes old or `mfa_code` must carry a current code (`auth.step_up_required`).",
+    description = "From a browser session of an account with two-step verification, the last second factor must be under 10 minutes old or `mfa_code` must carry a current code (`auth.step_up_required`). An API token cannot create another token for an account with two-step verification, or while the server requires it (`auth.step_up_required`): create it in Settings.",
     request_body = TokenCreate,
     responses((status = 200, body = TokenCreated), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
@@ -490,7 +490,14 @@ async fn create_token(
     {
         return Err(AppError::coded(ErrorCode::AuthScope, "this token expires, so it can only mint tokens that expire no later than it does"));
     }
-    // a new long-lived credential is a sensitive action: a fresh second factor for accounts with MFA
+    // a new long-lived credential is a sensitive action. For an account with MFA (or while MFA is required) only
+    // a browser session that passed a second factor may mint one: a token from before enrolment cannot breed
+    if me.actor.kind == "token" && (crate::mfa::enabled(&state.control, &user.id).await? || crate::mfa::require_mfa(&state.control).await?) {
+        return Err(AppError::coded(
+            ErrorCode::AuthStepUpRequired,
+            "This account uses two-step verification, so new API tokens are created in Settings > API tokens, where you confirm with a code. This token can't create another one.",
+        ));
+    }
     crate::mfa::step_up(&state, &user, &headers, body.mfa_code.as_deref()).await?;
     let expires_at = expires.map(Datetime::from);
     let result = models_user::create_api_token_with(&state.control, &user.id, &name, &scopes, vault.as_ref(), expires_at).await?;

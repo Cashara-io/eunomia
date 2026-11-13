@@ -10,7 +10,8 @@
 //! - A password that checks out yields a [`Challenge`], not a session: an HttpOnly cookie scoped to
 //!   `/api/auth/mfa` that can only finish the second step (or enrol, when MFA is required). It expires after
 //!   [`CHALLENGE_TTL_SECS`] and is deleted after [`CHALLENGE_MAX_FAILS`] wrong codes. Every code also takes
-//!   one of the account's [`MFA_FAILS`] attempts per 15 minutes. Both are reserved in the database before
+//!   one of the account's attempts per 15 minutes ([`MFA_FAILS`] authenticator codes, [`RECOVERY_FAILS`]
+//!   recovery codes, separate counters). Both are reserved in the database before
 //!   the code is checked ([`verify_attempt`]), so parallel requests cannot exceed them.
 
 use axum::{extract::Extension, http::{header, HeaderMap}};
@@ -38,6 +39,12 @@ pub const CHALLENGE_MAX_FAILS: i64 = 5;
 /// Codes per account in a 15-minute window, across challenges, Settings and step-up, before every attempt
 /// is refused for the rest of the window. A right code starts the window over.
 pub const MFA_FAILS: u32 = 10;
+/// Recovery-code attempts per account in a 15-minute window, on their own counter. Recovery codes carry 50
+/// random bits, so this budget is about stopping noise, not guessing: an authenticator lockout must never
+/// keep the owner from using a recovery code.
+pub const RECOVERY_FAILS: u32 = 50;
+/// Passwords typed again (to set up an authenticator) per account in a 15-minute window, every replica.
+pub const REAUTH_FAILS: u32 = 10;
 /// A sensitive action within this long of passing a second factor needs no new code.
 pub const STEP_UP_SECS: i64 = 600;
 /// A secret shown during enrolment must be confirmed within this long.
@@ -338,18 +345,44 @@ fn locked_out(wait_secs: i64) -> AppError {
     AppError::coded(ErrorCode::RateLimited, format!("Too many codes tried. Try again in {minutes} minute{}.", if minutes == 1 { "" } else { "s" }))
 }
 
-/// Takes one of the account's [`MFA_FAILS`] attempts for the current 15-minute window, before any code is
-/// checked: a conditional UPDATE in the control database, so parallel requests and other replicas share
-/// one budget. Refused (`rate.limited`) once the window's attempts are used.
-async fn reserve_attempt(state: &AppState, user: &RecordId) -> AppResult<()> {
-    let taken: Vec<serde_json::Value> =
-        stmt::MFA_ATTEMPT_RESERVE.on(&state.control).bind(("id", user.clone())).bind(("max", i64::from(MFA_FAILS))).await?.take(0)?;
+async fn window_left(state: &AppState, wait: &crate::store::ControlStmt, user: &RecordId) -> AppResult<i64> {
+    let since: Option<Datetime> = wait.on(&state.control).bind(("id", user.clone())).await?.take(0)?;
+    let ends = since.as_ref().and_then(crate::sources::base::datetime_to_chrono).map(|t| t + chrono::Duration::minutes(15));
+    Ok(ends.map_or(60, |e| (e - chrono::Utc::now()).num_seconds()))
+}
+
+/// Takes one attempt for the current 15-minute window before any code is checked: [`MFA_FAILS`] for
+/// authenticator codes, [`RECOVERY_FAILS`] for recovery codes, on separate counters. A conditional UPDATE in
+/// the control database, so parallel requests and other replicas share one budget. Refused (`rate.limited`)
+/// once the window's attempts of that kind are used.
+async fn reserve_attempt(state: &AppState, user: &RecordId, recovery: bool) -> AppResult<()> {
+    let (reserve, wait, max) = if recovery {
+        (&stmt::MFA_RECOVERY_ATTEMPT_RESERVE, &stmt::MFA_RECOVERY_ATTEMPT_WAIT, RECOVERY_FAILS)
+    } else {
+        (&stmt::MFA_ATTEMPT_RESERVE, &stmt::MFA_ATTEMPT_WAIT, MFA_FAILS)
+    };
+    let taken: Vec<serde_json::Value> = reserve.on(&state.control).bind(("id", user.clone())).bind(("max", i64::from(max))).await?.take(0)?;
     if !taken.is_empty() {
         return Ok(());
     }
-    let since: Option<Datetime> = stmt::MFA_ATTEMPT_WAIT.on(&state.control).bind(("id", user.clone())).await?.take(0)?;
-    let ends = since.as_ref().and_then(crate::sources::base::datetime_to_chrono).map(|t| t + chrono::Duration::minutes(15));
-    Err(locked_out(ends.map_or(60, |e| (e - chrono::Utc::now()).num_seconds())))
+    Err(locked_out(window_left(state, wait, user).await?))
+}
+
+/// Takes one of the account's [`REAUTH_FAILS`] password attempts before the password is checked (setting up
+/// an authenticator from Settings). Database-backed like the code attempts. Clear it with [`reauth_passed`].
+pub async fn reserve_reauth(state: &AppState, user: &RecordId) -> AppResult<()> {
+    let taken: Vec<serde_json::Value> =
+        stmt::REAUTH_ATTEMPT_RESERVE.on(&state.control).bind(("id", user.clone())).bind(("max", i64::from(REAUTH_FAILS))).await?.take(0)?;
+    if !taken.is_empty() {
+        return Ok(());
+    }
+    let minutes = (window_left(state, &stmt::REAUTH_ATTEMPT_WAIT, user).await?.max(1) + 59) / 60;
+    Err(AppError::coded(ErrorCode::RateLimited, format!("Too many wrong passwords. Try again in {minutes} minute{}.", if minutes == 1 { "" } else { "s" })))
+}
+
+pub async fn reauth_passed(state: &AppState, user: &RecordId) -> AppResult<()> {
+    stmt::REAUTH_ATTEMPT_RESET.on(&state.control).bind(("id", user.clone())).await?.check()?;
+    Ok(())
 }
 
 /// Takes one of the challenge's [`CHALLENGE_MAX_FAILS`] attempts before its code is checked. `None` when
@@ -374,13 +407,16 @@ fn challenge_over() -> AppError {
 /// `auth.mfa_secret_unreadable`. `place` says where the code was typed, for the log.
 pub async fn verify_attempt(state: &AppState, user: &RecordId, code: &str, place: &str, challenge: Option<&Challenge>) -> AppResult<Factor> {
     let _one_at_a_time = crate::tx::lock(&format!("mfa:{}", crate::rid::RecordIdExt::to_string(user))).await;
-    reserve_attempt(state, user).await?;
+    let recovery = !is_totp_shaped(code);
+    reserve_attempt(state, user, recovery).await?;
     let mut used = None;
     if let Some(c) = challenge {
         match reserve_challenge(&state.control, c).await? {
             Some(n) => used = Some(n),
             None => {
-                stmt::MFA_ATTEMPT_REFUND.on(&state.control).bind(("id", user.clone())).await?.check()?;
+                if !recovery {
+                    stmt::MFA_ATTEMPT_REFUND.on(&state.control).bind(("id", user.clone())).await?.check()?;
+                }
                 return Err(AppError::coded(ErrorCode::AuthMfaChallengeExpired, "Your sign-in has expired. Enter your email and password again."));
             }
         }
@@ -388,11 +424,18 @@ pub async fn verify_attempt(state: &AppState, user: &RecordId, code: &str, place
     let actor = Actor { kind: "user", id: crate::rid::RecordIdExt::to_string(user) };
     match spend(state, user, code).await {
         Ok(Some(factor)) => {
-            stmt::MFA_ATTEMPT_RESET.on(&state.control).bind(("id", user.clone())).await?.check()?;
-            // spent while the account's lock is held: a racing answer on the same challenge finds it gone
-            // before it can spend a code of its own
+            // the challenge's conditional delete decides who gets the session: a racing answer on another
+            // replica that also spent a factor finds it gone and gets none
             if let Some(c) = challenge {
-                stmt::MFA_CHALLENGE_TAKE.on(&state.control).bind(("id", c.id.clone())).await?.check()?;
+                let gone: Vec<serde_json::Value> = stmt::MFA_CHALLENGE_TAKE.on(&state.control).bind(("id", c.id.clone())).await?.take(0)?;
+                if gone.is_empty() {
+                    return Err(AppError::coded(ErrorCode::AuthMfaChallengeExpired, "This sign-in was already finished in another window."));
+                }
+            }
+            // the factor is spent: nothing after this may stop the sign-in, so the counters are reset best effort
+            let reset = if factor == Factor::Recovery { &stmt::MFA_ATTEMPT_RESET_ALL } else { &stmt::MFA_ATTEMPT_RESET };
+            if let Err(e) = reset.on(&state.control).bind(("id", user.clone())).await.and_then(|r| r.check()) {
+                tracing::warn!(error = %e, "could not reset the MFA attempt window after a right code");
             }
             if factor == Factor::Recovery {
                 let left = recovery_left(&state.control, user).await.unwrap_or(0);
@@ -414,7 +457,7 @@ pub async fn verify_attempt(state: &AppState, user: &RecordId, code: &str, place
             Err(invalid())
         }
         Err(e) if e.code == ErrorCode::AuthMfaUnreadable => {
-            // no code was checked: the attempts are given back
+            // no code was checked: the attempts are given back (only an authenticator code reaches this)
             stmt::MFA_ATTEMPT_REFUND.on(&state.control).bind(("id", user.clone())).await?.check()?;
             if let Some(c) = challenge {
                 stmt::MFA_CHALLENGE_REFUND.on(&state.control).bind(("id", c.id.clone())).await?.check()?;
@@ -467,7 +510,7 @@ pub async fn confirm_enrolment(state: &AppState, user: &RecordId, code: &str, ch
     let (Some(enc), true) = (row.mfa_pending_enc, fresh) else {
         return Err(AppError::bad_request("That setup has expired. Start again to get a new QR code."));
     };
-    reserve_attempt(state, user).await?;
+    reserve_attempt(state, user, false).await?;
     let mut used = None;
     if let Some(c) = challenge {
         match reserve_challenge(&state.control, c).await? {
@@ -509,9 +552,15 @@ pub async fn confirm_enrolment(state: &AppState, user: &RecordId, code: &str, ch
     if done.is_empty() {
         return Err(AppError::coded(ErrorCode::DbConflict, "Setup changed in another window. Start again."));
     }
-    stmt::MFA_ATTEMPT_RESET.on(&state.control).bind(("id", user.clone())).await?.check()?;
     if let Some(c) = challenge {
-        stmt::MFA_CHALLENGE_TAKE.on(&state.control).bind(("id", c.id.clone())).await?.check()?;
+        // MFA is on now; the challenge only decides whether this request also gets the session
+        let gone: Vec<serde_json::Value> = stmt::MFA_CHALLENGE_TAKE.on(&state.control).bind(("id", c.id.clone())).await?.take(0)?;
+        if gone.is_empty() {
+            return Err(AppError::coded(ErrorCode::AuthMfaChallengeExpired, "This sign-in was already finished in another window."));
+        }
+    }
+    if let Err(e) = stmt::MFA_ATTEMPT_RESET.on(&state.control).bind(("id", user.clone())).await.and_then(|r| r.check()) {
+        tracing::warn!(error = %e, "could not reset the MFA attempt window after enrolment");
     }
     if let Some(sid) = current_sid {
         stmt::MFA_SESSION_MARK.on(&state.control).bind(("sid", sid.to_string())).bind(("owner", user.clone())).await?.check()?;
@@ -593,10 +642,23 @@ pub struct Challenge {
     #[serde(default)]
     #[surreal(default)]
     pub failures: i64,
+    /// A single sign-on identity to link once the second step passes (`routers/oidc.rs`).
+    #[serde(default)]
+    #[surreal(default)]
+    pub link_issuer: Option<String>,
+    #[serde(default)]
+    #[surreal(default)]
+    pub link_subject: Option<String>,
+    #[serde(default)]
+    #[surreal(default)]
+    pub link_email: Option<String>,
 }
 
 /// Creates the challenge; returns the token for the cookie (only its hash is stored).
-pub async fn create_challenge(control: &ControlDb, user: &RecordId, next: AfterPassword, via: &str, user_agent: Option<&str>) -> AppResult<String> {
+/// A single sign-on identity waiting to be linked: issuer, subject, email.
+pub type PendingLink = (String, String, String);
+
+pub async fn create_challenge(control: &ControlDb, user: &RecordId, next: AfterPassword, via: &str, user_agent: Option<&str>, link: Option<PendingLink>) -> AppResult<String> {
     let token = models_user::generate_token();
     let ua: String = user_agent.unwrap_or("").chars().take(300).collect();
     stmt::MFA_CHALLENGE_CREATE
@@ -606,6 +668,9 @@ pub async fn create_challenge(control: &ControlDb, user: &RecordId, next: AfterP
         .bind(("purpose", next.purpose().to_string()))
         .bind(("via", via.to_string()))
         .bind(("user_agent", ua))
+        .bind(("link_issuer", link.as_ref().map(|l| l.0.clone())))
+        .bind(("link_subject", link.as_ref().map(|l| l.1.clone())))
+        .bind(("link_email", link.map(|l| l.2)))
         .bind(("ttl", format!("{CHALLENGE_TTL_SECS}s")))
         .await?
         .check()?;

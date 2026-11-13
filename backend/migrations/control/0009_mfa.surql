@@ -15,6 +15,13 @@ DEFINE FIELD OVERWRITE mfa_last_step ON user TYPE option<int>;
 -- parallel requests cannot exceed the budget. A right code resets it. Shared by every replica.
 DEFINE FIELD OVERWRITE mfa_attempts ON user TYPE option<int>;
 DEFINE FIELD OVERWRITE mfa_attempts_since ON user TYPE option<datetime>;
+-- Recovery codes have their own, larger budget (they carry 50 random bits), so an authenticator lockout
+-- never blocks the owner's recovery code. A right recovery code resets both windows.
+DEFINE FIELD OVERWRITE mfa_recovery_attempts ON user TYPE option<int>;
+DEFINE FIELD OVERWRITE mfa_recovery_attempts_since ON user TYPE option<datetime>;
+-- Passwords typed again to set up an authenticator, counted the same way (database-backed, every replica).
+DEFINE FIELD OVERWRITE reauth_attempts ON user TYPE option<int>;
+DEFINE FIELD OVERWRITE reauth_attempts_since ON user TYPE option<datetime>;
 
 -- When this browser session last proved a second factor (TOTP or a recovery code). NONE for a password session
 -- from before MFA existed. `via` is how it signed in: `password` or `oidc` (NONE before this migration).
@@ -39,6 +46,11 @@ DEFINE FIELD OVERWRITE token_hash ON mfa_challenge TYPE string;
 DEFINE FIELD OVERWRITE purpose ON mfa_challenge TYPE string ASSERT $value IN ["verify", "enrol"];
 DEFINE FIELD OVERWRITE via ON mfa_challenge TYPE string DEFAULT "password";
 DEFINE FIELD OVERWRITE user_agent ON mfa_challenge TYPE string DEFAULT "";
+-- A single sign-on identity to link to the account once the second step passes (not before: an abandoned
+-- step leaves the account as it was).
+DEFINE FIELD OVERWRITE link_issuer ON mfa_challenge TYPE option<string>;
+DEFINE FIELD OVERWRITE link_subject ON mfa_challenge TYPE option<string>;
+DEFINE FIELD OVERWRITE link_email ON mfa_challenge TYPE option<string>;
 -- codes tried on this challenge, counted before each is checked
 DEFINE FIELD OVERWRITE failures ON mfa_challenge TYPE int DEFAULT 0;
 DEFINE FIELD OVERWRITE expires_at ON mfa_challenge TYPE datetime;

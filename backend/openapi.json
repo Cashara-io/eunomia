@@ -1346,7 +1346,7 @@
           "auth"
         ],
         "summary": "Create an API token",
-        "description": "From a browser session of an account with two-step verification, the last second factor must be under 10 minutes old or `mfa_code` must carry a current code (`auth.step_up_required`).",
+        "description": "From a browser session of an account with two-step verification, the last second factor must be under 10 minutes old or `mfa_code` must carry a current code (`auth.step_up_required`). An API token cannot create another token for an account with two-step verification, or while the server requires it (`auth.step_up_required`): create it in Settings.",
         "operationId": "createToken",
         "requestBody": {
           "content": {
@@ -15931,7 +15931,7 @@
             "items": {
               "type": "string"
             },
-            "description": "The emails that may sign up when `mode` is `invite`."
+            "description": "The emails that may sign up when `mode` is `invite`. Empty unless you are the server's operator."
           },
           "mode": {
             "type": "string",
@@ -15942,7 +15942,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`)."
+            "description": "Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`). Empty unless you are the server's operator."
           },
           "summary": {
             "type": "string",

@@ -105,11 +105,8 @@ async fn enrol(State(state): State<AppState>, user: User, Json(body): Json<Enrol
     if !status.available {
         return Err(AppError::bad_request("This account signs in through single sign-on. Your identity provider handles two-step verification."));
     }
-    // the password again, counted before it is checked (bcrypt is slow: the count must not wait for it)
-    let key = format!("reauth-fail:{}", crate::rid::RecordIdExt::to_string(&user.id));
-    if let Err(wait) = state.fail_throttle.reserve(&key, crate::ratelimit::LOGIN_FAILS) {
-        return Err(AppError::coded(ErrorCode::RateLimited, format!("Too many wrong passwords. Try again in {} minutes.", wait.div_ceil(60))));
-    }
+    // the password again, counted before it is checked (database-backed, every replica)
+    mfa::reserve_reauth(&state, &user.id).await?;
     let password = body.password.unwrap_or_default();
     if password.is_empty() || !models_user::password_matches(&state.control, &user.id, &password).await? {
         let actor = authz::current().map(|c| c.actor).unwrap_or(authz::Actor { kind: "user", id: crate::rid::RecordIdExt::to_string(&user.id) });
@@ -117,7 +114,7 @@ async fn enrol(State(state): State<AppState>, user: User, Json(body): Json<Enrol
         // 403, not 401: the session is fine, only the password typed again was wrong
         return Err(AppError::coded(ErrorCode::AuthForbidden, "That password isn't right."));
     }
-    state.fail_throttle.clear(&key);
+    mfa::reauth_passed(&state, &user.id).await?;
     Ok(Json(mfa::begin_enrolment(&state, &user.id).await?))
 }
 
@@ -183,6 +180,28 @@ async fn regenerate(State(state): State<AppState>, user: User, Json(body): Json<
     Ok(Json(RecoveryCodesOut { recovery_codes: mfa::regenerate_recovery_codes(&state.control, &user.id).await? }))
 }
 
+/// Links the pending single sign-on identity to the account after its second step passed.
+async fn link_after_second_step(state: &AppState, c: &mfa::Challenge, issuer: &str, subject: &str) -> AppResult<()> {
+    let email = c.link_email.clone().unwrap_or_default();
+    match models_user::link_identity(&state.control, &c.user, issuer, subject, &email).await {
+        Ok(()) => {}
+        // linked meanwhile (a second sign-in raced this one): fine if it is this account's
+        Err(e) if matches!(e.code, ErrorCode::DbDuplicate | ErrorCode::AuthEmailTaken) => {
+            let owner = models_user::user_by_identity(&state.control, issuer, subject).await?;
+            if owner.map(|u| u.id) != Some(c.user.clone()) {
+                return Err(AppError::coded(ErrorCode::AuthForbidden, "That single sign-on account is already linked to another Eunomia account."));
+            }
+            return Ok(());
+        }
+        Err(e) => return Err(e),
+    }
+    crate::store::control::AUTH_SESSION_REVOKE_OWNER.on(&state.control).bind(("owner", c.user.clone())).await?.check()?;
+    state.credentials.clear();
+    let actor = authz::Actor { kind: "user", id: crate::rid::RecordIdExt::to_string(&c.user) };
+    crate::audit::record(&state.control, crate::audit::Event { user: Some(&c.user), actor: &actor, action: "auth.oidc_link", target: "", outcome: "ok", detail: "linked to the existing account with this email, after its second step" }).await;
+    Ok(())
+}
+
 /// Records the sign-in after the second step (which already spent the challenge); the caller starts the session.
 async fn finish(state: &AppState, c: &mfa::Challenge, detail: &str) -> AppResult<User> {
     let user = models_user::load_user(&state.control, c.user.clone(), c.email.clone()).await?;
@@ -205,6 +224,11 @@ async fn finish(state: &AppState, c: &mfa::Challenge, detail: &str) -> AppResult
 async fn challenge_verify(State(state): State<AppState>, https: Option<Extension<ForwardedHttps>>, headers: HeaderMap, Json(body): Json<CodeIn>) -> AppResult<Response> {
     let c = mfa::find_challenge(&state.control, &headers, "verify").await?;
     let factor = mfa::verify_attempt(&state, &c.user, &body.code, "sign-in", Some(&c)).await?;
+    // a single sign-on identity waiting on this step is linked only now, and only now are the account's
+    // other sessions ended (as an immediate link would have done)
+    if let (Some(issuer), Some(subject)) = (&c.link_issuer, &c.link_subject) {
+        link_after_second_step(&state, &c, issuer, subject).await?;
+    }
     let user = finish(&state, &c, &format!("second step: {}", factor.words())).await?;
     let clear = mfa::clear_challenge_cookie(&state.settings.public_url, https);
     session_response(&state, user, &headers, https, Via::parse(&c.via), true, Some(clear)).await

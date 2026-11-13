@@ -94,6 +94,12 @@ pub const ALL: &[&ControlStmt] = &[
     &MFA_CHALLENGE_REFUND,
     &MFA_ATTEMPT_RESERVE,
     &MFA_ATTEMPT_RESET,
+    &MFA_ATTEMPT_RESET_ALL,
+    &MFA_RECOVERY_ATTEMPT_RESERVE,
+    &MFA_RECOVERY_ATTEMPT_WAIT,
+    &REAUTH_ATTEMPT_RESERVE,
+    &REAUTH_ATTEMPT_RESET,
+    &REAUTH_ATTEMPT_WAIT,
     &MFA_ATTEMPT_REFUND,
     &MFA_ATTEMPT_WAIT,
     &MFA_REVOKE_UNVERIFIED_SESSIONS,
@@ -559,13 +565,14 @@ pub const MFA_RECOVERY_LEFT: ControlStmt = ControlStmt::new(
 pub const MFA_CHALLENGE_CREATE: ControlStmt = ControlStmt::new(
     "control.mfa_challenge_create",
     "CREATE mfa_challenge SET user = $user, token_hash = $hash, purpose = $purpose, via = $via, user_agent = $user_agent, \
+     link_issuer = $link_issuer, link_subject = $link_subject, link_email = $link_email, \
      expires_at = time::now() + <duration> $ttl RETURN NONE",
 );
 
 /// A live challenge by the hash of the browser's token.
 pub const MFA_CHALLENGE_FIND: ControlStmt = ControlStmt::new(
     "control.mfa_challenge_find",
-    "SELECT id, user, user.email AS email, purpose, via, user_agent, failures FROM mfa_challenge \
+    "SELECT id, user, user.email AS email, purpose, via, user_agent, failures, link_issuer, link_subject, link_email FROM mfa_challenge \
      WHERE token_hash = $hash AND expires_at > time::now() LIMIT 1",
 );
 
@@ -589,9 +596,41 @@ pub const MFA_ATTEMPT_RESERVE: ControlStmt = ControlStmt::new(
      WHERE mfa_attempts_since = NONE OR mfa_attempts_since < time::now() - 15m OR (mfa_attempts ?? 0) < $max RETURN mfa_attempts",
 );
 
-/// A right code: the account's window starts over.
+/// A right authenticator code: the account's authenticator window starts over.
 pub const MFA_ATTEMPT_RESET: ControlStmt =
     ControlStmt::new("control.mfa_attempt_reset", "UPDATE $id SET mfa_attempts = NONE, mfa_attempts_since = NONE RETURN NONE");
+
+/// A right recovery code: both windows start over (the owner is back in; an authenticator lockout ends).
+pub const MFA_ATTEMPT_RESET_ALL: ControlStmt = ControlStmt::new(
+    "control.mfa_attempt_reset_all",
+    "UPDATE $id SET mfa_attempts = NONE, mfa_attempts_since = NONE, mfa_recovery_attempts = NONE, mfa_recovery_attempts_since = NONE RETURN NONE",
+);
+
+/// [`MFA_ATTEMPT_RESERVE`] for recovery codes, on their own counter.
+pub const MFA_RECOVERY_ATTEMPT_RESERVE: ControlStmt = ControlStmt::new(
+    "control.mfa_recovery_attempt_reserve",
+    "UPDATE $id SET \
+       mfa_recovery_attempts = IF mfa_recovery_attempts_since = NONE OR mfa_recovery_attempts_since < time::now() - 15m THEN 1 ELSE (mfa_recovery_attempts ?? 0) + 1 END, \
+       mfa_recovery_attempts_since = IF mfa_recovery_attempts_since = NONE OR mfa_recovery_attempts_since < time::now() - 15m THEN time::now() ELSE mfa_recovery_attempts_since END \
+     WHERE mfa_recovery_attempts_since = NONE OR mfa_recovery_attempts_since < time::now() - 15m OR (mfa_recovery_attempts ?? 0) < $max RETURN mfa_recovery_attempts",
+);
+
+pub const MFA_RECOVERY_ATTEMPT_WAIT: ControlStmt =
+    ControlStmt::new("control.mfa_recovery_attempt_wait", "SELECT VALUE mfa_recovery_attempts_since FROM ONLY $id");
+
+/// [`MFA_ATTEMPT_RESERVE`] for the password typed again before setting up an authenticator.
+pub const REAUTH_ATTEMPT_RESERVE: ControlStmt = ControlStmt::new(
+    "control.reauth_attempt_reserve",
+    "UPDATE $id SET \
+       reauth_attempts = IF reauth_attempts_since = NONE OR reauth_attempts_since < time::now() - 15m THEN 1 ELSE (reauth_attempts ?? 0) + 1 END, \
+       reauth_attempts_since = IF reauth_attempts_since = NONE OR reauth_attempts_since < time::now() - 15m THEN time::now() ELSE reauth_attempts_since END \
+     WHERE reauth_attempts_since = NONE OR reauth_attempts_since < time::now() - 15m OR (reauth_attempts ?? 0) < $max RETURN reauth_attempts",
+);
+
+pub const REAUTH_ATTEMPT_RESET: ControlStmt =
+    ControlStmt::new("control.reauth_attempt_reset", "UPDATE $id SET reauth_attempts = NONE, reauth_attempts_since = NONE RETURN NONE");
+
+pub const REAUTH_ATTEMPT_WAIT: ControlStmt = ControlStmt::new("control.reauth_attempt_wait", "SELECT VALUE reauth_attempts_since FROM ONLY $id");
 
 /// Gives back one reserved attempt that never checked a code (the server could not read the secret).
 pub const MFA_ATTEMPT_REFUND: ControlStmt = ControlStmt::new(
@@ -615,7 +654,8 @@ pub const ADMIN_WITHOUT_MFA_ALL: ControlStmt = ControlStmt::new(
     "SELECT count() FROM user WHERE password_hash != NONE AND mfa_secret_enc = NONE AND suspended_at = NONE GROUP ALL",
 );
 
-/// Single use: the first successful second step deletes the challenge; a racing second finds nothing.
+/// Single use: the first successful second step deletes the challenge and gets the session; a racing second
+/// (another replica) finds nothing and gets none.
 pub const MFA_CHALLENGE_TAKE: ControlStmt = ControlStmt::new("control.mfa_challenge_take", "DELETE $id RETURN BEFORE");
 
 pub const MFA_CHALLENGE_PRUNE: ControlStmt =
