@@ -21,6 +21,12 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+      # A cold build plus the test binaries needs more disk than a hosted runner has free
+      # (private repositories get the smaller runner): drop toolchains this job never uses.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
 
       # Tests run against an in-memory SurrealDB, so no service container is
       # needed.
@@ -49,6 +55,13 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+      # A cold build plus the test binaries needs more disk than a hosted runner has free
+      # (private repositories get the smaller runner): drop toolchains this job never uses.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
