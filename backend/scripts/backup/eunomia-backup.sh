@@ -253,7 +253,7 @@ decrypt_to() { # decrypt_to FILE OUT
 }
 
 restore_one() { # restore_one FILE DB [--wipe]
-  plain="$(mktemp)"; trap 'rm -f "$plain"' EXIT
+  plain="$(mktemp)"; trap 'rm -f "$plain" "${kept:-}"' EXIT
   decrypt_to "$1" "$plain"
   if [ "${3:-}" = "--wipe" ]; then
     log "wiping database $NS/$2"
@@ -267,16 +267,46 @@ restore_one() { # restore_one FILE DB [--wipe]
   rm -f "$plain"
 }
 
+# keep_erasures OUT: the erasure records of the live control database (docs/privacy/subject-rights.md)
+# as an import script that merges them back (INSERT IGNORE), so restoring a backup taken before an
+# erasure never forgets it: the backend then erases those accounts again when it starts. Prints
+# nothing and keeps nothing when there is no control database or no erasure yet.
+keep_erasures() {
+  : > "$1"
+  x="$(mktemp)" || return 1
+  if "$SURREAL" export --log none --endpoint "$ENDPOINT" --user "$USER_" --pass "$PASS_" --ns "$NS" --db control \
+       --only --tables erasure --records true "$x" >/dev/null 2>&1 && grep -q '^INSERT \[' "$x"; then
+    { echo "OPTION IMPORT;"
+      grep -E '^DEFINE TABLE erasure ' "$x" | sed 's/^DEFINE TABLE erasure /DEFINE TABLE IF NOT EXISTS erasure /'
+      grep -E '^DEFINE (FIELD|INDEX) ' "$x"
+      grep -E '^INSERT \[' "$x" | sed 's/^INSERT \[/INSERT IGNORE INTO erasure [/'
+    } > "$1"
+  fi
+  rm -f "$x"
+}
+
 do_restore() {
   need_key
   f="${1:-}"; [ -n "$f" ] || die "usage: restore NAME [--wipe]"
   [ -e "$f" ] || f="$DIR/$f"
   [ -e "$f" ] || die "no such backup: $1 (try: list)"
   if [ -d "$f" ]; then
+    kept=""
+    if [ -f "$f/control.surql.enc" ]; then
+      kept="$(mktemp)"
+      keep_erasures "$kept" || : > "$kept"
+      [ -s "$kept" ] || { rm -f "$kept"; kept=""; }
+    fi
     for file in "$f"/*.surql.enc; do
       d="$(basename "$file" .surql.enc)"
       restore_one "$file" "$d" "${2:-}"
     done
+    if [ -n "$kept" ]; then
+      "$SURREAL" import --endpoint "$ENDPOINT" --user "$USER_" --pass "$PASS_" --ns "$NS" --db control "$kept" \
+        || { rm -f "$kept"; die "restored, but could not carry over the erasure records: run it again, or erase those people again from Settings > People"; }
+      log "kept the erasure records made after this backup; the backend erases those accounts again when it starts"
+    fi
+    [ -z "$kept" ] || rm -f "$kept"
     if [ -f "$f/documents.tar.enc" ]; then
       mkdir -p "$DOCS_DIR" 2>/dev/null; [ -w "$DOCS_DIR" ] || die "$f holds documents but $DOCS_DIR is not writable here"
       plain="$(mktemp)"

@@ -18,7 +18,13 @@ cmd="$1"; shift
 db=""; file=""; ep=""
 while [ $# -gt 0 ]; do case "$1" in --db) db="$2"; shift ;; --endpoint) ep="$2"; shift ;; --ns|--user|--pass|--log) shift ;; --*) ;; *) file="$1" ;; esac; shift; done
 case "$cmd" in
-  export) if [ -f "$SHIM_FAIL" ] && grep -q "$db" "$SHIM_FAIL"; then
+  # MOCK_ERASURES: the live control database has erasure records (a restore must carry them over)
+  export) if [ -n "${MOCK_ERASURES:-}" ] && [ "$db" = control ] && [ -n "$file" ]; then
+            printf '%s\n' "OPTION IMPORT;" "DEFINE TABLE erasure TYPE NORMAL SCHEMAFULL PERMISSIONS NONE;" \
+              "DEFINE FIELD OVERWRITE subject_ref ON erasure TYPE string PERMISSIONS FULL;" "INSERT [ { id: erasure:after, subject_ref: 'ref-after-backup' } ];" > "$file"
+            exit 0
+          fi
+          if [ -f "$SHIM_FAIL" ] && grep -q "$db" "$SHIM_FAIL"; then
             rm -f "$SHIM_FAIL"; echo "OPTION IMPORT; -- dump of $db -- padding padding padding padding padding padding"; printf 'CREATE half'
             [ "$SHIM_MODE" = truncate ] && exit 0; exit 1; fi
           echo "OPTION IMPORT; -- dump of $db -- padding padding padding padding padding padding padding padding;"
@@ -93,6 +99,13 @@ check "no half-written .part is left" test -z "$(ls -d "$TMP"/backups/*.part 2>/
 : > "$SHIM_LOG"
 bk restore "$(basename "$d")" --wipe >/dev/null
 check "each database is wiped, created and imported" sh -c "grep -c 'import ' '$SHIM_LOG' | grep -qx 3 && grep -q 'REMOVE DATABASE IF EXISTS .control.' '$SHIM_LOG' && grep -q 'import control: OPTION IMPORT; -- dump of control' '$SHIM_LOG'"
+# 3b. erasure records made after the backup survive its restore: merged back into control after it is imported
+: > "$SHIM_LOG"
+MOCK_ERASURES=1 bk restore "$(basename "$d")" --wipe >/dev/null
+dumped="$(grep -n 'import control: OPTION IMPORT; -- dump of control' "$SHIM_LOG" | cut -d: -f1)"; merged="$(grep -n '^INSERT IGNORE INTO erasure \[ { id: erasure:after' "$SHIM_LOG" | cut -d: -f1)"
+check "erasure records are merged back into control after it is restored" test -n "$dumped" -a -n "$merged" -a "${merged:-0}" -gt "${dumped:-0}"
+check "with the table defined only if the backup lacks it" grep -q '^DEFINE TABLE IF NOT EXISTS erasure ' "$SHIM_LOG"
+check "and nothing is carried over when there are none" sh -c ": > '$SHIM_LOG'; sh '$SCRIPT' restore '$(basename "$d")' --wipe >/dev/null && ! grep -q erasure '$SHIM_LOG'"
 check "a wrong key refuses clearly" sh -c "BACKUP_ENCRYPTION_KEY=nope sh '$SCRIPT' restore '$(basename "$d")' 2>&1 | grep -q 'integrity check'"
 
 # 3a. uploaded documents (the file bucket folder) go into a tenancy backup as documents.tar.enc and come back
