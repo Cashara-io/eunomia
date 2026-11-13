@@ -57,7 +57,7 @@ pub enum AuditCategory {
     Server,
 }
 
-const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.oidc_takeover", "auth.failed"];
+const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.oidc_set_aside", "auth.failed"];
 const ADMIN_ACTIONS: &[&str] = &[
     "admin.grant",
     "admin.revoke",
@@ -340,7 +340,7 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "auth.oidc_login" => return "Single sign-on sign-in failed".into(),
         "auth.oidc_link" if ok => "Linked a single sign-on account".into(),
         "auth.oidc_link" => return "Linking single sign-on failed (wrong password)".into(),
-        "auth.oidc_takeover" => "Took the account over with single sign-on: its password, API tokens, app connections and sessions were removed".into(),
+        "auth.oidc_set_aside" => format!("Set aside {}: a single sign-on for its address started a new account instead", kv(detail, "email").unwrap_or("an account")),
         "auth.register" => "Created an account".into(),
         "auth.failed" => return "Used a sign-in or token that is no longer valid".into(),
         "auth.token_create" => format!("Created the API token {}", name("(since revoked)")),

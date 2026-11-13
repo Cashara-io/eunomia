@@ -729,8 +729,8 @@
         "tags": [
           "auth"
         ],
-        "summary": "Link the provider sign-in to the existing account: prove its password, or take it over",
-        "description": "Needs the cookie the provider sign-in left. With `password`, the password is checked (throttled like login) and the account is linked; nothing is removed. With `take_over: true`, the account's password, API tokens, app connections and sessions are removed, then it is linked. Starts a session.",
+        "summary": "Link the provider sign-in to the existing account by its password, or start a new account",
+        "description": "Needs the cookie the provider sign-in left, which names one identity and one account and is spent by either choice. With `password`, the password is checked (throttled like login) and the account is linked; nothing is removed. With `start_fresh: true`, the existing account is set aside (suspended, its address replaced, its data kept for an operator) and a new, empty account is made under this server's sign-up rules. A suspended account can be neither linked nor replaced here. Starts a session.",
         "operationId": "oidcLink",
         "requestBody": {
           "content": {
@@ -13008,9 +13008,9 @@
             ],
             "description": "The existing account's password: proves it is yours, and links without removing anything."
           },
-          "take_over": {
+          "start_fresh": {
             "type": "boolean",
-            "description": "`true`: you don't know the password. The account is taken over: its password, API tokens, app\nconnections and sessions are removed first."
+            "description": "`true`: you don't know the password. A new, empty account is made for you; the existing one is set\naside (suspended, nothing of it inherited) for a server operator to review, restore or erase."
           }
         }
       },
@@ -13101,7 +13101,7 @@
       "LinkDone": {
         "type": "object",
         "required": [
-          "took_over",
+          "started_fresh",
           "next"
         ],
         "properties": {
@@ -13109,9 +13109,9 @@
             "type": "string",
             "description": "Where to go next."
           },
-          "took_over": {
+          "started_fresh": {
             "type": "boolean",
-            "description": "The account was taken over: whatever it already held was put there by whoever had it before."
+            "description": "A new account was made and the existing one set aside."
           }
         }
       },

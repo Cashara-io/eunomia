@@ -190,9 +190,9 @@ export const oidcCallback = <ThrowOnError extends boolean = false>(options?: Opt
 export const oidcLinkInfo = <ThrowOnError extends boolean = false>(options?: Options<OidcLinkInfoData, ThrowOnError>): RequestResult<OidcLinkInfoResponses, OidcLinkInfoErrors, ThrowOnError> => (options?.client ?? client).get<OidcLinkInfoResponses, OidcLinkInfoErrors, ThrowOnError>({ url: '/api/auth/oidc/link', ...options });
 
 /**
- * Link the provider sign-in to the existing account: prove its password, or take it over
+ * Link the provider sign-in to the existing account by its password, or start a new account
  *
- * Needs the cookie the provider sign-in left. With `password`, the password is checked (throttled like login) and the account is linked; nothing is removed. With `take_over: true`, the account's password, API tokens, app connections and sessions are removed, then it is linked. Starts a session.
+ * Needs the cookie the provider sign-in left, which names one identity and one account and is spent by either choice. With `password`, the password is checked (throttled like login) and the account is linked; nothing is removed. With `start_fresh: true`, the existing account is set aside (suspended, its address replaced, its data kept for an operator) and a new, empty account is made under this server's sign-up rules. A suspended account can be neither linked nor replaced here. Starts a session.
  */
 export const oidcLink = <ThrowOnError extends boolean = false>(options: Options<OidcLinkData, ThrowOnError>): RequestResult<OidcLinkResponses, OidcLinkErrors, ThrowOnError> => (options.client ?? client).post<OidcLinkResponses, OidcLinkErrors, ThrowOnError>({
     url: '/api/auth/oidc/link',

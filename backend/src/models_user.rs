@@ -156,6 +156,14 @@ async fn home_of(control: &ControlDb, user: &RecordId) -> AppResult<(OrgId, bool
         .ok_or_else(|| AppError::coded(ErrorCode::TenantNotFound, "This account does not belong to an organisation."))
 }
 
+/// Whether `user` is a suspended account. A record that is not an account (or no longer exists) is not.
+/// The ways in that do not pass through [`load_user`] check this themselves: peer links and share codes,
+/// extension and source webhooks, and the job worker (connector syncs and every other queued job).
+pub async fn is_suspended(control: &ControlDb, user: &RecordId) -> AppResult<bool> {
+    let mut res = store::control::USER_SUSPENDED.on(control).bind(("id", user.clone())).await?;
+    Ok(res.take::<Vec<Option<Datetime>>>(0)?.into_iter().next().flatten().is_some())
+}
+
 /// The refusal for a suspended account, wherever it tries to get in.
 pub fn suspended_error() -> AppError {
     AppError::coded(ErrorCode::AuthSuspended, "This account is suspended. Ask your workspace admin to restore it.")
