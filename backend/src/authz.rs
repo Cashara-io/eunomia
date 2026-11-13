@@ -243,6 +243,26 @@ pub async fn is_admin(db: &ControlDb, user: &User) -> AppResult<bool> {
     Ok(is_operator(user) || granted_admin(db, &user.id).await? || crate::capsules::first_user(db).await?.as_ref() == Some(&user.id))
 }
 
+/// May see what belongs to no organisation, such as the `instance` audit ledger (every tenant's
+/// sign-in attempts with unknown emails): a server operator (`EUNOMIA_ADMIN_EMAILS`), the install's
+/// first account, or, while the install has a single organisation, any admin of it (there is no
+/// other tenant to see). An admin granted in the app on a host with several organisations is not.
+pub async fn sees_instance(db: &ControlDb, user: &User) -> AppResult<bool> {
+    if is_operator(user) || crate::capsules::first_user(db).await?.as_ref() == Some(&user.id) {
+        return Ok(true);
+    }
+    if !is_admin(db, user).await? {
+        return Ok(false);
+    }
+    #[derive(Deserialize, SurrealValue)]
+    struct T {
+        #[allow(dead_code)]
+        org: RecordId,
+    }
+    let orgs: Vec<T> = store::tenant::LIST.on(db).await?.take(0)?;
+    Ok(orgs.len() <= 1)
+}
+
 /// True when an admin granted `user` admin rights in the app (the `admin` flag on the account).
 pub async fn granted_admin(db: &ControlDb, user: &RecordId) -> AppResult<bool> {
     #[derive(Deserialize, SurrealValue)]

@@ -456,6 +456,7 @@ async fn get_workspace_audit(State(state): State<AppState>, user: User, Query(q)
     let mut rows: Vec<LedgerRow> = store::control::ADMIN_AUDIT_PAGE
         .on(&state.control)
         .bind(("org", user.org.record()))
+        .bind(("instance", authz::sees_instance(&state.control, &user).await?))
         .bind(("prefix", prefix.to_string()))
         .bind(("actions", actions.iter().map(|a| a.to_string()).collect::<Vec<_>>()))
         .bind(("exclude", exclude.iter().map(|a| a.to_string()).collect::<Vec<_>>()))

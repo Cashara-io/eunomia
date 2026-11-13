@@ -124,7 +124,7 @@ export const listWorkspaceAudit = <ThrowOnError extends boolean = false>(options
 /**
  * Download the security log for a time range, with checkpoints to verify it offline (admin only)
  *
- * Metadata only: who, what, when, on which record and the outcome. Free-text detail is replaced by its SHA-256, so the file holds no memory text, chat content, prompts or secrets and still verifies. At most 50,000 events per file: `truncated` and `next_seq` say where to continue.
+ * Metadata only: who, what, when, on which record and the outcome. Free-text detail is replaced by a keyed digest (HMAC-SHA256 under a server key), so the file holds no memory text, chat content, prompts or secrets and still verifies. At most 50,000 events per file: `truncated` and `next_seq` say where to continue.
  */
 export const exportAuditChain = <ThrowOnError extends boolean = false>(options?: Options<ExportAuditChainData, ThrowOnError>): RequestResult<ExportAuditChainResponses, ExportAuditChainErrors, ThrowOnError> => (options?.client ?? client).get<ExportAuditChainResponses, ExportAuditChainErrors, ThrowOnError>({
     security: [{

@@ -15,6 +15,9 @@ DEFINE FIELD IF NOT EXISTS snapshot ON access_review TYPE object FLEXIBLE;
 DEFINE FIELD IF NOT EXISTS snapshot_hash ON access_review TYPE string;
 DEFINE FIELD IF NOT EXISTS result_hash ON access_review TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS summary ON access_review TYPE option<object> FLEXIBLE;
+-- Bumped by every decision in the same transaction; completion requires the value it read, so a
+-- decision and a completion racing each other conflict instead of both committing.
+DEFINE FIELD IF NOT EXISTS rev ON access_review TYPE int DEFAULT 0;
 DEFINE INDEX IF NOT EXISTS access_review_open_unique ON access_review FIELDS open_slot UNIQUE;
 DEFINE INDEX IF NOT EXISTS access_review_started_idx ON access_review FIELDS started_at;
 DEFINE EVENT IF NOT EXISTS access_review_frozen ON access_review

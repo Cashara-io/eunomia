@@ -384,7 +384,7 @@
           "admin"
         ],
         "summary": "Download the security log for a time range, with checkpoints to verify it offline (admin only)",
-        "description": "Metadata only: who, what, when, on which record and the outcome. Free-text detail is replaced by its SHA-256, so the file holds no memory text, chat content, prompts or secrets and still verifies. At most 50,000 events per file: `truncated` and `next_seq` say where to continue.",
+        "description": "Metadata only: who, what, when, on which record and the outcome. Free-text detail is replaced by a keyed digest (HMAC-SHA256 under a server key), so the file holds no memory text, chat content, prompts or secrets and still verifies. At most 50,000 events per file: `truncated` and `next_seq` say where to continue.",
         "operationId": "exportAuditChain",
         "parameters": [
           {
@@ -408,7 +408,7 @@
           {
             "name": "ledger",
             "in": "query",
-            "description": "`org` (default): this workspace's events. `instance`: events with no workspace.",
+            "description": "`org` (default): this workspace's events. `instance`: events with no workspace (server\noperators only on a host with several workspaces).",
             "required": false,
             "schema": {
               "type": "string"
@@ -9889,7 +9889,7 @@
           "target",
           "outcome",
           "trace_id",
-          "detail_sha256"
+          "detail_digest"
         ],
         "properties": {
           "action": {
@@ -9904,7 +9904,7 @@
           "created_at": {
             "type": "string"
           },
-          "detail_sha256": {
+          "detail_digest": {
             "type": "string"
           },
           "id": {
@@ -10087,6 +10087,7 @@
           "checked",
           "pending",
           "before_chain",
+          "detail_unchecked",
           "checked_at"
         ],
         "properties": {
@@ -10126,6 +10127,12 @@
           "checked_at": {
             "type": "string",
             "description": "When the check ran, RFC 3339."
+          },
+          "detail_unchecked": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Events whose detail could not be checked against its digest because the encryption key\nchanged since they were written (their hash and link were still checked).",
+            "minimum": 0
           },
           "first_seq": {
             "type": [
@@ -10179,7 +10186,7 @@
             "items": {
               "$ref": "#/components/schemas/AuditVerification"
             },
-            "description": "The workspace's own ledger first, then the `instance` ledger (events with no workspace,\nsuch as sign-ins with an unknown email)."
+            "description": "The workspace's own ledger first, then, for a server operator (or any admin while the\ninstall has one workspace), the `instance` ledger: events with no workspace, such as sign-ins\nwith an unknown email."
           }
         }
       },

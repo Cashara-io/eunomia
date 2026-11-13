@@ -23,8 +23,9 @@ pub fn router() -> Router<AppState> {
 
 #[derive(Serialize, utoipa::ToSchema)]
 struct AuditVerifyReport {
-    /// The workspace's own ledger first, then the `instance` ledger (events with no workspace,
-    /// such as sign-ins with an unknown email).
+    /// The workspace's own ledger first, then, for a server operator (or any admin while the
+    /// install has one workspace), the `instance` ledger: events with no workspace, such as sign-ins
+    /// with an unknown email.
     ledgers: Vec<AuditVerification>,
 }
 
@@ -41,7 +42,9 @@ struct AuditVerifyReport {
 async fn verify(State(state): State<AppState>, user: User) -> AppResult<Json<AuditVerifyReport>> {
     super::admin::require_admin(&state, &user).await?;
     let mut ledgers = vec![chain::verify(&state.control, &chain::org_ledger(&user.org)).await?];
-    ledgers.push(chain::verify(&state.control, chain::INSTANCE).await?);
+    if crate::authz::sees_instance(&state.control, &user).await? {
+        ledgers.push(chain::verify(&state.control, chain::INSTANCE).await?);
+    }
     Ok(Json(AuditVerifyReport { ledgers }))
 }
 
@@ -52,7 +55,8 @@ struct ExportQuery {
     from: Option<String>,
     /// End of the range (exclusive): RFC 3339 or `YYYY-MM-DD`. Omit for the newest event.
     to: Option<String>,
-    /// `org` (default): this workspace's events. `instance`: events with no workspace.
+    /// `org` (default): this workspace's events. `instance`: events with no workspace (server
+    /// operators only on a host with several workspaces).
     ledger: Option<String>,
 }
 
@@ -73,16 +77,27 @@ fn parse_time(field: &str, v: Option<&str>) -> AppResult<Option<DateTime<Utc>>> 
     path = "/api/admin/audit/export",
     tag = "admin",
     summary = "Download the security log for a time range, with checkpoints to verify it offline (admin only)",
-    description = "Metadata only: who, what, when, on which record and the outcome. Free-text detail is replaced by its SHA-256, so the file holds no memory text, chat content, prompts or secrets and still verifies. At most 50,000 events per file: `truncated` and `next_seq` say where to continue.",
+    description = "Metadata only: who, what, when, on which record and the outcome. Free-text detail is replaced by a keyed digest (HMAC-SHA256 under a server key), so the file holds no memory text, chat content, prompts or secrets and still verifies. At most 50,000 events per file: `truncated` and `next_seq` say where to continue.",
     params(ExportQuery),
     responses((status = 200, body = AuditExport), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
 async fn export(State(state): State<AppState>, user: User, Query(q): Query<ExportQuery>) -> AppResult<impl IntoResponse> {
+    // the export and the event that records it finish together, whatever the client does meanwhile
+    crate::audit::detached(export_now(state, user, q)).await
+}
+
+async fn export_now(state: AppState, user: User, q: ExportQuery) -> AppResult<([(header::HeaderName, String); 1], Json<AuditExport>)> {
     super::admin::require_admin(&state, &user).await?;
     let ledger = match q.ledger.as_deref().unwrap_or("org") {
         "org" | "" => chain::org_ledger(&user.org),
-        "instance" => chain::INSTANCE.to_string(),
+        "instance" if crate::authz::sees_instance(&state.control, &user).await? => chain::INSTANCE.to_string(),
+        "instance" => {
+            return Err(AppError::coded(
+                crate::error::ErrorCode::AuthForbidden,
+                "Only the server's operators can download sign-in attempts that belong to no workspace.",
+            ));
+        }
         _ => return Err(AppError::bad_request("`ledger` must be `org` or `instance`.")),
     };
     let from = parse_time("from", q.from.as_deref())?;

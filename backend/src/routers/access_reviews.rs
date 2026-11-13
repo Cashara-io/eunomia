@@ -246,6 +246,9 @@ struct ReviewRow {
     #[serde(default)]
     #[surreal(default)]
     summary: Option<Value>,
+    #[serde(default)]
+    #[surreal(default)]
+    rev: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, SurrealValue)]
@@ -471,6 +474,11 @@ async fn list(State(state): State<AppState>, user: User) -> AppResult<Json<Vec<A
     security(("cookie" = [])),
 )]
 async fn start(State(state): State<AppState>, user: User) -> AppResult<Json<AccessReview>> {
+    // the review and its audit event are written together, whatever the client does meanwhile
+    crate::audit::detached(start_now(state, user)).await
+}
+
+async fn start_now(state: AppState, user: User) -> AppResult<Json<AccessReview>> {
     authz::require_session()?;
     super::admin::require_admin(&state, &user).await?;
     let org = state.org(&user.org).await?;
@@ -545,6 +553,10 @@ async fn decide(
     Path((review_id, user_id)): Path<(String, String)>,
     Json(body): Json<AccessReviewDecisionBody>,
 ) -> AppResult<Json<AccessReview>> {
+    crate::audit::detached(decide_now(state, user, review_id, user_id, body)).await
+}
+
+async fn decide_now(state: AppState, user: User, review_id: String, user_id: String, body: AccessReviewDecisionBody) -> AppResult<Json<AccessReview>> {
     authz::require_session()?;
     super::admin::require_admin(&state, &user).await?;
     if !matches!(body.decision.as_str(), "keep" | "remove" | "suspend") {
@@ -602,6 +614,10 @@ async fn decide(
     security(("cookie" = [])),
 )]
 async fn complete(State(state): State<AppState>, user: User, Path(review_id): Path<String>) -> AppResult<Json<AccessReview>> {
+    crate::audit::detached(complete_now(state, user, review_id)).await
+}
+
+async fn complete_now(state: AppState, user: User, review_id: String) -> AppResult<Json<AccessReview>> {
     authz::require_session()?;
     super::admin::require_admin(&state, &user).await?;
     let org = state.org(&user.org).await?;
@@ -624,7 +640,6 @@ async fn complete(State(state): State<AppState>, user: User, Path(review_id): Pa
     let count = |d: &str| decisions.iter().filter(|x| x.decision == d).count();
     let not_reviewed = doc["not_reviewed"].as_array().map(Vec::len).unwrap_or(0);
     let summary = json!({ "keep": count("keep"), "remove": count("remove"), "suspend": count("suspend"), "not_reviewed": not_reviewed });
-    let latest = decisions.iter().filter_map(|d| d.decided_at).max_by_key(crate::sources::base::datetime_to_chrono);
     #[derive(Deserialize, SurrealValue)]
     struct Id {
         #[allow(dead_code)]
@@ -638,8 +653,7 @@ async fn complete(State(state): State<AppState>, user: User, Path(review_id): Pa
         .bind(("at", Datetime::from(completed_at)))
         .bind(("result_hash", result_hash.clone()))
         .bind(("summary", summary.clone()))
-        .bind(("count", decisions.len() as i64))
-        .bind(("latest", latest))
+        .bind(("rev", row.rev.unwrap_or(0)))
         .await
         .map_err(frozen)?
         .take(0)?;
@@ -711,6 +725,10 @@ async fn export(State(state): State<AppState>, user: User, Path(review_id): Path
     };
     let result = result_doc(&row, &decisions, &by, time(&Some(at)).as_str().unwrap_or_default());
     let ledger = chain::org_ledger(&user.org);
+    // the completion event is sealed in the background: make sure it has its place in the chain
+    if let Err(e) = chain::seal(&state.control, &ledger).await {
+        tracing::warn!(error = %e.message, "audit seal before review export failed");
+    }
     #[derive(Deserialize, SurrealValue)]
     struct Found {
         #[serde(default)]

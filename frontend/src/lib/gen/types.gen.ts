@@ -281,7 +281,7 @@ export type AuditEventFields = {
     actor_id: string;
     actor_kind: string;
     created_at: string;
-    detail_sha256: string;
+    detail_digest: string;
     id: string;
     ledger: string;
     outcome: string;
@@ -362,6 +362,11 @@ export type AuditVerification = {
      * When the check ran, RFC 3339.
      */
     checked_at: string;
+    /**
+     * Events whose detail could not be checked against its digest because the encryption key
+     * changed since they were written (their hash and link were still checked).
+     */
+    detail_unchecked: number;
     first_seq?: number | null;
     head_hash?: string | null;
     head_seq?: number | null;
@@ -379,8 +384,9 @@ export type AuditVerification = {
 
 export type AuditVerifyReport = {
     /**
-     * The workspace's own ledger first, then the `instance` ledger (events with no workspace,
-     * such as sign-ins with an unknown email).
+     * The workspace's own ledger first, then, for a server operator (or any admin while the
+     * install has one workspace), the `instance` ledger: events with no workspace, such as sign-ins
+     * with an unknown email.
      */
     ledgers: Array<AuditVerification>;
 };
@@ -3491,7 +3497,8 @@ export type ExportAuditChainData = {
          */
         to?: string;
         /**
-         * `org` (default): this workspace's events. `instance`: events with no workspace.
+         * `org` (default): this workspace's events. `instance`: events with no workspace (server
+         * operators only on a host with several workspaces).
          */
         ledger?: string;
     };
