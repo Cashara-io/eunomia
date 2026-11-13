@@ -334,7 +334,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         CREATE $sp SET kind = 'onepassword_connect', host = $c, token_enc = 'enc:v1:planted', created_by = $u, updated_by = $u;
         CREATE secret_request SET vault = $v, name = 'planted', label = $c, description = $c, target_hosts = ['api.example.com'], requested_by = $u, actor_id = $c, client_name = $c, expires_at = time::now() + 1d;
         CREATE vault_secret SET vault = $v, name = 'planted', label = $c, value_enc = $senc, allowed_hosts = ['api.example.com'], allowed_actors = [$c], created_by = $u;
-        LET $ar = (CREATE ONLY access_review SET open_slot = $c, started_by = $u, started_by_email = $c, snapshot = {people: [{email: $c}]}, snapshot_hash = $c).id;
+        LET $ar = (CREATE ONLY access_review SET org = $rorg, open_slot = $c, started_by = $u, started_by_email = $c, snapshot = {people: [{email: $c}]}, snapshot_hash = $c).id;
         CREATE access_review_decision SET review = $ar, subject = $u, subject_email = $c, decision = 'keep', note = $c, reviewer = $u, reviewer_email = $c;";
     let uid = user.id.clone();
     db.test_raw()
@@ -342,6 +342,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         .bind(("u", uid.clone()))
         .bind(("thread", eunomia_backend::rid::parse(&ids.thread).unwrap()))
         .bind(("c", canary.clone()))
+        .bind(("rorg", user.org.key()))
         .bind(("enc", enc))
         // a held secret whose value is the canary, encrypted as the fill route stores it
         .bind(("senc", crypto::encrypt(&state.settings.encryption_key, &canary)))

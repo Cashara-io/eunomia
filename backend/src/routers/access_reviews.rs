@@ -345,8 +345,9 @@ struct AccessReview {
 }
 
 async fn load(db: &crate::pool::OrgDb, id: &str) -> AppResult<(ReviewRow, Vec<DecisionRow>)> {
+    let org = db.org().key();
     let rid = crate::rid::parse(id).ok().filter(|r| r.table() == "access_review").ok_or_else(not_found)?;
-    let rows: Vec<ReviewRow> = store::access_reviews::REVIEW_GET.on(db).bind(("id", rid.clone())).await?.take(0)?;
+    let rows: Vec<ReviewRow> = store::access_reviews::REVIEW_GET.on(db).bind(("id", rid.clone())).bind(("org", org)).await?.take(0)?;
     let row = rows.into_iter().next().ok_or_else(not_found)?;
     let decisions: Vec<DecisionRow> = store::access_reviews::REVIEW_DECISIONS.on(db).bind(("review", rid)).await?.take(0)?;
     Ok((row, decisions))
@@ -445,7 +446,7 @@ fn result_doc(r: &ReviewRow, decisions: &[DecisionRow], completed_by: &RecordId,
 async fn list(State(state): State<AppState>, user: User) -> AppResult<Json<Vec<AccessReviewSummary>>> {
     super::admin::require_admin(&state, &user).await?;
     let org = state.org(&user.org).await?;
-    let rows: Vec<ListRow> = store::access_reviews::REVIEW_LIST.on(&org.db).bind(("limit", 50)).await?.take(0)?;
+    let rows: Vec<ListRow> = store::access_reviews::REVIEW_LIST.on(&org.db).bind(("org", org.db.org().key())).bind(("limit", 50)).await?.take(0)?;
     Ok(Json(
         rows.into_iter()
             .map(|r| AccessReviewSummary {
@@ -491,6 +492,7 @@ async fn start_now(state: AppState, user: User) -> AppResult<Json<AccessReview>>
     }
     let created = store::access_reviews::REVIEW_CREATE
         .on(&org.db)
+        .bind(("org", org.db.org().key()))
         .bind(("by", user.id.clone()))
         .bind(("email", user.email.clone()))
         .bind(("snapshot", snap))
@@ -579,6 +581,7 @@ async fn decide_now(state: AppState, user: User, review_id: String, user_id: Str
     let key = crate::tx::stable_key('d', &format!("{}|{}", chain::rid(&row.id), subject.0));
     store::access_reviews::REVIEW_DECIDE
         .on(&org.db)
+        .bind(("org", org.db.org().key()))
         .bind(("id", RecordId::new("access_review_decision", key.as_str())))
         .bind(("review", row.id.clone()))
         .bind(("subject", subject_id.clone()))
@@ -647,6 +650,7 @@ async fn complete_now(state: AppState, user: User, review_id: String) -> AppResu
     }
     let done: Vec<Id> = store::access_reviews::REVIEW_COMPLETE
         .on(&org.db)
+        .bind(("org", org.db.org().key()))
         .bind(("id", row.id.clone()))
         .bind(("by", user.id.clone()))
         .bind(("email", user.email.clone()))

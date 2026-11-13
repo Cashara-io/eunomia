@@ -2,8 +2,11 @@
 -- what, records a decision per person and completes the review. A completed review cannot be
 -- changed: the events below refuse any update or delete of it and of its decisions.
 DEFINE TABLE IF NOT EXISTS access_review SCHEMAFULL;
+-- The org the review is of (its 32-hex key). Every statement filters on it, so the app-level filter
+-- holds on its own too (tests/isolation.rs, shared-database mode), not only the per-org database.
+DEFINE FIELD IF NOT EXISTS org ON access_review TYPE string;
 DEFINE FIELD IF NOT EXISTS status ON access_review TYPE string DEFAULT "open" ASSERT $value IN ["open", "completed"];
--- "open" while open, NONE once completed: the unique index allows one open review at a time.
+-- "open:<org>" while open, NONE once completed: the unique index allows one open review per org.
 DEFINE FIELD IF NOT EXISTS open_slot ON access_review TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS started_by ON access_review TYPE record<user>;
 DEFINE FIELD IF NOT EXISTS started_by_email ON access_review TYPE string;
