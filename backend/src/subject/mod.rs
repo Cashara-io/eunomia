@@ -317,7 +317,26 @@ fn job_owner() -> RecordId {
 
 /// Queues the erasure of `user` after [`check_erasable`] (the caller has already [`confirm`]ed).
 pub async fn request_erasure(state: &AppState, user: &RecordId, who: Requester, allow_close: bool) -> AppResult<ErasureTicket> {
-    let plans = check_erasable(&state.control, user, &who, allow_close).await?;
+    // a repeat request joins the open erasure (a workspace erasure already took the person out of the
+    // workspace, so it would not plan again); it can add a confirmation that a workspace closes
+    if open_ticket(&state.control, &subject_refs(&state.settings, user)).await?.is_some() {
+        let plans = match &who {
+            Requester::Myself | Requester::Operator(_) if allow_close => {
+                let pending: Vec<RecordId> = q::OPEN_SUBJECTS.on(&state.control).await?.take::<Vec<RecordId>>(0)?.into_iter().filter(|u| u != user).collect();
+                plan(&state.control, user, &pending, true, false, None).await.unwrap_or_default()
+            }
+            _ => Vec::new(),
+        };
+        return enqueue_erasure(state, user, who, &plans).await;
+    }
+    let plans = match check_erasable(&state.control, user, &who, allow_close).await {
+        Ok(p) => p,
+        // a request for the same person that raced this one opened it first: join it
+        Err(e) => match open_ticket(&state.control, &subject_refs(&state.settings, user)).await? {
+            Some(_) => Vec::new(),
+            None => return Err(e),
+        },
+    };
     enqueue_erasure(state, user, who, &plans).await
 }
 

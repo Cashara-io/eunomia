@@ -102,6 +102,10 @@ pub struct OrgWork {
     pub transfer: bool,
     pub solo: Vec<String>,
     pub kept: Vec<Kept>,
+    /// Spaces that stay and that the person was in: their names are the person's to scrub; any other
+    /// space's name is someone else's, only counted for review.
+    #[serde(default)]
+    pub member_of: Vec<String>,
     pub files: Vec<String>,
 }
 
@@ -216,11 +220,6 @@ async fn run(state: &AppState, erasure: &RecordId) -> Result<Outcome, AppError> 
     if !reapply && held(state, &subject).await? {
         return park(state, erasure).await;
     }
-    let started: Vec<String> = q::ERASURE_RUNNING.on(&state.control).bind(("id", erasure.clone())).await?.take(0)?;
-    if started.is_empty() {
-        return Ok(Outcome::Done);
-    }
-
     // the plan is rebuilt from live state on every run (a resume after a hold sees new files, tokens and
     // workspaces) and merged with what was saved before (a retry after steps that already ran still checks
     // everything the first run knew)
@@ -239,6 +238,10 @@ async fn run(state: &AppState, erasure: &RecordId) -> Result<Outcome, AppError> 
     if let Err(e) = locked {
         tracing::info!(erasure = %erasure.to_string(), error = %e, "another erasure holds a workspace this one touches; waiting");
         return Ok(Outcome::Busy);
+    }
+    let started: Vec<String> = q::ERASURE_RUNNING.on(&state.control).bind(("id", erasure.clone())).await?.take(0)?;
+    if started.is_empty() {
+        return Ok(Outcome::Done);
     }
 
     // the last moment a hold placed after the request stops it: nothing is deleted yet
@@ -263,7 +266,7 @@ async fn run(state: &AppState, erasure: &RecordId) -> Result<Outcome, AppError> 
         add_counts(&mut counts, &c);
         add_into(&mut check, &org_check(&org_state, &subject, o, &work, &email_lc).await?);
         if !o.close {
-            let kept: Vec<RecordId> = o.kept.iter().filter_map(|k| crate::rid::parse(&k.vault).ok()).collect();
+            let kept: Vec<RecordId> = o.member_of.iter().filter_map(|v| crate::rid::parse(v).ok()).collect();
             let r: Value = q::REVIEW.on(&org_state.db).bind(("email_lc", email_lc.clone())).bind(("kept", kept)).await?.take::<Option<Value>>(0)?.unwrap_or_default();
             add_into(&mut review, &r);
         }
@@ -408,6 +411,11 @@ fn merge(saved: Work, fresh: Work) -> Work {
                     o.kept.push(k.clone());
                 }
             }
+            for v in &s.member_of {
+                if !o.member_of.contains(v) {
+                    o.member_of.push(v.clone());
+                }
+            }
             o.close |= s.close;
             o.transfer |= s.transfer;
             if o.heir.is_none() {
@@ -496,6 +504,8 @@ async fn capture(state: &AppState, subject: &RecordId, row: &ErasureRow, workspa
                 .iter()
                 .map(|(v, (to, is_owner))| Kept { vault: v.clone(), to: to.to_string(), promote: my_owned.contains(v.as_str()) && !is_owner })
                 .collect();
+            let mine_all: HashSet<&str> = mine.iter().map(|m| m.vault.as_str()).collect();
+            w.member_of = w.kept.iter().filter(|k| mine_all.contains(k.vault.as_str())).map(|k| k.vault.clone()).collect();
             let kept: Vec<RecordId> = w.kept.iter().filter_map(|k| crate::rid::parse(&k.vault).ok()).collect();
             let mut res = q::OWNED_FILES.on(db).bind(("u", subject.clone())).bind(("kept", kept)).await?;
             w.files = res.take::<Vec<Option<String>>>(0)?.into_iter().flatten().collect();
@@ -516,7 +526,7 @@ async fn capture(state: &AppState, subject: &RecordId, row: &ErasureRow, workspa
 /// workspace every table empty.
 async fn org_check(state: &OrgState, subject: &RecordId, o: &OrgWork, work: &Work, email_lc: &str) -> Result<Value, AppError> {
     let solo: Vec<RecordId> = o.solo.iter().filter_map(|v| crate::rid::parse(v).ok()).collect();
-    let kept: Vec<RecordId> = o.kept.iter().filter_map(|k| crate::rid::parse(&k.vault).ok()).collect();
+    let kept: Vec<RecordId> = o.member_of.iter().filter_map(|v| crate::rid::parse(v).ok()).collect();
     let mut res = q::RESIDUE
         .on(&state.db)
         .bind(("u", subject.clone()))
@@ -589,8 +599,8 @@ async fn erase_in_org(state: &OrgState, subject: &RecordId, o: &OrgWork, actors:
     }
 
     // what stays in the workspace no longer carries their email address, in any case
-    let kept: Vec<RecordId> = o.kept.iter().filter_map(|k| crate::rid::parse(&k.vault).ok()).collect();
-    let targets: Vec<Value> = q::SCRUB_TARGETS.on(db).bind(("email_lc", email_lc.to_string())).await?.take::<Option<Vec<Value>>>(0)?.unwrap_or_default();
+    let kept: Vec<RecordId> = o.member_of.iter().filter_map(|v| crate::rid::parse(v).ok()).collect();
+    let targets: Vec<Value> = q::SCRUB_TARGETS.on(db).bind(("email_lc", email_lc.to_string())).await?.take::<Vec<Value>>(0)?;
     let mut res = q::SCRUB_EMAIL.on(db).bind(("email_re", email_re.to_string())).bind(("email_lc", email_lc.to_string())).bind(("kept", kept)).await?;
     counts.insert("email_scrubbed".into(), res.take::<Option<i64>>(q::SCRUB_EMAIL.slot)?.unwrap_or(0));
     let mut updated: BTreeMap<String, Vec<(&'static str, &'static str, RecordId)>> = BTreeMap::new();
@@ -615,7 +625,7 @@ async fn erase_in_org(state: &OrgState, subject: &RecordId, o: &OrgWork, actors:
         counts.insert("bucket_files".into(), o.files.len() as i64);
     }
     // the same content-free `deleted` change rows a normal delete writes, so sync clients drop their copies
-    let items: Vec<Value> = q::CHANGE_ITEMS.on(db).bind(("u", subject.clone())).bind(("solo", solo.clone())).await?.take::<Option<Vec<Value>>>(0)?.unwrap_or_default();
+    let items: Vec<Value> = q::CHANGE_ITEMS.on(db).bind(("u", subject.clone())).bind(("solo", solo.clone())).await?.take::<Vec<Value>>(0)?;
     let mut by_vault: BTreeMap<String, Vec<(&'static str, &'static str, RecordId)>> = BTreeMap::new();
     for it in &items {
         let (Some(id), Some(vault), Some(kind)) = (it.get("id").and_then(Value::as_str), it.get("vault").and_then(Value::as_str), it.get("kind").and_then(Value::as_str)) else { continue };

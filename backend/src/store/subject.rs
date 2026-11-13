@@ -565,7 +565,9 @@ pub const LOCKS_TAKE: ControlStmt = ControlStmt::new(
 );
 pub const LOCKS_RELEASE: ControlStmt = ControlStmt::new("subject.locks_release", "DELETE erasure_lock WHERE erasure = $id");
 /// The identifiers the post-check needs, saved before anything is deleted.
-pub const ERASURE_WORK: ControlStmt = ControlStmt::new("subject.erasure_work", "UPDATE $id SET work = $work, closes = $closes RETURN NONE");
+/// `closes` only grows: another erasure may have added a workspace this one closes as the last member.
+pub const ERASURE_WORK: ControlStmt =
+    ControlStmt::new("subject.erasure_work", "UPDATE $id SET work = $work, closes = array::union(closes, $closes) RETURN NONE");
 /// Parked by a legal hold placed after the request; lifting the hold resumes it.
 pub const ERASURE_HELD: ControlStmt =
     ControlStmt::new("subject.erasure_held", "UPDATE $id SET status = 'held', held_at = time::now() RETURN NONE");
