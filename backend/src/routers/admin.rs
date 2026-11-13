@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use axum::{extract::{Path, Query, State}, routing::{delete, get, put}, Json, Router};
+use axum::{extract::{Path, Query, State}, http::HeaderMap, routing::{delete, get, put}, Json, Router};
 use serde::{Deserialize, Serialize};
 use surrealdb::types::SurrealValue;
 use surrealdb::types::{Datetime, RecordId};
@@ -24,6 +24,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/people/{user_id}/suspended", put(set_suspended))
         .route("/admin/people/{user_id}/tokens", get(get_person_tokens))
         .route("/admin/people/{user_id}/tokens/{token_id}", delete(revoke_person_token))
+        .route("/admin/security", get(get_security).put(put_security))
 }
 
 async fn require_admin(state: &AppState, user: &User) -> AppResult<()> {
@@ -56,8 +57,8 @@ pub enum AuditCategory {
     Server,
 }
 
-const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.failed"];
-const ADMIN_ACTIONS: &[&str] = &["admin.grant", "admin.revoke", "user.suspend", "user.restore", "admin.token_revoke"];
+const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.failed", "auth.mfa_failed", "auth.mfa_recovery_used"];
+const ADMIN_ACTIONS: &[&str] = &["admin.grant", "admin.revoke", "user.suspend", "user.restore", "admin.token_revoke", "admin.require_mfa"];
 
 impl AuditCategory {
     /// `(prefix, exact actions, excluded actions)` for the ledger query; all empty means every event.
@@ -309,6 +310,17 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
             Some(t) => format!("Revoked {email}\u{2019}s API token \u{201c}{t}\u{201d}"),
             None => format!("Revoked an API token of {email}"),
         },
+        "admin.require_mfa" if detail == "on" => "Required two-step verification for every password account".into(),
+        "admin.require_mfa" => "Stopped requiring two-step verification".into(),
+        "auth.mfa_enrol" => "Turned on two-step verification".into(),
+        "auth.mfa_disable" => "Turned off two-step verification".into(),
+        "auth.mfa_recovery_regenerate" => "Made new recovery codes".into(),
+        "auth.mfa_recovery_used" => match kv(detail, "left") {
+            Some(n) => format!("Used a recovery code ({n} left)"),
+            None => "Used a recovery code".into(),
+        },
+        "auth.mfa_failed" => return "Two-step verification failed (wrong or reused code)".into(),
+        "auth.login" if ok && detail.contains("second step") => return "Signed in with two-step verification".into(),
         "auth.login" if ok => return "Signed in".into(),
         "auth.login" => return "Sign-in failed (wrong email or password)".into(),
         "auth.oidc_login" if ok => return "Signed in with single sign-on".into(),
@@ -347,7 +359,7 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
 }
 
 /// Actions whose failed sentence already says why ([`describe`] returns early for them).
-const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.failed", "oauth.consent", "authz.denied"];
+const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.failed", "auth.mfa_failed", "oauth.consent", "authz.denied"];
 
 /// Why an action failed, from the error code it ended with, in words; empty when it worked.
 /// The exact cause a failed attempt recorded in its detail (`why=...`), when it recorded one.
@@ -532,6 +544,12 @@ struct PersonRow {
     #[serde(default)]
     #[surreal(default)]
     suspended_at: Option<Datetime>,
+    #[serde(default)]
+    #[surreal(default)]
+    mfa: bool,
+    #[serde(default)]
+    #[surreal(default)]
+    has_password: bool,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -572,6 +590,9 @@ struct Person {
     is_you: bool,
     /// How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`).
     tokens: i64,
+    /// Two-step verification: `on`, `off`, or `provider` for an account that signs in only through single
+    /// sign-on (its identity provider handles the second factor).
+    mfa: String,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -689,6 +710,7 @@ async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport>
                 role: if admin.is_empty() { "member" } else { "admin" }.into(),
                 is_you: r.id == user.id,
                 tokens: token_counts.get(&key).copied().unwrap_or(0),
+                mfa: if r.mfa { "on" } else if r.has_password { "off" } else { "provider" }.into(),
                 id: key,
                 email: r.email,
                 created_at: r.created_at,
@@ -838,6 +860,83 @@ async fn set_suspended(
     Ok(Json(people_report(&state, &user).await?))
 }
 
+// ---------------------------------------------------------------- server security settings
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct SecurityOut {
+    /// Every password account must pass two-step verification before it gets a session. Accounts that
+    /// sign in through single sign-on are left to the identity provider.
+    require_mfa: bool,
+    #[schema(value_type = Option<String>)]
+    updated_at: Option<Datetime>,
+    /// Email of the admin who last changed it.
+    updated_by: Option<String>,
+    /// Password accounts in the workspace without two-step verification yet (they must set it up at their
+    /// next sign-in while it is required).
+    without_mfa: i64,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+struct SecurityChange {
+    require_mfa: bool,
+    /// A current authenticator or recovery code, when the admin's own account has two-step verification and
+    /// its last second factor is older than 10 minutes (`auth.step_up_required`).
+    #[serde(default)]
+    mfa_code: Option<String>,
+}
+
+async fn security_out(state: &AppState, user: &User) -> AppResult<SecurityOut> {
+    let s = crate::mfa::security(&state.control).await?;
+    let without_mfa = people_rows(state, user).await?.iter().filter(|r| r.has_password && !r.mfa && r.suspended_at.is_none()).count();
+    Ok(SecurityOut { require_mfa: s.require_mfa, updated_at: s.updated_at, updated_by: s.updated_by, without_mfa: i64::try_from(without_mfa).unwrap_or(i64::MAX) })
+}
+
+#[utoipa::path(
+    operation_id = "getServerSecurity",
+    get,
+    path = "/api/admin/security",
+    tag = "admin",
+    summary = "Server security settings: whether two-step verification is required (admin only)",
+    responses((status = 200, body = SecurityOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn get_security(State(state): State<AppState>, user: User) -> AppResult<Json<SecurityOut>> {
+    require_admin(&state, &user).await?;
+    Ok(Json(security_out(&state, &user).await?))
+}
+
+#[utoipa::path(
+    operation_id = "setServerSecurity",
+    put,
+    path = "/api/admin/security",
+    tag = "admin",
+    summary = "Require two-step verification for every password account, or stop (admin only, browser session)",
+    description = "Instance-wide. Turning it on needs your own account protected first (two-step verification on, or single sign-on only). While on, a password sign-in without two-step verification must set it up before it gets a session, and browser sessions that never passed a second factor are signed out. API tokens and app connections keep working.",
+    request_body = SecurityChange,
+    responses((status = 200, body = SecurityOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = [])),
+)]
+async fn put_security(State(state): State<AppState>, user: User, headers: HeaderMap, Json(body): Json<SecurityChange>) -> AppResult<Json<SecurityOut>> {
+    authz::require_session()?;
+    require_admin(&state, &user).await?;
+    let current = crate::mfa::security(&state.control).await?;
+    if current.require_mfa == body.require_mfa {
+        return Ok(Json(security_out(&state, &user).await?));
+    }
+    crate::mfa::step_up(&state, &user, &headers, body.mfa_code.as_deref()).await?;
+    if body.require_mfa {
+        let me = crate::mfa::status(&state.control, &user.id).await?;
+        if me.available && !me.enabled {
+            return Err(AppError::bad_request("Turn on two-step verification for your own account first (Settings > Two-step verification), so you are not locked out."));
+        }
+    }
+    crate::mfa::set_require_mfa(&state.control, body.require_mfa, &user.id).await?;
+    // sessions verified in the last few seconds are re-checked against the new rule on their next request
+    state.credentials.clear();
+    crate::audit::record_as_caller_detail(&state.control, &user.id, "admin.require_mfa", "", "ok", if body.require_mfa { "on" } else { "off" }).await;
+    Ok(Json(security_out(&state, &user).await?))
+}
+
 // ---------------------------------------------------------------- other people's API tokens
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -907,7 +1006,7 @@ async fn revoke_person_token(
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(get_workspace_audit, get_people, set_admin, set_suspended, get_person_tokens, revoke_person_token))]
+#[openapi(paths(get_workspace_audit, get_people, set_admin, set_suspended, get_person_tokens, revoke_person_token, get_security, put_security))]
 pub struct Doc;
 
 #[cfg(test)]
@@ -1006,6 +1105,8 @@ mod tests {
             created_at: None,
             admin: admin.then_some(true),
             suspended_at: suspended.then(Datetime::now),
+            mfa: false,
+            has_password: true,
         };
         let a: RecordId = crate::rid::parse("user:a").unwrap();
         let b: RecordId = crate::rid::parse("user:b").unwrap();

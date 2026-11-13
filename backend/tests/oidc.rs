@@ -51,6 +51,8 @@ struct Behavior {
     kid: Option<String>,
     /// "ES256", or "HS256" / "none" for the algorithm-confusion attempts
     alg: &'static str,
+    /// the `amr` claim, when set
+    amr: Option<Value>,
 }
 
 impl Default for Behavior {
@@ -67,6 +69,7 @@ impl Default for Behavior {
             key: "a",
             kid: Some("key-a".into()),
             alg: "ES256",
+            amr: None,
         }
     }
 }
@@ -200,6 +203,9 @@ async fn token(State(idp): State<Idp>, headers: HeaderMap, Form(f): Form<HashMap
     if let Some(a) = &b.azp {
         claims["azp"] = json!(a);
     }
+    if let Some(a) = &b.amr {
+        claims["amr"] = a.clone();
+    }
     let id_token = sign(&b, &claims);
     (StatusCode::OK, Json(json!({"access_token": "at-1", "token_type": "Bearer", "id_token": id_token})))
 }
@@ -254,6 +260,8 @@ fn settings(mode: AuthMode, issuer: &str) -> Settings {
                 client_secret: Some(CLIENT_SECRET.into()),
                 scopes: "openid email profile".into(),
                 provider_name: "Mock IdP".into(),
+                require_mfa_claim: false,
+                mfa_acr: Vec::new(),
             }),
         },
         ..test_settings()
@@ -680,4 +688,50 @@ async fn an_mcp_client_signs_in_through_the_provider_and_gets_a_working_token() 
     assert_eq!(status, StatusCode::OK, "{mcp}");
     assert!(mcp.to_string().contains("alice@example.test") || mcp.to_string().contains("personal") || mcp.to_string().contains("Personal"), "{mcp}");
     assert!(app.idp.token_hits() >= 1);
+}
+
+// -- MFA and single sign-on (compliance PR04) ---------------------------------------------------
+
+/// `OIDC_REQUIRE_MFA=true`: an ID token that does not say a second factor was used signs nobody in and
+/// makes no account; one whose `amr` names a second factor does.
+#[tokio::test]
+async fn oidc_require_mfa_refuses_a_sign_in_without_a_second_factor_claim() {
+    let (idp, issuer) = Idp::start().await;
+    let mut settings = settings(AuthMode::Oidc, &issuer);
+    if let Some(o) = settings.auth.oidc.as_mut() {
+        o.require_mfa_claim = true;
+    }
+    let state = AppState::build(&settings, engine_config()).await.expect("state");
+    let app = App { router: eunomia_backend::app(state.clone()), state, idp };
+
+    expect_refused(&app.sign_in().await, "mfa");
+    app.idp.behave(Behavior { amr: Some(json!(["pwd"])), ..Default::default() });
+    expect_refused(&app.sign_in().await, "mfa");
+    assert_eq!(app.user_count().await, 0, "a refused sign-in creates no account");
+
+    app.idp.behave(Behavior { amr: Some(json!(["pwd", "otp"])), ..Default::default() });
+    let cookie = expect_signed_in(&app.sign_in().await);
+    assert_eq!(app.get_as(&cookie, "/api/auth/me").await.0, StatusCode::OK);
+}
+
+/// With the server requiring MFA, a single sign-on session is not asked for a TOTP code (the provider owns
+/// the second factor), while a password account on the same server gets no session from its password alone.
+#[tokio::test]
+async fn required_mfa_leaves_sso_to_the_provider_and_stops_the_password_path() {
+    let app = app(AuthMode::Both).await;
+    let alice = expect_signed_in(&app.sign_in().await);
+    let alice_user = models_user::user_by_email(&app.state.control, "alice@example.test").await.unwrap().unwrap();
+    // bob has a password on the same server
+    common::register(&app.state, "bob@example.test").await;
+    eunomia_backend::mfa::set_require_mfa(&app.state.control, true, &alice_user.id).await.unwrap();
+    app.state.credentials.clear();
+
+    assert_eq!(app.get_as(&alice, "/api/auth/me").await.0, StatusCode::OK, "the SSO session keeps working");
+    let again = expect_signed_in(&app.sign_in().await);
+    assert_eq!(app.get_as(&again, "/api/auth/me").await.0, StatusCode::OK, "a new SSO sign-in is not prompted");
+
+    let ((status, body), set) = http(&app.router, "POST", "/api/auth/login", Some(json!({"email": "bob@example.test", "password": PASSWORD})), None, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["mfa_required"], "enrol", "{body}");
+    assert!(!set.unwrap_or_default().starts_with("eunomia_session="), "the password alone starts no session");
 }

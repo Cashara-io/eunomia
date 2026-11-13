@@ -190,6 +190,8 @@ enum Fail {
     NoEmail,
     EmailUnverified,
     SignupClosed,
+    /// `OIDC_REQUIRE_MFA` is on and the ID token does not say a second factor was used.
+    NoMfa,
     Internal(AppError),
 }
 
@@ -203,6 +205,7 @@ impl Fail {
             Fail::NoEmail => "no_email",
             Fail::EmailUnverified => "email_unverified",
             Fail::SignupClosed => "signup_closed",
+            Fail::NoMfa => "mfa",
             Fail::Internal(_) => "unavailable",
         }
     }
@@ -211,6 +214,7 @@ impl Fail {
         match self {
             Fail::State(_) | Fail::Denied(_) | Fail::Token(_) => ErrorCode::AuthUnauthorized,
             Fail::NoEmail | Fail::EmailUnverified | Fail::SignupClosed => ErrorCode::AuthForbidden,
+            Fail::NoMfa => ErrorCode::AuthMfaRequired,
             Fail::Provider(_) | Fail::Internal(_) => ErrorCode::Internal,
         }
     }
@@ -222,6 +226,7 @@ impl Fail {
             Fail::NoEmail => "the provider returned no email".into(),
             Fail::EmailUnverified => "an account has this email but the provider did not verify it".into(),
             Fail::SignupClosed => "signup is not open to this email".into(),
+            Fail::NoMfa => "the provider did not report a second factor (amr/acr) and OIDC_REQUIRE_MFA is on".into(),
             Fail::Internal(e) => e.source.clone().unwrap_or_else(|| e.message.clone()),
         }
     }
@@ -269,7 +274,7 @@ async fn callback(State(state): State<AppState>, https: Option<Extension<Forward
     let next = flow.as_ref().map_or_else(|| "/".to_string(), |f| f.next.clone());
     match finish(&state, cfg, flow, &q, &headers).await {
         Ok((user, mapped)) => {
-            let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref()).await?;
+            let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref(), auth::Via::Oidc, false).await?;
             let actor = Actor { kind: "user", id: user.id.to_string() };
             let rec = |action: &'static str, target: &'static str, detail: &'static str| {
                 audit::record(&state.control, Event { user: Some(&user.id), actor: &actor, action, target, outcome: "ok", detail })
@@ -331,6 +336,10 @@ async fn finish(state: &AppState, cfg: &OidcConfig, flow: Option<Flow>, q: &Call
         oidc::OidcError::Token(m) => Fail::Token(m),
         oidc::OidcError::Provider(m) => Fail::Provider(m),
     })?;
+    // checked before any account is found or made: a sign-in without a second factor changes nothing
+    if cfg.require_mfa_claim && !ident.asserts_mfa(&cfg.mfa_acr) {
+        return Err(Fail::NoMfa);
+    }
     // some providers keep the email out of the ID token; the userinfo endpoint (same subject, same access token) has it
     if ident.email.is_none()
         && let Some(at) = access_token
