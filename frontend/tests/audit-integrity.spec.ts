@@ -50,6 +50,10 @@ test.describe("security log integrity and access reviews", () => {
     expect(doc.format).toBe("eunomia-audit-export");
     expect(doc.ok).toBe(true);
     expect(doc.events.length).toBeGreaterThan(0);
+    // the header states the file's own range, ending at the head it recorded
+    expect(doc.range.first_seq).toBe(doc.events[0].seq);
+    expect(doc.range.last_seq).toBe(doc.events[doc.events.length - 1].seq);
+    expect(doc.range.head_seq).toBe(doc.head.seq);
     // metadata only: the free-text detail travels as its hash
     for (const e of doc.events) {
       expect(e.detail).toBeUndefined();
