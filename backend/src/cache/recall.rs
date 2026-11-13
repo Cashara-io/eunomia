@@ -79,6 +79,74 @@ const MAX_QUERY_CHARS: usize = 2_000;
 /// Each arm's deadline: past it the arm contributes nothing and the others'
 /// results are returned (see `arm`).
 const ARM_DEADLINE: Duration = Duration::from_secs(4);
+
+/// [`ARM_DEADLINE`], unless a test shortened it ([`test_hooks`]).
+fn deadline() -> Duration {
+    #[cfg(feature = "test-support")]
+    if let Some(d) = test_hooks::deadline() {
+        return d;
+    }
+    ARM_DEADLINE
+}
+
+/// Test-support builds only: make one part of recall hang (so it hits its deadline) and shorten the
+/// deadline, to prove a recall that could not finish says so.
+#[cfg(feature = "test-support")]
+pub mod test_hooks {
+    use std::sync::Mutex;
+    use std::time::Duration;
+    static HANG: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    static DEADLINE: Mutex<Option<Duration>> = Mutex::new(None);
+    /// Parts named here (`keyword`, `semantic`, `graph`, `memory_text`, `memory_semantic`,
+    /// `temporal`, `embedding`) never finish; `deadline` replaces [`super::ARM_DEADLINE`].
+    pub fn set(hang: &[&str], deadline: Option<Duration>) {
+        *HANG.lock().unwrap() = hang.iter().map(|s| s.to_string()).collect();
+        *DEADLINE.lock().unwrap() = deadline;
+    }
+    pub(super) fn hangs(name: &str) -> bool {
+        HANG.lock().unwrap().iter().any(|h| h == name)
+    }
+    pub(super) fn deadline() -> Option<Duration> {
+        *DEADLINE.lock().unwrap()
+    }
+}
+
+/// What did not run to completion in one recall, in words for the caller (`incomplete`): an arm past
+/// its deadline or (optional arms) failed, the query's embedding timing out or failing, or no
+/// embedding provider for a non-empty query. Each notice once.
+#[derive(Default)]
+struct Notes(std::sync::Mutex<Vec<String>>);
+
+impl Notes {
+    fn add(&self, notice: String) {
+        let mut v = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        if !v.contains(&notice) {
+            v.push(notice);
+        }
+    }
+    fn into_vec(self) -> Vec<String> {
+        self.0.into_inner().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+/// An arm's name as the caller reads it in `incomplete`.
+fn arm_label(name: &str) -> &'static str {
+    match name {
+        "semantic" => "semantic search over synced records",
+        "keyword" => "keyword search over synced records",
+        "graph" => "entity graph search",
+        "memory_text" => "text search over memories",
+        "memory_semantic" => "semantic search over memories",
+        "temporal" => "date search",
+        _ => "search",
+    }
+}
+
+/// One recall's hits, and what did not run to completion (empty when the search was complete).
+pub struct Recalled {
+    pub items: Vec<RecallItem>,
+    pub incomplete: Vec<String>,
+}
 /// Graph arm bounds: index hits kept per (kind, name/alias), how many
 /// matched entities it follows, and the query phrases it looks names up by
 /// (runs of up to `NAME_WORDS` of the first `MAX_NAME_WORDS` words).
@@ -533,24 +601,34 @@ struct QueryVector {
 
 /// Embeds the query under [`ARM_DEADLINE`]. `None` (and the semantic arms contribute nothing) without a
 /// working provider, on a provider error, or past the deadline.
-async fn query_vector(db: &OrgDb, settings: &Settings, owner: &RecordId, query: &str) -> Option<QueryVector> {
+async fn query_vector(db: &OrgDb, settings: &Settings, owner: &RecordId, query: &str, notes: &Notes) -> Option<QueryVector> {
     use crate::embeddings::service as embeddings;
+    if query.trim().is_empty() {
+        return None;
+    }
     let fut = async {
-        if query.trim().is_empty() || !embeddings::available(db, settings, owner).await {
+        #[cfg(feature = "test-support")]
+        if test_hooks::hangs("embedding") {
+            std::future::pending::<()>().await;
+        }
+        if !embeddings::available(db, settings, owner).await {
+            notes.add("semantic search skipped: no embedding provider is configured, so only words and names were matched".into());
             return AppResult::Ok(None);
         }
         let spec = embeddings::spec_for(db, settings, owner).await?.tag();
         let vector = embeddings::embed(db, settings, &[query.to_string()], Some(owner)).await?.into_iter().next().unwrap_or_default();
         Ok((vector.len() == embeddings::dim()).then_some(QueryVector { vector, spec }))
     };
-    match tokio::time::timeout(ARM_DEADLINE, fut).await {
+    match tokio::time::timeout(deadline(), fut).await {
         Ok(Ok(v)) => v,
         Ok(Err(e)) => {
             tracing::warn!("recall: semantic arms skipped: {}", e.message);
+            notes.add("semantic search skipped: embedding the query failed".into());
             None
         }
         Err(_) => {
-            tracing::warn!("recall: query embedding timed out after {ARM_DEADLINE:?}");
+            tracing::warn!("recall: query embedding timed out after {:?}", deadline());
+            notes.add("semantic search skipped: embedding the query timed out".into());
             None
         }
     }
@@ -935,20 +1013,29 @@ fn validate(
 /// Runs one arm under [`ARM_DEADLINE`]. A timeout -- or, for an `optional`
 /// arm (semantic: an external provider), an error -- drops just that arm's
 /// candidates, so one slow or broken arm never blocks the others' results.
-async fn arm<T: Default>(name: &str, optional: bool, fut: impl std::future::Future<Output = AppResult<T>>) -> AppResult<T> {
+async fn arm<T: Default>(name: &str, optional: bool, notes: &Notes, fut: impl std::future::Future<Output = AppResult<T>>) -> AppResult<T> {
     let started = std::time::Instant::now();
-    match tokio::time::timeout(ARM_DEADLINE, fut).await {
+    let fut = async move {
+        #[cfg(feature = "test-support")]
+        if test_hooks::hangs(name) {
+            std::future::pending::<()>().await;
+        }
+        fut.await
+    };
+    match tokio::time::timeout(deadline(), fut).await {
         Ok(Ok(keys)) => {
             tracing::debug!(arm = name, elapsed_ms = started.elapsed().as_millis() as u64, "recall: arm done");
             Ok(keys)
         }
         Ok(Err(e)) if optional => {
             tracing::warn!("recall: {name} arm skipped: {}", e.message);
+            notes.add(format!("{} failed", arm_label(name)));
             Ok(T::default())
         }
         Ok(Err(e)) => Err(e),
         Err(_) => {
-            tracing::warn!("recall: {name} arm timed out after {ARM_DEADLINE:?}");
+            tracing::warn!("recall: {name} arm timed out after {:?}", deadline());
+            notes.add(format!("{} timed out", arm_label(name)));
             Ok(T::default())
         }
     }
@@ -960,7 +1047,9 @@ async fn arm<T: Default>(name: &str, optional: bool, fut: impl std::future::Futu
 /// every vault are fused in one ranking (see the module docs), and scores are scaled so the best hit
 /// of the whole recall is 1. `time_range` is a filter (module docs). `history` also returns facts a
 /// later one superseded, marked `status: superseded` (for "what did we think before"); otherwise
-/// only current facts.
+/// only current facts. `incomplete` names what did not run to completion (an arm past its deadline,
+/// no or a failed query embedding): with it set, an empty or short result does not mean nothing
+/// else exists.
 #[allow(clippy::too_many_arguments)]
 pub async fn recall(
     db: &OrgDb,
@@ -973,7 +1062,7 @@ pub async fn recall(
     types: Option<&[MemoryType]>,
     vault_ids: &[RecordId],
     history: bool,
-) -> AppResult<Vec<RecallItem>> {
+) -> AppResult<Recalled> {
     let observations = types.is_some_and(|t| t.contains(&MemoryType::Observation));
     let window = validate(query, time_range, limit, max_tokens)?.map(|(since, until)| Span { since, until, observations });
     let pool = limit.saturating_mul(4).max(40);
@@ -981,14 +1070,15 @@ pub async fn recall(
 
     let rs = vaults_service::read_scope(db, owner, vault_ids).await?;
     let scope = cs::RecordScope::vaults(owner, rs.personal.as_ref(), &rs.vaults);
-    let mut records = record_arms(db, settings, &scope, query, window, pool).await?;
+    let notes = Notes::default();
+    let mut records = record_arms(db, settings, &scope, query, window, pool, &notes).await?;
 
     // The memory arms, vault by vault. These only query SurrealDB and run one after another (running
     // them concurrently made each several times slower, they contend inside the database).
     let terms = memory_text_terms(query);
     let mut passes: Vec<VaultArms> = Vec::with_capacity(rs.vaults.len());
     for vault in &rs.vaults {
-        passes.push(vault_arms(db, vault, query, &terms, window, pool, records.query.as_ref()).await?);
+        passes.push(vault_arms(db, vault, query, &terms, window, pool, records.query.as_ref(), &notes).await?);
     }
 
     // one list per arm for the whole recall
@@ -1008,9 +1098,9 @@ pub async fn recall(
     // query that matches nothing in the range gets nothing, never the range's newest items dressed
     // up as an answer.
     if window.is_some() && query.trim().is_empty() {
-        let mut lists = vec![arm("temporal", false, temporal_records(db, &scope, window, pool)).await?];
+        let mut lists = vec![arm("temporal", false, &notes, temporal_records(db, &scope, window, pool)).await?];
         for (vault, p) in rs.vaults.iter().zip(&mut passes) {
-            let mems = arm("temporal", false, temporal_memories(db, vault, window, pool)).await?;
+            let mems = arm("temporal", false, &notes, temporal_memories(db, vault, window, pool)).await?;
             p.temporal = mems.iter().map(|(_, k)| k.clone()).collect();
             lists.push(mems);
         }
@@ -1032,7 +1122,7 @@ pub async fn recall(
 
     let rrf = cs::rrf_scores(&arms);
     if rrf.is_empty() {
-        return Ok(Vec::new());
+        return Ok(Recalled { items: Vec::new(), incomplete: notes.into_vec() });
     }
 
     // Hydrate each candidate in the vault it came from; authorization is re-checked there.
@@ -1107,10 +1197,11 @@ pub async fn recall(
         item.score = (item.score / top * 1000.0).round() / 1000.0;
     }
 
-    Ok(match max_tokens {
+    let items = match max_tokens {
         Some(budget) => fit_budget(scored, budget),
         None => scored,
-    })
+    };
+    Ok(Recalled { items, incomplete: notes.into_vec() })
 }
 
 /// The synced-record arms (semantic and keyword), run once over every vault of a recall rather than
@@ -1151,16 +1242,17 @@ async fn record_arms(
     query: &str,
     window: Window,
     pool: usize,
+    notes: &Notes,
 ) -> AppResult<RecordArms> {
     // whole-second bounds for the occurred_at index (see `index_safe`); recall's exact check follows
     let bounds = window.as_ref().map(index_safe);
     let filter = cs::RecordFilter { since: bounds.map(|b| b.0), until: bounds.map(|b| b.1), ..Default::default() };
     let keys = |ids: Vec<RecordId>| ids.iter().map(record_key).collect::<Vec<_>>();
-    let keyword = arm("keyword", false, async { Ok(keys(cs::keyword_ids(db, scope, query, &filter, pool).await?)) });
-    let (qv, keyword) = tokio::join!(query_vector(db, settings, scope.owner(), query), keyword);
+    let keyword = arm("keyword", false, notes, async { Ok(keys(cs::keyword_ids(db, scope, query, &filter, pool).await?)) });
+    let (qv, keyword) = tokio::join!(query_vector(db, settings, scope.owner(), query, notes), keyword);
     let keyword = keyword?;
     let semantic = match &qv {
-        Some(q) => arm("semantic", true, async { Ok(keys(cs::nearest_ids(db, scope, q.vector.clone(), &filter, pool).await?)) }).await?,
+        Some(q) => arm("semantic", true, notes, async { Ok(keys(cs::nearest_ids(db, scope, q.vector.clone(), &filter, pool).await?)) }).await?,
         None => Vec::new(),
     };
 
@@ -1199,19 +1291,14 @@ async fn vault_arms(
     window: Window,
     pool: usize,
     qv: Option<&QueryVector>,
+    notes: &Notes,
 ) -> AppResult<VaultArms> {
     // boxed: the graph arm's future is large, and inline it pushes a debug build past a thread's stack
     let started = std::time::Instant::now();
-    let GraphHits { keys: graph, between } = match tokio::time::timeout(ARM_DEADLINE, Box::pin(graph_arm(db, vault, query, pool, window))).await {
-        Ok(hits) => hits?,
-        Err(_) => {
-            tracing::warn!("recall: graph arm timed out after {ARM_DEADLINE:?}");
-            GraphHits::default()
-        }
-    };
+    let GraphHits { keys: graph, between } = arm("graph", false, notes, Box::pin(graph_arm(db, vault, query, pool, window))).await?;
     tracing::debug!(arm = "graph", candidates = graph.len(), elapsed_ms = started.elapsed().as_millis() as u64, "recall: arm done");
-    let text = arm("memory_text", false, memory_text_arm(db, vault, terms, pool, window)).await?;
-    let semantic = arm("memory_semantic", true, Box::pin(memory_semantic_arm(db, vault, qv, pool, window))).await?;
+    let text = arm("memory_text", false, notes, memory_text_arm(db, vault, terms, pool, window)).await?;
+    let semantic = arm("memory_semantic", true, notes, Box::pin(memory_semantic_arm(db, vault, qv, pool, window))).await?;
     let keys = graph
         .iter()
         .chain(&between)
@@ -1400,16 +1487,20 @@ mod tests {
     #[tokio::test]
     async fn a_hanging_arm_is_dropped_at_its_deadline() {
         let started = std::time::Instant::now();
-        let hung = arm("semantic", true, std::future::pending::<AppResult<Vec<String>>>()).await.unwrap();
+        let notes = Notes::default();
+        let hung = arm("semantic", true, &notes, std::future::pending::<AppResult<Vec<String>>>()).await.unwrap();
         assert!(hung.is_empty());
+        assert_eq!(notes.into_vec(), ["semantic search over synced records timed out"]);
         assert!(started.elapsed() < ARM_DEADLINE + std::time::Duration::from_secs(1));
     }
 
     #[tokio::test]
     async fn only_an_optional_arm_swallows_errors() {
         let failing = || async { Err::<Vec<String>, _>(AppError::internal("provider down")) };
-        assert!(arm("semantic", true, failing()).await.unwrap().is_empty());
-        assert!(arm("keyword", false, failing()).await.is_err());
-        assert_eq!(arm("keyword", false, async { Ok(vec!["k".to_string()]) }).await.unwrap(), vec!["k"]);
+        let notes = Notes::default();
+        assert!(arm("semantic", true, &notes, failing()).await.unwrap().is_empty());
+        assert!(arm("keyword", false, &notes, failing()).await.is_err());
+        assert_eq!(arm("keyword", false, &notes, async { Ok(vec!["k".to_string()]) }).await.unwrap(), vec!["k"]);
+        assert_eq!(notes.into_vec(), ["semantic search over synced records failed"], "a clean arm adds nothing");
     }
 }

@@ -26,5 +26,8 @@ expression: stable
       "vault": "vault:<id2>",
       "vault_name": "Personal"
     }
+  ],
+  "incomplete": [
+    "semantic search skipped: no embedding provider is configured, so only words and names were matched"
   ]
 }
