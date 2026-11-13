@@ -334,3 +334,12 @@ async fn a_provider_email_written_with_look_alike_letters_makes_no_account() {
     assert_eq!(app.user_count().await, 1);
     assert!(models_user::user_by_email(&app.state.control, "kate@example.test").await.unwrap().is_none());
 }
+
+#[tokio::test]
+async fn a_provider_email_with_an_ordinary_capital_outside_ascii_makes_an_account() {
+    let app = app(AuthMode::Both).await;
+    expect_signed_in(&app.sign_in().await);
+    app.idp.behave(Behavior { sub: "olsen-sub".into(), email: Some("\u{d8}lsen@Firma.no".into()), ..Default::default() });
+    expect_signed_in(&app.sign_in().await);
+    assert!(models_user::user_by_email(&app.state.control, "\u{f8}lsen@firma.no").await.unwrap().is_some());
+}

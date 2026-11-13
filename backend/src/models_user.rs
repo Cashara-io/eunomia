@@ -71,20 +71,32 @@ pub fn normalize_email(email: &str) -> String {
     email.trim().to_lowercase()
 }
 
-/// True when lowercasing `email` with Unicode rules gives the same text as an ASCII-only fold. Some
-/// characters lowercase into plain ASCII (U+212A KELVIN SIGN into `k`) or into another letter (U+212B
-/// ANGSTROM SIGN into `\u{e5}`), so an address written with them would compare as different text but
-/// be stored, after [`normalize_email`], as another address. New addresses must not do that.
-pub fn folds_like_ascii(email: &str) -> bool {
-    email.to_lowercase() == email.to_ascii_lowercase()
+/// True when lowercasing `email` cannot turn one address into another. Some characters lowercase into
+/// plain ASCII (U+212A KELVIN SIGN into `k`), into the lowercase of a different capital (U+212B ANGSTROM
+/// SIGN into `\u{e5}`, whose capital is U+00C5), or into several characters (U+0130 into `i` and a dot),
+/// so an address written with them would compare as different text but be stored, after
+/// [`normalize_email`], as another address. New addresses must not do that.
+///
+/// An ordinary capital letter is fine, ASCII or not (`\u{d8}lsen` lowercases to `\u{f8}lsen`, whose capital
+/// is the same `\u{d8}`): a character passes when it is already lowercase or uncased, or when it lowercases
+/// to one non-ASCII character whose capital is exactly itself.
+pub fn case_folds_cleanly(email: &str) -> bool {
+    email.chars().all(|c| {
+        if c.is_ascii() {
+            return true;
+        }
+        let mut lower = c.to_lowercase();
+        let (Some(l), None) = (lower.next(), lower.next()) else { return false };
+        l == c || (!l.is_ascii() && { let mut up = l.to_uppercase(); up.next() == Some(c) && up.next().is_none() })
+    })
 }
 
-/// The form a new address is stored and compared in: trimmed, checked with [`folds_like_ascii`],
+/// The form a new address is stored and compared in: trimmed, checked with [`case_folds_cleanly`],
 /// lowercased and validated. Every signup path goes through it. An internationalised domain is
 /// accepted in its ASCII (`xn--`) form.
 pub fn normalize_new_email(raw: &str) -> AppResult<String> {
     let trimmed = raw.trim();
-    if !folds_like_ascii(trimmed) {
+    if !case_folds_cleanly(trimmed) {
         return Err(AppError::bad_request(
             "This email has a character that can't be used here. Type it in plain letters, and use the xn-- form for an internationalised domain.",
         ));
@@ -602,8 +614,9 @@ mod tests {
     #[test]
     fn look_alikes_that_fold_into_other_letters_are_refused() {
         // U+212A KELVIN SIGN lowercases to an ASCII `k`; U+212B ANGSTROM SIGN to `\u{e5}`
-        for raw in ["\u{212A}ate@corp.com", "kate@\u{212A}orp.com", "\u{212B}sa@corp.com", "\u{0130}nci@corp.com"] {
-            assert!(!folds_like_ascii(raw), "{raw:?}");
+        // U+2126 OHM SIGN lowercases to a Greek omega whose capital is U+03A9; U+1E9E to `\u{df}`, capital "SS"
+        for raw in ["\u{212A}ate@corp.com", "kate@\u{212A}orp.com", "\u{212B}sa@corp.com", "\u{0130}nci@corp.com", "\u{2126}@corp.com", "gro\u{1E9E}@corp.com"] {
+            assert!(!case_folds_cleanly(raw), "{raw:?}");
             assert!(normalize_new_email(raw).is_err(), "{raw:?}");
         }
         assert_eq!(normalize_email("\u{212A}ate@corp.com"), "kate@corp.com", "what the check exists for");
@@ -611,6 +624,11 @@ mod tests {
         assert_eq!(normalize_new_email("  Kate@Corp.COM ").unwrap(), "kate@corp.com");
         assert_eq!(normalize_new_email("anna@xn--bcher-kva.example").unwrap(), "anna@xn--bcher-kva.example");
         assert!(normalize_new_email("not-an-email").is_err());
+        // an ordinary capital letter outside ASCII is a real address, not a look-alike
+        assert_eq!(normalize_new_email("\u{d8}lsen@firma.no").unwrap(), "\u{f8}lsen@firma.no");
+        assert_eq!(normalize_new_email("\u{c5}sa@corp.com").unwrap(), "\u{e5}sa@corp.com");
+        assert_eq!(normalize_new_email("\u{c9}lodie@exemple.fr").unwrap(), "\u{e9}lodie@exemple.fr");
+        assert!(normalize_new_email("\u{e9}lodie@exemple.fr").is_ok());
     }
 
     #[test]

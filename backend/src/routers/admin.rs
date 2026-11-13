@@ -550,6 +550,10 @@ struct PersonRow {
     #[serde(default)]
     #[surreal(default)]
     email: String,
+    /// The stored, normalized address (`duplicate:` for a legacy duplicate): what operator status is read from.
+    #[serde(default)]
+    #[surreal(default)]
+    email_lc: Option<String>,
     created_at: Option<Datetime>,
     #[serde(default)]
     #[surreal(default)]
@@ -648,7 +652,7 @@ fn signup_policy(mode: &str, allowlist: &str, operators: &str) -> SignupPolicy {
 fn admin_source(row: &PersonRow, creator: Option<&RecordId>) -> &'static str {
     if creator == Some(&row.id) {
         "creator"
-    } else if authz::operator_email_listed(&row.email) {
+    } else if authz::stored_email_is_operator(row.email_lc.as_deref()) {
         "operator"
     } else if row.admin == Some(true) {
         "granted"
@@ -1047,6 +1051,7 @@ mod tests {
         let row = |id: &str, admin: bool, suspended: bool| PersonRow {
             id: crate::rid::parse(id).unwrap(),
             email: format!("{}@x.test", id.trim_start_matches("user:")),
+            email_lc: None,
             created_at: None,
             admin: admin.then_some(true),
             suspended_at: suspended.then(Datetime::now),

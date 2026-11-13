@@ -78,6 +78,7 @@ pub const ALL: &[&ControlStmt] = &[
     &ADMIN_TOKEN_NAMES,
     &ADMIN_TOKEN_COUNTS,
     &USER_ADMIN_FLAG,
+    &USER_EMAIL_LC,
     &USER_SET_ADMIN,
     &USER_SET_SUSPENDED,
 ];
@@ -423,7 +424,7 @@ pub const ADMIN_AUDIT_PAGE: ControlStmt = ControlStmt::new(
 /// Every account in an org, oldest first.
 pub const ADMIN_PEOPLE: ControlStmt = ControlStmt::new(
     "control.admin_people",
-    "SELECT id, email, created_at, admin, suspended_at FROM user WHERE id IN (SELECT VALUE user FROM membership WHERE org = $org) ORDER BY created_at, id",
+    "SELECT id, email, email_lc, created_at, admin, suspended_at FROM user WHERE id IN (SELECT VALUE user FROM membership WHERE org = $org) ORDER BY created_at, id",
 );
 
 /// When each of `$ids` was last seen: browser sessions, then API tokens (the caller takes the latest).
@@ -439,6 +440,10 @@ pub const ADMIN_TOKEN_NAMES: ControlStmt = ControlStmt::new("control.admin_token
 /// How many API tokens each of `$ids` holds (People shows the count; an owner with none has no row).
 pub const ADMIN_TOKEN_COUNTS: ControlStmt =
     ControlStmt::new("control.admin_token_counts", "SELECT owner, count() AS n FROM api_token WHERE owner IN $ids GROUP BY owner");
+
+/// The stored, normalized address of an account (`authz::is_operator`). A legacy duplicate holds a
+/// `duplicate:` placeholder instead.
+pub const USER_EMAIL_LC: ControlStmt = ControlStmt::new("control.user_email_lc", "SELECT VALUE email_lc FROM user WHERE id = $id LIMIT 1");
 
 /// Whether an admin granted this account admin rights in the app (`authz::is_admin`).
 pub const USER_ADMIN_FLAG: ControlStmt = ControlStmt::new("control.user_admin_flag", "SELECT admin FROM user WHERE id = $id LIMIT 1");

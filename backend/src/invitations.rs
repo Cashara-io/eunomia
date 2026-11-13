@@ -180,7 +180,7 @@ fn expired_error(p: &Pending) -> AppError {
 /// The email check every accept makes: the accepting account's email, normalized, is the invited one.
 pub fn email_matches(p: &Pending, email: &str) -> AppResult<()> {
     // a look-alike that only lowercases into the invited address is not the invited address
-    if models_user::folds_like_ascii(email.trim()) && models_user::normalize_email(email) == p.email {
+    if models_user::case_folds_cleanly(email.trim()) && models_user::normalize_email(email) == p.email {
         Ok(())
     } else {
         Err(AppError::coded(ErrorCode::InvitationEmailMismatch, format!("This invitation is for {}. Use that email address to accept it.", p.email)))
