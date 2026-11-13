@@ -58,6 +58,7 @@ test("People: an admin exports, holds and deletes someone's data from their row"
     legal_hold_at: null as string | null,
     is_you: false,
     tokens: 0,
+    workspace_owner: false,
   };
   const calls: { method: string; url: string; body: unknown }[] = [];
   await page.route("**/api/admin/people", (route) =>
@@ -70,12 +71,13 @@ test("People: an admin exports, holds and deletes someone's data from their row"
     if (req.url().endsWith("/legal-hold")) {
       const hold = (req.postDataJSON() as { hold: boolean }).hold;
       person.legal_hold_at = hold ? new Date().toISOString() : null;
-      return route.fulfill({ json: { legal_hold_at: person.legal_hold_at } });
+      return route.fulfill({ json: { legal_hold_at: person.legal_hold_at, erasure_open: false } });
     }
     if (req.url().endsWith("/erasure")) {
-      const typed = (req.postDataJSON() as { confirm_email: string }).confirm_email;
-      if (typed !== person.email)
-        return route.fulfill({ status: 403, json: { code: "subject.confirmation_failed", detail: "Type the person's email address exactly to confirm. Nothing was deleted." } });
+      // the admin confirms with their own password, never the person's email
+      const body = req.postDataJSON() as { password?: string; confirm_email?: string };
+      if (body.confirm_email !== undefined || body.password !== PASSWORD)
+        return route.fulfill({ status: 403, json: { code: "subject.confirmation_failed", detail: "That isn't your password. Type your own password to confirm. Nothing was deleted." } });
       return route.fulfill({ json: { id: "erasure:x", status: "pending", requested_at: new Date().toISOString() } });
     }
     return route.fulfill({
@@ -89,7 +91,8 @@ test("People: an admin exports, holds and deletes someone's data from their row"
   await row.getByRole("button", { name: `Data of ${person.email}` }).click();
   const panel = page.getByTestId(`person-data-${person.email}`);
   await panel.getByRole("button", { name: "Export their data" }).click();
-  await expect(panel.getByText("Export started.")).toBeVisible();
+  await expect(panel.getByText("Export started. It is delivered to them")).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Make workspace owner" })).toBeVisible();
 
   await panel.getByRole("button", { name: "Place legal hold" }).click();
   await expect(panel.getByText("Legal hold placed.")).toBeVisible();
@@ -99,10 +102,10 @@ test("People: an admin exports, holds and deletes someone's data from their row"
   await expect(panel.getByText("Legal hold lifted.")).toBeVisible();
 
   await panel.getByRole("button", { name: "Delete account and data" }).click();
-  await panel.getByLabel(`Type ${person.email} to confirm`).fill("someone@example.com");
+  await panel.getByLabel("Your password").fill("not-my-password");
   await panel.getByRole("button", { name: "Delete", exact: true }).click();
-  await expect(page.getByText("Type the person's email address exactly to confirm.")).toBeVisible();
-  await panel.getByLabel(`Type ${person.email} to confirm`).fill(person.email);
+  await expect(page.getByText("That isn't your password.")).toBeVisible();
+  await panel.getByLabel("Your password").fill(PASSWORD);
   await panel.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(panel.getByText("Deletion started.")).toBeVisible();
 

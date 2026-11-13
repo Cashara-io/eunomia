@@ -8,7 +8,8 @@ import Tooltip from "@/components/bits/Tooltip";
 import CopyButton from "@/components/bits/CopyButton";
 import { usePeople, usePersonTokens, useRevokePersonToken, useSetAdmin, useSetSuspended } from "@/lib/queries/admin";
 import type { Person } from "@/lib/gen";
-import { useErasePerson, useErasures, useReapplyErasures, useSetLegalHold, useStartPersonExport } from "@/lib/queries/subject";
+import { useErasePerson, useErasures, useMakeWorkspaceOwner, useReapplyErasures, useSetLegalHold, useStartPersonExport } from "@/lib/queries/subject";
+import { useMe } from "@/lib/queries/auth";
 import { ICON, PanelHead, QUIET_DANGER, RevokeButton, TableSkeleton, expiryLabel, relativeTime } from "./shared";
 
 /* Why an admin can't be changed here, for the tooltip on the disabled button. */
@@ -134,6 +135,9 @@ function PersonData({ p, onError }: { p: Person; onError: (f: Failure | null) =>
   const exp = useStartPersonExport();
   const hold = useSetLegalHold();
   const erase = useErasePerson();
+  const owner = useMakeWorkspaceOwner();
+  // the admin confirms with their own password; an admin with single sign-on only types the person's email
+  const adminHasPassword = useMe().data?.has_password ?? true;
   const [confirming, setConfirming] = useState(false);
   const [typed, setTyped] = useState("");
   const [done, setDone] = useState<string | null>(null);
@@ -157,7 +161,13 @@ function PersonData({ p, onError }: { p: Person; onError: (f: Failure | null) =>
           type="button"
           className="btn btn-sm"
           disabled={exp.isPending}
-          onClick={() => run(() => exp.mutateAsync(p.id), `Could not start an export for ${p.email}.`, "Export started. It appears in Settings > Data when it is ready.")}
+          onClick={() =>
+            run(
+              () => exp.mutateAsync(p.id),
+              `Could not start an export for ${p.email}.`,
+              "Export started. It is delivered to them in their Settings > Data, and their activity shows you started it. You see its status in your Settings > Data."
+            )
+          }
         >
           Export their data
         </button>
@@ -165,16 +175,38 @@ function PersonData({ p, onError }: { p: Person; onError: (f: Failure | null) =>
           type="button"
           className="btn btn-sm"
           disabled={hold.isPending}
-          onClick={() =>
-            run(
-              () => hold.mutateAsync({ user_id: p.id, hold: !held }),
-              held ? `Could not lift the hold on ${p.email}.` : `Could not place a hold on ${p.email}.`,
-              held ? "Legal hold lifted." : "Legal hold placed. The account can't be erased until you lift it."
-            )
-          }
+          onClick={async () => {
+            onError(null);
+            setDone(null);
+            try {
+              const r = await hold.mutateAsync({ user_id: p.id, hold: !held });
+              setDone(
+                held
+                  ? r.erasure_open
+                    ? "Legal hold lifted. The deletion that was waiting carries on."
+                    : "Legal hold lifted."
+                  : r.erasure_open
+                    ? "Legal hold placed. A deletion was already queued: it stops before its next step and waits until you lift the hold."
+                    : "Legal hold placed. The account can't be erased until you lift it."
+              );
+            } catch (e) {
+              onError(failure(e, held ? `Could not lift the hold on ${p.email}.` : `Could not place a hold on ${p.email}.`));
+            }
+          }}
         >
           {held ? "Lift legal hold" : "Place legal hold"}
         </button>
+        {!p.workspace_owner && !p.is_you && (
+          <button
+            type="button"
+            className="btn btn-sm"
+            disabled={owner.isPending}
+            title="A workspace has one owner. Hand it over before deleting the current owner's account."
+            onClick={() => run(() => owner.mutateAsync(p.id), `Could not make ${p.email} the workspace owner.`, `${p.email} owns the workspace now.`)}
+          >
+            Make workspace owner
+          </button>
+        )}
         {!confirming && !p.is_you && (
           <button type="button" className={QUIET_DANGER} disabled={held} title={held ? "Lift the legal hold first." : undefined} onClick={() => setConfirming(true)}>
             Delete account and data
@@ -187,7 +219,7 @@ function PersonData({ p, onError }: { p: Person; onError: (f: Failure | null) =>
           onSubmit={(e) => {
             e.preventDefault();
             void run(
-              () => erase.mutateAsync({ user_id: p.id, confirm_email: typed }),
+              () => erase.mutateAsync(adminHasPassword ? { user_id: p.id, password: typed } : { user_id: p.id, confirm_email: typed }),
               `${p.email} was not deleted.`,
               "Deletion started. They are signed out, and their data is removed in the next few minutes."
             ).then(() => setConfirming(false));
@@ -195,10 +227,18 @@ function PersonData({ p, onError }: { p: Person; onError: (f: Failure | null) =>
         >
           <span style={{ color: "var(--ink-dim)" }}>
             Signs them out and deletes their account and everything that is theirs alone. What they wrote in shared spaces stays,
-            with them removed as its author. Type <span className="font-mono">{p.email}</span> to confirm.
+            with them removed as its author.{" "}
+            {adminHasPassword ? "Type your own password to confirm." : <>Type <span className="font-mono">{p.email}</span> to confirm.</>}
           </span>
           <span className="flex flex-wrap items-center gap-2">
-            <input className="field h-8 px-3 min-w-[16rem]" aria-label={`Type ${p.email} to confirm`} value={typed} onChange={(e) => setTyped(e.target.value)} />
+            <input
+              className="field h-8 px-3 min-w-[16rem]"
+              type={adminHasPassword ? "password" : "text"}
+              autoComplete={adminHasPassword ? "current-password" : "off"}
+              aria-label={adminHasPassword ? "Your password" : `Type ${p.email} to confirm`}
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+            />
             <button type="submit" className="btn btn-danger-solid btn-sm" disabled={!typed || erase.isPending}>
               {erase.isPending ? "Deleting…" : "Delete"}
             </button>
@@ -216,6 +256,12 @@ function PersonData({ p, onError }: { p: Person; onError: (f: Failure | null) =>
     </div>
   );
 }
+
+const mentions = (r: { review?: unknown }) =>
+  Object.values(((r.review as { mentions_left_in_others_content?: Record<string, number> } | undefined)?.mentions_left_in_others_content ?? {}) as Record<string, number>).reduce(
+    (a, n) => a + (typeof n === "number" ? n : 0),
+    0
+  );
 
 /* The proof each erasure leaves: when, how, whether the post-check found nothing. Never who it was. */
 function Erasures() {
@@ -266,9 +312,16 @@ function Erasures() {
                   {r.status === "done"
                     ? "Done, nothing left"
                     : r.status === "failed"
-                      ? `Failed: still in ${left.map(([t]) => t).join(", ") || "unknown"}`
-                      : "In progress"}
+                      ? `Failed, retrying: still in ${left.map(([t]) => t).join(", ") || "unknown"}`
+                      : r.status === "held"
+                        ? "Waiting: a legal hold stopped it"
+                        : "In progress"}
                 </span>
+                {mentions(r) > 0 && (
+                  <span style={{ color: "var(--ink-dim)" }} title="Mentions of their email in content other people wrote. That content is theirs, so it was kept: review it.">
+                    {mentions(r)} {mentions(r) === 1 ? "mention" : "mentions"} left in others&apos; content, for review
+                  </span>
+                )}
               </li>
             );
           })}

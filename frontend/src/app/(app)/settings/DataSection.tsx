@@ -23,15 +23,20 @@ function summary(e: ExportRow): string {
 /* One export: when, what is in it, and Download once it is ready. */
 function ExportLine({ e, you }: { e: ExportRow; you: string }) {
   const [error, setError] = useState<Failure | null>(null);
-  const forSomeoneElse = e.subject && e.subject !== you;
+  // an export you started for someone else is theirs: it is delivered to them, you see its status and counts
+  const forSomeoneElse = !!e.subject && e.subject !== you;
+  const byAdmin = !forSomeoneElse && !!e.requested_by && e.requested_by !== you;
   return (
     <li className="py-3 flex flex-col gap-1 min-w-0" data-testid="subject-export">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-[13px] tabular-nums" style={{ color: "var(--ink-dim)" }}>
           {when(e.created_at)}
-          {forSomeoneElse ? " · for someone in your workspace" : ""} · kept until {when(e.expires_at)}
+          {forSomeoneElse ? " · for someone in your workspace, delivered to them" : ""}
+          {byAdmin ? " · started for you by an admin of your workspace" : ""} · kept until {when(e.expires_at)}
         </span>
-        {e.status === "ready" ? (
+        {e.status === "ready" && forSomeoneElse ? (
+          <StatusLine tone="good">Ready for them</StatusLine>
+        ) : e.status === "ready" ? (
           <button
             type="button"
             className="btn btn-sm"
@@ -71,16 +76,24 @@ function DeleteAccount() {
   const [open, setOpen] = useState(false);
   const [secret, setSecret] = useState("");
   const [error, setError] = useState<Failure | null>(null);
+  // the server said this account is the only member of a workspace: deleting it closes that workspace
+  const [closes, setCloses] = useState(false);
+  const [closeOk, setCloseOk] = useState(false);
   const hasPassword = me.data?.has_password ?? true;
 
   async function confirm() {
     setError(null);
     try {
-      await erase.mutateAsync(hasPassword ? { password: secret } : { confirm_email: secret });
+      const proof = hasPassword ? { password: secret } : { confirm_email: secret };
+      await erase.mutateAsync({ ...proof, close_workspace: closes && closeOk });
       // signed out everywhere: nothing cached for this account is valid any more
       qc.clear();
       router.replace("/login?erased=1");
     } catch (e) {
+      if ((e as { code?: string }).code === "subject.workspace_closes") {
+        setCloses(true);
+        return;
+      }
       setError(failure(e, "Your account was not deleted."));
     }
   }
@@ -129,9 +142,18 @@ function DeleteAccount() {
               aria-label={hasPassword ? "Your password" : "Your email"}
             />
           </label>
+          {closes && (
+            <label className="flex items-start gap-2 text-[13px] max-w-[60ch]" data-testid="close-workspace">
+              <input type="checkbox" className="mt-1" checked={closeOk} onChange={(e) => setCloseOk(e.target.checked)} />
+              <span>
+                You&apos;re the only person in your workspace, so it closes with your account: every space, document and connected
+                source in it is deleted, and nobody can use it again. I understand.
+              </span>
+            </label>
+          )}
           {error && <ErrorLine error={error} />}
           <div className="flex items-center gap-2">
-            <button type="submit" className="btn btn-danger-solid" disabled={!secret || erase.isPending}>
+            <button type="submit" className="btn btn-danger-solid" disabled={!secret || erase.isPending || (closes && !closeOk)}>
               {erase.isPending ? "Deleting…" : "Delete my account and data"}
             </button>
             <button

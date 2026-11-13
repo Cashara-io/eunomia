@@ -15,7 +15,7 @@
           "export"
         ],
         "summary": "Delete your account and your data (browser session, confirmed with your password)",
-        "description": "Checks the confirmation, then suspends the account and signs it out everywhere, and queues the erasure. Refused with `subject.legal_hold` while an admin holds the account, and with `subject.last_owner` for the workspace's last owner. What is deleted and what is kept: docs/privacy/subject-rights.md.",
+        "description": "Checks the confirmation, then suspends the account and signs it out everywhere, and queues the erasure. Refused with `subject.legal_hold` while an admin holds the account, `subject.last_owner` when you own a workspace that has other members and no other owner, and `subject.workspace_closes` until you confirm closing a workspace you are the only member of. What is deleted and what is kept: docs/privacy/subject-rights.md.",
         "operationId": "eraseMyAccount",
         "requestBody": {
           "content": {
@@ -144,7 +144,7 @@
           "admin"
         ],
         "summary": "Erasure records for the workspace, newest first (admin only)",
-        "description": "Each record keeps only an opaque reference to the person, the counts per category and the post-check (every value 0 when it passed).",
+        "description": "Each record keeps only an opaque reference to the person, the counts per category, the post-check (every value 0 when it passed) and the mentions of their email left in other people's content, for review.",
         "operationId": "listErasures",
         "responses": {
           "200": {
@@ -187,7 +187,7 @@
           "admin"
         ],
         "summary": "After restoring a backup: erase again everyone erased after the backup was taken (admin only, browser session)",
-        "description": "Also runs by itself when the server starts. Matches live accounts against the erasure records; queues an erasure for each match.",
+        "description": "Also runs by itself when the server starts. Matches live accounts, and the owners of rows in every workspace, against the erasure records; queues an erasure for each match. It acts on the whole server, like a restore.",
         "operationId": "reapplyErasures",
         "responses": {
           "200": {
@@ -319,8 +319,8 @@
         "tags": [
           "admin"
         ],
-        "summary": "Delete someone's account and data (admin only, browser session, confirmed with their email)",
-        "description": "Refused for your own account (use Settings > Data), with `subject.legal_hold` while the account is held, and with `subject.last_owner` for the workspace's last owner or the account that set up the server.",
+        "summary": "Delete someone's account and data (admin only, browser session, confirmed with your own password)",
+        "description": "Refused for your own account (use Settings > Data), with `subject.legal_hold` while the account is held, and with `subject.last_owner` when the person owns a workspace with other members and nobody else owns it, or is the account that set up the server.",
         "operationId": "erasePerson",
         "parameters": [
           {
@@ -377,7 +377,7 @@
           "admin"
         ],
         "summary": "Prepare a full data export for someone in the workspace (admin only, browser session)",
-        "description": "The same archive the person gets from Settings > Data. It is listed with your own exports and kept for seven days.",
+        "description": "The same archive the person gets from Settings > Data, delivered to them: it appears in their Settings > Data, and their activity records that an admin started it. You see its status and counts; you can download it only while their account is suspended, with a reason.",
         "operationId": "startPersonExport",
         "parameters": [
           {
@@ -424,7 +424,7 @@
           "admin"
         ],
         "summary": "Place or lift a legal hold on someone's account (admin only, browser session)",
-        "description": "While held, erasing the account is refused with `subject.legal_hold`. Placing and lifting are both in the activity log. A hold does not stop the audit retention window (AUDIT_RETENTION_DAYS).",
+        "description": "While held, erasing the account is refused with `subject.legal_hold`, and an erasure already queued parks as `held` before its next irreversible step and resumes when the hold is lifted. Placing and lifting are both in the activity log. A hold does not stop the audit retention window (AUDIT_RETENTION_DAYS).",
         "operationId": "setPersonLegalHold",
         "parameters": [
           {
@@ -621,6 +621,53 @@
                   "items": {
                     "$ref": "#/components/schemas/PersonToken"
                   }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/workspace-owner": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Make someone the workspace's owner in place of the current owner (admin only, browser session)",
+        "description": "A workspace has one owner. Handing it over lets the previous owner's account be erased while the workspace keeps an owner.",
+        "operationId": "makeWorkspaceOwner",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleReport"
                 }
               }
             }
@@ -4066,7 +4113,7 @@
         "tags": [
           "export"
         ],
-        "summary": "Your data exports, and the ones you asked for as an admin, newest first",
+        "summary": "Your data exports (including ones an admin started for you) and the ones you asked for as an admin, newest first",
         "operationId": "listSubjectExports",
         "responses": {
           "200": {
@@ -4106,8 +4153,8 @@
         "tags": [
           "export"
         ],
-        "summary": "Prepare a full export of your data (a zip archive with a manifest)",
-        "description": "Queues a job that collects everything in scope about you (account, spaces, what you wrote in spaces you can still read, documents and their files, synced records, chat, sources, tokens and connected apps by name, your audit events) into a zip archive kept for seven days. List exports to see when it is ready.",
+        "summary": "Prepare a full export of your data (a zip archive with a manifest; browser session)",
+        "description": "Queues a job that collects everything in scope about you in every workspace you belong to (account, spaces, what you wrote in spaces you can still read, documents and their files, synced records, chat, sources, tokens and connected apps by name, your audit events) into a zip archive kept for seven days. List exports to see when it is ready. Not available to API tokens or apps.",
         "operationId": "startSubjectExport",
         "responses": {
           "200": {
@@ -4134,9 +4181,6 @@
         "security": [
           {
             "cookie": []
-          },
-          {
-            "bearer": []
           }
         ]
       }
@@ -4146,7 +4190,8 @@
         "tags": [
           "export"
         ],
-        "summary": "Download a ready data export (zip)",
+        "summary": "Download a ready data export (zip; browser session)",
+        "description": "The person downloads their own. An admin who started one for someone downloads it only while that account is suspended, with a reason.",
         "operationId": "downloadSubjectExport",
         "parameters": [
           {
@@ -4154,6 +4199,15 @@
             "in": "path",
             "description": "The export's id, as listed",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reason",
+            "in": "query",
+            "description": "Required when an admin downloads someone else's export (allowed only while that account is\nsuspended): why. Recorded in both people's activity.",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -4180,9 +4234,6 @@
         "security": [
           {
             "cookie": []
-          },
-          {
-            "bearer": []
           }
         ]
       }
@@ -11336,6 +11387,10 @@
       "EraseMe": {
         "type": "object",
         "properties": {
+          "close_workspace": {
+            "type": "boolean",
+            "description": "You confirm that a workspace whose only member you are is closed with your account (everything\nin it is deleted). Without it such a request is refused with `subject.workspace_closes`."
+          },
           "confirm_email": {
             "type": [
               "string",
@@ -11354,19 +11409,29 @@
       },
       "ErasePerson": {
         "type": "object",
-        "required": [
-          "confirm_email"
-        ],
         "properties": {
+          "close_workspace": {
+            "type": "boolean",
+            "description": "Confirms closing any workspace whose only member the person is."
+          },
           "confirm_email": {
-            "type": "string",
-            "description": "The person's email, typed by the admin to confirm."
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Your own password, typed again (an admin who signs in only with single sign-on types the\nperson's email in `confirm_email` instead)."
           }
         }
       },
       "ErasureRecord": {
         "type": "object",
-        "description": "The record a completed erasure leaves, for the People page (no personal data: an opaque reference,\nper-category counts and the post-check result).",
+        "description": "The record a completed erasure leaves, for the People page (no personal data: an opaque reference,\nper-category counts, the post-check result and the review counts).",
         "required": [
           "id",
           "subject_ref",
@@ -11407,6 +11472,10 @@
             "type": "string",
             "description": "`self`, `admin` or `reapply` (a restore brought the account back and it was erased again)."
           },
+          "review": {
+            "type": "object",
+            "description": "Mentions of the person's email left in content other people wrote, for review (not counted as\nresidue: that content is theirs)."
+          },
           "status": {
             "type": "string"
           },
@@ -11433,7 +11502,7 @@
           },
           "status": {
             "type": "string",
-            "description": "`pending`, `running`, `done` or `failed`."
+            "description": "`pending`, `running`, `held`, `done` or `failed`."
           }
         }
       },
@@ -12217,7 +12286,14 @@
       },
       "HoldState": {
         "type": "object",
+        "required": [
+          "erasure_open"
+        ],
         "properties": {
+          "erasure_open": {
+            "type": "boolean",
+            "description": "An erasure of this account is open. A hold placed now parks it (`held`) before its next\nirreversible step; lifting the hold resumes it."
+          },
           "legal_hold_at": {
             "type": [
               "string",
@@ -14308,7 +14384,8 @@
           "admin",
           "role",
           "is_you",
-          "tokens"
+          "tokens",
+          "workspace_owner"
         ],
         "properties": {
           "admin": {
@@ -14365,6 +14442,10 @@
             "type": "integer",
             "format": "int64",
             "description": "How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`)."
+          },
+          "workspace_owner": {
+            "type": "boolean",
+            "description": "The workspace's owner (one per workspace). An owner whose workspace has other members hands it\nover (`/api/admin/people/{user_id}/workspace-owner`) before their account can be erased."
           }
         }
       },
@@ -14987,7 +15068,7 @@
         "properties": {
           "queued": {
             "type": "integer",
-            "description": "Accounts erased before that a restore brought back, queued to be erased again.",
+            "description": "Erasures queued again: accounts a restore brought back, and restored rows whose owner was erased.",
             "minimum": 0
           }
         }

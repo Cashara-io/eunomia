@@ -744,6 +744,11 @@ export type EntityUpdate = {
 
 export type EraseMe = {
     /**
+     * You confirm that a workspace whose only member you are is closed with your account (everything
+     * in it is deleted). Without it such a request is refused with `subject.workspace_closes`.
+     */
+    close_workspace?: boolean;
+    /**
      * Your email, typed again: the confirmation for an account that signs in only with single sign-on.
      */
     confirm_email?: string | null;
@@ -755,14 +760,20 @@ export type EraseMe = {
 
 export type ErasePerson = {
     /**
-     * The person's email, typed by the admin to confirm.
+     * Confirms closing any workspace whose only member the person is.
      */
-    confirm_email: string;
+    close_workspace?: boolean;
+    confirm_email?: string | null;
+    /**
+     * Your own password, typed again (an admin who signs in only with single sign-on types the
+     * person's email in `confirm_email` instead).
+     */
+    password?: string | null;
 };
 
 /**
  * The record a completed erasure leaves, for the People page (no personal data: an opaque reference,
- * per-category counts and the post-check result).
+ * per-category counts, the post-check result and the review counts).
  */
 export type ErasureRecord = {
     completed_at?: string | null;
@@ -785,6 +796,13 @@ export type ErasureRecord = {
      * `self`, `admin` or `reapply` (a restore brought the account back and it was erased again).
      */
     requested_by: string;
+    /**
+     * Mentions of the person's email left in content other people wrote, for review (not counted as
+     * residue: that content is theirs).
+     */
+    review?: {
+        [key: string]: unknown;
+    };
     status: string;
     /**
      * The keyed hash of the erased account's id (never the id or the email).
@@ -799,7 +817,7 @@ export type ErasureTicket = {
     id: string;
     requested_at: string;
     /**
-     * `pending`, `running`, `done` or `failed`.
+     * `pending`, `running`, `held`, `done` or `failed`.
      */
     status: string;
 };
@@ -1145,6 +1163,11 @@ export type HoldChange = {
 };
 
 export type HoldState = {
+    /**
+     * An erasure of this account is open. A hold placed now parks it (`held`) before its next
+     * irreversible step; lifting the hold resumes it.
+     */
+    erasure_open: boolean;
     /**
      * When the hold was placed, RFC 3339; none when there is no hold.
      */
@@ -1992,6 +2015,11 @@ export type Person = {
      * How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`).
      */
     tokens: number;
+    /**
+     * The workspace's owner (one per workspace). An owner whose workspace has other members hands it
+     * over (`/api/admin/people/{user_id}/workspace-owner`) before their account can be erased.
+     */
+    workspace_owner: boolean;
 };
 
 export type PersonToken = {
@@ -2234,7 +2262,7 @@ export type ReadinessOut = {
 
 export type Reapplied = {
     /**
-     * Accounts erased before that a restore brought back, queued to be erased again.
+     * Erasures queued again: accounts a restore brought back, and restored rows whose owner was erased.
      */
     queued: number;
 };
@@ -3447,6 +3475,30 @@ export type RevokePersonTokenResponses = {
 };
 
 export type RevokePersonTokenResponse = RevokePersonTokenResponses[keyof RevokePersonTokenResponses];
+
+export type MakeWorkspaceOwnerData = {
+    body?: never;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/workspace-owner';
+};
+
+export type MakeWorkspaceOwnerErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type MakeWorkspaceOwnerError = MakeWorkspaceOwnerErrors[keyof MakeWorkspaceOwnerErrors];
+
+export type MakeWorkspaceOwnerResponses = {
+    200: PeopleReport;
+};
+
+export type MakeWorkspaceOwnerResponse = MakeWorkspaceOwnerResponses[keyof MakeWorkspaceOwnerResponses];
 
 export type ListAuditData = {
     body?: never;
@@ -5220,7 +5272,13 @@ export type DownloadSubjectExportData = {
          */
         export_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Required when an admin downloads someone else's export (allowed only while that account is
+         * suspended): why. Recorded in both people's activity.
+         */
+        reason?: string;
+    };
     url: '/api/export/subject/{export_id}';
 };
 

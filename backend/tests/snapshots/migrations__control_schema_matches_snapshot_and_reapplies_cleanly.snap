@@ -105,11 +105,27 @@ expression: first
       "indexes": [
         {
           "cols": [
+            "open_slot"
+          ],
+          "index": "UNIQUE",
+          "name": "erasure_open_slot",
+          "table": "erasure"
+        },
+        {
+          "cols": [
             "org",
             "requested_at"
           ],
           "index": "",
           "name": "erasure_org",
+          "table": "erasure"
+        },
+        {
+          "cols": [
+            "running_slot"
+          ],
+          "index": "UNIQUE",
+          "name": "erasure_running_slot",
           "table": "erasure"
         },
         {
