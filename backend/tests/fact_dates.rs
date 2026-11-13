@@ -288,11 +288,11 @@ async fn an_edited_fact_is_not_replaced_by_an_older_email_imported_later() {
     *answers.pairs.lock().unwrap() = both_ways();
     let app = app(answers.clone()).await;
     let (_, cto) = write(&app, "Ada Lovelace", "Ada is the CTO", None).await;
-    // as if written in 2023, before this release
+    // as if written in 2023 (told then)
     app.db()
         .await
         .test_raw()
-        .query("UPDATE $id SET created_at = d'2023-01-10T00:00:00Z', updated_at = d'2023-01-10T00:00:00Z', asserted_at = NONE")
+        .query("UPDATE $id SET created_at = d'2023-01-10T00:00:00Z', updated_at = d'2023-01-10T00:00:00Z', asserted_at = d'2023-01-10T00:00:00Z'")
         .bind(("id", cto.clone()))
         .await
         .unwrap()
@@ -301,7 +301,7 @@ async fn an_edited_fact_is_not_replaced_by_an_older_email_imported_later() {
     let edited = app.tool("memory_update", json!({"memory_id": cto.to_string(), "text": "Ada is the CTO of Acme"})).await;
     assert!(edited.get("error").is_none(), "{edited}");
     let asserted = dates(&app, &cto).await["asserted"].as_str().unwrap().to_string();
-    assert!(asserted.as_str() > "2026-01-01", "an edit is being told again: {asserted}");
+    assert!(asserted.starts_with("20") && asserted.as_str() > "2026-01-01", "an edit is being told again: {asserted}");
     let keys: Vec<String> = app
         .control()
         .test_raw()
