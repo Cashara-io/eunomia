@@ -546,50 +546,96 @@ async fn password_login(app: &App, email: &str, password: &str) -> StatusCode {
     http(&app.router, "POST", "/api/auth/login", Some(json!({"email": email, "password": password})), None, None).await.0 .0
 }
 
-/// Someone registered alice's address with their own password and holds a token and a session. Alice's
-/// verified sign-in does not link into it silently; taking it over removes every credential they hold.
+async fn count_rows(app: &App, sql: &str, user: &eunomia_backend::models_user::User) -> i64 {
+    let rows: Vec<Value> = app.state.control.test_raw().query(sql).bind(("u", user.id.clone())).await.unwrap().take(0).unwrap();
+    rows.first().map_or(0, |r| r["n"].as_i64().unwrap_or(0))
+}
+
+/// A planted OAuth access token (an app connection) for `user`; the raw token.
+async fn oauth_access_token(app: &App, user: &eunomia_backend::models_user::User) -> String {
+    let raw = format!("{}{}", eunomia_backend::oauth::ACCESS_PREFIX, uuid::Uuid::new_v4().simple());
+    app.state.control.test_raw()
+        .query("LET $g = (CREATE oauth_grant SET owner = $u, client_id = 'client-x', client_name = 'Squatter App', scope = ['memory:read', 'memory:write'], resource = 'http://localhost:8001/mcp' RETURN VALUE id)[0]; \
+                CREATE oauth_token SET kind = 'access', token_hash = $h, family = $g, scope = ['memory:read', 'memory:write'], expires_at = time::now() + 15m;")
+        .bind(("u", user.id.clone()))
+        .bind(("h", models_user::hash_token(&raw)))
+        .await.unwrap().check().unwrap();
+    raw
+}
+
+async fn mcp_ping(app: &App, token: &str) -> StatusCode {
+    http(&app.router, "POST", "/mcp", Some(json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "vault_list", "arguments": {}}})), Some(token), None).await.0 .0
+}
+
+/// Someone registered alice's address with their own password, connected an app, minted a token and set up
+/// an extension that writes in. Alice's verified sign-in does not inherit any of it: starting fresh sets
+/// the account aside (every credential it had stops working) and gives her a new, empty account.
 #[tokio::test]
-async fn a_squatted_password_account_is_taken_over_and_the_squatter_loses_everything() {
+async fn starting_fresh_sets_the_old_account_aside_and_nothing_of_it_works_or_shows() {
     let app = app(AuthMode::Both).await;
-    let squatted = common::register(&app.state, "alice@example.test").await;
-    let token = models_user::create_api_token_with(&app.state.control, &squatted.id, "squatter", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
+    let old = common::register(&app.state, "alice@example.test").await;
+    let token = models_user::create_api_token_with(&app.state.control, &old.id, "squatter", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
+    let oauth = oauth_access_token(&app, &old).await;
     let squatter_session = {
         let (_, set) = http(&app.router, "POST", "/api/auth/login", Some(json!({"email": "alice@example.test", "password": PASSWORD})), None, None).await;
         set.unwrap().split(';').next().unwrap().to_string()
     };
-    assert_eq!(http(&app.router, "GET", "/api/vaults", None, Some(&token), None).await.0 .0, StatusCode::OK);
+    // a memory, and an extension whose secret keeps writing in
+    let wrote = http(&app.router, "POST", "/api/tools/memory_write", Some(json!({"subject_name": "Planted Person", "subject_kind": "person", "text": "planted by the squatter"})), Some(&token), None).await.0;
+    assert_eq!(wrote.0, StatusCode::OK, "{}", wrote.1);
+    let ((status, ext), _) = http(&app.router, "POST", "/api/extensions", Some(json!({"name": "squatter feed"})), Some(&token), None).await;
+    assert_eq!(status, StatusCode::OK, "{ext}");
+    let hook = format!("/hooks/ext/{}", ext["extension"]["webhook_url"].as_str().unwrap().rsplit('/').next().unwrap());
+    let secret = ext["secret"].as_str().unwrap().to_string();
+    assert_eq!(http(&app.router, "POST", &hook, Some(json!({"note": "in"})), Some(&secret), None).await.0 .0, StatusCode::ACCEPTED);
+    assert_eq!(mcp_ping(&app, &oauth).await, StatusCode::OK, "the planted app connection works before");
 
     let landed = app.sign_in().await;
     assert_eq!(landed.location, "/login/link");
-    assert!(landed.session.is_none(), "no session before the person chooses");
     let link_cookie = landed.link.expect("the pending-link cookie");
-    let (status, info) = app.get_as(&link_cookie, "/api/auth/oidc/link").await;
-    assert_eq!((status, info["email"].as_str(), info["provider"].as_str()), (StatusCode::OK, Some("alice@example.test"), Some("Mock IdP")));
-    // the squatter still holds everything until the person chooses
-    assert_eq!(password_login(&app, "alice@example.test", PASSWORD).await, StatusCode::OK);
-
-    let ((status, done), set) = link_as(&app, &link_cookie, json!({"take_over": true})).await;
-    assert_eq!(status, StatusCode::OK, "{done}");
-    assert_eq!(done["took_over"], true);
+    let ((status, done), set) = link_as(&app, &link_cookie, json!({"start_fresh": true})).await;
+    assert_eq!((status, done["started_fresh"].as_bool(), done["next"].as_str()), (StatusCode::OK, Some(true), Some("/onboarding")), "{done}");
     let session = set.expect("a session").split(';').next().unwrap().to_string();
+
+    // a new account, not the old one, with nothing of it
     let (_, me) = app.get_as(&session, "/api/auth/me").await;
-    assert_eq!((me["id"].as_str(), me["has_password"].as_bool(), me["oidc_provider"].as_str()), (Some(squatted.id.to_string().as_str()), Some(false), Some("Mock IdP")));
+    assert_ne!(me["id"], json!(old.id.to_string()));
+    assert_eq!((me["email"].as_str(), me["has_password"].as_bool(), me["oidc_provider"].as_str()), (Some("alice@example.test"), Some(false), Some("Mock IdP")));
+    let (_, vaults) = app.get_as(&session, "/api/vaults").await;
+    let list = vaults.as_array().or(vaults["results"].as_array()).unwrap().clone();
+    assert_eq!(list.len(), 1, "only the new personal space: {vaults}");
+    assert!(!app.get_as(&session, "/api/entities").await.1.to_string().contains("Planted Person"), "the old account's data is not visible");
 
-    // the squatter's password, token and session are all gone
+    // every way the previous holder had in stops working
     assert_eq!(password_login(&app, "alice@example.test", PASSWORD).await, StatusCode::UNAUTHORIZED);
-    assert_eq!(http(&app.router, "GET", "/api/vaults", None, Some(&token), None).await.0 .0, StatusCode::UNAUTHORIZED);
+    assert_eq!(http(&app.router, "GET", "/api/vaults", None, Some(&token), None).await.0 .0, StatusCode::FORBIDDEN, "suspended");
+    assert_ne!(mcp_ping(&app, &oauth).await, StatusCode::OK, "the app connection");
     assert_eq!(app.get_as(&squatter_session, "/api/auth/me").await.0, StatusCode::UNAUTHORIZED);
-    let rows: Vec<Value> = app.state.control.test_raw().query("SELECT count() AS n FROM api_token WHERE owner = $u GROUP ALL").bind(("u", squatted.id.clone())).await.unwrap().take(0).unwrap();
-    assert_eq!(rows.first().map_or(0, |r| r["n"].as_i64().unwrap()), 0, "no API token left: {rows:?}");
-    let audit: Vec<Value> = app.state.control.test_raw().query("SELECT action FROM audit_event WHERE action = 'auth.oidc_takeover'").await.unwrap().take(0).unwrap();
-    assert_eq!(audit.len(), 1);
+    assert_eq!(http(&app.router, "POST", &hook, Some(json!({"note": "still in?"})), Some(&secret), None).await.0 .0, StatusCode::UNAUTHORIZED, "the extension secret");
 
-    // the cookie is spent; the next provider sign-in just signs in
-    assert_eq!(link_as(&app, &link_cookie, json!({"take_over": true})).await.0 .0, StatusCode::OK, "a replay in the same browser only re-links the same identity");
-    expect_signed_in(&app.sign_in().await);
+    // the old account is set aside, data untouched, for an operator
+    assert!(models_user::is_suspended(&app.state.control, &old.id).await.unwrap());
+    let rows: Vec<Value> = app.state.control.test_raw().query("SELECT email, email_lc FROM $u").bind(("u", old.id.clone())).await.unwrap().take(0).unwrap();
+    assert!(rows[0]["email_lc"].as_str().unwrap().starts_with("set-aside:"), "{rows:?}");
+    assert!(rows[0]["email"].as_str().unwrap().contains("alice@example.test"), "the operator can see what it was: {rows:?}");
+    assert_eq!(count_rows(&app, "SELECT count() AS n FROM api_token WHERE owner = $u GROUP ALL", &old).await, 1, "kept for review, not deleted");
+    let audit: Vec<Value> = app.state.control.test_raw().query("SELECT user FROM audit_event WHERE action = 'auth.oidc_set_aside'").await.unwrap().take(0).unwrap();
+    assert_eq!(audit, vec![json!({"user": old.id.to_string()})]);
+
+    // the choice is spent; the next sign-in is an ordinary one into the new account
+    for body in [json!({"start_fresh": true}), json!({"password": PASSWORD})] {
+        let ((status, _), set) = link_as(&app, &link_cookie, body).await;
+        // the account it named is set aside (suspended, checked first) and the identity is taken: refused, no session
+        assert!(matches!(status, StatusCode::FORBIDDEN | StatusCode::UNAUTHORIZED) && set.is_none(), "{status}");
+    }
+    assert_eq!(app.user_count().await, 2, "no third account");
+    let again = app.sign_in().await;
+    assert!(again.link.is_none());
+    let (_, me2) = app.get_as(&expect_signed_in(&again), "/api/auth/me").await;
+    assert_eq!(me2["id"], me["id"]);
 }
 
-/// The person who made the account proves its password: linked, and nothing is removed.
+/// The person who made the account proves its password: linked, nothing removed, and the cookie is spent.
 #[tokio::test]
 async fn the_owner_proves_the_password_and_keeps_everything() {
     let app = app(AuthMode::Both).await;
@@ -599,16 +645,36 @@ async fn the_owner_proves_the_password_and_keeps_everything() {
     let ((status, body), set) = link_as(&app, &link_cookie, json!({"password": "not-the-password"})).await;
     assert_eq!((status, body["code"].as_str(), set.is_none()), (StatusCode::UNAUTHORIZED, Some("auth.unauthorized"), true));
     let ((status, done), set) = link_as(&app, &link_cookie, json!({"password": PASSWORD})).await;
-    assert_eq!((status, done["took_over"].as_bool()), (StatusCode::OK, Some(false)), "{done}");
+    assert_eq!((status, done["started_fresh"].as_bool()), (StatusCode::OK, Some(false)), "{done}");
     assert!(set.is_some());
     assert_eq!(http(&app.router, "GET", "/api/vaults", None, Some(&token), None).await.0 .0, StatusCode::OK, "the token survives");
     assert_eq!(password_login(&app, "alice@example.test", PASSWORD).await, StatusCode::OK, "and the password");
     let issuer = app.idp.inner.lock().unwrap().issuer.clone();
     assert_eq!(models_user::user_by_identity(&app.state.control, &issuer, "alice-sub").await.unwrap().map(|u| u.id), Some(alice.id));
+    // the cookie is spent: replaying it starts nothing
+    let ((status, _), set) = link_as(&app, &link_cookie, json!({"password": PASSWORD})).await;
+    assert_eq!((status, set.is_none()), (StatusCode::UNAUTHORIZED, true));
     // the next sign-in does not ask again
     let again = app.sign_in().await;
     assert!(again.link.is_none());
     expect_signed_in(&again);
+}
+
+/// A suspended account is an operator's decision: the link page can neither link it nor replace it.
+#[tokio::test]
+async fn a_suspended_account_can_be_neither_linked_nor_replaced() {
+    let app = app(AuthMode::Both).await;
+    let alice = common::register(&app.state, "alice@example.test").await;
+    let link_cookie = app.sign_in().await.link.expect("asks first");
+    app.state.control.test_raw().query("UPDATE $u SET suspended_at = time::now()").bind(("u", alice.id.clone())).await.unwrap().check().unwrap();
+    for body in [json!({"password": PASSWORD}), json!({"start_fresh": true})] {
+        let ((status, err), set) = link_as(&app, &link_cookie, body.clone()).await;
+        assert_eq!((status, err["code"].as_str(), set.is_none()), (StatusCode::FORBIDDEN, Some("auth.suspended"), true), "{body}");
+    }
+    assert_eq!(app.user_count().await, 1, "no new account");
+    let issuer = app.idp.inner.lock().unwrap().issuer.clone();
+    let rows: Vec<Value> = app.state.control.test_raw().query("SELECT * FROM identity WHERE issuer = $i").bind(("i", issuer)).await.unwrap().take(0).unwrap();
+    assert!(rows.is_empty(), "nothing linked");
 }
 
 /// Guessing the password here counts against the same throttle as the login form.
@@ -623,19 +689,22 @@ async fn a_wrong_password_is_throttled_like_login() {
     assert_eq!(link_as(&app, &link_cookie, json!({"password": PASSWORD})).await.0 .0, StatusCode::TOO_MANY_REQUESTS, "even the right one, for a while");
     assert_eq!(password_login(&app, "alice@example.test", PASSWORD).await, StatusCode::TOO_MANY_REQUESTS, "the login form shares the count");
     // and no cookie, no link
-    assert_eq!(http(&app.router, "POST", "/api/auth/oidc/link", Some(json!({"take_over": true})), None, None).await.0 .0, StatusCode::UNAUTHORIZED);
+    assert_eq!(http(&app.router, "POST", "/api/auth/oidc/link", Some(json!({"start_fresh": true})), None, None).await.0 .0, StatusCode::UNAUTHORIZED);
 }
 
-/// An account with no password (made by single sign-on) links a second verified identity without asking.
+/// One account, one identity per provider: a second identity with the same address is refused, password
+/// or not (an operator relinks it).
 #[tokio::test]
-async fn an_sso_only_account_links_without_asking() {
+async fn an_account_is_never_linked_to_a_second_identity_at_the_provider() {
     let app = app(AuthMode::Both).await;
     expect_signed_in(&app.sign_in().await);
     app.idp.behave(Behavior { sub: "alice-second-sub".into(), ..Default::default() });
     let landed = app.sign_in().await;
     assert!(landed.link.is_none());
-    expect_signed_in(&landed);
+    expect_refused(&landed, "identity_taken");
     assert_eq!(app.user_count().await, 1);
+    let issuer = app.idp.inner.lock().unwrap().issuer.clone();
+    assert!(models_user::user_by_identity(&app.state.control, &issuer, "alice-second-sub").await.unwrap().is_none());
 }
 
 #[tokio::test]

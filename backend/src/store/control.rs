@@ -72,7 +72,8 @@ pub const ALL: &[&ControlStmt] = &[
     &IDENTITY_LIST_FOR_USER,
     &IDENTITY_DELETE_USER,
     &AUTH_SESSION_REVOKE_OWNER,
-    &AUTH_TAKE_OVER,
+    &AUTH_SET_ASIDE,
+    &AUTH_SET_ASIDE_UNDO,
     &ADMIN_AUDIT_PAGE,
     &ADMIN_PEOPLE,
     &ADMIN_LAST_SEEN,
@@ -81,6 +82,7 @@ pub const ALL: &[&ControlStmt] = &[
     &USER_ADMIN_FLAG,
     &USER_SET_ADMIN,
     &USER_SET_SUSPENDED,
+    &USER_SUSPENDED,
 ];
 
 pub const AUTH_SESSION_CREATE: ControlStmt =
@@ -405,18 +407,23 @@ pub const IDENTITY_DELETE_USER: ControlStmt = ControlStmt::new("control.identity
 pub const AUTH_SESSION_REVOKE_OWNER: ControlStmt =
     ControlStmt::new("control.auth_session_revoke_owner", "UPDATE session SET revoked = true WHERE owner = $owner AND revoked = false");
 
-/// Single sign-on takes over an account it could not prove it owned the password of (`routers/oidc.rs`,
-/// `take_over`): every credential anyone else may hold goes, in one transaction.
-pub const AUTH_TAKE_OVER: ControlStmt = ControlStmt::new(
-    "control.auth_take_over",
+/// Sets an account aside when a provider-verified sign-in for its address starts a new account instead
+/// (`routers/oidc.rs`, `start_fresh`): suspended (every way in and every job refuse it), its sign-in address
+/// replaced by a placeholder no address can match, its sessions ended. Its data is not touched. The raw
+/// `email` keeps the old address after the placeholder, for the operator reviewing it.
+pub const AUTH_SET_ASIDE: ControlStmt = ControlStmt::new(
+    "control.auth_set_aside",
     "BEGIN TRANSACTION; \
-     UPDATE $user SET password_hash = NONE; \
-     DELETE api_token WHERE owner = $user; \
-     DELETE oauth_token WHERE family IN (SELECT VALUE id FROM oauth_grant WHERE owner = $user); \
-     DELETE oauth_grant WHERE owner = $user; \
-     DELETE oauth_code WHERE owner = $user; \
+     UPDATE $user SET suspended_at = (suspended_at ?? time::now()), email_lc = string::concat('set-aside:', <string>$user), \
+        email = string::concat('set-aside:', <string>$user, ' (was ', email, ')'); \
      UPDATE session SET revoked = true WHERE owner = $user AND revoked = false; \
      COMMIT TRANSACTION;",
+);
+
+/// Undoes [`AUTH_SET_ASIDE`] when the new account could not be made (ended sessions stay ended).
+pub const AUTH_SET_ASIDE_UNDO: ControlStmt = ControlStmt::new(
+    "control.auth_set_aside_undo",
+    "UPDATE $user SET email = $email, email_lc = $email_lc, suspended_at = $suspended_at",
 );
 
 // workspace admin (routers/admin.rs)
@@ -461,6 +468,9 @@ pub const USER_ADMIN_FLAG: ControlStmt = ControlStmt::new("control.user_admin_fl
 /// Grants (`true`) or takes back (`NONE`) admin rights granted in the app.
 pub const USER_SET_ADMIN: ControlStmt =
     ControlStmt::new("control.user_set_admin", "UPDATE user SET admin = $admin WHERE id = $id RETURN id");
+
+/// When an account was suspended (`NONE` while active; no row for a record that is not an account).
+pub const USER_SUSPENDED: ControlStmt = ControlStmt::new("control.user_suspended", "SELECT VALUE suspended_at FROM user WHERE id = $id LIMIT 1");
 
 /// Suspends (now) or restores an account. Suspending again keeps the first time.
 pub const USER_SET_SUSPENDED: ControlStmt = ControlStmt::new(
