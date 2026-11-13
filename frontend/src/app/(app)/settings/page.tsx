@@ -21,6 +21,7 @@ import { DataSection } from "./DataSection";
 import { UsageSection } from "./UsageSection";
 import { AuditSection } from "./AuditSection";
 import { PeopleSection } from "./PeopleSection";
+import { AccessReviewsSection } from "./AccessReviewsSection";
 import { SETTINGS_GROUPS } from "@/lib/settingsTabs";
 
 const GROUPS = SETTINGS_GROUPS;
@@ -166,6 +167,7 @@ function Settings() {
             {tab === "support" && <DiagnosticsSection />}
             {tab === "data" && <DataSection />}
             {tab === "people" && <PeopleSection />}
+            {tab === "reviews" && <AccessReviewsSection />}
             {tab === "audit" && <AuditSection />}
             {tab === "usage" && <UsageSection />}
             {tab === "https" && <HttpsSection />}

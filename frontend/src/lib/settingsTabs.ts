@@ -19,7 +19,8 @@ export const SETTINGS_GROUPS = [
     admin: true,
     tabs: [
       { id: "people", label: "People", keywords: "users accounts admin suspend sign up" },
-      { id: "audit", label: "Audit log", keywords: "history events activity" },
+      { id: "reviews", label: "Access reviews", keywords: "access review recertify who has access compliance" },
+      { id: "audit", label: "Audit log", keywords: "history events activity integrity verify export" },
       { id: "usage", label: "Usage", keywords: "tool calls stats" },
     ],
   },

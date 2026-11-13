@@ -3,11 +3,11 @@ import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 
 import ErrorLine, { failure } from "@/components/ErrorLine";
 import { useState } from "react";
-import { DownloadSimpleIcon } from "@phosphor-icons/react/ssr";
+import { DownloadSimpleIcon, SealCheckIcon } from "@phosphor-icons/react/ssr";
 import { useAudit } from "@/lib/queries/audit";
-import { useWorkspaceAudit } from "@/lib/queries/admin";
-import type { AuditCategory } from "@/lib/gen";
-import { PanelHead, TableSkeleton, relativeTime } from "./shared";
+import { downloadAuditExport, useVerifyAudit, useWorkspaceAudit } from "@/lib/queries/admin";
+import type { AuditCategory, AuditVerification } from "@/lib/gen";
+import { PanelHead, StatusLine, TableSkeleton, relativeTime } from "./shared";
 
 const PAGE = 50;
 
@@ -200,8 +200,95 @@ export function AuditSection() {
           ? "Changes to spaces, tokens, apps and admin rights, newest first."
           : "Changes your AI apps made with your account, newest first."}
       </PanelHead>
+      {view === "workspace" && <Integrity />}
       {view === "workspace" ? <WorkspaceLog /> : <ToolCallLog />}
     </div>
+  );
+}
+
+/* One ledger's check in words: "Intact: events 1 to 240 checked" or where it breaks. */
+function LedgerResult({ v }: { v: AuditVerification }) {
+  const name = v.ledger === "instance" ? "Sign-ins with no account" : "This workspace";
+  if (!v.ok)
+    return (
+      <StatusLine tone="critical">
+        {name}: altered or incomplete. {v.break?.message}
+      </StatusLine>
+    );
+  const range = v.checked ? `events ${v.first_seq} to ${v.last_seq} checked` : "nothing recorded yet";
+  const from = v.anchor?.kind === "retention" ? ", from the last retention cut" : "";
+  const older = v.before_chain ? `; ${v.before_chain} older events predate the chain` : "";
+  return (
+    <StatusLine tone="good">
+      {name}: intact, {range}
+      {from}
+      {older}.
+    </StatusLine>
+  );
+}
+
+/* Check the hash chain, and download a date range of the log that verifies offline. */
+function Integrity() {
+  const verify = useVerifyAudit();
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ReturnType<typeof failure> | null>(null);
+  async function download() {
+    setBusy(true);
+    setError(null);
+    try {
+      await downloadAuditExport(from, to);
+    } catch (e) {
+      setError(failure(e, "Could not download the security log."));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section aria-labelledby="integrity-title" className="flex flex-col gap-3 rounded-[12px] border p-4" style={{ borderColor: "var(--border)" }}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 id="integrity-title" className="text-[14px] font-medium">
+            Integrity
+          </h3>
+          <p className="text-[13px] max-w-[60ch]" style={{ color: "var(--ink-dim)" }}>
+            Every event is chained to the one before it, so an edited or deleted event shows up here.
+          </p>
+        </div>
+        <button type="button" className="btn btn-sm" disabled={verify.isFetching} onClick={() => void verify.refetch()}>
+          <SealCheckIcon weight="duotone" size={14} aria-hidden />
+          {verify.isFetching ? "Checking…" : "Check integrity"}
+        </button>
+      </div>
+      {verify.isError && <ErrorLine error={failure(verify.error, "Could not check the security log.")} />}
+      {verify.data && (
+        <div className="flex flex-col gap-1" data-testid="integrity-result">
+          {verify.data.ledgers.map((v) => (
+            <LedgerResult key={v.ledger} v={v} />
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1">
+          <span className="label">From</span>
+          <input type="date" className="field h-9 px-2 text-[13px]" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="label">Until</span>
+          <input type="date" className="field h-9 px-2 text-[13px]" value={to} onChange={(e) => setTo(e.target.value)} />
+        </label>
+        <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void download()}>
+          <DownloadSimpleIcon weight="duotone" size={14} aria-hidden />
+          {busy ? "Preparing…" : "Download for auditors"}
+        </button>
+      </div>
+      <p className="text-[12px] max-w-[68ch]" style={{ color: "var(--ink-faint)" }}>
+        The file lists who did what and when, with each event&apos;s hash. It holds no memory text, chat content or secrets. Check it
+        offline with <code className="font-mono">scripts/audit/verify-audit-export.py</code>.
+      </p>
+      {error && <ErrorLine error={error} />}
+    </section>
   );
 }
 
