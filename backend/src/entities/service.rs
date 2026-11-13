@@ -844,8 +844,9 @@ pub async fn add_memory(
     add_memory_at(db, owner, subject_id, text, source_record_id, mem_type, None).await
 }
 
-/// [`add_memory`] for a fact that happened at `occurred_at` (`None`: unknown, so recall and supersession
-/// date it by when it was written). The date is written in the same statement as the fact.
+/// [`add_memory`] for a fact drawn from a source record dated `occurred_at` (`None`: undated). The record
+/// date is both when the fact happened and when we were told it (`asserted_at`, never later than the
+/// write; see docs/concepts.md). Both are written in the same statement as the fact.
 pub async fn add_memory_at(
     db: &OrgDb,
     owner: &RecordId,
@@ -864,7 +865,7 @@ pub async fn add_memory_at(
             format!("not a member of {}'s vault", subject_row.vault.to_string()),
         ));
     }
-    Ok(insert_memory(db, owner, subject_id, &subject_row.vault, text, source_record_id, mem_type, occurred_at).await?.0)
+    Ok(insert_memory(db, owner, subject_id, &subject_row.vault, text, source_record_id, mem_type, occurred_at, occurred_at).await?.0)
 }
 
 /// [`add_memory`] once the subject and its vault are known and the caller may write there.
@@ -878,6 +879,7 @@ async fn insert_memory(
     source_record_id: Option<&str>,
     mem_type: &str,
     occurred_at: Option<Datetime>,
+    told_at: Option<Datetime>,
 ) -> AppResult<(MemoryOut, String)> {
     // every memory write (tools, REST, extraction) lands here, so this is the one place secrets are dropped
     let mut redacted = Vec::new();
@@ -908,6 +910,7 @@ async fn insert_memory(
             .bind(("source", source.clone()))
             .bind(("obs_id", obs_id.clone()))
             .bind(("occurred_at", occurred_at))
+            .bind(("told_at", told_at))
             .await?
             .check()?;
         let rows: Vec<MemoryRow> = res.take(stmt.slot)?;
@@ -943,6 +946,7 @@ pub async fn write_memory(
     source_record_id: Option<&str>,
     mem_type: &str,
     vault_id: Option<&RecordId>,
+    // when the fact happened; it is told now whatever this says
     occurred_at: Option<Datetime>,
 ) -> AppResult<WriteMemoryOut> {
     authz::require_scope(Action::WriteMemories.scope())?;
@@ -952,7 +956,7 @@ pub async fn write_memory(
     let entity_rid: RecordId =
         crate::rid::parse(&entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
     let vault: RecordId = crate::rid::parse(&entity.vault).map_err(|_| AppError::internal("vault id did not round-trip"))?;
-    let (memory, vault_name) = insert_memory(db, owner, &entity_rid, &vault, text, source_record_id, mem_type, occurred_at).await?;
+    let (memory, vault_name) = insert_memory(db, owner, &entity_rid, &vault, text, source_record_id, mem_type, occurred_at, None).await?;
     let possible_duplicates = if created { possible_duplicates(db, &entity).await? } else { Vec::new() };
     Ok(WriteMemoryOut { entity, memory, possible_duplicates, kind_mapped, vault_name })
 }

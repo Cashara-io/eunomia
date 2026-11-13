@@ -156,14 +156,30 @@ fn embed_soon(state: &OrgState, owner: &RecordId) {
 /// Memories embedded right after a write (the new one and any backlog alongside it).
 const EMBED_SOON_BATCH: usize = 16;
 
+/// Edits a fact. An edit is being told the fact again (its `asserted_at` moves to now), so a raw fact is
+/// checked again, like a new write, against the subject's other facts.
 pub async fn memory_update(
-    db: &OrgDb,
+    state: &OrgState,
     owner: &RecordId,
     memory_id: &RecordId,
     text: Option<&str>,
     new_type: Option<&str>,
 ) -> AppResult<Option<service::MemoryOut>> {
-    service::update_memory(db, owner, memory_id, text, new_type).await
+    let out = service::update_memory(&state.db, owner, memory_id, text, new_type).await?;
+    if let Some(m) = &out {
+        recheck_after_edit(state, owner, m).await;
+    }
+    Ok(out)
+}
+
+/// Queues the supersede check for an edited raw fact (the MCP tool and the web route both edit through
+/// here or call it). Best effort, like the check after a write.
+pub async fn recheck_after_edit(state: &OrgState, owner: &RecordId, memory: &service::MemoryOut) {
+    if memory.mem_type == "observation" || !super::supersede::enabled(&state.db, &state.settings, owner).await {
+        return;
+    }
+    let (Ok(subject), Ok(id)) = (crate::rid::parse(&memory.subject), crate::rid::parse(&memory.id)) else { return };
+    crate::jobs::enqueue_lossy(&state.control, crate::jobs::handlers::supersede_edit_job(state.db.org(), owner, &subject, &id, memory.version)).await;
 }
 
 pub async fn entity_update(

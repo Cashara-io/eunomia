@@ -30,10 +30,13 @@ pub const WRITE_OBSERVATION: Stmt = Stmt::at(
 );
 
 /// `$occurred_at` (when the fact happened; NONE: unknown) is written with the fact, never after it.
+/// `asserted_at` (when we were told it) is `$told_at`, a source record's date, but never later than
+/// now; with no `$told_at` (a person or agent wrote it) it is now. See docs/concepts.md.
 pub const WRITE_FACT: Stmt = Stmt::at(
     "entities.write_fact",
     r#"BEGIN TRANSACTION;
-        CREATE memory SET owner = $owner, vault = $vault, subject = $subject, text = $text, type = $type, source = $source, occurred_at = $occurred_at RETURN *, vault.name AS vault_name;
+        CREATE memory SET owner = $owner, vault = $vault, subject = $subject, text = $text, type = $type, source = $source, occurred_at = $occurred_at,
+            asserted_at = IF $told_at != NONE AND $told_at < time::now() THEN $told_at ELSE time::now() END RETURN *, vault.name AS vault_name;
         LET $cur = (SELECT VALUE id FROM $obs_id);
         IF array::len($cur) > 0 {
             UPDATE $obs_id SET status = "stale", version = version + 1
@@ -85,11 +88,13 @@ pub const DELETE_RECORD: Stmt = Stmt::new("entities.delete_record", "DELETE $id"
 // Edit a memory and, for a raw fact, make its subject's observation stale -- one transaction, like
 // WRITE_FACT and DELETE_MEMORY. Advancing the observation version also rejects an in-flight
 // rebuild from before this edit, even if the observation was already stale. An edited raw fact is
-// current again (no longer superseded); an observation keeps its status.
+// current again (no longer superseded); an observation keeps its status. An edit is being told the
+// fact again: `asserted_at` moves to now (the caller queues a supersede check).
 pub const UPDATE_MEMORY_TEXT: Stmt = Stmt::at(
     "entities.update_memory_text",
     r#"BEGIN TRANSACTION;
-        UPDATE $id SET version = version + 1, updated_at = time::now(), text = $text, status = IF type = "observation" THEN status ELSE NONE END RETURN AFTER;
+        UPDATE $id SET version = version + 1, updated_at = time::now(), asserted_at = time::now(), text = $text, status = IF type = "observation" THEN status ELSE NONE END,
+            superseded_by = IF type = "observation" THEN superseded_by ELSE NONE END RETURN AFTER;
         IF $raw { UPDATE memory SET status = "stale", version = version + 1 WHERE subject = $subject AND type = "observation" };
         COMMIT TRANSACTION;"#,
     1, // BEGIN 0, UPDATE 1
@@ -97,7 +102,7 @@ pub const UPDATE_MEMORY_TEXT: Stmt = Stmt::at(
 pub const UPDATE_MEMORY_TYPE: Stmt = Stmt::at(
     "entities.update_memory_type",
     r#"BEGIN TRANSACTION;
-        UPDATE $id SET version = version + 1, updated_at = time::now(), type = $type RETURN AFTER;
+        UPDATE $id SET version = version + 1, updated_at = time::now(), asserted_at = time::now(), type = $type RETURN AFTER;
         IF $raw { UPDATE memory SET status = "stale", version = version + 1 WHERE subject = $subject AND type = "observation" };
         COMMIT TRANSACTION;"#,
     1, // BEGIN 0, UPDATE 1
@@ -105,7 +110,8 @@ pub const UPDATE_MEMORY_TYPE: Stmt = Stmt::at(
 pub const UPDATE_MEMORY_TEXT_TYPE: Stmt = Stmt::at(
     "entities.update_memory_text_type",
     r#"BEGIN TRANSACTION;
-        UPDATE $id SET version = version + 1, updated_at = time::now(), text = $text, type = $type, status = IF $type = "observation" THEN status ELSE NONE END RETURN AFTER;
+        UPDATE $id SET version = version + 1, updated_at = time::now(), asserted_at = time::now(), text = $text, type = $type, status = IF $type = "observation" THEN status ELSE NONE END,
+            superseded_by = IF $type = "observation" THEN superseded_by ELSE NONE END RETURN AFTER;
         IF $raw { UPDATE memory SET status = "stale", version = version + 1 WHERE subject = $subject AND type = "observation" };
         COMMIT TRANSACTION;"#,
     1, // BEGIN 0, UPDATE 1
@@ -275,19 +281,20 @@ pub const SET_SUMMARY: Stmt = Stmt::new(
 );
 
 // consolidate.rs
-// Supersession dates a fact by when it happened (`occurred_at`), else when it was first written
-// (`created_at`): never by its last edit. `written` breaks ties between facts about the same moment.
+// Supersession places a fact by when we were last told it (`asserted_at`), else its last write
+// (facts from before 0046); never by when it happened (`occurred_at`, shown to the model only).
+// `written` (last write) breaks ties. See docs/concepts.md, "A fact's two dates".
 /// The facts being checked (the new ones).
 pub const FACTS_BY_ID: Stmt = Stmt::new(
     "entities.facts_by_id",
-    r#"SELECT id, text, occurred_at ?? created_at AS at, created_at AS written FROM $ids
+    r#"SELECT id, text, asserted_at ?? updated_at ?? created_at AS at, updated_at ?? created_at AS written, occurred_at FROM $ids
        WHERE type IN ["world","experience"] AND status != "superseded""#,
 );
 /// The subject's live raw facts with no vector for `$spec` yet (their embed job has not run), newest first.
 /// The supersede check embeds these itself, or a contradiction written right after a fact would miss it.
 pub const UNEMBEDDED_LIVE_FACTS: Stmt = Stmt::new(
     "entities.unembedded_live_facts",
-    r#"SELECT id, text, occurred_at ?? created_at AS at, created_at AS written FROM memory
+    r#"SELECT id, text, asserted_at ?? updated_at ?? created_at AS at, updated_at ?? created_at AS written, occurred_at FROM memory
        WHERE subject = $subject AND id NOTINSIDE $new AND type IN ["world","experience"]
        AND status != "superseded" AND (embedding_spec = NONE OR embedding_spec != $spec)
        ORDER BY at DESC LIMIT $limit"#,
@@ -296,14 +303,15 @@ pub const UNEMBEDDED_LIVE_FACTS: Stmt = Stmt::new(
 /// Only these can be superseded by it: a fact about something else can't be made untrue by it.
 pub const SIMILAR_LIVE_FACTS: Stmt = Stmt::new(
     "entities.similar_live_facts",
-    r#"SELECT id, text, occurred_at ?? created_at AS at, created_at AS written, vector::similarity::cosine(embedding, $vector) AS sim
+    r#"SELECT id, text, asserted_at ?? updated_at ?? created_at AS at, updated_at ?? created_at AS written, occurred_at, vector::similarity::cosine(embedding, $vector) AS sim
        FROM memory WHERE subject = $subject AND id != $new AND type IN ["world","experience"]
        AND status != "superseded" AND embedding_spec = $spec ORDER BY sim DESC LIMIT $limit"#,
 );
-/// Marks facts superseded and makes the subject's observation stale.
+/// Marks facts superseded, each with the fact that replaced it (`$pairs`: `[fact, by]`), and makes the
+/// subject's observation stale.
 pub const MARK_SUPERSEDED: Stmt = Stmt::new(
     "entities.mark_superseded",
-    r#"UPDATE $ids SET status = "superseded";
+    r#"FOR $p IN $pairs { UPDATE $p[0] SET status = "superseded", superseded_by = $p[1] };
        UPDATE memory SET status = "stale" WHERE subject = $subject AND type = "observation";"#,
 );
 pub const RAW_MEMORIES: Stmt = Stmt::new(

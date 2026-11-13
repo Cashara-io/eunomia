@@ -73,6 +73,32 @@ access") is marked `status: "superseded"`: `recall` leaves it out,
 also favours recent memories, and every hit carries its date. Without a chat
 model nothing is marked, so check dates on time-sensitive facts.
 
+**A fact's two dates.** Every raw fact has two dates, used for different things.
+This is the one definition; recall and supersession both follow it.
+
+- *When it happened* (`occurred_at`): the date the writer gave (`memory_write`'s
+  `occurred_at`), or for a fact extracted from a synced record, that record's
+  date (a message's sent time, an event's start, a page's last edit). It may be
+  in the future (a meeting next month). For recall and display a memory's date
+  is `occurred_at`, else its last write (`updated_at`, else `created_at`): that
+  is what `time_range`, recency and every hit's `occurred_at` use.
+- *When we were last told* (`asserted_at`): for an extracted fact, its record's
+  date but never later than the moment the fact was written (a source cannot
+  tell us something after we read it); for a fact a person or agent wrote, the
+  write time, whatever `occurred_at` they passed; for an edited fact, the edit
+  time. A fact without one (written before it existed) falls back to its last
+  write. Only this date decides which fact is current: the fact we were told
+  most recently replaces the earlier one, never the other way round, and two
+  facts told at the same moment go to the later write. A replaced fact keeps
+  the id of the fact that replaced it (`superseded_by`).
+
+So an old email imported today cannot replace a newer fact, a correction made
+today wins even when it says "true since March", a fact from next month's
+calendar event does not outrank today's correction, and an edit counts as
+being told again (it is re-checked). One limit: a fact written directly about
+the past ("worked at Acme in 2019") is told today, so it relies on the model,
+which sees both dates, not to read history as a correction.
+
 **Finding and de-duplicating entities.** `entities_search` matches names and
 aliases, then the text of each entity's facts, so a handle that only appears
 in a fact still finds its entity. `memory_write` with a decorated name
@@ -271,7 +297,8 @@ semantic hit must reach a minimum similarity, so an unrelated nearest
 neighbour never rides in on rank alone.
 
 A fact can carry when it happened: `memory_write` takes `occurred_at` (a fact
-written today about last March). The temporal arm and recency use it, and with
+written today about last March; see "A fact's two dates" above). The temporal
+arm and recency use it, and with
 a `time_range` "recent" means "inside that range". Superseded facts are left
 out unless `include_history` is true, which returns them marked
 `status: "superseded"`.

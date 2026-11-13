@@ -267,7 +267,16 @@ async fn fact_dates_backfill(state: AppState, job: Job) -> Result<(), JobError> 
 
 /// One supersede check per written fact.
 pub fn supersede_job(org: crate::pool::OrgId, owner: &RecordId, subject: &RecordId, memory: &RecordId) -> NewJob {
-    let key = format!("{}:{}:{}", kind::SUPERSEDE, org.key(), memory.to_string());
+    supersede_job_keyed(org, owner, subject, memory, format!("{}:{}:{}", kind::SUPERSEDE, org.key(), memory.to_string()))
+}
+
+/// One supersede check per edit of a fact (`version` is the fact's version after the edit), so it is not
+/// taken for the check its first write already queued.
+pub fn supersede_edit_job(org: crate::pool::OrgId, owner: &RecordId, subject: &RecordId, memory: &RecordId, version: i64) -> NewJob {
+    supersede_job_keyed(org, owner, subject, memory, format!("{}:{}:{}:v{version}", kind::SUPERSEDE, org.key(), memory.to_string()))
+}
+
+fn supersede_job_keyed(org: crate::pool::OrgId, owner: &RecordId, subject: &RecordId, memory: &RecordId, key: String) -> NewJob {
     NewJob::new(kind::SUPERSEDE, owner.clone(), key)
         .in_org(org)
         .payload(json!({ "subject": subject.to_string(), "memory": memory.to_string() }))

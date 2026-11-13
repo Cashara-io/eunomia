@@ -136,7 +136,7 @@ impl Provisioner {
             let s = self.session(rt, db).await?;
             root(&s, "provisioning.redact_done", "UPSERT $id SET stage = 'done', done_at = time::now(), updated_at = time::now()").bind(("id", id)).await?.check()?;
             // nor any fact extracted before facts carried their record's date (jobs::fact_dates)
-            root(&s, "provisioning.fact_dates_done", "UPSERT $id SET done_at = time::now(), updated_at = time::now()")
+            root(&s, "provisioning.fact_dates_done", "UPSERT $id SET stage = 'done', done_at = time::now(), updated_at = time::now()")
                 .bind(("id", crate::jobs::fact_dates::marker_id()))
                 .await?
                 .check()?;

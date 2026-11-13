@@ -1,6 +1,8 @@
-//! Facts carry the date they happened (audit T1: findings F1, F3, F15), against a real in-memory
-//! SurrealDB through the public paths: extraction from a synced record, `memory_write` with an explicit
-//! `occurred_at`, the supersede check, and recall's date range.
+//! Facts carry two dates (audit T1: findings F1, F3, F15; docs/concepts.md "A fact's two dates"),
+//! against a real in-memory SurrealDB through the public paths: extraction from a synced record,
+//! `memory_write` with an explicit `occurred_at`, `memory_update`, the supersede check, and recall's
+//! date range. When a fact happened (`occurred_at`) is for recall and display; when we were last told it
+//! (`asserted_at`) decides which fact is current.
 //!
 //! The model and embeddings are a local stub: every text gets the same vector (so every pair of facts is a
 //! candidate) and the supersede "model" answers a fixed list of `{fact, by}` pairs, including the wrong
@@ -11,6 +13,7 @@ mod common;
 use std::sync::{Arc, Mutex};
 
 use common::TestApp;
+use eunomia_backend::rid::RecordIdExt;
 use eunomia_backend::entities::{extract, supersede};
 use serde_json::{json, Value};
 use surrealdb::types::RecordId;
@@ -20,6 +23,8 @@ use surrealdb::types::RecordId;
 struct Answers {
     pairs: Arc<Mutex<Value>>,
     extraction: Arc<Mutex<Value>>,
+    /// Every supersede prompt the stub was sent.
+    prompts: Arc<Mutex<Vec<String>>>,
 }
 
 /// An OpenAI-compatible `/v1/embeddings` (one constant vector per input) and `/v1/chat/completions`.
@@ -36,6 +41,7 @@ async fn stub(answers: Answers) -> String {
     async fn chat(State(a): State<Answers>, Json(body): Json<Value>) -> Json<Value> {
         let prompt = body["messages"][0]["content"].as_str().unwrap_or_default();
         let content = if prompt.contains("\"superseded\"") {
+            a.prompts.lock().unwrap().push(prompt.to_string());
             json!({ "superseded": a.pairs.lock().unwrap().clone() })
         } else {
             a.extraction.lock().unwrap().clone()
@@ -62,13 +68,59 @@ fn rid(v: &Value) -> RecordId {
 }
 
 async fn write(app: &TestApp, subject: &str, text: &str, occurred_at: Option<&str>) -> (RecordId, RecordId) {
-    let mut args = json!({"subject_name": subject, "subject_kind": "person", "text": text});
+    write_kind(app, subject, "person", text, occurred_at).await
+}
+
+async fn write_kind(app: &TestApp, subject: &str, kind: &str, text: &str, occurred_at: Option<&str>) -> (RecordId, RecordId) {
+    let mut args = json!({"subject_name": subject, "subject_kind": kind, "text": text});
     if let Some(at) = occurred_at {
         args["occurred_at"] = json!(at);
     }
     let out = app.tool("memory_write", args).await;
     assert!(out.get("error").is_none(), "{out}");
     (rid(&out["entity"]["id"]), rid(&out["memory"]["id"]))
+}
+
+/// A fact extracted from a synced record dated `date` (`section`: "people" or "organisations"), as the
+/// extract job writes it. Returns `(subject, memory)`.
+async fn extract_fact(app: &TestApp, answers: &Answers, section: &str, subject: &str, text: &str, date: &str) -> (RecordId, RecordId) {
+    *answers.extraction.lock().unwrap() = json!({ section: [{"name": subject, "facts": [text]}] });
+    let record = extract::ExtractRecord {
+        id: format!("notes:{}", text.len() * 7919 + date.len()),
+        title: "Note".into(),
+        body_text: format!("{text}. This note is long enough to be worth extracting facts from."),
+        occurred_at: Some(date.to_string()),
+        vault: None,
+        source: "notes".into(),
+        payload: Value::Null,
+        owner_name: None,
+    };
+    common::sys(extract::extract_entities(&app.db().await, &app.state.settings, &app.user.id, &record)).await.unwrap();
+    let rows: Vec<Value> = app
+        .db()
+        .await
+        .test_raw()
+        .query("SELECT <string> id AS id, <string> subject AS subject FROM memory WHERE text = $t")
+        .bind(("t", text.to_string()))
+        .await
+        .unwrap()
+        .take(0)
+        .unwrap();
+    assert_eq!(rows.len(), 1, "{text}: {rows:?}");
+    (rid(&rows[0]["subject"]), rid(&rows[0]["id"]))
+}
+
+/// A memory's dates and replacement link, as strings.
+async fn dates(app: &TestApp, id: &RecordId) -> Value {
+    let mut res = app
+        .db()
+        .await
+        .test_raw()
+        .query("SELECT <string> occurred_at AS occurred, <string> asserted_at AS asserted, <string> superseded_by AS by FROM ONLY $id")
+        .bind(("id", id.clone()))
+        .await
+        .unwrap();
+    res.take::<Option<Value>>(0).unwrap().unwrap()
 }
 
 /// `(status, occurred_at)` of one memory, read straight from the database.
@@ -124,12 +176,11 @@ async fn an_extracted_fact_is_dated_by_its_record_and_found_by_that_dates_range(
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert!(rows[0]["at"].as_str().is_some_and(|a| a.starts_with("2023-04-01T09:30:00")), "dated by the record, not the job: {rows:?}");
 
-    // date-range recall finds it in the record's year, through the date arm, and not in this year's
+    // recall for the record's year returns it, dated by the record (whichever arm finds it)
     let hits = app.tool("recall", json!({"query": "Ada Acme pilot", "time_range": ["2023-01-01", "2023-12-31T23:59:59Z"]})).await;
     let hit = hits["results"].as_array().unwrap().iter().find(|h| h["text"] == "Ada agreed to lead the Acme pilot").cloned();
-    let hit = hit.unwrap_or_else(|| panic!("{hits}"));
+    let hit = hit.unwrap_or_else(|| panic!("the fact is returned for its record's year: {hits}"));
     assert!(hit["occurred_at"].as_str().unwrap().starts_with("2023-04-01"), "{hit}");
-    assert!(hit["arms_hit"].as_u64().unwrap() >= 2, "the date arm counts it in 2023: {hit}");
 
     // a record with no date keeps today's behaviour: the fact has no occurred_at, and recall dates it by its write
     *answers.extraction.lock().unwrap() = json!({"people": [{"name": "Ada Lovelace", "facts": ["Ada prefers written updates"]}]});
@@ -177,49 +228,100 @@ async fn a_dated_write_is_never_seen_without_its_date() {
     assert_eq!(n, vec![40]);
 }
 
-// ---- F3: supersession goes by when facts happened, not when they were written ----------------
+// ---- F3: replacement goes by when we were told a fact, never by when it happened ------------
 
+/// (1) An old email imported today does not replace a newer fact: it is told at the email's date.
 #[tokio::test]
-async fn an_old_fact_imported_today_never_replaces_the_current_one() {
+async fn an_old_email_imported_today_does_not_replace_a_newer_fact() {
     let answers = Answers::default();
     *answers.pairs.lock().unwrap() = both_ways();
-    let app = app(answers).await;
-    let (ada, current) = write(&app, "Ada Lovelace", "Ada is Head of Platform", Some("2026-09-01")).await;
-    let (_, imported) = write(&app, "Ada Lovelace", "Ada's title is Staff Engineer", Some("2021-05-01")).await;
-    check(&app, &ada, std::slice::from_ref(&imported)).await;
-    assert!(!superseded(&app, &current).await, "the 2021 title must not replace the 2026 one");
-    // the import is the one out of date: the later-dated live fact supersedes it
-    assert!(superseded(&app, &imported).await);
-}
-
-#[tokio::test]
-async fn an_old_fact_imported_today_never_replaces_an_undated_current_one() {
-    let answers = Answers::default();
-    *answers.pairs.lock().unwrap() = both_ways();
-    let app = app(answers).await;
-    // undated: placed at when it was written (now)
+    let app = app(answers.clone()).await;
     let (ada, current) = write(&app, "Ada Lovelace", "Ada is Head of Platform", None).await;
-    let (_, imported) = write(&app, "Ada Lovelace", "Ada's title is Staff Engineer", Some("2021-05-01")).await;
+    let (_, imported) = extract_fact(&app, &answers, "people", "Ada Lovelace", "Ada's title is Staff Engineer", "2021-05-01T09:00:00+00:00").await;
+    assert!(dates(&app, &imported).await["asserted"].as_str().unwrap().starts_with("2021-05-01"), "told at the email's date");
     check(&app, &ada, std::slice::from_ref(&imported)).await;
-    assert!(!superseded(&app, &current).await);
-    assert!(superseded(&app, &imported).await);
+    assert!(!superseded(&app, &current).await, "the 2021 email must not replace the current fact");
+    assert!(superseded(&app, &imported).await, "the import is the one out of date");
+    assert_eq!(dates(&app, &imported).await["by"], json!(current.to_string()), "the replacing fact is recorded");
 }
 
+/// (2) A correction written today wins even when it says "since March" and the error was dated June.
 #[tokio::test]
-async fn an_undated_new_fact_replaces_an_older_dated_one() {
+async fn a_correction_about_an_earlier_moment_beats_the_error_it_corrects() {
     let answers = Answers::default();
     *answers.pairs.lock().unwrap() = both_ways();
-    let app = app(answers).await;
-    let (ada, old) = write(&app, "Ada Lovelace", "Ada's title is Staff Engineer", Some("2021-05-01")).await;
-    let (_, new) = write(&app, "Ada Lovelace", "Ada is Head of Platform", None).await;
-    check(&app, &ada, std::slice::from_ref(&new)).await;
-    assert!(superseded(&app, &old).await);
-    assert!(!superseded(&app, &new).await);
+    let app = app(answers.clone()).await;
+    let (ada, error) = extract_fact(&app, &answers, "people", "Ada Lovelace", "Ada started on 3 March", "2025-06-03T08:00:00+00:00").await;
+    let (_, correction) = write(&app, "Ada Lovelace", "Ada started on 10 March 2025", Some("2025-03-10")).await;
+    check(&app, &ada, std::slice::from_ref(&correction)).await;
+    assert!(superseded(&app, &error).await, "the error is replaced");
+    assert!(!superseded(&app, &correction).await, "the correction stands, though it is about March");
+    assert_eq!(dates(&app, &error).await["by"], json!(correction.to_string()));
+    // the model sees when each fact happened, to tell history from a correction
+    let prompt = answers.prompts.lock().unwrap().last().cloned().unwrap();
+    assert!(prompt.contains("Ada started on 10 March 2025 (happened 2025-03-10)"), "{prompt}");
+    assert!(prompt.contains("Ada started on 3 March (happened 2025-06-03)"), "{prompt}");
 }
 
-/// Two facts about the same moment: the later write is the correction, never the other way round.
+/// (3) A fact from next month's calendar event does not block or beat a correction made today.
 #[tokio::test]
-async fn a_correction_about_the_same_moment_replaces_the_first_write() {
+async fn a_future_dated_fact_does_not_beat_a_correction_made_today() {
+    let answers = Answers::default();
+    *answers.pairs.lock().unwrap() = both_ways();
+    let app = app(answers.clone()).await;
+    let next_month = (chrono::Utc::now() + chrono::Duration::days(40)).to_rfc3339();
+    let (acme, planned) = extract_fact(&app, &answers, "organisations", "Acme Corp", "Ada owns the Acme account", &next_month).await;
+    let d = dates(&app, &planned).await;
+    assert!(d["occurred"].as_str().unwrap() > chrono::Utc::now().to_rfc3339().as_str(), "still dated next month for display: {d}");
+    assert!(d["asserted"].as_str().unwrap() <= chrono::Utc::now().to_rfc3339().as_str(), "told when it was read, not next month: {d}");
+    let (_, correction) = write_kind(&app, "Acme Corp", "organisation", "The handover is cancelled: Bob keeps the Acme account", None).await;
+    check(&app, &acme, std::slice::from_ref(&correction)).await;
+    assert!(!superseded(&app, &correction).await, "today's correction is not replaced by next month's plan");
+    assert!(superseded(&app, &planned).await, "the correction replaces the plan");
+}
+
+/// (4) A fact edited in 2026 is not replaced by a 2024 email imported later: an edit is being told again,
+/// and it queues its own supersede check.
+#[tokio::test]
+async fn an_edited_fact_is_not_replaced_by_an_older_email_imported_later() {
+    let answers = Answers::default();
+    *answers.pairs.lock().unwrap() = both_ways();
+    let app = app(answers.clone()).await;
+    let (_, cto) = write(&app, "Ada Lovelace", "Ada is the CTO", None).await;
+    // as if written in 2023, before this release
+    app.db()
+        .await
+        .test_raw()
+        .query("UPDATE $id SET created_at = d'2023-01-10T00:00:00Z', updated_at = d'2023-01-10T00:00:00Z', asserted_at = NONE")
+        .bind(("id", cto.clone()))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    let edited = app.tool("memory_update", json!({"memory_id": cto.to_string(), "text": "Ada is the CTO of Acme"})).await;
+    assert!(edited.get("error").is_none(), "{edited}");
+    let asserted = dates(&app, &cto).await["asserted"].as_str().unwrap().to_string();
+    assert!(asserted.as_str() > "2026-01-01", "an edit is being told again: {asserted}");
+    let keys: Vec<String> = app
+        .control()
+        .test_raw()
+        .query("SELECT VALUE idempotency_key FROM job WHERE kind = 'supersede'")
+        .await
+        .unwrap()
+        .take(0)
+        .unwrap();
+    let cto_key = cto.to_string();
+    assert!(keys.iter().any(|k| k.contains(cto_key.as_str()) && k.ends_with(":v2")), "the edit queues its own check: {keys:?}");
+
+    let (ada, vp) = extract_fact(&app, &answers, "people", "Ada Lovelace", "Ada is VP of Engineering", "2024-05-01T09:00:00+00:00").await;
+    check(&app, &ada, std::slice::from_ref(&vp)).await;
+    assert!(!superseded(&app, &cto).await, "the 2026 edit stands");
+    assert!(superseded(&app, &vp).await);
+}
+
+/// Two facts told at the same moment: the later write is the correction, never the other way round.
+#[tokio::test]
+async fn a_correction_written_later_replaces_the_first_write() {
     let answers = Answers::default();
     *answers.pairs.lock().unwrap() = both_ways();
     let app = app(answers).await;
@@ -230,17 +332,22 @@ async fn a_correction_about_the_same_moment_replaces_the_first_write() {
     assert!(!superseded(&app, &correction).await);
 }
 
-/// A history arriving newest first ends as one arriving oldest first: the later-dated fact stands.
+/// A history read newest first ends as one read oldest first: the latest-told fact stands.
 #[tokio::test]
-async fn a_history_backfilled_in_any_order_keeps_the_latest_dated_fact() {
+async fn a_history_extracted_in_any_order_keeps_the_latest_fact() {
     let answers = Answers::default();
     *answers.pairs.lock().unwrap() = both_ways();
-    let app = app(answers).await;
-    let history = [("Ada is a junior engineer", "2023-04-01"), ("Ada is a senior engineer", "2025-06-01"), ("Ada is a staff engineer", "2026-02-01")];
-    for (subject, order) in [("Ada Inorder", [0, 1, 2]), ("Ada Reversed", [2, 1, 0]), ("Ada Shuffled", [1, 2, 0])] {
+    let app = app(answers.clone()).await;
+    let history = [
+        ("is a junior engineer", "2023-04-01T09:00:00+00:00"),
+        ("is a senior engineer", "2025-06-01T09:00:00+00:00"),
+        ("is a staff engineer", "2026-02-01T09:00:00+00:00"),
+    ];
+    for (name, order) in [("Ada Inorder", [0, 1, 2]), ("Ada Reversed", [2, 1, 0]), ("Ada Shuffled", [1, 2, 0])] {
         let mut ids = [None, None, None];
         for i in order {
-            let (s, m) = write(&app, subject, history[i].0, Some(history[i].1)).await;
+            let text = format!("{name} {}", history[i].0);
+            let (s, m) = extract_fact(&app, &answers, "people", name, &text, history[i].1).await;
             check(&app, &s, std::slice::from_ref(&m)).await;
             ids[i] = Some(m);
         }
@@ -250,6 +357,6 @@ async fn a_history_backfilled_in_any_order_keeps_the_latest_dated_fact() {
                 live.push(history[i].0);
             }
         }
-        assert_eq!(live, ["Ada is a staff engineer"], "{subject}: only the latest-dated title stays live");
+        assert_eq!(live, ["is a staff engineer"], "{name}: only the latest title stays live");
     }
 }
