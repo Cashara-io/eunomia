@@ -81,6 +81,10 @@ impl AppState {
             None => crate::connectors::crypto::rotate_tenant_passwords(settings, &control).await?,
         };
         let pool = Pool::new(templates, control.clone(), settings);
+        if let Some(p) = &provisioner {
+            let repair = std::env::var("EUNOMIA_REPAIR_MIGRATIONS").is_ok_and(|v| v.trim() == "1");
+            guard_skipped_migrations(p, &control, &pool, repair).await?;
+        }
         let scope_refusal_audit = crate::audit::scope_refusals::ScopeRefusals::new(control.clone());
         // every process drains its own audit replay queue, leader or not
         crate::audit::chain::start_drain();
@@ -103,4 +107,29 @@ impl AppState {
     pub async fn org(&self, org: &OrgId) -> AppResult<OrgState> {
         Ok(OrgState { app: self.clone(), db: self.pool.for_org(org).await? })
     }
+}
+
+/// An org whose database applied a migration numbered above one it lacks is not served: with the
+/// missing one unapplied its data may not be what the code expects, and nothing would ever apply
+/// it. Each is reported by id on stderr and in the log. `repair` (`EUNOMIA_REPAIR_MIGRATIONS=1` at
+/// boot) applies the missing migrations instead (they run after newer ones, so read their notes first);
+/// see docs/audit-chain.md, "Migration numbers".
+pub async fn guard_skipped_migrations(p: &Provisioner, control: &crate::pool::ControlDb, pool: &Pool, repair: bool) -> AppResult<()> {
+    let gaps = p.find_migration_gaps(control).await?;
+    for (org, missing) in gaps {
+        let list = missing.iter().map(|v| format!("{v:04}")).collect::<Vec<_>>().join(", ");
+        if repair {
+            eprintln!("warning: org {} lacks tenant migration(s) {list} below ones it has; applying them now (EUNOMIA_REPAIR_MIGRATIONS=1)", org.key());
+            p.migrate_org(control, &org).await?;
+            pool.unblock(&org);
+            continue;
+        }
+        let why = format!(
+            "This organisation's database is missing migration(s) {list}, which newer ones were applied over. It is not served until an operator repairs it (docs/audit-chain.md, \"Migration numbers\")."
+        );
+        eprintln!("error: org {} lacks tenant migration(s) {list} below ones it has: not serving it. Restart once with EUNOMIA_REPAIR_MIGRATIONS=1 to apply them.", org.key());
+        tracing::error!(org = %org.key(), "org database lacks a migration below its newest: not serving it");
+        pool.block(&org, why);
+    }
+    Ok(())
 }

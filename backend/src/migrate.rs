@@ -83,6 +83,14 @@ pub fn first_gap(list: &[(u32, &str, &str)]) -> Option<u32> {
     list.iter().enumerate().find(|(i, m)| m.0 != *i as u32 + 1).map(|(i, _)| i as u32 + 1)
 }
 
+/// Registered tenant migrations an org database lacks although it applied a later one: a number
+/// that was missing from the build that migrated it (a lane run ahead of the queue). The scheduler
+/// only migrates orgs below the latest version, so these would never be applied by themselves.
+pub fn skipped_tenant_migrations(applied: &[u32]) -> Vec<u32> {
+    let Some(&top) = applied.iter().max() else { return Vec::new() };
+    MIGRATIONS.iter().map(|m| m.0).filter(|v| *v < top && !applied.contains(v)).collect()
+}
+
 /// Refuses to boot when the registered tenant or control migrations are not contiguous.
 /// `scripts/ci/check-migrations.sh` checks the same in CI; this makes a binary built past that
 /// check refuse to start instead of skipping a migration for good. Builds with the `test-support`
@@ -466,5 +474,17 @@ mod contiguity_tests {
         assert_eq!(first_gap(&[(2, "b", "")]), Some(1), "a missing first");
         assert_eq!(first_gap(&[(1, "a", ""), (1, "a", "")]), Some(2), "a number twice");
         assert_eq!(first_gap(&[]), None);
+    }
+
+    #[test]
+    fn a_number_skipped_below_the_newest_applied_is_reported() {
+        let all: Vec<u32> = super::MIGRATIONS.iter().map(|m| m.0).collect();
+        assert!(super::skipped_tenant_migrations(&all).is_empty());
+        let mut without_ten: Vec<u32> = all.iter().copied().filter(|v| *v != 10).collect();
+        assert_eq!(super::skipped_tenant_migrations(&without_ten), vec![10]);
+        // missing only at the top is just "behind", which the scheduler handles
+        without_ten.retain(|v| *v < 10);
+        assert!(super::skipped_tenant_migrations(&without_ten).is_empty());
+        assert!(super::skipped_tenant_migrations(&[]).is_empty());
     }
 }
