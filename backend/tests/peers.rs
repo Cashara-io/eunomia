@@ -584,3 +584,47 @@ fn sender_truncates_addresses_before_signing_the_join_request() {
         assert_eq!(guest.link(&joined.link.id).await.role, "read");
     });
 }
+
+async fn suspend(node: &Node) {
+    node.app.state.control.test_raw().query("UPDATE $u SET suspended_at = time::now()").bind(("u", node.app.user.id.clone())).await.unwrap().check().unwrap();
+}
+
+/// A suspended account's shared spaces stop moving, both ways, and its unused share codes stop working:
+/// none of it goes through a session or a token, so each checks the account itself.
+#[test]
+fn a_suspended_accounts_links_and_share_codes_stop() {
+    run(|| async {
+        let (a, b, c) = (Node::new("sa1").await, Node::new("sb1").await, Node::new("sc1").await);
+        let va = a.vault("Shared Before").await;
+        a.fact(&va, "Alice", "Alice likes green tea").await;
+        let code = a.code(&va, "edit").await;
+        let spare = a.code(&va, "edit").await;
+        let (vb, link) = b.join(&code).await;
+
+        // the host's account is suspended: the guest's sync gets nothing, and its writes do not land
+        suspend(&a).await;
+        b.fact(&vb, "Bob", "Bob plays jazz piano").await;
+        let st = b.org().await;
+        let _ = sys(sync::sync_link(&st, &link)).await;
+        assert!(!names(&a.find(&va, "Bob").await).contains(&"Bob".to_string()), "nothing reached the suspended host");
+        // and a code it made before can no longer be used
+        let st = c.org().await;
+        assert!(sys(peers::join(&st, &c.app.user.id, &spare, vec![c.base.clone()], "late")).await.is_err());
+    });
+}
+
+/// A suspended guest's links neither send nor fetch.
+#[test]
+fn a_suspended_guest_does_not_sync() {
+    run(|| async {
+        let (a, b) = (Node::new("sa2").await, Node::new("sb2").await);
+        let va = a.vault("Shared Guest").await;
+        let code = a.code(&va, "edit").await;
+        let (vb, link) = b.join(&code).await;
+        b.fact(&vb, "Carol", "Carol keeps bees").await;
+        suspend(&b).await;
+        let r = b.sync(&link).await;
+        assert_eq!((r.applied, r.rejected), (0, 0), "{r:?}");
+        assert!(!names(&a.find(&va, "Carol").await).contains(&"Carol".to_string()));
+    });
+}

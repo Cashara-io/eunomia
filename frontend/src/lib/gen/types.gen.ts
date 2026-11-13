@@ -1424,10 +1424,10 @@ export type LinkChoice = {
      */
     password?: string | null;
     /**
-     * `true`: you don't know the password. The account is taken over: its password, API tokens, app
-     * connections and sessions are removed first.
+     * `true`: you don't know the password. A new, empty account is made for you; the existing one is set
+     * aside (suspended, nothing of it inherited) for a server operator to review, restore or erase.
      */
-    take_over?: boolean;
+    start_fresh?: boolean;
 };
 
 export type LinkDecideBody = {
@@ -1454,9 +1454,9 @@ export type LinkDone = {
      */
     next: string;
     /**
-     * The account was taken over: whatever it already held was put there by whoever had it before.
+     * A new account was made and the existing one set aside.
      */
-    took_over: boolean;
+    started_fresh: boolean;
 };
 
 export type LinkInfo = {

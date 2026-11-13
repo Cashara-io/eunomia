@@ -18,10 +18,16 @@
 //!    - The account has no password (made by single sign-on): link it, signing its other browser sessions out.
 //!    - The account has a password: ask first ([`ask_before_linking`]). Anyone could have registered the
 //!      address with a password of their own, and linking silently would hand the real owner an account
-//!      whose password and API tokens someone else still holds. The person either proves the password
-//!      (link, nothing removed) or takes the account over, which removes the password, every API token, app
-//!      connection and session ([`take_over`]). `POST /api/auth/oidc/link` does either; the provider sign-in
-//!      that started it rides in a short-lived signed cookie.
+//!      that someone else still holds credentials and connections for. The person either proves the
+//!      password (link, nothing removed) or starts a new account ([`start_fresh`]): the existing one is
+//!      set aside (suspended, its address replaced by a placeholder, its data left for an operator) and a
+//!      new, empty account is made exactly as a first sign-in would make one. Nothing of the old account
+//!      is inherited, so nothing its holder set up (tokens, app connections, shared-space links, extension
+//!      secrets, connectors) reaches the new one. `POST /api/auth/oidc/link` does either; the provider
+//!      sign-in that started it rides in a short-lived signed cookie, bound to that identity and account
+//!      and spent by either choice.
+//!    - An account is linked to at most one identity per provider: a different identity at the same
+//!      provider is refused (an operator relinks it).
 //! 3. otherwise a new account with no password, through the same signup gate and setup (org membership,
 //!    personal vault) as password signup. On an empty install the first sign-in is the first user, the admin.
 
@@ -210,6 +216,8 @@ enum Fail {
     /// Not a failure: the verified email belongs to an account with a password, so the person is asked
     /// before linking ([`ask_before_linking`]).
     AskToLink(Box<AskToLink>),
+    /// The account is already linked to a different identity at this provider.
+    IdentityTaken,
     Internal(AppError),
 }
 
@@ -224,6 +232,7 @@ impl Fail {
             Fail::EmailUnverified => "email_unverified",
             Fail::SignupClosed => "signup_closed",
             Fail::AskToLink(_) => "link",
+            Fail::IdentityTaken => "identity_taken",
             Fail::Internal(_) => "unavailable",
         }
     }
@@ -231,7 +240,7 @@ impl Fail {
     fn outcome(&self) -> ErrorCode {
         match self {
             Fail::State(_) | Fail::Denied(_) | Fail::Token(_) => ErrorCode::AuthUnauthorized,
-            Fail::NoEmail | Fail::EmailUnverified | Fail::SignupClosed | Fail::AskToLink(_) => ErrorCode::AuthForbidden,
+            Fail::NoEmail | Fail::EmailUnverified | Fail::SignupClosed | Fail::AskToLink(_) | Fail::IdentityTaken => ErrorCode::AuthForbidden,
             Fail::Provider(_) | Fail::Internal(_) => ErrorCode::Internal,
         }
     }
@@ -244,6 +253,7 @@ impl Fail {
             Fail::EmailUnverified => "an account has this email but the provider did not verify it".into(),
             Fail::SignupClosed => "signup is not open to this email".into(),
             Fail::AskToLink(_) => "an account with a password has this email: asking before linking".into(),
+            Fail::IdentityTaken => "the account with this email is linked to a different identity at this provider".into(),
             Fail::Internal(e) => e.source.clone().unwrap_or_else(|| e.message.clone()),
         }
     }
@@ -412,6 +422,10 @@ async fn map_identity(state: &AppState, id: &Identity) -> Result<(User, Mapped),
             if !id.email_verified {
                 return Err(Fail::EmailUnverified);
             }
+            // one account, one identity per provider: a second one is not added, whatever the account holds
+            if linked_at_issuer(db, &user.id, &id.issuer).await? {
+                return Err(Fail::IdentityTaken);
+            }
             if ask_before_linking(db, &user.id).await? {
                 return Err(Fail::AskToLink(Box::new(AskToLink { user: user.id, email, issuer: id.issuer.clone(), subject: id.subject.clone() })));
             }
@@ -495,20 +509,65 @@ async fn ask_before_linking(db: &crate::pool::ControlDb, user: &surrealdb::types
     Ok(res.take::<Vec<Row>>(0)?.into_iter().next().is_some_and(|r| r.password_hash.is_some()))
 }
 
-/// Takes an account over for the person whose provider verified its address: removes every credential
-/// someone else may hold (the password, all API tokens, OAuth grants, codes and tokens, every browser
-/// session) in one transaction, and records it. When enforced second factors exist, their enrolment and
-/// recovery codes must be cleared here too.
-async fn take_over(state: &AppState, user: &surrealdb::types::RecordId) -> AppResult<()> {
-    crate::store::control::AUTH_TAKE_OVER.on(&state.control).bind(("user", user.clone())).await?.check()?;
-    state.credentials.forget_user(user);
-    let actor = Actor { kind: "user", id: user.to_string() };
-    audit::record(
-        &state.control,
-        Event { user: Some(user), actor: &actor, action: "auth.oidc_takeover", target: "", outcome: "ok", detail: "removed the password, API tokens, app connections and sessions" },
-    )
-    .await;
-    Ok(())
+/// Whether the account already has an identity at `issuer` (the one signing in is not it: that would have
+/// been found by `(issuer, subject)` first).
+async fn linked_at_issuer(db: &crate::pool::ControlDb, user: &surrealdb::types::RecordId, issuer: &str) -> AppResult<bool> {
+    #[derive(Deserialize, SurrealValue)]
+    struct Link {
+        issuer: String,
+    }
+    let mut res = crate::store::control::IDENTITY_LIST_FOR_USER.on(db).bind(("user", user.clone())).await?;
+    Ok(res.take::<Vec<Link>>(0)?.iter().any(|l| l.issuer == issuer))
+}
+
+/// The address and state of the account a pending link names, read again before acting on it.
+#[derive(Deserialize, SurrealValue)]
+struct LinkTarget {
+    email: String,
+    #[serde(default)]
+    #[surreal(default)]
+    email_lc: Option<String>,
+    #[serde(default)]
+    #[surreal(default)]
+    password_hash: Option<String>,
+    #[serde(default)]
+    #[surreal(default)]
+    suspended_at: Option<surrealdb::types::Datetime>,
+}
+
+async fn link_target(db: &crate::pool::ControlDb, user: &surrealdb::types::RecordId) -> AppResult<Option<LinkTarget>> {
+    let mut res = crate::store::control::AUTH_USER_BY_ID.on(db).bind(("id", user.clone())).await?;
+    Ok(res.take::<Vec<LinkTarget>>(0)?.into_iter().next())
+}
+
+/// Starts a new account for the person whose provider explicitly verified the address, instead of
+/// inheriting the account that already has it. The existing account is set aside in one transaction:
+/// suspended (so no session, token, app connection, shared-space link, share code, extension, source
+/// webhook or job acts for it), its sign-in address replaced by a `set-aside:` placeholder that matches no
+/// address, and its sessions ended. Its data stays where it is, for an operator to review, restore or
+/// erase. Then a new account is made exactly as a first sign-in would make one; if that fails, the set-aside
+/// is undone. When enforced second factors exist, an enrolled authenticator changes this (see the PR notes).
+async fn start_fresh(state: &AppState, old: &surrealdb::types::RecordId, before: &LinkTarget, email: &str, issuer: &str, subject: &str) -> AppResult<User> {
+    crate::store::control::AUTH_SET_ASIDE.on(&state.control).bind(("user", old.clone())).await?.check()?;
+    state.credentials.forget_user(old);
+    let made = models_user::register_oidc_user(state, email, issuer, subject).await;
+    let user = match made {
+        Ok(u) => u,
+        Err(e) => {
+            let _ = crate::store::control::AUTH_SET_ASIDE_UNDO
+                .on(&state.control)
+                .bind(("user", old.clone()))
+                .bind(("email", before.email.clone()))
+                .bind(("email_lc", before.email_lc.clone()))
+                .bind(("suspended_at", before.suspended_at))
+                .await;
+            return Err(e);
+        }
+    };
+    let actor = Actor { kind: "user", id: user.id.to_string() };
+    let detail = format!("email={email} set aside when a provider-verified sign-in for the address started a new account ({})", user.id.to_string());
+    audit::record(&state.control, Event { user: Some(old), actor: &actor, action: "auth.oidc_set_aside", target: &old.to_string(), outcome: "ok", detail: &detail }).await;
+    Ok(user)
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -534,6 +593,10 @@ async fn link_info(State(state): State<AppState>, headers: HeaderMap) -> AppResu
     Ok(Json(LinkInfo { email: p.email, provider: cfg.provider_name.clone() }))
 }
 
+fn link_spent() -> AppError {
+    AppError::coded(ErrorCode::AuthUnauthorized, "This choice has already been made, or the account changed meanwhile. Sign in with your provider again.")
+}
+
 fn link_expired() -> AppError {
     AppError::coded(ErrorCode::AuthUnauthorized, "This sign-in has expired. Sign in with your provider again.")
 }
@@ -543,16 +606,16 @@ struct LinkChoice {
     /// The existing account's password: proves it is yours, and links without removing anything.
     #[serde(default)]
     password: Option<String>,
-    /// `true`: you don't know the password. The account is taken over: its password, API tokens, app
-    /// connections and sessions are removed first.
+    /// `true`: you don't know the password. A new, empty account is made for you; the existing one is set
+    /// aside (suspended, nothing of it inherited) for a server operator to review, restore or erase.
     #[serde(default)]
-    take_over: bool,
+    start_fresh: bool,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
 struct LinkDone {
-    /// The account was taken over: whatever it already held was put there by whoever had it before.
-    took_over: bool,
+    /// A new account was made and the existing one set aside.
+    started_fresh: bool,
     /// Where to go next.
     next: String,
 }
@@ -562,8 +625,8 @@ struct LinkDone {
     post,
     path = "/api/auth/oidc/link",
     tag = "auth",
-    summary = "Link the provider sign-in to the existing account: prove its password, or take it over",
-    description = "Needs the cookie the provider sign-in left. With `password`, the password is checked (throttled like login) and the account is linked; nothing is removed. With `take_over: true`, the account's password, API tokens, app connections and sessions are removed, then it is linked. Starts a session.",
+    summary = "Link the provider sign-in to the existing account by its password, or start a new account",
+    description = "Needs the cookie the provider sign-in left, which names one identity and one account and is spent by either choice. With `password`, the password is checked (throttled like login) and the account is linked; nothing is removed. With `start_fresh: true`, the existing account is set aside (suspended, its address replaced, its data kept for an operator) and a new, empty account is made under this server's sign-up rules. A suspended account can be neither linked nor replaced here. Starts a session.",
     request_body = LinkChoice,
     responses((status = 200, body = LinkDone), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(()),
@@ -578,14 +641,35 @@ async fn link(
     configured(&state)?;
     let p = read_pending_link(&state, &headers).ok_or_else(link_expired)?;
     let user_id: surrealdb::types::RecordId = crate::rid::parse(&p.user).map_err(|_| link_expired())?;
-    let still_asks = ask_before_linking(&state.control, &user_id).await?;
-    let took_over = if body.take_over {
-        if still_asks {
-            take_over(&state, &user_id).await?;
+    // bound to the identity and the account it was issued for, and spent by either choice: the identity
+    // must still be unlinked, and the account must still hold this address and a password
+    let identity_free = models_user::user_by_identity(&state.control, &p.issuer, &p.subject).await.ok().flatten().is_none()
+        && !crate::store::control::IDENTITY_FIND.on(&state.control).bind(("issuer", p.issuer.clone())).bind(("subject", p.subject.clone())).await?.take::<Vec<serde_json::Value>>(0).map(|v| !v.is_empty()).unwrap_or(true);
+    let target = link_target(&state.control, &user_id).await?.ok_or_else(link_spent)?;
+    // a suspended account is an operator's to decide: it can be neither linked nor replaced here
+    if target.suspended_at.is_some() {
+        return Err(models_user::suspended_error());
+    }
+    if !identity_free || target.email_lc.as_deref() != Some(models_user::normalize_email(&p.email).as_str()) || target.password_hash.is_none() {
+        return Err(link_spent());
+    }
+    let (user, started_fresh) = if body.start_fresh {
+        // the same rules a first sign-in with this verified address meets on this server
+        let allowed = signup_decision(
+            true,
+            true,
+            authz::operator_email_listed(&p.email),
+            operators_configured(),
+            &std::env::var("SIGNUP").unwrap_or_default(),
+            &std::env::var("SIGNUP_ALLOWLIST").unwrap_or_default(),
+            &p.email,
+        );
+        if !allowed {
+            return Err(AppError::coded(ErrorCode::AuthForbidden, "This server isn't taking new accounts for this address. Ask a server operator for help."));
         }
-        true
+        (start_fresh(&state, &user_id, &target, &p.email, &p.issuer, &p.subject).await?, true)
     } else {
-        let password = body.password.as_deref().filter(|p| !p.is_empty()).ok_or_else(|| AppError::bad_request("Enter the account's password, or choose to take the account over."))?;
+        let password = body.password.as_deref().filter(|p| !p.is_empty()).ok_or_else(|| AppError::bad_request("Enter the account's password, or choose to start a new account."))?;
         // the same throttle as login, on the same keys: guesses here and there add up
         let account_key = format!("login-fail:{}", models_user::normalize_email(&p.email));
         let fail_key = format!("{account_key}:{}", ip.as_ref().map_or("", |i| i.0 .0.as_str()));
@@ -603,27 +687,19 @@ async fn link(
         }
         state.fail_throttle.clear(&fail_key);
         state.fail_throttle.clear(&account_key);
-        false
+        models_user::link_identity(&state.control, &user_id, &p.issuer, &p.subject, &p.email).await.map_err(|e| if e.code == ErrorCode::DbDuplicate { link_spent() } else { e })?;
+        (models_user::load_user(&state.control, user_id.clone(), target.email.clone()).await?, false)
     };
-    match models_user::link_identity(&state.control, &user_id, &p.issuer, &p.subject, &p.email).await {
-        Ok(()) => {}
-        // a second tab finished first: the identity is already this account's
-        Err(e) if e.code == ErrorCode::DbDuplicate && models_user::user_by_identity(&state.control, &p.issuer, &p.subject).await?.is_some_and(|u| u.id == user_id) => {}
-        Err(e) => return Err(e),
-    }
-    let mut res = crate::store::control::AUTH_USER_BY_ID.on(&state.control).bind(("id", user_id.clone())).await?;
-    #[derive(Deserialize, SurrealValue)]
-    struct Row {
-        email: String,
-    }
-    let email = res.take::<Vec<Row>>(0)?.into_iter().next().ok_or_else(link_expired)?.email;
-    let user = models_user::load_user(&state.control, user_id.clone(), email).await?;
     let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref()).await?;
     let actor = Actor { kind: "user", id: user.id.to_string() };
-    let detail = if took_over { "linked after taking the account over" } else { "linked after the account's password was given" };
-    audit::record(&state.control, Event { user: Some(&user.id), actor: &actor, action: "auth.oidc_link", target: "", outcome: "ok", detail }).await;
+    if started_fresh {
+        audit::record(&state.control, Event { user: Some(&user.id), actor: &actor, action: "auth.register", target: "", outcome: "ok", detail: "oidc, a new account instead of the one set aside" }).await;
+    } else {
+        audit::record(&state.control, Event { user: Some(&user.id), actor: &actor, action: "auth.oidc_link", target: "", outcome: "ok", detail: "linked after the account's password was given" }).await;
+    }
     let session = session_cookie_header(&token, &state.settings.public_url, https);
-    let body = LinkDone { took_over, next: p.next };
+    let next = if started_fresh { "/onboarding".to_string() } else { p.next };
+    let body = LinkDone { started_fresh, next };
     Ok(no_store((AppendHeaders([(header::SET_COOKIE, session), (header::SET_COOKIE, clear_link_cookie(&state, https))]), Json(body)).into_response()))
 }
 
