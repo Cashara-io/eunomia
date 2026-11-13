@@ -91,21 +91,23 @@ pub fn first_gap(list: &[(u32, &str, &str)]) -> Option<u32> {
 pub fn require_contiguous() -> crate::error::AppResult<()> {
     let gaps: Vec<String> = [("tenant", MIGRATIONS), ("control", CONTROL_MIGRATIONS)]
         .iter()
-        .filter_map(|(set, list)| first_gap(list).map(|n| format!("{set} migration {n:04}")))
+        .filter_map(|(set, list)| first_gap(list).map(|n| format!("{set} {n:04}")))
         .collect();
     if gaps.is_empty() {
         return Ok(());
     }
     let msg = format!(
-        "this build registers migrations with a gap ({} is missing): it would skip that migration for good. \
-         Build it after the missing migration lands, or renumber (backend/migrations/QUEUE.md).",
+        "this build registers migrations with a gap (missing: {}): an org would never get the missing one. \
+         Build it after the missing migrations land, or renumber (backend/migrations/QUEUE.md).",
         gaps.join(", ")
     );
     let allowed = cfg!(feature = "test-support") || std::env::var("EUNOMIA_ALLOW_MIGRATION_GAP").is_ok_and(|v| v.trim() == "1");
+    // straight to stderr: the log layer redacts formatted messages, and an operator must see why
     if allowed {
-        tracing::warn!("{msg} (allowed: test build or EUNOMIA_ALLOW_MIGRATION_GAP=1)");
+        eprintln!("warning: {msg} (allowed: test build or EUNOMIA_ALLOW_MIGRATION_GAP=1)");
         return Ok(());
     }
+    eprintln!("error: {msg}");
     Err(crate::error::AppError::internal(msg))
 }
 
