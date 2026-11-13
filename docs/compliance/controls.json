@@ -1024,10 +1024,9 @@
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. Durable in-process delivery with replay, per-org hash chain, verification, metadata-only export with checkpoints and retention checkpoints (PR03); external anchoring absent. E07-E08.",
+      "finding": "Partial. Browsable best-effort ledgers, no complete durable append, chain or external anchor. E07-E08.",
       "evidence": [
-        "EV-C07-1",
-        "EV-C07-2"
+        "EV-C07-1"
       ],
       "mappings": [
         {
@@ -1109,10 +1108,9 @@
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. People and suspension routes exist; recorded, immutable access reviews with per-person decisions (PR03); reviewer role, separation of duties, review schedule and signed records absent. E04,E07.",
+      "finding": "Partial. People and suspension routes exist; reviewer role and periodic signed review records absent. E04,E07.",
       "evidence": [
-        "EV-C08-1",
-        "EV-C08-2"
+        "EV-C08-1"
       ],
       "mappings": [
         {
@@ -5961,161 +5959,6 @@
         "Missing means no end-to-end workflow found in the inspected routes, schema, Settings navigation and docs."
       ],
       "summary": "Missing. Settings has component controls but no joined status or evidence pack. E24."
-    },
-    {
-      "schema_version": "1.0.0",
-      "id": "EV-C07-2",
-      "capability_id": "C07",
-      "kind": "source-inspection",
-      "owner": "Eunomia",
-      "source": "Eunomia",
-      "operation": "unknown",
-      "implementation": "Partial",
-      "captured_on": "2026-11-13",
-      "subject": {
-        "repository": "Cashara-io/eunomia",
-        "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
-        "scope": "Compliance PR03 branch source and its backend tests; no deployed installation assessed."
-      },
-      "references": [
-        {
-          "path": "backend/src/audit.rs",
-          "line_start": 8,
-          "line_end": 12,
-          "inventory_id": "E07",
-          "summary": "Delivery: the write and seal run in their own task, so a cancelled caller does not lose the event; failures are queued and replayed."
-        },
-        {
-          "path": "backend/src/audit/chain.rs",
-          "line_start": 83,
-          "line_end": 124,
-          "inventory_id": "E07",
-          "summary": "Canonical form of an event and its SHA-256 hash, versioned eunomia.audit.v1, detail committed by its hash."
-        },
-        {
-          "path": "backend/src/audit/chain.rs",
-          "line_start": 306,
-          "line_end": 322,
-          "inventory_id": "E07",
-          "summary": "Durable replay: queued writes, then every pending row of every ledger is sealed."
-        },
-        {
-          "path": "backend/src/audit/chain.rs",
-          "line_start": 432,
-          "line_end": 485,
-          "inventory_id": "E07",
-          "summary": "Sealing: per-ledger compare-and-set on the head so concurrent writers make one gapless chain."
-        },
-        {
-          "path": "backend/src/audit/chain.rs",
-          "line_start": 540,
-          "line_end": 591,
-          "inventory_id": "E07",
-          "summary": "Retention cut with a checkpoint, and periodic head checkpoints."
-        },
-        {
-          "path": "backend/src/audit/chain.rs",
-          "line_start": 712,
-          "line_end": 817,
-          "inventory_id": "E07",
-          "summary": "Verification walks a ledger from its anchor to its head and reports the first break."
-        },
-        {
-          "path": "backend/src/audit/chain.rs",
-          "line_start": 858,
-          "line_end": 955,
-          "inventory_id": "E07",
-          "summary": "Metadata-only export of a time range with anchor and checkpoints."
-        },
-        {
-          "path": "backend/src/store/control.rs",
-          "line_start": 338,
-          "line_end": 351,
-          "inventory_id": "E07",
-          "summary": "AUDIT_SEAL transaction: head check, genesis checkpoint, row seal and head move in one commit."
-        },
-        {
-          "path": "backend/migrations/control/0010_audit_chain.surql",
-          "line_start": 1,
-          "line_end": 34,
-          "inventory_id": "E07",
-          "summary": "Control migration 0010: chain fields on audit_event, audit_head, audit_checkpoint; existing rows untouched."
-        },
-        {
-          "path": "backend/tests/audit_chain.rs",
-          "line_start": 107,
-          "line_end": 417,
-          "inventory_id": "E07",
-          "summary": "Real-database tests: cancelled caller, failed write replayed, crash between write and seal replayed, concurrent writers with and without the in-process lock, tamper detection, retention checkpoint, metadata-only export verified by the offline script."
-        },
-        {
-          "path": "scripts/audit/verify-audit-export.py",
-          "line_start": 33,
-          "line_end": 71,
-          "inventory_id": "E07",
-          "summary": "Offline verifier for exports, standard library only."
-        }
-      ],
-      "limitations": [
-        "Line references are to this PR's branch head (compliance PR03), not to the catalogue snapshot commit recorded as release_sha; the snapshot is advanced when the catalogue is re-snapshotted after merge.",
-        "Source inspection and the named tests do not establish deployed settings, runtime effectiveness or audit-period operation.",
-        "Checkpoints live in the same database as the events: an attacker with database write access can rewrite events, hashes, head and checkpoints together. Only a checkpoint kept outside the database (manually today) detects that.",
-        "An event held only in the in-memory replay queue is lost if the process dies before the database accepts it."
-      ],
-      "summary": "Partial. Security events are delivered durably within the process (cancellation-safe write, queued replay, pending rows sealed by the scheduler), hash-chained per org ledger with a gapless sequence under concurrent writers, verifiable in the app and offline, exported as metadata only with checkpoints, and pruned with a retention checkpoint. External anchoring of checkpoints is not implemented."
-    },
-    {
-      "schema_version": "1.0.0",
-      "id": "EV-C08-2",
-      "capability_id": "C08",
-      "kind": "source-inspection",
-      "owner": "Eunomia",
-      "source": "Eunomia",
-      "operation": "unknown",
-      "implementation": "Partial",
-      "captured_on": "2026-11-13",
-      "subject": {
-        "repository": "Cashara-io/eunomia",
-        "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
-        "scope": "Compliance PR03 branch source and its backend tests; no deployed installation assessed."
-      },
-      "references": [
-        {
-          "path": "backend/src/routers/access_reviews.rs",
-          "line_start": 145,
-          "line_end": 216,
-          "inventory_id": "E04",
-          "summary": "Access reviews: snapshot of access (no secrets), per-person decisions with reviewer and time, self-review refused, completion hashed into the chain, export."
-        },
-        {
-          "path": "backend/src/routers/access_reviews.rs",
-          "line_start": 539,
-          "line_end": 746,
-          "inventory_id": "E04",
-          "summary": "Decide, complete and export routes."
-        },
-        {
-          "path": "backend/migrations/tenant/0044_audit_chain.surql",
-          "line_start": 1,
-          "line_end": 34,
-          "inventory_id": "E04",
-          "summary": "Tenant migration 0044: access_review and decisions; database events refuse changes to a completed review."
-        },
-        {
-          "path": "backend/tests/audit_chain.rs",
-          "line_start": 431,
-          "line_end": 534,
-          "inventory_id": "E04",
-          "summary": "Real-database test: snapshot without secrets, one open review, self-review refused, incomplete refused, completion frozen in the API and the database, export hashes match the chain event."
-        }
-      ],
-      "limitations": [
-        "Line references are to this PR's branch head (compliance PR03), not to the catalogue snapshot commit recorded as release_sha; the snapshot is advanced when the catalogue is re-snapshotted after merge.",
-        "Source inspection and the named tests do not establish deployed settings, runtime effectiveness or audit-period operation.",
-        "Decisions are records only: acting on remove or suspend is still done from People.",
-        "There is no separate reviewer role, separation-of-duties rule or periodic schedule; those are PR04 and PR09."
-      ],
-      "summary": "Partial. Admins can run a recorded access review: snapshot of who has access to what, a keep, remove or suspend decision per person with reviewer and time, self-review refused, an immutable completed review in the hash-chained log, and an export. No reviewer role, separation of duties, review schedule or signature."
     }
   ]
 }
