@@ -573,7 +573,7 @@ async fn a_vault_copy_keeps_dates_status_and_who_replaced_whom() {
         .await
         .test_raw()
         .query(format!(
-            "SELECT text, status, <string> occurred_at AS occurred, <string> asserted_at AS asserted, superseded_by.text AS by FROM memory WHERE vault = {copy} AND type = 'world'"
+            "SELECT text, status, <string> occurred_at AS occurred, <string> asserted_at AS asserted, superseded_by.text AS by, <string> superseded_by.vault AS by_vault FROM memory WHERE vault = {copy} AND type = 'world'"
         ))
         .await
         .unwrap()
@@ -583,6 +583,7 @@ async fn a_vault_copy_keeps_dates_status_and_who_replaced_whom() {
     let (o, n) = (get("Ada works at Acme"), get("Ada works at Globex"));
     assert_eq!(o["status"], json!("superseded"), "{o}");
     assert_eq!(o["by"], json!("Ada works at Globex"), "points at the copy of the fact that replaced it: {o}");
+    assert_eq!(o["by_vault"], json!(copy), "the copy's own replacer, not the original's: {o}");
     assert!(o["occurred"].as_str().unwrap().starts_with("2024-02-01") && n["occurred"].as_str().unwrap().starts_with("2025-03-01"));
     assert_eq!(o["asserted"], dates(&app, &old).await["asserted"], "told when the original was");
 }
