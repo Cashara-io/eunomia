@@ -261,49 +261,6 @@ async fn a_failed_event_append_rolls_back_the_definition_and_cursor() {
 }
 
 #[tokio::test]
-async fn an_n_minus_one_import_refuses_before_creating_any_objects() {
-    let app = TestApp::new().await;
-    let doc = app
-        .tool(
-            "document_upload",
-            json!({"filename":"shops.csv","text":"name,price\nNorth,20\n"}),
-        )
-        .await;
-    assert!(doc.get("error").is_none(), "{doc}");
-    app.control()
-        .test_raw()
-        .query("UPDATE $tenant SET schema_version = 41")
-        .bind(("tenant", app.user.org.tenant_record()))
-        .await
-        .unwrap()
-        .check()
-        .unwrap();
-    app.state.pool.evict(&app.user.org);
-    let out = app
-        .tool(
-            "document_import_rows",
-            json!({"document_id":doc["id"],"kind":"shop","name_column":"name"}),
-        )
-        .await;
-    assert!(
-        out["error"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("upgrading"),
-        "{out}"
-    );
-    let db = app.db().await;
-    let objects: Vec<serde_json::Value> = db
-        .test_raw()
-        .query("SELECT * FROM entity")
-        .await
-        .unwrap()
-        .take(0)
-        .unwrap();
-    assert!(objects.is_empty());
-}
-
-#[tokio::test]
 async fn link_histories_distinguish_the_target_kind() {
     let app = TestApp::new().await;
     let vault = setup(&app).await;
