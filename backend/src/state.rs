@@ -88,8 +88,6 @@ impl AppState {
             guard_skipped_migrations(p, &control, &pool, repair).await?;
         }
         let scope_refusal_audit = crate::audit::scope_refusals::ScopeRefusals::new(control.clone());
-        // every process drains its own audit replay queue, leader or not
-        crate::audit::chain::start_drain();
         Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner, settings: settings.clone(), composio_publishing: Default::default(), large_bodies: Default::default(), fail_throttle: Default::default(), invite_limiter: Default::default(), scope_refusal_audit, credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
     }
 

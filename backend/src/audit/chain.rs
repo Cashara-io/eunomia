@@ -284,7 +284,7 @@ impl Outbox {
             match write(&db, &mut p).await {
                 Ok(()) => {
                     written += 1;
-                    schedule_seal(&db, p.ledger.clone().unwrap_or_else(|| INSTANCE.into()));
+                    mark_dirty(&db, p.ledger.clone().unwrap_or_else(|| INSTANCE.into()));
                 }
                 Err(_) => failed.push((db, p)),
             }
@@ -320,8 +320,9 @@ pub fn queued() -> usize {
 /// Queued events one drain pass writes at most (the rest wait for the next pass).
 const DRAIN_BATCH: usize = 500;
 
-/// Drains `outbox` every `every` until the process ends. [`crate::state::AppState::build`] starts
-/// one for this process's queue; tests start their own.
+/// The background pass, every `every` until the process ends: writes what `outbox` holds, then
+/// seals every ledger this process wrote to since the last pass ([`seal_dirty`]), in batches. The
+/// server starts one for its own queue in `main` ([`start_drain`]); tests start their own.
 pub fn spawn_drain(outbox: &'static Outbox, every: Duration) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(every);
@@ -334,15 +335,19 @@ pub fn spawn_drain(outbox: &'static Outbox, every: Duration) -> tokio::task::Joi
                     tracing::info!(written = n, left = outbox.len(), "audit replay queue drained");
                 }
             }
+            seal_dirty().await;
         }
     })
 }
 
-/// Starts this process's drain once, however many app states the process builds.
+/// How often the background pass runs in the server.
+pub const DRAIN_EVERY: Duration = Duration::from_secs(5);
+
+/// Starts this process's background pass once (the server calls it at start-up).
 pub fn start_drain() {
     static STARTED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
     STARTED.get_or_init(|| {
-        spawn_drain(&OUTBOX, Duration::from_secs(5));
+        spawn_drain(&OUTBOX, DRAIN_EVERY);
     });
 }
 
@@ -359,6 +364,10 @@ pub async fn shutdown_flush(wait: Duration) {
     if left > 0 {
         tracing::error!(left, "audit events still queued at shutdown were lost");
     }
+    // and seal what this process wrote since the last pass, so nothing it wrote waits for the leader
+    if tokio::time::timeout_at(deadline, seal_dirty()).await.is_err() {
+        tracing::warn!("audit seal at shutdown did not finish; the scheduler's replay seals the rest");
+    }
 }
 
 /// Test-only fault injection (feature `test-support`): the next this-many writes fail as if the
@@ -369,14 +378,17 @@ pub static FAIL_WRITES: std::sync::atomic::AtomicU32 = std::sync::atomic::Atomic
 /// cannot be sealed would.
 #[cfg(feature = "test-support")]
 pub static FAIL_SEAL_LEDGER: Mutex<Option<String>> = Mutex::new(None);
-/// Test-only: when set, a written event is not scheduled for sealing (as if the process died right
-/// after the write), so only [`replay`] or an explicit [`seal`] can seal it.
+/// Test-only: when set, a written event is not handed to the background pass (as if the process died
+/// right after the write), so only [`replay`] or an explicit [`seal`] can seal it.
 #[cfg(feature = "test-support")]
 pub static SKIP_INLINE_SEAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Writes one event, then schedules its ledger's seal in the background. The caller waits only
-/// for the write (one statement, at most two quick retries): never for a seal, a lock, another
-/// writer or the replay queue. A write that cannot be made goes to this process's queue.
+/// Writes one event and marks its ledger for the next background pass. The caller waits only for
+/// the write (one statement, at most two quick retries; one more to find the user's org when the
+/// caller did not name it): never for a seal, a lock, another writer or the replay queue, and
+/// nothing is sent behind the request either. A write that cannot be made goes to this process's
+/// queue. The row is durable once written: if the process dies before the pass, the scheduler
+/// leader's [`replay`] seals it.
 pub(crate) async fn append(db: ControlDb, mut p: Pending) {
     match write(&db, &mut p).await {
         Ok(()) => {
@@ -384,7 +396,7 @@ pub(crate) async fn append(db: ControlDb, mut p: Pending) {
             if SKIP_INLINE_SEAL.load(Ordering::SeqCst) {
                 return;
             }
-            schedule_seal(&db, p.ledger.clone().unwrap_or_else(|| INSTANCE.into()));
+            mark_dirty(&db, p.ledger.clone().unwrap_or_else(|| INSTANCE.into()));
         }
         Err(e) => {
             tracing::warn!(action = %p.action, error = %e, "audit_event write failed; queued for replay");
@@ -393,40 +405,49 @@ pub(crate) async fn append(db: ControlDb, mut p: Pending) {
     }
 }
 
-/// Ledgers with a background sealer running in this process, keyed by database and ledger; the
-/// flag asks it to go round once more. However many events arrive at once, one task per ledger
-/// seals them, in batches.
+/// Ledgers this process wrote to since the last background pass, per database (keyed by its
+/// identity, with a handle to it). The pass seals each once, in batches, however many events arrived.
 type SealKey = (usize, String);
-static SEALING: Mutex<Option<std::collections::HashMap<SealKey, bool>>> = Mutex::new(None);
+type Dirty = std::collections::HashMap<usize, (ControlDb, std::collections::BTreeSet<String>)>;
+static DIRTY: Mutex<Option<Dirty>> = Mutex::new(None);
 
-fn schedule_seal(db: &ControlDb, ledger: String) {
-    let key = (db.identity(), ledger.clone());
-    {
-        let mut m = SEALING.lock().unwrap_or_else(|e| e.into_inner());
-        let m = m.get_or_insert_with(Default::default);
-        if let Some(again) = m.get_mut(&key) {
-            *again = true;
-            return;
-        }
-        m.insert(key.clone(), false);
-    }
-    let db = db.clone();
-    tokio::spawn(async move {
-        loop {
-            if let Err(e) = seal(&db, &ledger).await {
-                tracing::warn!(ledger = %ledger, error = %e.message, "audit seal deferred to replay");
-            }
-            let mut m = SEALING.lock().unwrap_or_else(|e| e.into_inner());
-            let m = m.get_or_insert_with(Default::default);
-            match m.get_mut(&key) {
-                Some(again) if *again => *again = false,
-                _ => {
-                    m.remove(&key);
-                    return;
+fn mark_dirty(db: &ControlDb, ledger: String) {
+    let mut m = DIRTY.lock().unwrap_or_else(|e| e.into_inner());
+    m.get_or_insert_with(Default::default).entry(db.identity()).or_insert_with(|| (db.clone(), Default::default())).1.insert(ledger);
+}
+
+/// Seals every ledger marked since the last call. A ledger whose seal fails is marked again for the
+/// next pass (and the leader's replay seals it too). Returns how many rows it sealed.
+pub async fn seal_dirty() -> u64 {
+    let batch: Dirty = DIRTY.lock().unwrap_or_else(|e| e.into_inner()).take().unwrap_or_default();
+    let mut sealed = 0;
+    for (_, (db, ledgers)) in batch {
+        for ledger in ledgers {
+            // one ledger that hangs (a database that went away) must not hold the pass for the others
+            match tokio::time::timeout(SEAL_PASS_LIMIT, seal(&db, &ledger)).await {
+                Ok(Ok(n)) => sealed += n,
+                Ok(Err(e)) => {
+                    tracing::warn!(ledger = %ledger, error = %e.message, "audit seal deferred to the next pass");
+                    mark_dirty(&db, ledger);
+                }
+                Err(_) => {
+                    tracing::warn!(ledger = %ledger, "audit seal timed out; deferred to the next pass");
+                    mark_dirty(&db, ledger);
                 }
             }
         }
-    });
+    }
+    sealed
+}
+
+/// How long the background pass gives one ledger's seal.
+const SEAL_PASS_LIMIT: Duration = Duration::from_secs(30);
+
+/// Test-only (feature `test-support`): forgets the ledgers marked for the next pass (a finished test's
+/// database is gone with its runtime).
+#[cfg(feature = "test-support")]
+pub fn forget_marked() {
+    DIRTY.lock().unwrap_or_else(|e| e.into_inner()).take();
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]

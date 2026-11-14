@@ -26,6 +26,8 @@ async fn main() {
         }
     };
 
+    // every process, leader or not, drains its own audit replay queue and seals what it wrote (docs/audit-chain.md)
+    eunomia_backend::audit::chain::start_drain();
     let (stop, stopped) = watch::channel(false);
     let mut background = Vec::new();
     let cfg = WorkerConfig::from_env();
