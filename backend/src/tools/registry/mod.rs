@@ -269,7 +269,8 @@ pub(crate) async fn record_audit(state: &OrgState, owner: &RecordId, tool_name: 
         .bind(("args_summary", summary))
         .bind(("outcome", outcome.to_string()));
     // the control database is shared across orgs: no tenant text, only the argument names and a hash
-    let _ = tokio::join!(org_row.into_future(), record_event(&state.control, owner, tool_name, code, &detail));
+    let org = state.db.org();
+    let _ = tokio::join!(org_row.into_future(), record_event(&state.control, &org, owner, tool_name, code, &detail));
 }
 
 /// What the cross-org `audit_event` keeps of a call's arguments: their keys and a hash, never values.
@@ -278,10 +279,11 @@ fn control_detail(args: &Value) -> String {
     format!("keys={keys} hash={}", crate::models_user::hash_token(&args.to_string()))
 }
 
-async fn record_event(db: &ControlDb, owner: &RecordId, tool_name: &str, code: &str, detail: &str) {
+/// The caller's org is known here, so the event names its ledger and the hot path pays no lookup.
+async fn record_event(db: &ControlDb, org: &crate::pool::OrgId, owner: &RecordId, tool_name: &str, code: &str, detail: &str) {
     let actor = authz::current().map(|c| c.actor).unwrap_or(authz::Actor { kind: "user", id: owner.to_string() });
     let action = format!("tool.{tool_name}");
-    audit::record(db, Event { user: Some(owner), actor: &actor, action: &action, target: "", outcome: code, detail }).await;
+    audit::record_in_org(db, org, Event { user: Some(owner), actor: &actor, action: &action, target: "", outcome: code, detail }).await;
 }
 
 /// The process-wide tool registry: a `OnceLock<HashMap<..>>` filled once, explicitly, by `register_all` below.
@@ -434,7 +436,7 @@ async fn call_inner(app: &AppState, user: &User, name: &str, mut args: Value) ->
 
     let needed = authz::require_scope(scopes::for_tool(name, is_read_only(name)));
     if let Err(e) = needed {
-        record_event(&app.control, owner, name, e.code.as_str(), "").await;
+        record_event(&app.control, &user.org, owner, name, e.code.as_str(), "").await;
         count_call(app, user, name, true, 0);
         return Err(e);
     }

@@ -71,6 +71,9 @@ async fn round_trips_per_request() {
         ("search", 4), // + the vault membership lookup since search covers several vaults (#93)
         // + 1 off the request path: the post-write embed checks whether the writer has a model (#65)
         // + 1 per change log row: the memory, and for a new subject its entity too (migration 0023)
+        // The `audit_event` row of a mutating call is the one write it always had: the call names its
+        // org, so no lookup; it is sealed into the hash chain by the process's background pass, every
+        // 5 s and in batches, not by the request (docs/audit-chain.md)
         ("memory_write known", 9),
         ("memory_write new", 12),
     ];
