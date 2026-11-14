@@ -71,12 +71,14 @@ VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usag
 # 0031_credential_refs: the credential broker's references and provider settings;
 # 0032_secret_requests: secret requests and the secrets Eunomia holds for agents; 0033_ontology: the kinds
 # and link types a vault's owners reviewed; 0034_ontology_properties: typed properties and their values; 0035_ontology_metrics: certified metrics;
-# 0044_audit_chain: access reviews and their decisions). Where <from-tag> lacks one, the update must add it to
+# 0044_audit_chain: access reviews and their decisions; 0045_erasure: data-subject export archives). Where <from-tag> lacks one, the update must add it to
 # every org database, holding only what the backfill writes (new_rows below). Their counts are checked
 # on their own, so they are left out of the before/after diff.
-NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill peer_instance peer_share peer_link peer_item credential_ref secret_provider secret_request vault_secret ontology_kind ontology_link ontology_property entity_property ontology_metric ontology_event composio_file access_review access_review_decision}"
-# Control tables added by control migrations (0009: two-step verification). Empty after an update: nothing backfills them.
-NEW_CONTROL_TABLES="${UPDATE_PATH_NEW_CONTROL_TABLES:-mfa_recovery_code mfa_challenge instance_setting}"
+NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill peer_instance peer_share peer_link peer_item credential_ref secret_provider secret_request vault_secret ontology_kind ontology_link ontology_property entity_property ontology_metric ontology_event composio_file access_review access_review_decision subject_export}"
+# Control tables added by control migrations (0009: two-step verification; 0011: erasure records and the
+# per-workspace erasure locks). Empty after an update: nothing backfills them, and the boot-time erasure
+# re-apply (subject::reapply_on_start) writes nothing while no erasure was ever recorded.
+NEW_CONTROL_TABLES="${UPDATE_PATH_NEW_CONTROL_TABLES:-mfa_recovery_code mfa_challenge instance_setting erasure erasure_lock}"
 # The audit chain's control tables (control 0010, docs/audit-chain.md): one head per ledger and its
 # checkpoints. They follow audit_event (volatile): a ledger gets its head and genesis checkpoint when its
 # first event after the update is sealed (the redaction backfill's event, a sign-in), and its head moves

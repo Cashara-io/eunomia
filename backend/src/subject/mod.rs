@@ -348,7 +348,7 @@ pub(crate) async fn enqueue_erasure(state: &AppState, user: &RecordId, who: Requ
         Some(t) => {
             // a repeat request adds its confirmation that a workspace closes
             if !closes.is_empty() {
-                q::ERASURE_ADD_CLOSES.on(&state.control).bind(("id", t.id.clone())).bind(("closes", closes.clone())).await?.check()?;
+                q::ERASURE_ADD_CLOSES.on(&state.control).bind(("id", crate::rid::parse(&t.id).map_err(|_| AppError::internal("erasure id"))?)).bind(("closes", closes.clone())).await?.check()?;
             }
             ensure_job(&state.control, &t.id).await?;
             t
