@@ -12,6 +12,39 @@ use crate::cache::tools as cache_tools;
 use super::kind_schema;
 use crate::entities::tools as entities_tools;
 
+/// Field names agents commonly send in place of the canonical ones: (alias, canonical).
+const WRITE_FIELD_ALIASES: [(&str, &str); 3] = [("content", "text"), ("subject", "subject_name"), ("memory_type", "type")];
+
+/// Moves aliased `memory_write` fields to their canonical names, in place. Both present and equal:
+/// the alias is dropped; both present and different: an error naming both. Non-objects are left for
+/// serde to reject.
+fn normalize_write_fields(obj: &mut serde_json::Value) -> Result<(), String> {
+    let Some(map) = obj.as_object_mut() else { return Ok(()) };
+    for (alias, canonical) in WRITE_FIELD_ALIASES {
+        let Some(v) = map.remove(alias) else { continue };
+        match map.get(canonical) {
+            None => {
+                map.insert(canonical.to_string(), v);
+            }
+            Some(existing) if *existing == v => {}
+            Some(_) => return Err(format!("both `{canonical}` and `{alias}` given with different values; send only `{canonical}`")),
+        }
+    }
+    Ok(())
+}
+
+/// A missing required field gets a hint about the alias agents tend to use instead.
+fn write_item_error(e: serde_json::Error) -> String {
+    let msg = e.to_string();
+    if msg.starts_with("missing field `text`") {
+        "missing field `text` (the fact; `content` is accepted too)".to_string()
+    } else if msg.starts_with("missing field `subject_name`") {
+        "missing field `subject_name` (`subject` is accepted too)".to_string()
+    } else {
+        msg
+    }
+}
+
 /// `memory_write_batch`'s input schema, built in its own frame: `register_all` builds every schema
 /// inline, and in a debug build one more nested `json!` there overflows a test thread's stack.
 #[inline(never)]
@@ -204,6 +237,10 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
         }),
         Arc::new(|state, owner, args| {
             Box::pin(async move {
+                let mut args = args;
+                if let Err(e) = normalize_write_fields(&mut args) {
+                    return Ok(json!({"error": e, "code": "validation.invalid"}));
+                }
                 let a: MemoryWriteArgs = match serde_json::from_value(args) {
                     Ok(a) => a,
                     Err(e) => return Ok(bad_args(e)),
@@ -271,9 +308,13 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     .map(|(index, raw)| {
                         let default_vault = a.vault_id.clone();
                         Box::pin(async move {
+                            let mut raw = raw;
+                            if let Err(e) = normalize_write_fields(&mut raw) {
+                                return json!({"index": index, "ok": false, "error": e, "code": "validation.invalid"});
+                            }
                             let item: BatchItem = match serde_json::from_value(raw) {
                                 Ok(i) => i,
-                                Err(e) => return json!({"index": index, "ok": false, "error": e.to_string(), "code": "validation.invalid"}),
+                                Err(e) => return json!({"index": index, "ok": false, "error": write_item_error(e), "code": "validation.invalid"}),
                             };
                             let vault = match parse_opt_rid("vault_id", &item.vault_id.or(default_vault)) {
                                 Ok(v) => v,
@@ -313,7 +354,18 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     .collect()
                     .await;
                 let written = results.iter().filter(|r| r["ok"] == true).count();
-                Ok(json!({"written": written, "failed": results.len() - written, "results": results}))
+                let failed = results.len() - written;
+                if written == 0 {
+                    // never success-shaped when nothing was stored: MCP maps a top-level `error` to isError
+                    return Ok(json!({
+                        "error": format!("no item was stored: {failed} of {failed} failed; see results"),
+                        "code": "validation.invalid",
+                        "written": 0,
+                        "failed": failed,
+                        "results": results,
+                    }));
+                }
+                Ok(json!({"written": written, "failed": failed, "results": results}))
             })
         }),
     );
