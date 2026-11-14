@@ -31,7 +31,10 @@ const MAX_SOURCE_CHARS: usize = 2000;
 static SEQ: AtomicU64 = AtomicU64::new(0);
 const KEEP_DAYS: &str = "7d";
 const KEEP_ROWS: i64 = 1000;
-const SECRET_HINTS: &[&str] = &["token", "secret", "password", "key", "authorization", "cookie"];
+const SECRET_HINTS: &[&str] = &["token", "secret", "password", "key", "authorization", "cookie", "otpauth", "recovery", "mfa"];
+/// Keys masked only when they match exactly (`code` alone would also hide harmless keys like `code_challenge`):
+/// typed one-time codes and the enrolment QR.
+const SECRET_KEYS: &[&str] = &["code", "qr_svg"];
 
 /// The code and raw cause of a failed response, attached by `AppError::into_response` for [`capture`].
 #[derive(Clone)]
@@ -120,7 +123,7 @@ pub fn redact(v: &Value) -> Value {
             m.iter()
                 .map(|(k, v)| {
                     let lower = k.to_lowercase();
-                    let hit = SECRET_HINTS.iter().any(|h| lower.contains(h));
+                    let hit = SECRET_HINTS.iter().any(|h| lower.contains(h)) || SECRET_KEYS.contains(&lower.as_str());
                     (k.clone(), if hit { json!("***") } else { redact(v) })
                 })
                 .collect(),
@@ -323,7 +326,8 @@ pub async fn capture(State(state): State<AppState>, req: Request, next: Next) ->
     let resp = next.run(Request::from_parts(parts, body)).await;
 
     if resp.status().is_server_error() && route != "/readyz" {
-        let saved = if path == "/api/connectors/composio/callback" { None } else { saved };
+        // sign-in and two-step verification bodies hold passwords, one-time and recovery codes: never kept
+        let saved = if path == "/api/connectors/composio/callback" || path.starts_with("/api/auth/") || path == "/api/oauth/consent" { None } else { saved };
         let body = saved.map_or(Value::Null, |b| serde_json::from_slice(&b).unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&b).into_owned())));
         // a tool failure that became this 5xx was recorded already, with its arguments
         if get(&state.control, &crate::telemetry::current_trace_id()).await.ok().flatten().is_some() {
@@ -352,6 +356,18 @@ pub async fn capture(State(state): State<AppState>, req: Request, next: Next) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn masks_one_time_codes_recovery_codes_and_enrolment_secrets() {
+        let v = json!({"code": "123456", "mfa_code": "abcde-fghij", "recovery_codes": ["a1b2c-d3e4f"], "otpauth_uri": "otpauth://totp/x?secret=ABC",
+            "qr_svg": "<svg/>", "code_challenge": "kept", "nested": {"code": "654321"}});
+        let r = redact(&v);
+        let text = r.to_string();
+        for leak in ["123456", "abcde-fghij", "a1b2c-d3e4f", "otpauth://", "<svg", "654321"] {
+            assert!(!text.contains(leak), "{leak} in {text}");
+        }
+        assert_eq!(r["code_challenge"], "kept");
+    }
 
     #[test]
     fn redacts_keys_at_any_depth_and_bearer_strings() {

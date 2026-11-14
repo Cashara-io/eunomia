@@ -61,6 +61,8 @@ pulldown-cmark = "0.13"
 rust_decimal = "1"
 
 jsonschema = { version = "0.58.6", default-features = false }
+totp-rs = { version = "6", default-features = false, features = ["std", "otpauth"] }
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }

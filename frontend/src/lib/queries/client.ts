@@ -31,7 +31,7 @@ const retryable = (e: unknown) => !(e instanceof ApiError) || e.status >= 500 ||
  * suspended account: its session no longer works either, and the login form says why. */
 export const isSessionEnded = (e: unknown) =>
   e instanceof ApiError &&
-  ((e.status === 401 && ["auth.unauthorized", "auth.session_expired", "auth.token_expired"].includes(e.code)) ||
+  ((e.status === 401 && ["auth.unauthorized", "auth.session_expired", "auth.token_expired", "auth.mfa_required"].includes(e.code)) ||
     (e.status === 403 && e.code === "auth.suspended"));
 
 /** Sends any query or mutation that finds the session gone to /login, remembering where the user was. */

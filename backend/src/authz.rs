@@ -262,6 +262,13 @@ pub async fn is_admin(db: &ControlDb, user: &User) -> AppResult<bool> {
     Ok(is_operator(db, user).await? || granted_admin(db, &user.id).await? || crate::capsules::first_user(db).await?.as_ref() == Some(&user.id))
 }
 
+/// An operator of the whole server: the instance's first account or an email in `EUNOMIA_ADMIN_EMAILS`.
+/// Admin rights granted in the app (Settings > People) are not enough: they are given within one
+/// organisation, while an instance setting reaches every organisation on the host.
+pub async fn is_instance_operator(db: &ControlDb, user: &User) -> AppResult<bool> {
+    Ok(is_operator(db, user).await? || crate::capsules::first_user(db).await?.as_ref() == Some(&user.id))
+}
+
 /// True when an admin granted `user` admin rights in the app (the `admin` flag on the account).
 pub async fn granted_admin(db: &ControlDb, user: &RecordId) -> AppResult<bool> {
     #[derive(Deserialize, SurrealValue)]

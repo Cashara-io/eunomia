@@ -20,6 +20,7 @@ pub mod integrity;
 pub mod isolation;
 pub mod jobs;
 pub mod llm_net;
+pub mod mfa;
 pub mod migrate;
 pub mod models_user;
 pub mod oauth;
@@ -78,6 +79,7 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
     let api = axum::Router::new()
         .route("/openapi.json", axum::routing::get(openapi::openapi_json))
         .merge(routers::auth::router())
+        .merge(routers::mfa::router())
         .merge(routers::chat::router())
         .merge(routers::settings::router())
         .merge(routers::audit::router())

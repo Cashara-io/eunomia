@@ -400,6 +400,14 @@ pub async fn authenticate(db: &ControlDb, email: &str, password: &str) -> AppRes
     Ok(Some(load_user(db, row.id, row.email).await?))
 }
 
+/// Re-checks the signed-in account's own password (enrolling an authenticator). `false` for a wrong
+/// password and for an account without one. Same bcrypt work either way.
+pub async fn password_matches(db: &ControlDb, user: &RecordId, password: &str) -> AppResult<bool> {
+    let rows: Vec<UserRow> = store::control::AUTH_USER_BY_ID.on(db).bind(("id", user.clone())).await?.take(0)?;
+    let hash = rows.into_iter().next().and_then(|r| r.password_hash);
+    Ok(verify_password(password, hash.as_deref()).await)
+}
+
 #[derive(Debug, Serialize)]
 pub struct ApiTokenCreated {
     pub id: RecordId,

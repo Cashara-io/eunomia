@@ -11,6 +11,7 @@ import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { oidcLink, oidcLinkInfo } from "@/lib/gen";
 import { call } from "@/lib/queries/client";
 import AuthShell, { LABEL, RevealToggle } from "../AuthShell";
+import SecondStep from "../SecondStep";
 
 export default function LinkPage() {
   const info = useQuery({ queryKey: ["auth", "oidc-link"], queryFn: () => call(oidcLinkInfo()), retry: false });
@@ -20,13 +21,17 @@ export default function LinkPage() {
   const [busy, setBusy] = useState(false);
   const [confirmFresh, setConfirmFresh] = useState(false);
   const [done, setDone] = useState<{ started_fresh: boolean; next: string } | null>(null);
+  // the account has its own authenticator (or this server requires one): the password opened its second step,
+  // and the link is made when that step passes
+  const [second, setSecond] = useState<{ step: "verify" | "enrol"; next: string } | null>(null);
 
   async function choose(body: { password?: string; start_fresh?: boolean }) {
     setBusy(true);
     setError(null);
     try {
       const r = await call(oidcLink({ body }));
-      if (r.started_fresh) setDone(r);
+      if (r.mfa === "verify" || r.mfa === "enrol") setSecond({ step: r.mfa, next: r.next || "/" });
+      else if (r.started_fresh) setDone(r);
       else window.location.replace(r.next || "/");
     } catch (e) {
       setError(failure(e, "Could not link your sign-in. Try again."));
@@ -35,6 +40,20 @@ export default function LinkPage() {
       setBusy(false);
     }
   }
+
+  if (second)
+    return (
+      <AuthShell>
+        <SecondStep
+          step={second.step}
+          onDone={() => window.location.replace(second.next)}
+          onRestart={(why) => {
+            setSecond(null);
+            setError(why);
+          }}
+        />
+      </AuthShell>
+    );
 
   if (done)
     return (

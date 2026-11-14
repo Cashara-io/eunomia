@@ -10,7 +10,7 @@ Owned by the lead. One line per reserved migration number (docs/architecture/nex
 
 Tenant set: next free 0044.
 
-Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension to user records (PR #162). Next free: 0009.
+Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension to user records (PR #162); 0009 is reserved for enforced MFA (compliance PR04). Next free: 0010.
 
 | set | number | name | lane | PR | state |
 |---|---|---|---|---|---|
@@ -38,3 +38,4 @@ Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension t
 | tenant | 0043 | chat_turn_order | Chat #220 | #238 (reserved by #237) | locked |
 | control | 0007 | secret_audit_index | L3 Broker | #123 (#122), 2.0.9 | merged |
 | control | 0008 | user_admin_suspend | Admin (#144) | #162, 2.0.9 | merged |
+| control | 0009 | mfa | Compliance PR04 (enforced MFA) | #244 | locked |

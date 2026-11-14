@@ -459,6 +459,9 @@ const NO_SECRET_ROWS: &[&str] = &[
     "change_seq",    // one counter per vault
     "peer_instance",  // one random identifier per database (peer vaults), no content
     "redact_backfill", // one progress row: a stage, a cursor id and counts, never content
+    "mfa_recovery_code", // a user id and a SHA-256 per recovery code, never content (tests/mfa.rs)
+    "mfa_challenge",     // a pending second sign-in step: a user id and a token hash, gone in minutes
+    "instance_setting",  // one instance-wide security row (require_mfa), not per org
 ];
 
 // ---- the attack -----------------------------------------------------------------------------
