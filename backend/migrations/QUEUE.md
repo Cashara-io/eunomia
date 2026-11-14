@@ -38,4 +38,4 @@ Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension t
 | tenant | 0043 | chat_turn_order | Chat #220 | pending | reserved |
 | control | 0007 | secret_audit_index | L3 Broker | #123 (#122), 2.0.9 | merged |
 | control | 0008 | user_admin_suspend | Admin (#144) | #162, 2.0.9 | merged |
-| control | 0009 | mfa | Compliance PR04 (enforced MFA) | eunomia-private #3 | locked |
+| control | 0009 | mfa | Compliance PR04 (enforced MFA) | #244 | locked |
