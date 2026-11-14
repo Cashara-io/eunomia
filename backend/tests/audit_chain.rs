@@ -19,12 +19,27 @@ use serde_json::{json, Value};
 
 static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-async fn serial() -> tokio::sync::MutexGuard<'static, ()> {
+/// Holds the test lock and this test's background pass (each test has its own runtime, so the
+/// server's one-per-process pass is started here per test, faster, and stopped when the test ends).
+struct Serial {
+    _lock: tokio::sync::MutexGuard<'static, ()>,
+    pass: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for Serial {
+    fn drop(&mut self) {
+        self.pass.abort();
+        chain::forget_marked();
+    }
+}
+
+async fn serial() -> Serial {
     let g = SERIAL.lock().await;
     chain::FAIL_WRITES.store(0, std::sync::atomic::Ordering::SeqCst);
     chain::SKIP_INLINE_SEAL.store(false, std::sync::atomic::Ordering::SeqCst);
     eunomia_backend::tx::LOCKS_OFF.store(false, std::sync::atomic::Ordering::SeqCst);
-    g
+    // this process's background pass, as `main` starts it in the server (every 5 s), only faster
+    Serial { _lock: g, pass: chain::spawn_drain(chain::outbox(), Duration::from_millis(200)) }
 }
 
 async fn emit(db: &ControlDb, user: &surrealdb::types::RecordId, action: &str, detail: &str) {
@@ -134,11 +149,14 @@ async fn a_failed_write_is_queued_and_replayed() {
     let _g = serial().await;
     let app = common::TestApp::new().await;
     let before = chain::queued();
-    chain::FAIL_WRITES.store(1, std::sync::atomic::Ordering::SeqCst);
+    // the database keeps refusing: the background pass cannot deliver it either
+    chain::FAIL_WRITES.store(1_000_000, std::sync::atomic::Ordering::SeqCst);
     emit(app.control(), &app.user.id, "test.refused_write", "").await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
     assert_eq!(chain::queued(), before + 1, "the event waits in the replay queue");
+    chain::FAIL_WRITES.store(0, std::sync::atomic::Ordering::SeqCst);
     assert!(sql(app.control(), "SELECT id FROM audit_event WHERE action = 'test.refused_write'", json!({})).await.is_empty());
-    // the scheduler's replay pass delivers it and seals it
+    // once the database is back, a replay pass delivers it and seals it
     let r = chain::replay(app.control()).await.unwrap();
     assert!(r.written >= 1, "{r:?}");
     assert_eq!(chain::queued(), before);
@@ -149,6 +167,20 @@ async fn a_failed_write_is_queued_and_replayed() {
     // replaying again writes nothing twice
     chain::replay(app.control()).await.unwrap();
     assert_eq!(sql(app.control(), "SELECT id FROM audit_event WHERE action = 'test.refused_write'", json!({})).await.len(), 1);
+}
+
+#[tokio::test]
+async fn a_graceful_shutdown_leaves_nothing_unsealed() {
+    // what this process wrote is sealed by its background pass, and shutdown runs that pass once more
+    let _g = serial().await;
+    let app = common::TestApp::new().await;
+    for i in 0..20 {
+        emit(app.control(), &app.user.id, "test.before_shutdown", &format!("n={i}")).await;
+    }
+    chain::shutdown_flush(Duration::from_secs(10)).await;
+    let pending = sql(app.control(), "SELECT id FROM audit_event WHERE pending = true", json!({})).await;
+    assert!(pending.is_empty(), "{pending:?}");
+    assert!(verify(&app).await.ok);
 }
 
 #[tokio::test]
