@@ -263,19 +263,44 @@ pub async fn register_user(state: &AppState, email: &str, password: &str) -> App
 pub async fn register_user_with(state: &AppState, email: &str, password: &str, personal: bool) -> AppResult<User> {
     let email = normalize_new_email(email)?;
     validate_credentials(&email, password)?;
-    Box::pin(create_account(state, &email, Some(password), None, personal)).await
+    Box::pin(create_account(state, &email, Some(password), None, Placement::Instance { personal })).await
+}
+
+/// An account made through an organisation invitation: it joins the inviting org with the invited role
+/// (whatever `EUNOMIA_SIGNUP_ORG` says), and the invitation is used up in the same step. The caller has
+/// checked that `email` is the invited one (`invitations::email_matches`).
+pub async fn register_invited(state: &AppState, email: &str, password: &str, invitation: &crate::invitations::Pending) -> AppResult<User> {
+    let email = normalize_new_email(email)?;
+    validate_credentials(&email, password)?;
+    Box::pin(create_account(state, &email, Some(password), None, Placement::Invitation(invitation))).await
 }
 
 /// An account made by a verified OpenID Connect sign-in: no password, linked to `(issuer, subject)`.
 /// The caller has already decided the signup is allowed and that no account owns `email`.
 pub async fn register_oidc_user(state: &AppState, email: &str, issuer: &str, subject: &str) -> AppResult<User> {
     let email = normalize_new_email(email)?;
-    Box::pin(create_account(state, &email, None, Some((issuer, subject)), signup_personal())).await
+    Box::pin(create_account(state, &email, None, Some((issuer, subject)), Placement::Instance { personal: signup_personal() })).await
+}
+
+/// [`register_oidc_user`] for a sign-in that started from an organisation invitation link and may use it
+/// (`routers/oidc.rs` checked the token, the email and its verification): the account joins that org and
+/// the invitation is used up.
+pub async fn register_oidc_user_invited(state: &AppState, email: &str, issuer: &str, subject: &str, invitation: &crate::invitations::Pending) -> AppResult<User> {
+    let email = normalize_new_email(email)?;
+    Box::pin(create_account(state, &email, None, Some((issuer, subject)), Placement::Invitation(invitation))).await
+}
+
+/// Where a new account's membership comes from.
+enum Placement<'a> {
+    /// The install's org, or (`personal`) an org of its own: see [`assign_org`].
+    Instance { personal: bool },
+    /// The org an invitation names, with the invited role.
+    Invitation(&'a crate::invitations::Pending),
 }
 
 /// The shared signup: the user row (with a bcrypt hash of `password`, or none), the identity link if any,
 /// the org membership and the personal vault. Anything that fails leaves nothing behind.
-async fn create_account(state: &AppState, email: &str, password: Option<&str>, identity: Option<(&str, &str)>, personal: bool) -> AppResult<User> {
+async fn create_account(state: &AppState, email: &str, password: Option<&str>, identity: Option<(&str, &str)>, placement: Placement<'_>) -> AppResult<User> {
     let db = &state.control;
 
     let mut res = store::control::AUTH_USER_ID_BY_EMAIL
@@ -315,8 +340,17 @@ async fn create_account(state: &AppState, email: &str, password: Option<&str>, i
     let row = rows.into_iter().next().ok_or_else(|| AppError::internal("insert returned no row"))?;
 
     let mut joined = None;
+    let mut claimed = None;
     let setup = async {
-        let org = assign_org(state, &row.id, email, personal).await?;
+        let org = match placement {
+            Placement::Instance { personal } => assign_org(state, &row.id, email, personal).await?,
+            Placement::Invitation(inv) => {
+                let org = inv.org_id().ok_or_else(|| AppError::internal("invitation names no org"))?;
+                crate::invitations::claim(&state.control, &row.id, inv, true).await?;
+                claimed = Some(inv);
+                org
+            }
+        };
         joined = Some(org);
         if let Some((issuer, subject)) = identity {
             link_identity(&state.control, &row.id, issuer, subject, email).await?;
@@ -339,6 +373,9 @@ async fn create_account(state: &AppState, email: &str, password: Option<&str>, i
             {
                 let vault = crate::vaults::service::personal_vault_record_id(&row.id);
                 let _ = store::vaults::DELETE_VAULT.on(&orgdb).bind(("vault", vault)).await;
+            }
+            if let Some(inv) = claimed {
+                crate::invitations::reopen(db, &row.id, inv).await;
             }
             let _ = store::control::IDENTITY_DELETE_USER.on(db).bind(("user", row.id.clone())).await;
             let _ = store::control::MEMBERSHIP_DELETE_USER.on(db).bind(("user", row.id.clone())).await;

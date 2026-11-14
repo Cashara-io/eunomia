@@ -423,6 +423,9 @@ async fn account_part(app: &AppState, subject: &RecordId, zip: &mut Zip, categor
     let apps = take_vec(&mut res, 5)?;
     let mut audit = take_vec(&mut res, 6)?;
     let usage = take_vec(&mut res, 7)?;
+    // the organisation invitations that name them: the one they joined through and any still addressed to
+    // them (no token hash, no inviter)
+    let invitations = take_vec(&mut res, 8)?;
     // other people's emails in the person's own audit trail
     let mut audit_redacted = 0;
     for e in audit.iter_mut() {
@@ -432,7 +435,7 @@ async fn account_part(app: &AppState, subject: &RecordId, zip: &mut Zip, categor
             e["detail"] = json!(clean);
         }
     }
-    put(zip, categories, None, "account", "account.json", 1, json!({ "account": account, "sign_in_identities": identities, "organisations": org_memberships }))?;
+    put(zip, categories, None, "account", "account.json", 1, json!({ "account": account, "sign_in_identities": identities, "organisations": org_memberships, "organisation_invitations": invitations }))?;
     put(zip, categories, None, "api_tokens", "api_tokens.json", tokens.len(), json!(tokens))?;
     put(zip, categories, None, "sessions", "sessions.json", sessions.len(), json!(sessions))?;
     put(zip, categories, None, "connected_apps", "connected_apps.json", apps.len(), json!(apps))?;
@@ -473,6 +476,7 @@ const OWN_LEFT_OUT: &[&str] = &[
     "Embeddings (numbers derived from your text; the text itself is included).",
     "Recording audio files (transcripts and summaries are included).",
     "Backups taken before this export (see docs/privacy/subject-rights.md).",
+    "Organisation invitations you sent (they name the people you invited).",
 ];
 
 /// The person's own export: the account part and the home workspace's part go in the home row (the

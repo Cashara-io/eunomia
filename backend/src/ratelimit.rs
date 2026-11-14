@@ -278,6 +278,14 @@ pub const LOGIN_FAILS: u32 = 10;
 pub const OAUTH_CLIENT_FAILS: u32 = 30;
 /// Failures per account across all addresses (distributed guessing), looser than `LOGIN_FAILS`.
 pub const LOGIN_ACCOUNT_FAILS: u32 = 100;
+/// Invitation links that did not check out (unknown, used, withdrawn or expired) per client address or
+/// account, before more attempts are refused: a link is 32 random bytes, so this only stops a noisy guesser.
+pub const INVITE_TOKEN_FAILS: u32 = 10;
+/// Organisation invitations an org can create or resend per minute (a [`RateLimiter`] bucket per org and one per admin).
+pub const INVITES_PER_MIN: u32 = 20;
+/// Invitation lookups and accepts per minute per client address or account. Above
+/// [`INVITE_TOKEN_FAILS`], so a burst of bad links meets the failure throttle before this bucket.
+pub const INVITE_ACCEPTS_PER_MIN: u32 = 20;
 const FAIL_MAX_KEYS: usize = 50_000;
 const FAIL_WINDOW: Duration = Duration::from_secs(15 * 60);
 

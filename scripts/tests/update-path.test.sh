@@ -76,9 +76,9 @@ VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usag
 # on their own, so they are left out of the before/after diff.
 NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill peer_instance peer_share peer_link peer_item credential_ref secret_provider secret_request vault_secret ontology_kind ontology_link ontology_property entity_property ontology_metric ontology_event composio_file access_review access_review_decision subject_export}"
 # Control tables added by control migrations (0009: two-step verification; 0011: erasure records and the
-# per-workspace erasure locks). Empty after an update: nothing backfills them, and the boot-time erasure
+# per-workspace erasure locks; 0012: organisation invitations). Empty after an update: nothing backfills them, and the boot-time erasure
 # re-apply (subject::reapply_on_start) writes nothing while no erasure was ever recorded.
-NEW_CONTROL_TABLES="${UPDATE_PATH_NEW_CONTROL_TABLES:-mfa_recovery_code mfa_challenge instance_setting erasure erasure_lock}"
+NEW_CONTROL_TABLES="${UPDATE_PATH_NEW_CONTROL_TABLES:-mfa_recovery_code mfa_challenge instance_setting erasure erasure_lock org_invitation}"
 # The audit chain's control tables (control 0010, docs/audit-chain.md): one head per ledger and its
 # checkpoints. They follow audit_event (volatile): a ledger gets its head and genesis checkpoint when its
 # first event after the update is sealed (the redaction backfill's event, a sign-in), and its head moves

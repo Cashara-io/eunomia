@@ -451,7 +451,9 @@ pub const ACCOUNT: ControlStmt = ControlStmt::new(
      SELECT user_agent, created_at, last_seen_at, revoked, via, mfa_at FROM session WHERE owner = $u; \
      SELECT client_name, client_id, scope, created_at, last_used_at FROM oauth_grant WHERE owner = $u; \
      SELECT action, target, outcome, actor_kind, detail, created_at FROM audit_event WHERE user = $u ORDER BY created_at; \
-     SELECT tool, channel, calls, errors, bucket FROM tool_usage WHERE user = $u ORDER BY bucket",
+     SELECT tool, channel, calls, errors, bucket FROM tool_usage WHERE user = $u ORDER BY bucket; \
+     SELECT <string> org AS org, org.name AS org_name, role, created_at, sent_at, expires_at, accepted_at, revoked_at FROM org_invitation \
+        WHERE accepted_by = $u OR ($u.email_lc != NONE AND string::lowercase(email) = $u.email_lc) ORDER BY created_at",
 );
 
 /// The access reviews of this workspace that list the person: their own row of the snapshot (what they
@@ -699,6 +701,8 @@ pub const ERASE_CONTROL: ControlStmt = ControlStmt::at(
      LET $mr = (DELETE mfa_recovery_code WHERE user = $u RETURN BEFORE); \
      LET $mc = (DELETE mfa_challenge WHERE user = $u OR string::lowercase(link_email ?? '') = $email_lc RETURN BEFORE); \
      UPDATE instance_setting SET updated_by = NONE WHERE updated_by = $u RETURN NONE; \
+     LET $oi = (DELETE org_invitation WHERE accepted_by = $u OR string::lowercase(email) = $email_lc RETURN BEFORE); \
+     UPDATE org_invitation SET invited_by = user:erased WHERE invited_by = $u RETURN NONE; \
      LET $ae = (UPDATE audit_event SET user = IF user = $u THEN user:erased ELSE user END, actor_id = IF actor_id IN $actors THEN 'erased' ELSE actor_id END, \
         target = IF target IN $actors OR string::contains(target, $key) THEN 'erased' ELSE target END, \
         detail = string::replace(detail, <regex> $email_re, '[erased person]') \
@@ -710,9 +714,9 @@ pub const ERASE_CONTROL: ControlStmt = ControlStmt::at(
      RETURN { app_connections: array::len($og) + array::len($ot) + array::len($oc), api_tokens: array::len($at), sessions: array::len($se), \
         sign_in_identities: array::len($id), usage_counters: array::len($tu), jobs: array::len($jb), failure_capsules: array::len($fc), \
         audit_events_anonymised: array::len($ae), audit_event_details_erased: array::len($as), two_step_codes_and_challenges: array::len($mr) + array::len($mc), \
-        org_memberships: array::len($ms), account: array::len($us) }; \
+        org_memberships: array::len($ms), organisation_invitations: array::len($oi), account: array::len($us) }; \
      COMMIT TRANSACTION;",
-    20,
+    22,
 );
 
 /// The control half of the post-check: every control table that can name the subject. All must be 0.
@@ -735,6 +739,7 @@ pub const CONTROL_RESIDUE: ControlStmt = ControlStmt::new(
        mfa_recovery_code: count((SELECT id FROM mfa_recovery_code WHERE user = $u)), \
        mfa_challenge: count((SELECT id FROM mfa_challenge WHERE user = $u OR string::lowercase(link_email ?? '') = $email_lc)), \
        instance_setting: count((SELECT id FROM instance_setting WHERE updated_by = $u)), \
+       org_invitation: count((SELECT id FROM org_invitation WHERE accepted_by = $u OR invited_by = $u OR string::lowercase(email) = $email_lc)), \
        erasure: count((SELECT id FROM erasure WHERE (subject = $u OR requester = $u) AND id != $erasure)) \
      }",
 );

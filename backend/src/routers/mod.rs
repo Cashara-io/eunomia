@@ -11,6 +11,7 @@ pub mod settings;
 pub mod access_reviews;
 pub mod admin;
 pub mod audit_chain;
+pub mod org;
 pub mod audit;
 pub mod debug;
 pub mod export;

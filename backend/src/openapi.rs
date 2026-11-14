@@ -88,6 +88,7 @@ pub fn spec() -> utoipa::openapi::OpenApi {
         routers::admin::Doc::openapi(),
         routers::audit_chain::Doc::openapi(),
         routers::access_reviews::Doc::openapi(),
+        routers::org::Doc::openapi(),
         routers::audit::Doc::openapi(),
         routers::changes::Doc::openapi(),
         routers::chat::Doc::openapi(),

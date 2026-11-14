@@ -78,6 +78,7 @@ pub const CONTROL_MIGRATIONS: &[(u32, &str, &str)] = &[
     (9, "mfa", include_str!("../migrations/control/0009_mfa.surql")),
     (10, "audit_chain", include_str!("../migrations/control/0010_audit_chain.surql")),
     (11, "erasure", include_str!("../migrations/control/0011_erasure.surql")),
+    (12, "org_invitations", include_str!("../migrations/control/0012_org_invitations.surql")),
 ];
 
 /// The first number missing from `list`, which must run 1, 2, 3, ... with no gap. A gap is final:

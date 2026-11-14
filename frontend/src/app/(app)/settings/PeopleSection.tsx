@@ -11,6 +11,7 @@ import type { Person } from "@/lib/gen";
 import { useCancelErasure, useErasePerson, useErasures, useMakeWorkspaceOwner, useReapplyErasures, useSetLegalHold, useStartPersonExport } from "@/lib/queries/subject";
 import { useMe } from "@/lib/queries/auth";
 import { ICON, PanelHead, QUIET_DANGER, RevokeButton, TableSkeleton, expiryLabel, relativeTime } from "./shared";
+import { InvitationsSection } from "./InvitationsSection";
 
 /* Why an admin can't be changed here, for the tooltip on the disabled button. */
 const LOCKED: Record<string, string> = {
@@ -486,7 +487,23 @@ function Email({ p }: { p: Person }) {
   );
 }
 
-export function PeopleSection() {
+/** An owner or admin of the organisation who is not an instance admin: invitations and seats only. */
+function OrgPeopleSection() {
+  return (
+    <div className="flex flex-col gap-5">
+      <PanelHead title="People">Invite colleagues to this organisation.</PanelHead>
+      <InvitationsSection />
+    </div>
+  );
+}
+
+/** `full` for an instance admin (everyone's account, suspend, admin rights); else invitations only. */
+export function PeopleSection({ full = true }: { full?: boolean }) {
+  if (!full) return <OrgPeopleSection />;
+  return <FullPeopleSection />;
+}
+
+function FullPeopleSection() {
   const query = usePeople();
   const data = query.data;
   const people = data?.people ?? null;
@@ -542,6 +559,8 @@ export function PeopleSection() {
           )}
         </div>
       )}
+
+      <InvitationsSection />
 
       {actionError && <ErrorLine error={actionError} />}
 

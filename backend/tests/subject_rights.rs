@@ -1440,3 +1440,78 @@ async fn a_set_aside_account_is_erased_by_its_kept_address_unless_another_accoun
     assert!(!account_exists(&app, &amy).await && account_exists(&app, &amy_now).await);
     assert!(texts(&db).await.iter().any(|t| t == "ask amy@example.com"), "the address belongs to the new account: not scrubbed");
 }
+
+/// An organisation invitation (`POST /api/org/invitations`) from the account behind `cookie`; returns the token.
+async fn org_invite(app: &TestApp, cookie: &str, email: &str, role: &str) -> String {
+    let (s, b) = req(&app.router, "POST", "/api/org/invitations", Some(json!({"email": email, "role": role})), None, Some(cookie)).await;
+    assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
+    json_of(&b)["token"].as_str().unwrap().to_string()
+}
+
+/// Organisation invitations name the person by email (open or used) and by `accepted_by` / `invited_by`.
+/// The export carries the ones addressed to or accepted by them (never a token hash or the inviter); the
+/// erasure deletes those, keeps the ones they sent for the organisation under `user:erased`, and the
+/// post-check counts the table (with the delete removed, it goes red).
+#[tokio::test]
+async fn organisation_invitations_naming_the_person_are_exported_and_erased() {
+    let _serial = SERIAL.lock().await;
+    let (app, _stop) = app_with_worker().await;
+    let admin = app.session_cookie().await;
+    // dana joins through an invitation, as an admin, and invites erin herself
+    let token = org_invite(&app, &admin, "Dana@Example.com", "admin").await;
+    let (s, b) = req(&app.router, "POST", "/api/auth/register", Some(json!({"email": "dana@example.com", "password": common::PASSWORD, "invitation": token})), None, None).await;
+    assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
+    let dana = models_user::user_by_email(&app.state.control, "dana@example.com").await.unwrap().unwrap();
+    let cookie = login(&app.router, &dana.email).await;
+    org_invite(&app, &cookie, "erin@example.com", "member").await;
+    // and another workspace has an open invitation addressed to her
+    let olga = common::register_personal(&app.state, "olga@example.com").await;
+    let olga_cookie = login(&app.router, &olga.email).await;
+    org_invite(&app, &olga_cookie, "dana@example.com", "member").await;
+
+    // export: both invitations naming her, without token hashes or inviters
+    let (s, b) = req(&app.router, "POST", "/api/export/subject", None, None, Some(&cookie)).await;
+    assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
+    let id = json_of(&b)["id"].as_str().unwrap().to_string();
+    wait_for("the export", || async {
+        let (_, b) = req(&app.router, "GET", "/api/export/subject", None, None, Some(&cookie)).await;
+        json_of(&b).as_array().unwrap().iter().any(|e| e["id"] == id.as_str() && e["status"] == "ready")
+    })
+    .await;
+    let (s, zip) = req(&app.router, "GET", &format!("/api/export/subject/{id}"), None, None, Some(&cookie)).await;
+    assert_eq!(s, 200);
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(zip)).unwrap();
+    let mut account = String::new();
+    archive.by_name("account.json").unwrap().read_to_string(&mut account).unwrap();
+    let account: Value = serde_json::from_str(&account).unwrap();
+    let invs = account["organisation_invitations"].as_array().unwrap_or_else(|| panic!("{account}"));
+    assert_eq!(invs.len(), 2, "{invs:?}");
+    let joined: Vec<&Value> = invs.iter().filter(|i| i["accepted_at"].is_string()).collect();
+    assert_eq!((joined.len(), joined[0]["role"].as_str(), joined[0]["org"].as_str()), (1, Some("admin"), Some(app.user.org.record().to_string().as_str())), "{invs:?}");
+    assert!(invs.iter().any(|i| i["org"] == olga.org.record().to_string() && i["accepted_at"].is_null()), "{invs:?}");
+    let text = account.to_string();
+    assert!(!text.contains("token_hash") && !text.contains("invited_by") && !text.contains("erin@example.com"), "{text}");
+
+    // erasure, first with the invitation delete removed: the post-check reports the table and nothing is done
+    eunomia_backend::isolation::mutate(
+        "subject.erase_control",
+        "LET $oi = (DELETE org_invitation WHERE accepted_by = $u OR string::lowercase(email) = $email_lc RETURN BEFORE);",
+        "LET $oi = [];",
+    );
+    let id = erase_route(&app, &dana, false).await;
+    let failed = wait_status(&app, &id, "failed").await;
+    eunomia_backend::isolation::clear_mutations();
+    assert_eq!(failed["post_check"]["org_invitation"], 2, "the one she joined through and the open one addressed to her: {failed}");
+    eunomia_backend::subject::heal_open(&app.state).await.unwrap();
+    let done = wait_status(&app, &id, "done").await;
+    assert_eq!(done["post_check"]["org_invitation"], 0, "{done}");
+    assert_eq!(done["counts"]["organisation_invitations"], 2, "{done}");
+
+    // none names her any more; the one she sent stays for the organisation, under no one
+    let rows = control_rows(&app.state, "SELECT email, <string> invited_by AS invited_by, accepted_by FROM org_invitation", ("x", json!(null))).await;
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!((rows[0]["email"].as_str(), rows[0]["invited_by"].as_str()), (Some("erin@example.com"), Some("user:erased")), "{rows:?}");
+    let db = common::org_db(&app.state, &app.user).await;
+    let hits = rows_naming(&app.state, &db, &[dana.id.key_str(), "dana@example.com".to_string()], &[]).await;
+    assert!(hits.iter().all(|h| !h.starts_with("control org_invitation")), "{hits:?}");
+}

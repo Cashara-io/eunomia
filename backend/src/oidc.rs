@@ -61,6 +61,11 @@ pub struct OidcConfig {
     pub require_mfa_claim: bool,
     /// `OIDC_MFA_ACR`: comma-separated `acr` values that count as multi-factor (provider specific).
     pub mfa_acr: Vec<String>,
+    /// `OIDC_INVITE_ACCEPT_UNVERIFIED_EMAIL`: when the provider sends no `email_verified` claim at all, a
+    /// sign-in may still accept the organisation invitation whose token came with it (the token is the second
+    /// proof). Nothing else: linking, starting fresh, operator addresses and the allowlist always need the
+    /// claim. A claim sent as false is never overridden. Off by default.
+    pub invite_accept_unverified_email: bool,
 }
 
 impl std::fmt::Debug for OidcConfig {
@@ -70,6 +75,7 @@ impl std::fmt::Debug for OidcConfig {
             .field("client_id", &self.client_id)
             .field("client_secret", &self.client_secret.as_ref().map(|_| "<redacted>"))
             .field("scopes", &self.scopes)
+            .field("invite_accept_unverified_email", &self.invite_accept_unverified_email)
             .field("provider_name", &self.provider_name)
             .field("require_mfa_claim", &self.require_mfa_claim)
             .field("mfa_acr", &self.mfa_acr)
@@ -127,6 +133,7 @@ impl AuthConfig {
                     Some(other) => return Err(format!("OIDC_REQUIRE_MFA={other:?} is not true or false")),
                 },
                 mfa_acr: var("OIDC_MFA_ACR").map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()).unwrap_or_default(),
+                invite_accept_unverified_email: var("OIDC_INVITE_ACCEPT_UNVERIFIED_EMAIL").is_some_and(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes")),
             }),
         })
     }
@@ -198,11 +205,24 @@ pub struct Identity {
     pub issuer: String,
     pub subject: String,
     pub email: Option<String>,
+    /// The provider said the email is verified.
     pub email_verified: bool,
+    /// The provider sent no `email_verified` claim at all (see `OidcConfig::invite_accept_unverified_email`).
+    pub email_verified_absent: bool,
     /// The `amr` claim (authentication methods, RFC 8176), empty when absent.
     pub amr: Vec<String>,
     /// The `acr` claim, when present.
     pub acr: Option<String>,
+}
+
+impl Identity {
+    /// Whether the email may be used to accept the invitation whose token came with this sign-in: the
+    /// provider verified it, or sent no claim at all and the operator allowed that for invitations only
+    /// (`OIDC_INVITE_ACCEPT_UNVERIFIED_EMAIL`). An explicit false stays false. Everything else (linking,
+    /// starting fresh, operator addresses, the allowlist) uses `email_verified` alone.
+    pub fn verified_for_invitation(&self, cfg: &OidcConfig) -> bool {
+        self.email_verified || (self.email_verified_absent && cfg.invite_accept_unverified_email)
+    }
 }
 
 /// `amr` values (RFC 8176) that mean more than a password was used.
@@ -463,11 +483,20 @@ impl Client {
             .map(|a| a.iter().filter_map(|m| m.as_str()).take(16).map(|m| m.chars().take(32).collect()).collect())
             .unwrap_or_default();
         let acr = c.acr.as_ref().and_then(|v| v.as_str()).map(|a| a.chars().take(255).collect());
-        Ok(Identity { issuer: cfg.issuer.clone(), subject: c.sub, email: c.email, email_verified: c.email_verified.as_ref().is_some_and(truthy), amr, acr })
+        Ok(Identity {
+            issuer: cfg.issuer.clone(),
+            subject: c.sub,
+            email: c.email,
+            email_verified: c.email_verified.as_ref().is_some_and(truthy),
+            email_verified_absent: c.email_verified.is_none(),
+            amr,
+            acr,
+        })
     }
 
     /// The userinfo claims, for a provider whose ID token carries no email. The subject must match the verified one.
-    pub async fn userinfo(&self, disc: &Discovery, access_token: &str, subject: &str) -> Option<(Option<String>, bool)> {
+    /// The second value is the `email_verified` claim: `None` when the provider sent none.
+    pub async fn userinfo(&self, disc: &Discovery, access_token: &str, subject: &str) -> Option<(Option<String>, Option<bool>)> {
         let url = disc.userinfo_endpoint.as_deref()?;
         let resp = self.http.get(url).bearer_auth(access_token).header("accept", "application/json").send().await.ok()?;
         if !resp.status().is_success() {
@@ -475,7 +504,7 @@ impl Client {
         }
         let v: serde_json::Value = serde_json::from_slice(&read_capped(resp).await.ok()?).ok()?;
         (v.get("sub").and_then(|s| s.as_str()) == Some(subject))
-            .then(|| (v.get("email").and_then(|e| e.as_str()).map(String::from), v.get("email_verified").is_some_and(truthy)))
+            .then(|| (v.get("email").and_then(|e| e.as_str()).map(String::from), v.get("email_verified").filter(|c| !c.is_null()).map(truthy)))
     }
 }
 
@@ -516,6 +545,7 @@ mod tests {
             subject: "s".into(),
             email: None,
             email_verified: false,
+            email_verified_absent: true,
             amr: amr.iter().map(|s| s.to_string()).collect(),
             acr: acr.map(String::from),
         };
@@ -558,6 +588,7 @@ mod tests {
         assert!(!c.password_enabled());
         let o = c.oidc.unwrap();
         assert_eq!((o.scopes.as_str(), o.provider_name.as_str(), o.client_secret), ("openid email profile", "Okta", None));
+        assert!(!o.invite_accept_unverified_email, "a missing email_verified claim is not trusted unless the operator says so");
         let c = AuthConfig::from_vars(vars(&[("AUTH_MODE", "both"), ("OIDC_ISSUER", "http://127.0.0.1:9"), ("OIDC_CLIENT_ID", "x"), ("OIDC_CLIENT_SECRET", "hunter2-secret")])).unwrap();
         assert!(c.password_enabled());
         assert!(!format!("{c:?}").contains("hunter2-secret"), "the secret is redacted in Debug");

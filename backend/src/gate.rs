@@ -70,6 +70,10 @@ pub fn explicit_class(method: &Method, path: &str) -> Option<Class> {
         ["mcp"] => Mcp,
         ["api", "openapi.json"] => Public,
         ["api", "auth", "register" | "login"] => AuthAttempt,
+        // an invitation link's holder may have no account yet: public, limited per client address like login
+        ["api", "invitations", "lookup"] => AuthAttempt,
+        ["api", "invitations", "accept"] => Account(scopes::VAULTS_ADMIN),
+        ["api", "org", ..] => Account(scopes::VAULTS_ADMIN),
         // the browser leaves for the provider (a redirect, nothing to guess) and comes back (a code exchange: limited per client address like login)
         ["api", "auth", "oidc", "start"] => Public,
         ["api", "auth", "oidc", "callback"] => AuthAttempt,

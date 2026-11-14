@@ -2,7 +2,7 @@
 // shapes (string kinds become unions); the query hooks cast to them.
 import type { PropertyValue } from "@/lib/gen";
 
-export type Me = { id: string; email: string; onboarded: boolean; has_password: boolean; oidc_provider?: string | null; is_admin: boolean };
+export type Me = { id: string; email: string; onboarded: boolean; has_password: boolean; oidc_provider?: string | null; is_admin: boolean; org_role?: string; can_manage_org?: boolean };
 
 export type Scope = "memory:read" | "memory:write" | "vaults:admin" | "connectors";
 export type ApiToken = {

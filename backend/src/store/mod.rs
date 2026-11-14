@@ -30,6 +30,7 @@ pub mod diagnostics;
 pub mod entities;
 pub mod extensions;
 pub mod integrity;
+pub mod invitations;
 pub mod jobs;
 pub mod ontology;
 pub mod ontology_activity;
@@ -285,7 +286,7 @@ fn surface_root_cause(mut res: surrealdb::IndexedResults) -> surrealdb::Result<s
 /// Tables that live in the control database. Everything else a statement names is an org table.
 pub const CONTROL_TABLES: &[&str] = &[
     "user", "identity", "org", "membership", "tenant", "api_token", "session", "oauth_client", "oauth_code", "oauth_grant", "oauth_token", "audit_event", "tool_usage", "job",
-    "job_leader", "failure_capsule", "mfa_recovery_code", "mfa_challenge", "instance_setting", "audit_head", "audit_checkpoint", "erasure", "erasure_lock",
+    "job_leader", "failure_capsule", "mfa_recovery_code", "mfa_challenge", "instance_setting", "audit_head", "audit_checkpoint", "erasure", "erasure_lock", "org_invitation",
 ];
 
 /// Tables that live in an org database.
@@ -369,5 +370,5 @@ pub fn all() -> Vec<&'static Stmt> {
 
 /// Every static control statement.
 pub fn all_control() -> Vec<&'static ControlStmt> {
-    [diagnostics::CONTROL_ALL, control::ALL, tenant::ALL, capsules::ALL, jobs::CONTROL_ALL, secret_requests::CONTROL_ALL, subject::CONTROL_ALL].concat()
+    [diagnostics::CONTROL_ALL, control::ALL, tenant::ALL, capsules::ALL, jobs::CONTROL_ALL, secret_requests::CONTROL_ALL, subject::CONTROL_ALL, invitations::CONTROL_ALL].concat()
 }

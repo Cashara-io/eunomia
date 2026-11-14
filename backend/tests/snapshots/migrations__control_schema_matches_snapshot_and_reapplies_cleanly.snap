@@ -590,6 +590,55 @@ expression: first
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "org_invitation",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "email"
+          ],
+          "index": "",
+          "name": "org_invitation_email_idx",
+          "table": "org_invitation"
+        },
+        {
+          "cols": [
+            "org",
+            "created_at"
+          ],
+          "index": "",
+          "name": "org_invitation_org_idx",
+          "table": "org_invitation"
+        },
+        {
+          "cols": [
+            "slot"
+          ],
+          "index": "UNIQUE",
+          "name": "org_invitation_slot_unique",
+          "table": "org_invitation"
+        },
+        {
+          "cols": [
+            "token_hash"
+          ],
+          "index": "UNIQUE",
+          "name": "org_invitation_token_unique",
+          "table": "org_invitation"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "session",
       "permissions": {
         "create": false,

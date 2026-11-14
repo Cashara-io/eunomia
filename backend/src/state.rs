@@ -21,6 +21,8 @@ pub struct AppStateInner {
     pub large_bodies: crate::ratelimit::LargeBodies,
     /// Failed sign-ins per account and per OAuth client (see `ratelimit::FailThrottle`).
     pub fail_throttle: crate::ratelimit::FailThrottle,
+    /// Organisation invitations created, resent, looked up and accepted (see `invitations.rs`).
+    pub invite_limiter: crate::ratelimit::RateLimiter,
     /// Generic refusal budget per credential, with timer-flushed suppression summaries.
     pub(crate) scope_refusal_audit: crate::audit::scope_refusals::ScopeRefusals,
     /// Credentials verified in the last few seconds (see `auth::Credentials`).
@@ -86,7 +88,7 @@ impl AppState {
             guard_skipped_migrations(p, &control, &pool, repair).await?;
         }
         let scope_refusal_audit = crate::audit::scope_refusals::ScopeRefusals::new(control.clone());
-        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner, settings: settings.clone(), composio_publishing: Default::default(), large_bodies: Default::default(), fail_throttle: Default::default(), scope_refusal_audit, credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
+        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner, settings: settings.clone(), composio_publishing: Default::default(), large_bodies: Default::default(), fail_throttle: Default::default(), invite_limiter: Default::default(), scope_refusal_audit, credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
     }
 
     /// Connect to an install that is already set up, without provisioning or moving anything
@@ -98,7 +100,7 @@ impl AppState {
         let control = crate::pool::connect_control(&templates, settings).await?;
         let pool = Pool::new(templates, control.clone(), settings);
         let scope_refusal_audit = crate::audit::scope_refusals::ScopeRefusals::new(control.clone());
-        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner: None, settings: settings.clone(), composio_publishing: Default::default(), large_bodies: Default::default(), fail_throttle: Default::default(), scope_refusal_audit, credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
+        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner: None, settings: settings.clone(), composio_publishing: Default::default(), large_bodies: Default::default(), fail_throttle: Default::default(), invite_limiter: Default::default(), scope_refusal_audit, credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
     }
 
     /// The org's database, bundled with the app state.
