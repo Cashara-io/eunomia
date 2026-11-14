@@ -255,7 +255,8 @@ async fn run(state: &AppState, erasure: &RecordId) -> Result<Outcome, AppError> 
 
     // one running erasure per workspace, over every workspace this one touches
     let orgs: Vec<String> = work.orgs.iter().map(|o| o.org.clone()).collect();
-    let locked = q::LOCKS_TAKE.on(&state.control).bind(("id", erasure.clone())).bind(("orgs", orgs)).await.and_then(|r| r.check());
+    let locks: Vec<RecordId> = orgs.iter().map(|o| RecordId::new("erasure_lock", o.as_str())).collect();
+    let locked = q::LOCKS_TAKE.on(&state.control).bind(("id", erasure.clone())).bind(("locks", locks)).await.and_then(|r| r.check());
     if let Err(e) = locked {
         tracing::info!(erasure = %erasure.to_string(), error = %e, "another erasure holds a workspace this one touches; waiting");
         return Ok(Outcome::Busy);
@@ -343,7 +344,7 @@ async fn run(state: &AppState, erasure: &RecordId) -> Result<Outcome, AppError> 
     }
 
     for o in work.orgs.iter().filter(|o| o.close) {
-        q::CLOSE_ORG.on(&state.control).bind(("okey", o.org.clone())).await?.check()?;
+        q::CLOSE_ORG.on(&state.control).bind(("tenant", RecordId::new("tenant", o.org.as_str()))).bind(("org", RecordId::new("org", o.org.as_str()))).await?.check()?;
         if let Some(org) = OrgId::parse(&o.org) {
             state.pool.evict(&org);
         }

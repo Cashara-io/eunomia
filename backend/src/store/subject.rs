@@ -553,7 +553,7 @@ pub const ERASURE_OPEN: ControlStmt = ControlStmt::new(
 );
 /// A repeat request adds its confirmation that a workspace closes.
 pub const ERASURE_ADD_CLOSES: ControlStmt =
-    ControlStmt::new("subject.erasure_add_closes", "UPDATE type::record($id) SET closes = array::union(closes, $closes) RETURN NONE");
+    ControlStmt::new("subject.erasure_add_closes", "UPDATE $id SET closes = array::union(closes, $closes) RETURN NONE");
 /// Everyone left in a workspace is being erased: the last of them closes it.
 pub const ERASURE_JOINT_CLOSE: ControlStmt = ControlStmt::new(
     "subject.erasure_joint_close",
@@ -574,13 +574,13 @@ pub const ERASURE_RUNNING: ControlStmt = ControlStmt::new(
     "subject.erasure_running",
     "UPDATE $id SET status = 'running', held_at = NONE, error = NONE WHERE status IN ['pending', 'running', 'failed'] RETURN VALUE <string> id",
 );
-/// The locks of every workspace the erasure touches, all or none (a lock held by another erasure makes
+/// The locks of every workspace the erasure touches (`$locks`: `erasure_lock:<org key>` ids), all or none (a lock held by another erasure makes
 /// the transaction fail: this one waits). Its own stale locks (a crash) are taken back first.
 pub const LOCKS_TAKE: ControlStmt = ControlStmt::new(
     "subject.locks_take",
     "BEGIN TRANSACTION; \
      DELETE erasure_lock WHERE erasure = $id; \
-     FOR $o IN $orgs { CREATE type::record('erasure_lock', $o) SET erasure = $id; }; \
+     FOR $l IN $locks { CREATE $l SET erasure = $id; }; \
      COMMIT TRANSACTION;",
 );
 pub const LOCKS_RELEASE: ControlStmt = ControlStmt::new("subject.locks_release", "DELETE erasure_lock WHERE erasure = $id");
@@ -653,7 +653,7 @@ pub const USERS_EXISTING: ControlStmt = ControlStmt::new("subject.users_existing
 /// Closes a workspace whose only member was erased: nothing is served from it or joins it again.
 pub const CLOSE_ORG: ControlStmt = ControlStmt::new(
     "subject.close_org",
-    "UPDATE type::record('tenant', $okey) SET status = 'closed' RETURN NONE; UPDATE type::record('org', $okey) SET closed_at = time::now() RETURN NONE",
+    "UPDATE $tenant SET status = 'closed' RETURN NONE; UPDATE $org SET closed_at = time::now() RETURN NONE",
 );
 /// Ready workspaces (the re-apply sweeps each).
 pub const READY_ORGS: ControlStmt = ControlStmt::new("subject.ready_orgs", "SELECT VALUE org FROM tenant WHERE status = 'ready'");

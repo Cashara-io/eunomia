@@ -407,7 +407,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         CREATE oauth_token SET kind = 'access', token_hash = $c, family = $g, expires_at = time::now() + 15m;
         CREATE oauth_code SET code_hash = $c, owner = $u, client_id = 'client-x', redirect_uri = 'http://localhost/cb', code_challenge = $c, scope = ['memory:read'], resource = 'http://x', expires_at = time::now() + 1m;
         CREATE erasure SET org = $okey_bare, subject_ref = $c, requested_by = 'operator', status = 'done', open_slot = $c, counts = {note: $c};
-        CREATE type::record('erasure_lock', $c) SET erasure = type::record('erasure', $c);
+        CREATE $lock SET erasure = (SELECT VALUE id FROM erasure WHERE open_slot = $c)[0];
         CREATE $inv SET org = $org, email = 'invitee@example.net', role = 'member', token_hash = $c, invited_by = $u, expires_at = time::now() + 7d, slot = string::concat(<string>$org, '/invitee@example.net');
         RETURN $g;";
     let mut res = state
@@ -420,6 +420,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         .bind(("u", uid.clone()))
         .bind(("c", canary.clone()))
         .bind(("mem", surrealdb::types::RecordId::new("membership", canary.clone())))
+        .bind(("lock", surrealdb::types::RecordId::new("erasure_lock", canary.clone())))
         .bind(("inv", surrealdb::types::RecordId::new("org_invitation", canary.clone())))
         .await
         .unwrap();

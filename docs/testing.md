@@ -100,4 +100,12 @@ Composio migration 0041 adds `composio_file`, expected empty in each upgraded te
 
 Control migration 0009 (two-step verification) adds `mfa_recovery_code`, `mfa_challenge` and `instance_setting` to the control database. The update path expects them empty after an update (`UPDATE_PATH_NEW_CONTROL_TABLES`). The MFA flows run in `backend/tests/mfa.rs` (enrolment, replay refusal, recovery codes, lockout, the admin switch, step-up) and the single sign-on cases in `backend/tests/oidc.rs`; the browser walk-through is `frontend/tests/mfa.spec.ts`. See [security/mfa.md](security/mfa.md).
 
+Control migration 0010 and tenant migration 0044 (the audit chain, [audit-chain.md](audit-chain.md)) add `audit_head` and `audit_checkpoint` to the control database and `access_review` and `access_review_decision` to every org database. The access-review tables are in `UPDATE_PATH_NEW_TABLES` and must be new and empty after an update. The chain tables are not compared by count (`UPDATE_PATH_CHAIN_TABLES`). They follow `audit_event`: a ledger gets its head and genesis checkpoint when its first event after the update is sealed (for example the redaction backfill's `redact.backfill`), and the head moves with every later event. The update path checks what must hold instead (`chain_consistent`, `chain_events` and `legacy_events` in the script):
+- everything written since the update is sealed;
+- every head is its ledger's newest sealed event, with exactly one genesis checkpoint per ledger;
+- the events the old release wrote stay unchained and none is deleted;
+- on the re-run the chain is only appended to: every event sealed after the update keeps its sequence number and hash.
+
+Control migration 0011 and tenant migration 0045 (data-subject export and erasure, [privacy/subject-rights.md](privacy/subject-rights.md)) add `erasure` and `erasure_lock` to the control database and `subject_export` to every org database. They are listed in `UPDATE_PATH_NEW_CONTROL_TABLES` and `UPDATE_PATH_NEW_TABLES` and must be new and empty after an update and after the re-run: nothing backfills them, and the boot-time erasure re-apply (`subject::reapply_on_start`) only reads while no erasure has ever been recorded.
+
 Control migration 0012 (organisation invitations) adds `org_invitation`, also expected empty after an update (`UPDATE_PATH_NEW_CONTROL_TABLES`).
