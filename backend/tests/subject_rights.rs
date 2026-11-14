@@ -558,9 +558,15 @@ async fn two_erasures_in_one_workspace_keep_it_owned_and_never_hand_rows_to_each
     };
     // two at once, and the same person twice at once: one erasure per person
     let ((s1, b1), (s2, b2), (s3, b3)) = tokio::join!(ask(&dave), ask(&erin), ask(&dave));
-    assert_eq!((s1, s2, s3), (200, 200, 200), "{} {} {}", String::from_utf8_lossy(&b1), String::from_utf8_lossy(&b2), String::from_utf8_lossy(&b3));
-    assert_eq!(json_of(&b1)["id"], json!(json_of(&b3)["id"]), "two requests for one person make one erasure");
-    let (d, e) = (json_of(&b1)["id"].as_str().unwrap().to_string(), json_of(&b2)["id"].as_str().unwrap().to_string());
+    let bodies = format!("{} {} {}", String::from_utf8_lossy(&b1), String::from_utf8_lossy(&b2), String::from_utf8_lossy(&b3));
+    assert_eq!(s2, 200, "{bodies}");
+    // dave's two requests race the worker: one that arrives after his account is deleted finds no account (404);
+    // every one that is accepted names the same erasure, and at least one is accepted
+    assert!([s1, s3].iter().all(|s| *s == 200 || *s == 404), "{bodies}");
+    let daves: Vec<String> = [(s1, &b1), (s3, &b3)].iter().filter(|(s, _)| *s == 200).map(|(_, b)| json_of(b)["id"].as_str().unwrap().to_string()).collect();
+    assert!(!daves.is_empty(), "{bodies}");
+    assert!(daves.iter().all(|id| *id == daves[0]), "two requests for one person make one erasure: {bodies}");
+    let (d, e) = (daves[0].clone(), json_of(&b2)["id"].as_str().unwrap().to_string());
     wait_status(&app, &d, "done").await;
     wait_status(&app, &e, "done").await;
     let db = common::org_db(&app.state, &app.user).await;
