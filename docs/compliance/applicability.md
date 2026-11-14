@@ -31,7 +31,7 @@ These are applicability prompts from the [OAIC APP guidance](https://www.oaic.go
 | 9 | Assess government identifiers, avoid them as account identifiers and document any lawful special use. |
 | 10 | C24/C26/C35 support correction, citations and numeric checks. People assess factual quality. |
 | 11 | C01 to C20 and C22 support security and disposal. Host protection, retention and organisational measures remain shared. |
-| 12 | C21 is only a partial personal-vault export. Verify subject identity, scope, third-party redaction, refusal reasons and response records. |
+| 12 | C21 exports a person's data across every workspace they belong to, with third-party redaction, from a browser session. Verify subject identity, scope, redaction, refusal reasons and response records. |
 | 13 | C24 supports edits. The full correction case, disagreement statement and downstream notification process remains to be built and operated. |
 
 For a suspected eligible breach, take reasonable steps to complete assessment within 30 calendar days. Once the eligible-breach test is met, notification must be prompt. The assessment period is not permission to delay known notification duties. [OAIC NDB guidance](https://www.oaic.gov.au/privacy/notifiable-data-breaches/preventing-preparing-for-and-responding-to-data-breaches/data-breach-preparation-and-response/part-4-notifiable-data-breach-ndb-scheme).

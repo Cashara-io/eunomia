@@ -46,7 +46,11 @@ def check(root):
         validator.validate(example)
     require(catalogue['catalogue_version'] == '1.0.0', 'missing/unsupported catalogue version')
     require(catalogue['evidence_schema_version'] == schema['properties']['schema_version']['const'], 'schema version mismatch')
-    require(re.fullmatch(r'[0-9a-f]{40}', catalogue['snapshot']['commit']), 'missing snapshot version')
+    snapshot = catalogue['snapshot']['commit']
+    require(re.fullmatch(r'[0-9a-f]{40}', snapshot), 'missing snapshot version')
+    previous = catalogue['snapshot'].get('previous_commits', [])
+    require(all(re.fullmatch(r'[0-9a-f]{40}', sha) for sha in previous), 'invalid previous snapshot')
+    require(len(previous) == len(set(previous)) and snapshot not in previous, 'duplicate previous snapshot')
     sources = indexed(catalogue['sources'], 'source')
     for source in sources.values():
         require(nonempty(source['title']) and nonempty(source['limits']), 'source needs title and limits')
@@ -78,7 +82,10 @@ def check(root):
         require(control['evidence'] and set(control['evidence']) <= records.keys(), 'dangling/missing evidence')
         for eid in control['evidence']:
             require(records[eid]['capability_id'] == control['id'], 'cross-capability evidence')
-            require(records[eid]['implementation'] == control['status'], 'evidence status mismatch')
+        # earlier captures stay as history (README); the newest one is at the snapshot and states the row
+        latest = records[max(control['evidence'], key=lambda eid: int(eid.rsplit('-', 1)[1]))]
+        require(latest['implementation'] == control['status'], 'evidence status mismatch')
+        require(latest['subject']['release_sha'] == snapshot, 'newest evidence not at the snapshot')
         used_evidence.update(control['evidence'])
         require(control['mappings'], 'missing mappings')
         require(len(control['mappings']) == len({m['standard'] for m in control['mappings']}), 'duplicate standard mapping')
@@ -95,10 +102,12 @@ def check(root):
     for record in records.values():
         validator.validate(record)
         require(record['id'].startswith('EV-' + record['capability_id'] + '-'), 'evidence id/capability mismatch')
-        require(record['subject']['release_sha'] == catalogue['snapshot']['commit'], 'source snapshot mismatch')
+        current = record['subject']['release_sha'] == snapshot
+        require(current or record['subject']['release_sha'] in previous, 'source snapshot mismatch')
         for ref in record['references']:
             require(ref['line_end'] >= ref['line_start'], 'invalid evidence line range')
-            if 'path' in ref:
+            # an earlier record's ranges belong to its own commit, not to this tree
+            if 'path' in ref and current:
                 path = root / ref['path']
                 require(path.resolve().is_relative_to(root.resolve()) and path.is_file(), 'missing/unsafe evidence path')
                 require(ref['line_end'] <= len(path.read_text().splitlines()), 'evidence line outside file')
