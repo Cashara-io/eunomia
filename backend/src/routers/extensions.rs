@@ -559,6 +559,10 @@ async fn receive(State(state): State<AppState>, Path(key): Path<String>, request
     // who: unknown owner, unknown extension, and a wrong secret are indistinguishable from outside
     let (owner, id) = svc::parse_hook_key(&key).ok_or_else(unauthorized)?;
     let org = crate::models_user::org_of(&state.control, &owner).await.map_err(|_| unauthorized())?;
+    // a suspended owner's extensions take nothing in (and look like any other refusal)
+    if crate::models_user::is_suspended(&state.control, &owner).await.unwrap_or(true) {
+        return Err(unauthorized());
+    }
     let org = state.org(&org).await?;
     let ext = svc::get(&org.db, &owner, &id).await.map_err(|_| unauthorized())?;
     let secret = svc::secret_of(&state.settings.encryption_key, &ext)?;
