@@ -223,24 +223,50 @@ pub fn require_unrestricted() -> AppResult<()> {
     }
 }
 
-/// True for an email listed in `EUNOMIA_ADMIN_EMAILS` (comma separated).
+/// True for an email listed in `EUNOMIA_ADMIN_EMAILS` (comma separated), compared in normalized form.
 pub fn operator_email_listed(email: &str) -> bool {
-    std::env::var("EUNOMIA_ADMIN_EMAILS")
-        .unwrap_or_default()
-        .split(',')
-        .any(|e| !e.trim().is_empty() && e.trim().eq_ignore_ascii_case(email.trim()))
+    email_listed_in(&std::env::var("EUNOMIA_ADMIN_EMAILS").unwrap_or_default(), email)
 }
 
-/// An email listed in `EUNOMIA_ADMIN_EMAILS`: an operator of the whole instance. Emails are not
-/// verified, so signup refuses a listed address once the install has users (`routers/auth.rs`):
+/// Whether `email` is in the comma-separated `list`, both sides normalized the way accounts are stored
+/// (`models_user::normalize_email`), so an address cannot slip past a list by being written differently.
+pub fn email_listed_in(list: &str, email: &str) -> bool {
+    let email = crate::models_user::normalize_email(email);
+    !email.is_empty() && list.split(',').map(crate::models_user::normalize_email).any(|e| !e.is_empty() && e == email)
+}
+
+/// Whether a stored, normalized address (`user.email_lc`) is an operator's. A legacy duplicate's
+/// `duplicate:` placeholder never is.
+pub fn stored_email_is_operator(email_lc: Option<&str>) -> bool {
+    stored_email_listed_in(&std::env::var("EUNOMIA_ADMIN_EMAILS").unwrap_or_default(), email_lc)
+}
+
+/// [`stored_email_is_operator`] against `list`.
+pub fn stored_email_listed_in(list: &str, email_lc: Option<&str>) -> bool {
+    email_lc.is_some_and(|e| !e.starts_with("duplicate:") && email_listed_in(list, e))
+}
+
+/// An account whose stored address is listed in `EUNOMIA_ADMIN_EMAILS`: an operator of the whole
+/// instance. Read from `email_lc` (the normalized form signup stores and looks accounts up by), never the
+/// raw `email`, so a legacy duplicate that only normalizes to a listed address is not an operator. Emails
+/// are not verified, so signup refuses a listed address once the install has users (`routers/auth.rs`):
 /// an operator must register the account first, then add it to the list.
-pub fn is_operator(user: &User) -> bool {
-    operator_email_listed(&user.email)
+pub async fn is_operator(db: &ControlDb, user: &User) -> AppResult<bool> {
+    let mut res = store::control::USER_EMAIL_LC.on(db).bind(("id", user.id.clone())).await?;
+    let email_lc: Option<String> = res.take::<Vec<Option<String>>>(0)?.into_iter().next().flatten();
+    Ok(stored_email_is_operator(email_lc.as_deref()))
 }
 
 /// Admin = the instance's first user, an operator, or an account an admin made one (Settings > People).
 pub async fn is_admin(db: &ControlDb, user: &User) -> AppResult<bool> {
-    Ok(is_operator(user) || granted_admin(db, &user.id).await? || crate::capsules::first_user(db).await?.as_ref() == Some(&user.id))
+    Ok(is_operator(db, user).await? || granted_admin(db, &user.id).await? || crate::capsules::first_user(db).await?.as_ref() == Some(&user.id))
+}
+
+/// An operator of the whole server: the instance's first account or an email in `EUNOMIA_ADMIN_EMAILS`.
+/// Admin rights granted in the app (Settings > People) are not enough: they are given within one
+/// organisation, while an instance setting reaches every organisation on the host.
+pub async fn is_instance_operator(db: &ControlDb, user: &User) -> AppResult<bool> {
+    Ok(is_operator(db, user).await? || crate::capsules::first_user(db).await?.as_ref() == Some(&user.id))
 }
 
 /// May see what belongs to no organisation, such as the `instance` audit ledger (every tenant's
@@ -248,7 +274,7 @@ pub async fn is_admin(db: &ControlDb, user: &User) -> AppResult<bool> {
 /// first account, or, while the install has a single organisation, any admin of it (there is no
 /// other tenant to see). An admin granted in the app on a host with several organisations is not.
 pub async fn sees_instance(db: &ControlDb, user: &User) -> AppResult<bool> {
-    if is_operator(user) || crate::capsules::first_user(db).await?.as_ref() == Some(&user.id) {
+    if is_instance_operator(db, user).await? {
         return Ok(true);
     }
     if !is_admin(db, user).await? {
@@ -318,6 +344,26 @@ pub async fn authorize(db: &OrgDb, user: &RecordId, action: Action, vault: &Reco
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn listed_addresses_compare_normalized() {
+        let list = " Kate@Corp.com, ops@corp.com ,";
+        assert!(email_listed_in(list, "kate@corp.com"));
+        assert!(email_listed_in(list, "  KATE@CORP.COM "));
+        // a look-alike that would be stored as the listed address counts as listed
+        assert!(email_listed_in(list, "\u{212A}ate@corp.com"));
+        assert!(!email_listed_in(list, "kate@corp.co"));
+        assert!(!email_listed_in(list, ""));
+        assert!(!email_listed_in("", "kate@corp.com"));
+    }
+
+    #[test]
+    fn a_legacy_duplicate_placeholder_is_never_an_operator() {
+        let list = "kate@corp.com, duplicate:user:abc";
+        assert!(stored_email_listed_in(list, Some("kate@corp.com")));
+        assert!(!stored_email_listed_in(list, Some("duplicate:user:abc")), "even if someone lists the placeholder");
+        assert!(!stored_email_listed_in(list, None));
+    }
 
     #[test]
     fn role_matrix() {

@@ -182,3 +182,29 @@ async fn an_admin_sees_and_revokes_someone_elses_api_tokens() {
 
     assert_eq!(audit_summaries(&app, &owner_cookie).await, ["Revoked bob@example.com\u{2019}s API token \u{201c}work laptop\u{201d}"]);
 }
+
+/// The server's operator list and the instance-wide sign-up allowlist are the operator's: an admin granted in
+/// the app sees the policy in words, not other organisations' invitees or the operator emails.
+#[tokio::test]
+async fn only_the_operator_sees_the_operator_list_and_the_allowlist() {
+    // SAFETY: set once before the requests that read them; no other test in this file reads these
+    unsafe {
+        std::env::set_var("SIGNUP", "invite");
+        std::env::set_var("SIGNUP_ALLOWLIST", "invitee@elsewhere.example");
+    }
+    let app = common::TestApp::new().await;
+    let owner = app.session_cookie().await;
+    let bob = common::register(&app.state, "bob@example.com").await;
+    let path = format!("/api/admin/people/{}/admin", bob.id.to_string());
+    let ((status, _), _) = common::http(&app.router, "PUT", &path, Some(json!({ "admin": true })), None, Some(&owner)).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let ((_, report), _) = common::http(&app.router, "GET", "/api/admin/people", None, None, Some(&owner)).await;
+    assert_eq!(report["signup"]["allowlist"], json!(["invitee@elsewhere.example"]), "the operator sees it: {report}");
+    let bob_cookie = cookie_of(login(&app, "bob@example.com").await.1);
+    let ((status, report), _) = common::http(&app.router, "GET", "/api/admin/people", None, None, Some(&bob_cookie)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!((report["signup"]["allowlist"].clone(), report["signup"]["operators"].clone()), (json!([]), json!([])), "{report}");
+    assert_eq!(report["signup"]["mode"], "invite", "the policy itself is still shown");
+    assert!(!report.to_string().contains("invitee@elsewhere.example"));
+}

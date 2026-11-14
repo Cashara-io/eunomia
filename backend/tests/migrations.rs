@@ -742,3 +742,20 @@ async fn ontology_activity_upgrade_keeps_decisions_without_inventing_old_events(
     migrate::migrate(&db, &test_settings()).await.unwrap();
     assert_eq!(count(&db, "ontology_event").await, 1, "upgrade is idempotent");
 }
+
+#[tokio::test]
+async fn chat_turn_order_upgrade_preserves_history_and_reapplies() {
+    let db = fresh().await;
+    migrate::apply_up_to(&db, 42).await.unwrap();
+    db.query("CREATE chat_thread:old SET owner = user:old, title = 'old thread';
+        CREATE chat_message:old SET owner = user:old, thread_id = chat_thread:old, role = 'user', content = 'exact old bytes'")
+        .await.unwrap().check().unwrap();
+    let before: Vec<Value> = db.query("SELECT * FROM chat_message:old").await.unwrap().take(0).unwrap();
+    migrate::migrate(&db, &test_settings()).await.unwrap();
+    migrate::migrate(&db, &test_settings()).await.unwrap();
+    let after: Vec<Value> = db.query("SELECT * FROM chat_message:old").await.unwrap().take(0).unwrap();
+    assert_eq!(before, after);
+    let table: Option<Value> = db.query("INFO FOR TABLE chat_thread STRUCTURE").await.unwrap().take(0).unwrap();
+    let names: Vec<_> = table.as_ref().unwrap()["fields"].as_array().unwrap().iter().map(|field| field["name"].as_str().unwrap()).collect();
+    for name in ["turn_token", "turn_until", "history_at"] { assert!(names.contains(&name), "{names:?}"); }
+}

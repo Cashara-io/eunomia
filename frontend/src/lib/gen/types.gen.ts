@@ -732,6 +732,13 @@ export type CloudSimilarityBody = {
     vault_ids?: Array<string>;
 };
 
+export type CodeIn = {
+    /**
+     * A six-digit authenticator code, or (where a recovery code is accepted) a recovery code.
+     */
+    code: string;
+};
+
 /**
  * How one column would be imported.
  */
@@ -826,6 +833,11 @@ export type ConsentClient = {
 
 export type ConsentDecision = AuthzParams & {
     approve: boolean;
+    /**
+     * A current authenticator or recovery code, when your account has two-step verification and its last
+     * second factor is older than 10 minutes (`auth.step_up_required`). Only needed to approve.
+     */
+    mfa_code?: string | null;
 };
 
 export type ConsentInfo = {
@@ -983,6 +995,43 @@ export type DocumentOut = {
      * The vault (memory space) the document is in.
      */
     vault: string;
+};
+
+export type EnrolIn = {
+    /**
+     * Your account password: setting up an authenticator from Settings needs it, so a stolen session alone
+     * cannot put an attacker's authenticator on the account.
+     */
+    password?: string | null;
+};
+
+export type EnrolledOut = {
+    /**
+     * The signed-in user (the session cookie is set with this answer).
+     */
+    me: AuthOut;
+    /**
+     * Shown once. Each works once, in place of an authenticator code.
+     */
+    recovery_codes: Array<string>;
+};
+
+/**
+ * What the enrolment screen shows, once.
+ */
+export type Enrolment = {
+    /**
+     * `otpauth://totp/...` URI the QR code encodes.
+     */
+    otpauth_uri: string;
+    /**
+     * The QR code as a standalone SVG document (no scripts), for an `<img>` tag.
+     */
+    qr_svg: string;
+    /**
+     * The secret in base32, for typing into an authenticator app by hand. Shown only now.
+     */
+    secret: string;
 };
 
 export type EntityCreate = {
@@ -1706,6 +1755,18 @@ export type LinkCheck = {
     values: number;
 };
 
+export type LinkChoice = {
+    /**
+     * The existing account's password: proves it is yours, and links without removing anything.
+     */
+    password?: string | null;
+    /**
+     * `true`: you don't know the password. A new, empty account is made for you; the existing one is set
+     * aside (suspended, nothing of it inherited) for a server operator to review, restore or erase.
+     */
+    start_fresh?: boolean;
+};
+
 export type LinkDecideBody = {
     decision: LinkDecision;
     from_kind: string;
@@ -1722,6 +1783,35 @@ export type LinkDecision = {
 } | {
     action: 'describe';
     description: string;
+};
+
+export type LinkDone = {
+    /**
+     * Set when the password was right but the account's second step comes first: `verify` (enter the
+     * account's authenticator code) or `enrol` (this server requires two-step verification: set it up).
+     * No session and no link yet; the response sets the short-lived second-step cookie, and the link is
+     * made when that step passes.
+     */
+    mfa?: string | null;
+    /**
+     * Where to go next.
+     */
+    next: string;
+    /**
+     * A new account was made and the existing one set aside.
+     */
+    started_fresh: boolean;
+};
+
+export type LinkInfo = {
+    /**
+     * The address both the provider and the existing account have.
+     */
+    email: string;
+    /**
+     * "Continue with {provider}".
+     */
+    provider: string;
 };
 
 /**
@@ -1967,6 +2057,43 @@ export type Metrics = {
     queries_without_org_context: number;
 };
 
+/**
+ * A correct password whose sign-in still needs its second step. No session yet: the response sets a
+ * short-lived cookie that only the `/api/auth/mfa/challenge*` routes accept.
+ */
+export type MfaPendingOut = {
+    /**
+     * `verify`: enter an authenticator or recovery code. `enrol`: this server requires two-step
+     * verification and the account has none yet, so set up an authenticator first.
+     */
+    mfa_required: string;
+};
+
+export type MfaStatus = {
+    /**
+     * False for an account that signs in only through single sign-on: the provider handles its second factor.
+     */
+    available: boolean;
+    /**
+     * Two-step verification is on for this account.
+     */
+    enabled: boolean;
+    enabled_at?: string | null;
+    /**
+     * Unused recovery codes left.
+     */
+    recovery_codes_left: number;
+    /**
+     * An admin requires two-step verification for every password account on this server.
+     */
+    required: boolean;
+    /**
+     * True when the stored authenticator can no longer be read (`ENCRYPTION_KEY` changed): sign in with a
+     * recovery code, turn it off and set it up again.
+     */
+    unreadable: boolean;
+};
+
 export type ModelsOut = {
     /**
      * Null on success.
@@ -2161,6 +2288,11 @@ export type Person = {
      * Latest browser session activity or API token use, RFC 3339; none if never seen.
      */
     last_active?: string | null;
+    /**
+     * Two-step verification: `on`, `off`, or `provider` for an account that signs in only through single
+     * sign-on (its identity provider handles the second factor).
+     */
+    mfa: string;
     /**
      * `admin` or `member`.
      */
@@ -2441,6 +2573,13 @@ export type RecordTypeProfile = {
     source: string;
 };
 
+export type RecoveryCodesOut = {
+    /**
+     * Shown once. Each works once, in place of an authenticator code.
+     */
+    recovery_codes: Array<string>;
+};
+
 /**
  * What one write had redacted: `count` secrets of `kind` (e.g. "github token").
  */
@@ -2692,6 +2831,34 @@ export type Rule = {
     vault: string;
 };
 
+export type SecurityChange = {
+    /**
+     * A current authenticator or recovery code, when your own account has two-step verification and its
+     * last second factor is older than 10 minutes (`auth.step_up_required`).
+     */
+    mfa_code?: string | null;
+    require_mfa: boolean;
+};
+
+export type SecurityOut = {
+    /**
+     * Every password account on this server, in every organisation, must pass two-step verification before
+     * it gets a session. Accounts that sign in through single sign-on are left to the identity provider
+     * unless they set up their own authenticator.
+     */
+    require_mfa: boolean;
+    updated_at?: string | null;
+    /**
+     * Email of the operator who last changed it.
+     */
+    updated_by?: string | null;
+    /**
+     * Active password accounts on the whole server (every organisation) without two-step verification yet:
+     * while it is required they are signed out and must set it up at their next sign-in.
+     */
+    without_mfa: number;
+};
+
 export type Selection = {
     account: string;
     folder?: string;
@@ -2798,9 +2965,14 @@ export type ShareCodeRequest = {
     role?: string;
 };
 
+/**
+ * What login and register answer: the signed-in user, or the second step still to do.
+ */
+export type SignInOut = AuthOut | MfaPendingOut;
+
 export type SignupPolicy = {
     /**
-     * The emails that may sign up when `mode` is `invite`.
+     * The emails that may sign up when `mode` is `invite`. Empty unless you are the server's operator.
      */
     allowlist: Array<string>;
     /**
@@ -2808,7 +2980,7 @@ export type SignupPolicy = {
      */
     mode: string;
     /**
-     * Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`).
+     * Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`). Empty unless you are the server's operator.
      */
     operators: Array<string>;
     /**
@@ -2926,6 +3098,13 @@ export type StatusCounts = {
     rejected: number;
 };
 
+export type StatusOut = MfaStatus & {
+    /**
+     * You may require two-step verification for the whole server (`/api/admin/security`): the server's operator.
+     */
+    can_require: boolean;
+};
+
 export type StrictBody = {
     /**
      * Only approved kinds and links.
@@ -3036,6 +3215,11 @@ export type TokenCreate = {
      * RFC 3339 timestamp in the future. Omit for 90 days. Explicit null never expires.
      */
     expires_at?: string | null;
+    /**
+     * A current authenticator or recovery code. Needed from a browser session of an account with
+     * two-step verification when its last second factor is older than 10 minutes (`auth.step_up_required`).
+     */
+    mfa_code?: string | null;
     name: string;
     /**
      * Any of `memory:read`, `memory:write`, `vaults:admin`, `connectors`. Defaults
@@ -3687,6 +3871,50 @@ export type RevokePersonTokenResponses = {
 
 export type RevokePersonTokenResponse = RevokePersonTokenResponses[keyof RevokePersonTokenResponses];
 
+export type GetServerSecurityData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/security';
+};
+
+export type GetServerSecurityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetServerSecurityError = GetServerSecurityErrors[keyof GetServerSecurityErrors];
+
+export type GetServerSecurityResponses = {
+    200: SecurityOut;
+};
+
+export type GetServerSecurityResponse = GetServerSecurityResponses[keyof GetServerSecurityResponses];
+
+export type SetServerSecurityData = {
+    body: SecurityChange;
+    path?: never;
+    query?: never;
+    url: '/api/admin/security';
+};
+
+export type SetServerSecurityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetServerSecurityError = SetServerSecurityErrors[keyof SetServerSecurityErrors];
+
+export type SetServerSecurityResponses = {
+    200: SecurityOut;
+};
+
+export type SetServerSecurityResponse = SetServerSecurityResponses[keyof SetServerSecurityResponses];
+
 export type ListAuditData = {
     body?: never;
     path?: never;
@@ -3782,7 +4010,7 @@ export type LoginErrors = {
 export type LoginError = LoginErrors[keyof LoginErrors];
 
 export type LoginResponses = {
-    200: AuthOut;
+    200: SignInOut;
 };
 
 export type LoginResponse = LoginResponses[keyof LoginResponses];
@@ -3831,6 +4059,182 @@ export type GetMeResponses = {
 
 export type GetMeResponse = GetMeResponses[keyof GetMeResponses];
 
+export type GetMfaData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa';
+};
+
+export type GetMfaErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetMfaError = GetMfaErrors[keyof GetMfaErrors];
+
+export type GetMfaResponses = {
+    200: StatusOut;
+};
+
+export type GetMfaResponse = GetMfaResponses[keyof GetMfaResponses];
+
+export type StartMfaChallengeEnrolmentData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa/challenge/enrol';
+};
+
+export type StartMfaChallengeEnrolmentErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type StartMfaChallengeEnrolmentError = StartMfaChallengeEnrolmentErrors[keyof StartMfaChallengeEnrolmentErrors];
+
+export type StartMfaChallengeEnrolmentResponses = {
+    200: Enrolment;
+};
+
+export type StartMfaChallengeEnrolmentResponse = StartMfaChallengeEnrolmentResponses[keyof StartMfaChallengeEnrolmentResponses];
+
+export type ConfirmMfaChallengeEnrolmentData = {
+    body: CodeIn;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa/challenge/enrol/confirm';
+};
+
+export type ConfirmMfaChallengeEnrolmentErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ConfirmMfaChallengeEnrolmentError = ConfirmMfaChallengeEnrolmentErrors[keyof ConfirmMfaChallengeEnrolmentErrors];
+
+export type ConfirmMfaChallengeEnrolmentResponses = {
+    200: EnrolledOut;
+};
+
+export type ConfirmMfaChallengeEnrolmentResponse = ConfirmMfaChallengeEnrolmentResponses[keyof ConfirmMfaChallengeEnrolmentResponses];
+
+export type VerifyMfaChallengeData = {
+    body: CodeIn;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa/challenge/verify';
+};
+
+export type VerifyMfaChallengeErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type VerifyMfaChallengeError = VerifyMfaChallengeErrors[keyof VerifyMfaChallengeErrors];
+
+export type VerifyMfaChallengeResponses = {
+    200: AuthOut;
+};
+
+export type VerifyMfaChallengeResponse = VerifyMfaChallengeResponses[keyof VerifyMfaChallengeResponses];
+
+export type DisableMfaData = {
+    body: CodeIn;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa/disable';
+};
+
+export type DisableMfaErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DisableMfaError = DisableMfaErrors[keyof DisableMfaErrors];
+
+export type DisableMfaResponses = {
+    200: MfaStatus;
+};
+
+export type DisableMfaResponse = DisableMfaResponses[keyof DisableMfaResponses];
+
+export type StartMfaEnrolmentData = {
+    body: EnrolIn;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa/enrol';
+};
+
+export type StartMfaEnrolmentErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type StartMfaEnrolmentError = StartMfaEnrolmentErrors[keyof StartMfaEnrolmentErrors];
+
+export type StartMfaEnrolmentResponses = {
+    200: Enrolment;
+};
+
+export type StartMfaEnrolmentResponse = StartMfaEnrolmentResponses[keyof StartMfaEnrolmentResponses];
+
+export type ConfirmMfaEnrolmentData = {
+    body: CodeIn;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa/enrol/confirm';
+};
+
+export type ConfirmMfaEnrolmentErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ConfirmMfaEnrolmentError = ConfirmMfaEnrolmentErrors[keyof ConfirmMfaEnrolmentErrors];
+
+export type ConfirmMfaEnrolmentResponses = {
+    200: RecoveryCodesOut;
+};
+
+export type ConfirmMfaEnrolmentResponse = ConfirmMfaEnrolmentResponses[keyof ConfirmMfaEnrolmentResponses];
+
+export type RegenerateRecoveryCodesData = {
+    body: CodeIn;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa/recovery-codes';
+};
+
+export type RegenerateRecoveryCodesErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RegenerateRecoveryCodesError = RegenerateRecoveryCodesErrors[keyof RegenerateRecoveryCodesErrors];
+
+export type RegenerateRecoveryCodesResponses = {
+    200: RecoveryCodesOut;
+};
+
+export type RegenerateRecoveryCodesResponse = RegenerateRecoveryCodesResponses[keyof RegenerateRecoveryCodesResponses];
+
 export type OidcCallbackData = {
     body?: never;
     path?: never;
@@ -3872,6 +4276,50 @@ export type OidcCallbackResponses = {
 };
 
 export type OidcCallbackResponse = OidcCallbackResponses[keyof OidcCallbackResponses];
+
+export type OidcLinkInfoData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/oidc/link';
+};
+
+export type OidcLinkInfoErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcLinkInfoError = OidcLinkInfoErrors[keyof OidcLinkInfoErrors];
+
+export type OidcLinkInfoResponses = {
+    200: LinkInfo;
+};
+
+export type OidcLinkInfoResponse = OidcLinkInfoResponses[keyof OidcLinkInfoResponses];
+
+export type OidcLinkData = {
+    body: LinkChoice;
+    path?: never;
+    query?: never;
+    url: '/api/auth/oidc/link';
+};
+
+export type OidcLinkErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcLinkError = OidcLinkErrors[keyof OidcLinkErrors];
+
+export type OidcLinkResponses = {
+    200: LinkDone;
+};
+
+export type OidcLinkResponse = OidcLinkResponses[keyof OidcLinkResponses];
 
 export type OidcStartData = {
     body?: never;
@@ -3920,7 +4368,7 @@ export type RegisterErrors = {
 export type RegisterError = RegisterErrors[keyof RegisterErrors];
 
 export type RegisterResponses = {
-    200: AuthOut;
+    200: SignInOut;
 };
 
 export type RegisterResponse = RegisterResponses[keyof RegisterResponses];

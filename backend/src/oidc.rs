@@ -55,6 +55,12 @@ pub struct OidcConfig {
     pub scopes: String,
     /// Shown on the button: "Continue with {provider_name}".
     pub provider_name: String,
+    /// `OIDC_REQUIRE_MFA=true`: refuse a sign-in whose ID token does not say a second factor was used
+    /// (an `amr` claim naming one, RFC 8176, or an `acr` listed in `OIDC_MFA_ACR`). Off by default: most
+    /// providers enforce MFA themselves and not all of them send `amr`.
+    pub require_mfa_claim: bool,
+    /// `OIDC_MFA_ACR`: comma-separated `acr` values that count as multi-factor (provider specific).
+    pub mfa_acr: Vec<String>,
 }
 
 impl std::fmt::Debug for OidcConfig {
@@ -65,6 +71,8 @@ impl std::fmt::Debug for OidcConfig {
             .field("client_secret", &self.client_secret.as_ref().map(|_| "<redacted>"))
             .field("scopes", &self.scopes)
             .field("provider_name", &self.provider_name)
+            .field("require_mfa_claim", &self.require_mfa_claim)
+            .field("mfa_acr", &self.mfa_acr)
             .finish()
     }
 }
@@ -107,7 +115,19 @@ impl AuthConfig {
         let provider_name = var("OIDC_PROVIDER_NAME").unwrap_or_else(|| "single sign-on".into());
         Ok(AuthConfig {
             mode,
-            oidc: Some(OidcConfig { issuer, client_id, client_secret: var("OIDC_CLIENT_SECRET"), scopes, provider_name }),
+            oidc: Some(OidcConfig {
+                issuer,
+                client_id,
+                client_secret: var("OIDC_CLIENT_SECRET"),
+                scopes,
+                provider_name,
+                require_mfa_claim: match var("OIDC_REQUIRE_MFA").map(|v| v.to_ascii_lowercase()).as_deref() {
+                    None | Some("false" | "0" | "no") => false,
+                    Some("true" | "1" | "yes") => true,
+                    Some(other) => return Err(format!("OIDC_REQUIRE_MFA={other:?} is not true or false")),
+                },
+                mfa_acr: var("OIDC_MFA_ACR").map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()).unwrap_or_default(),
+            }),
         })
     }
 }
@@ -179,6 +199,23 @@ pub struct Identity {
     pub subject: String,
     pub email: Option<String>,
     pub email_verified: bool,
+    /// The `amr` claim (authentication methods, RFC 8176), empty when absent.
+    pub amr: Vec<String>,
+    /// The `acr` claim, when present.
+    pub acr: Option<String>,
+}
+
+/// `amr` values (RFC 8176) that mean more than a password was used.
+const MFA_AMR: &[&str] = &["mfa", "otp", "hwk", "swk", "sc", "pop", "fpt", "face", "iris", "retina", "vbm"];
+
+impl Identity {
+    /// The ID token says a second factor was used: an `amr` that names one (or two methods at once), or an
+    /// `acr` the operator listed as multi-factor.
+    pub fn asserts_mfa(&self, accepted_acr: &[String]) -> bool {
+        self.amr.iter().any(|m| MFA_AMR.contains(&m.as_str()))
+            || self.amr.iter().collect::<std::collections::HashSet<_>>().len() >= 2
+            || self.acr.as_ref().is_some_and(|a| accepted_acr.iter().any(|x| x == a))
+    }
 }
 
 pub struct Client {
@@ -381,6 +418,10 @@ impl Client {
             email: Option<String>,
             #[serde(default)]
             email_verified: Option<serde_json::Value>,
+            #[serde(default)]
+            amr: Option<serde_json::Value>,
+            #[serde(default)]
+            acr: Option<serde_json::Value>,
         }
         let mut last = None;
         let mut claims = None;
@@ -415,7 +456,14 @@ impl Client {
         if c.sub.is_empty() || c.sub.len() > 255 {
             return Err(bad("the ID token has no usable subject"));
         }
-        Ok(Identity { issuer: cfg.issuer.clone(), subject: c.sub, email: c.email, email_verified: c.email_verified.as_ref().is_some_and(truthy) })
+        let amr = c
+            .amr
+            .as_ref()
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|m| m.as_str()).take(16).map(|m| m.chars().take(32).collect()).collect())
+            .unwrap_or_default();
+        let acr = c.acr.as_ref().and_then(|v| v.as_str()).map(|a| a.chars().take(255).collect());
+        Ok(Identity { issuer: cfg.issuer.clone(), subject: c.sub, email: c.email, email_verified: c.email_verified.as_ref().is_some_and(truthy), amr, acr })
     }
 
     /// The userinfo claims, for a provider whose ID token carries no email. The subject must match the verified one.
@@ -462,6 +510,29 @@ mod tests {
     }
 
     #[test]
+    fn mfa_is_asserted_by_amr_or_a_listed_acr() {
+        let id = |amr: &[&str], acr: Option<&str>| Identity {
+            issuer: "i".into(),
+            subject: "s".into(),
+            email: None,
+            email_verified: false,
+            amr: amr.iter().map(|s| s.to_string()).collect(),
+            acr: acr.map(String::from),
+        };
+        let gold = vec!["gold".to_string()];
+        assert!(!id(&[], None).asserts_mfa(&gold));
+        assert!(!id(&["pwd"], None).asserts_mfa(&gold), "a password alone is one factor");
+        assert!(!id(&["pwd", "pwd"], None).asserts_mfa(&gold), "the same method twice is still one");
+        assert!(id(&["mfa"], None).asserts_mfa(&[]));
+        assert!(id(&["pwd", "otp"], None).asserts_mfa(&[]));
+        assert!(id(&["pwd", "kba"], None).asserts_mfa(&[]), "two different methods");
+        assert!(id(&["hwk"], None).asserts_mfa(&[]));
+        assert!(!id(&["pwd"], Some("silver")).asserts_mfa(&gold));
+        assert!(id(&["pwd"], Some("gold")).asserts_mfa(&gold));
+        assert!(!id(&[], Some("gold")).asserts_mfa(&[]), "no acr counts unless the operator lists it");
+    }
+
+    #[test]
     fn default_is_password_only() {
         let c = AuthConfig::from_vars(vars(&[])).unwrap();
         assert_eq!(c.mode, AuthMode::Password);
@@ -473,6 +544,14 @@ mod tests {
         assert!(AuthConfig::from_vars(vars(&[("AUTH_MODE", "oicd")])).is_err());
         assert!(AuthConfig::from_vars(vars(&[("AUTH_MODE", "oidc")])).is_err());
         assert!(AuthConfig::from_vars(vars(&[("AUTH_MODE", "oidc"), ("OIDC_ISSUER", "https://idp.example")])).is_err());
+        assert!(
+            AuthConfig::from_vars(vars(&[("AUTH_MODE", "oidc"), ("OIDC_ISSUER", "https://idp.example"), ("OIDC_CLIENT_ID", "x"), ("OIDC_REQUIRE_MFA", "yes please")])).is_err(),
+            "a mistyped MFA requirement is an error, never quietly off"
+        );
+        let strict = AuthConfig::from_vars(vars(&[("AUTH_MODE", "oidc"), ("OIDC_ISSUER", "https://idp.example"), ("OIDC_CLIENT_ID", "x"), ("OIDC_REQUIRE_MFA", "true"), ("OIDC_MFA_ACR", "gold, ")])).unwrap();
+        let o = strict.oidc.unwrap();
+        assert!(o.require_mfa_claim);
+        assert_eq!(o.mfa_acr, vec!["gold".to_string()]);
         assert!(AuthConfig::from_vars(vars(&[("AUTH_MODE", "oidc"), ("OIDC_ISSUER", "http://idp.example"), ("OIDC_CLIENT_ID", "x")])).is_err(), "plain http to a remote host");
         let c = AuthConfig::from_vars(vars(&[("AUTH_MODE", " OIDC "), ("OIDC_ISSUER", "https://idp.example"), ("OIDC_CLIENT_ID", "x"), ("OIDC_PROVIDER_NAME", "Okta")])).unwrap();
         assert_eq!(c.mode, AuthMode::Oidc);

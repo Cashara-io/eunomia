@@ -78,10 +78,13 @@ struct ReflectModel {
     cited: Vec<i64>,
 }
 
+const RECALL_ONLY_INSTRUCTIONS: &str = "Eunomia has no model configured, so you answer. Use ONLY the numbered memories below, \
+cite them by index like [1], and say so plainly if they don't contain enough to answer.";
+
 /// No server-side model: hand the recalled memories to the caller (the MCP
 /// agent is the model) with the same answer-from-memories-only contract the
 /// server-side prompt enforces.
-fn recall_only(query: &str, items: &[RecallItem], note: Option<&str>) -> Value {
+fn recall_only(query: &str, items: &[RecallItem], note: Option<&str>, incomplete: &[String]) -> Value {
     let memories: Vec<Value> = items
         .iter()
         .enumerate()
@@ -97,8 +100,10 @@ fn recall_only(query: &str, items: &[RecallItem], note: Option<&str>) -> Value {
         "answer": Value::Null,
         "mode": "recall_only",
         "note": note,
-        "instructions": "Eunomia has no model configured, so you answer. Use ONLY the numbered memories below, \
-cite them by index like [1], and say so plainly if they don't contain enough to answer.",
+        "instructions": match incomplete_note(incomplete) {
+            None => RECALL_ONLY_INSTRUCTIONS.to_string(),
+            Some(n) => format!("{RECALL_ONLY_INSTRUCTIONS} {n}"),
+        },
         "question": query,
         "memories": memories,
     })
@@ -117,27 +122,50 @@ pub async fn reflect(
 ) -> AppResult<Value> {
     // a bounded context: one long transcript among the hits cannot crowd out the rest or blow the
     // model's window, and every citation index still maps to an item the model was shown
-    let items = recall::recall(db, settings, owner, query, None, limit, Some(REFLECT_TOKENS), None, vault_ids, false).await?;
-    if items.is_empty() {
-        return Ok(json!({ "answer": "No relevant memories found.", "citations": [] }));
-    }
-
-    let p = provider::resolve(db, settings, owner).await?;
-    if settings.embeddings_backend != "openai" || !p.configured() {
-        return Ok(recall_only(query, &items, None));
-    }
-
-    match synthesize(query, &items, &p).await {
-        Ok(v) => Ok(v),
-        Err(e) => {
-            tracing::warn!("reflect: model call failed, returning recalled memories: {}", e.message);
-            Ok(recall_only(query, &items, Some(&format!("server model call failed: {}", e.message))))
+    let recall::Recalled { items, incomplete } =
+        recall::recall(db, settings, owner, query, None, limit, Some(REFLECT_TOKENS), None, vault_ids, false).await?;
+    let mut out = if items.is_empty() && !incomplete.is_empty() {
+        // not "nothing exists": the search could not finish
+        json!({ "answer": "The memory search could not finish, so this is not a sign that nothing relevant exists; try again or narrow the question.", "citations": [] })
+    } else if items.is_empty() {
+        json!({ "answer": "No relevant memories found.", "citations": [] })
+    } else {
+        let p = provider::resolve(db, settings, owner).await?;
+        if settings.embeddings_backend != "openai" || !p.configured() {
+            recall_only(query, &items, None, &incomplete)
+        } else {
+            match synthesize(query, &items, &p, &incomplete).await {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::warn!("reflect: model call failed, returning recalled memories: {}", e.message);
+                    recall_only(query, &items, Some(&format!("server model call failed: {}", e.message)), &incomplete)
+                }
+            }
         }
+    };
+    if !incomplete.is_empty() {
+        out["incomplete"] = json!(incomplete);
     }
+    Ok(out)
 }
 
-async fn synthesize(query: &str, items: &[RecallItem], p: &Provider) -> AppResult<Value> {
-    let prompt = build_prompt(query, &render_memories(items));
+/// Told to the model (or the agent, in recall-only mode) when the memories it got may be incomplete.
+fn incomplete_note(incomplete: &[String]) -> Option<String> {
+    (!incomplete.is_empty()).then(|| {
+        format!(
+            "The memory search did not finish ({}), so these memories may be incomplete: do not conclude that \
+something is unknown or does not exist only because it is missing here.",
+            incomplete.join("; ")
+        )
+    })
+}
+
+async fn synthesize(query: &str, items: &[RecallItem], p: &Provider, incomplete: &[String]) -> AppResult<Value> {
+    let mut prompt = build_prompt(query, &render_memories(items));
+    if let Some(note) = incomplete_note(incomplete) {
+        prompt.push_str("\n\n");
+        prompt.push_str(&note);
+    }
 
     let client = p.client().await?;
     let model = provider::chat_model(p).await;
@@ -237,12 +265,20 @@ mod tests {
 
     #[test]
     fn recall_only_numbers_memories_and_tells_the_caller_to_answer() {
-        let r = recall_only("who is ada?", &[item("a"), item("b")], None);
+        let r = recall_only("who is ada?", &[item("a"), item("b")], None, &[]);
         assert_eq!(r["mode"], "recall_only");
         assert!(r["answer"].is_null());
         assert_eq!(r["memories"][0]["index"], 1);
         assert_eq!(r["memories"][1]["text"], "b");
         assert!(r["instructions"].as_str().unwrap().contains("you answer"));
+    }
+
+    #[test]
+    fn recall_only_warns_the_caller_when_the_search_did_not_finish() {
+        let r = recall_only("who is ada?", &[item("a")], None, &["semantic search over memories timed out".to_string()]);
+        let i = r["instructions"].as_str().unwrap();
+        assert!(i.contains("may be incomplete") && i.contains("semantic search over memories timed out"), "{i}");
+        assert!(!recall_only("q", &[item("a")], None, &[])["instructions"].as_str().unwrap().contains("incomplete"));
     }
 
     #[test]

@@ -58,9 +58,10 @@ async fn in_process(method: &str, url: &str, body: Option<String>) -> Option<Res
         Ok(r) => r,
         Err(e) => return Some(Err(e.to_string())),
     };
+    // the router's error type is `Infallible`: there is no error to report
     let resp = match router.oneshot(req).await {
         Ok(r) => r,
-        Err(e) => return Some(Err(e.to_string())),
+        Err(e) => match e {},
     };
     let status = resp.status().as_u16();
     let body = resp.into_body().collect().await.map(|b| b.to_bytes().to_vec()).unwrap_or_default();

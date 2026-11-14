@@ -284,7 +284,7 @@ fn surface_root_cause(mut res: surrealdb::IndexedResults) -> surrealdb::Result<s
 /// Tables that live in the control database. Everything else a statement names is an org table.
 pub const CONTROL_TABLES: &[&str] = &[
     "user", "identity", "org", "membership", "tenant", "api_token", "session", "oauth_client", "oauth_code", "oauth_grant", "oauth_token", "audit_event", "tool_usage", "job",
-    "job_leader", "failure_capsule", "audit_head", "audit_checkpoint",
+    "job_leader", "failure_capsule", "mfa_recovery_code", "mfa_challenge", "instance_setting", "audit_head", "audit_checkpoint",
 ];
 
 /// Tables that live in an org database.
