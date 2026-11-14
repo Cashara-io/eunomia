@@ -134,7 +134,7 @@ impl Provisioner {
         let id = surrealdb::types::RecordId::new("redact_backfill", format!("v{}", crate::redact::DETECTOR_VERSION));
         let done = async {
             let s = self.session(rt, db).await?;
-            root(&s, "provisioning.redact_done", "UPSERT $id SET done_at = time::now(), updated_at = time::now()").bind(("id", id)).await?.check()?;
+            root(&s, "provisioning.redact_done", "UPSERT $id SET stage = 'done', done_at = time::now(), updated_at = time::now()").bind(("id", id)).await?.check()?;
             // nor any fact extracted before facts carried their record's date (jobs::fact_dates)
             root(&s, "provisioning.fact_dates_done", "UPSERT $id SET done_at = time::now(), updated_at = time::now()")
                 .bind(("id", crate::jobs::fact_dates::marker_id()))
@@ -222,6 +222,32 @@ impl Provisioner {
                 Err(e) => tracing::warn!(db = row.db, error = %e, "could not open the org database to define its documents bucket"),
             }
         }
+    }
+
+    /// Ready orgs whose database lacks a registered migration below one it has applied, with the
+    /// numbers it lacks (see `migrate::skipped_tenant_migrations`). Reads every org's `_migration`
+    /// ledger with one root session.
+    pub async fn find_migration_gaps(&self, control: &ControlDb) -> AppResult<Vec<(OrgId, Vec<u32>)>> {
+        #[derive(serde::Deserialize, surrealdb::types::SurrealValue)]
+        struct T {
+            org: surrealdb::types::RecordId,
+            db: String,
+            status: String,
+        }
+        let tenants: Vec<T> = store::tenant::LIST.on(control).await?.take(0)?;
+        let rt = self.open().await?;
+        let mut out = Vec::new();
+        for t in tenants.into_iter().filter(|t| t.status == "ready") {
+            let Some(org) = crate::rid::key_string(&t.org.key).and_then(|k| OrgId::parse(&k)) else { continue };
+            let s = self.session(&rt, &t.db).await?;
+            let applied: Vec<i64> = store::root(&s, "provisioning.applied_versions", "SELECT VALUE version FROM _migration").await?.take(0)?;
+            let applied: Vec<u32> = applied.into_iter().filter_map(|v| u32::try_from(v).ok()).collect();
+            let missing = crate::migrate::skipped_tenant_migrations(&applied);
+            if !missing.is_empty() {
+                out.push((org, missing));
+            }
+        }
+        Ok(out)
     }
 
     /// Apply pending tenant migrations to one org's database (the `migrate_tenant` job).

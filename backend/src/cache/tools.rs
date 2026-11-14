@@ -38,8 +38,13 @@ pub async fn recall_tool(
     vault_ids: &[RecordId],
     history: bool,
 ) -> AppResult<Value> {
-    let results = recall::recall(db, settings, owner, query, time_range_tuple(time_range)?, limit, max_tokens, types, vault_ids, history).await?;
-    Ok(json!({ "results": results }))
+    let recalled = recall::recall(db, settings, owner, query, time_range_tuple(time_range)?, limit, max_tokens, types, vault_ids, history).await?;
+    let mut out = json!({ "results": recalled.items });
+    // only when the search could not finish, so a client that ignores it sees the same shape
+    if !recalled.incomplete.is_empty() {
+        out["incomplete"] = json!(recalled.incomplete);
+    }
+    Ok(out)
 }
 
 pub async fn reflect_tool(

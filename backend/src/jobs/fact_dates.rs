@@ -136,7 +136,8 @@ async fn report(state: &OrgState, p: &Progress) {
     tracing::info!(org = %org, version = VERSION, memory = p.changed, "fact date backfill finished");
     let detail = format!("version={VERSION} memory={}", p.changed);
     let actor = Actor { kind: "system", id: "system".into() };
-    audit::record(&state.control, Event { user: None, actor: &actor, action: "facts.backfill_dates", target: &org, outcome: "ok", detail: &detail }).await;
+    audit::record_in_org(&state.control, &state.db.org(), Event { user: None, actor: &actor, action: "facts.backfill_dates", target: &org, outcome: "ok", detail: &detail })
+        .await;
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -185,6 +186,15 @@ fn dates_for(row: &Row, cutoff: Utc) -> Option<(Datetime, Datetime)> {
     Some((Datetime::from(happened), Datetime::from(told)))
 }
 
+/// The record-id range after `cursor` in its table (`table:<key>>..`), bound as `$range` so a batch is a
+/// key-range scan (`WHERE id > $cursor` plans as a filtered table scan; `type::record` is not on the
+/// hardened server's function list).
+fn after(cursor: &RecordId) -> RecordId {
+    use surrealdb::types::{RecordIdKey, RecordIdKeyRange};
+    let range = RecordIdKeyRange { start: std::ops::Bound::Excluded(cursor.key().clone()), end: std::ops::Bound::Unbounded };
+    RecordId::from_table_key(cursor.table(), RecordIdKey::Range(Box::new(range)))
+}
+
 /// The ledger row of `memory`: the same key in `fact_dates_redated`.
 fn ledger_id(memory: &RecordId) -> RecordId {
     RecordId::from_table_key("fact_dates_redated", memory.key().clone())
@@ -217,8 +227,8 @@ impl Logged {
 /// (last id read, facts re-dated); no last id once the table is exhausted.
 async fn redate_batch(state: &OrgState, cursor: &Option<RecordId>, cutoff: Utc) -> AppResult<(Option<RecordId>, i64)> {
     let stmt = if cursor.is_some() { &q::MEMORY_AFTER } else { &q::MEMORY_FIRST };
-    let key = cursor.as_ref().map(|c| c.key().clone());
-    let rows: Vec<Row> = stmt.on(&state.db).bind(("key", key)).bind(("limit", BATCH)).await?.check()?.take(0)?;
+    let range = cursor.as_ref().map(after);
+    let rows: Vec<Row> = stmt.on(&state.db).bind(("range", range)).bind(("limit", BATCH)).await?.check()?.take(0)?;
     let mut changed = 0;
     let mut logged = Logged::default();
     for row in &rows {
@@ -298,8 +308,8 @@ pub async fn undo(state: &OrgState) -> AppResult<i64> {
     loop {
         // a record-id range walk from the last row read, like the backfill's
         let stmt = if cursor.is_some() { &q::LEDGER_AFTER } else { &q::LEDGER_FIRST };
-        let key = cursor.as_ref().map(|c| c.key().clone());
-        let rows: Vec<Entry> = stmt.on(&state.db).bind(("key", key)).bind(("limit", BATCH)).await?.check()?.take(0)?;
+        let range = cursor.as_ref().map(after);
+        let rows: Vec<Entry> = stmt.on(&state.db).bind(("range", range)).bind(("limit", BATCH)).await?.check()?.take(0)?;
         let Some(last) = rows.last() else { return Ok(restored) };
         cursor = Some(last.id.clone());
         let mut logged = Logged::default();

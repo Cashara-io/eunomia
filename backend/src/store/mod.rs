@@ -19,6 +19,7 @@ use tracing::Instrument;
 use crate::db::Db;
 use crate::pool::{ControlDb, OrgDb};
 
+pub mod access_reviews;
 pub mod app;
 pub mod capsules;
 pub mod cache;
@@ -30,6 +31,7 @@ pub mod entities;
 pub mod extensions;
 pub mod fact_dates;
 pub mod integrity;
+pub mod invitations;
 pub mod jobs;
 pub mod ontology;
 pub mod ontology_activity;
@@ -40,6 +42,7 @@ pub mod routing;
 pub mod secret_requests;
 pub mod secrets;
 pub mod skills;
+pub mod subject;
 pub mod tenant;
 pub mod vaults;
 
@@ -284,7 +287,7 @@ fn surface_root_cause(mut res: surrealdb::IndexedResults) -> surrealdb::Result<s
 /// Tables that live in the control database. Everything else a statement names is an org table.
 pub const CONTROL_TABLES: &[&str] = &[
     "user", "identity", "org", "membership", "tenant", "api_token", "session", "oauth_client", "oauth_code", "oauth_grant", "oauth_token", "audit_event", "tool_usage", "job",
-    "job_leader", "failure_capsule",
+    "job_leader", "failure_capsule", "mfa_recovery_code", "mfa_challenge", "instance_setting", "audit_head", "audit_checkpoint", "erasure", "erasure_lock", "org_invitation",
 ];
 
 /// Tables that live in an org database.
@@ -293,7 +296,7 @@ pub const TENANT_TABLES: &[&str] = &[
     "file", "symbol", "memory", "relates_to", "chat_thread", "chat_message", "audit_log", "embed_cache", "pocket_recording",
     "document", "extension", "extension_event", "skill", "change", "change_seq", "redact_backfill", "peer_instance", "peer_share", "peer_link", "peer_item",
     "credential_ref", "secret_provider", "secret_request", "vault_secret", "ontology_kind", "ontology_link", "ontology_property",
-    "entity_property", "ontology_metric", "ontology_event", "fact_dates_backfill", "fact_dates_redated",
+    "entity_property", "ontology_metric", "ontology_event", "access_review", "access_review_decision", "subject_export", "fact_dates_backfill", "fact_dates_redated",
 ];
 
 /// The first table `sql` names that lives in the other database. A table is recognised where
@@ -363,10 +366,10 @@ pub fn crossing_table(sql: &str, in_org: bool) -> Option<String> {
 
 /// Every static tenant statement, for the `every_query_executes` test.
 pub fn all() -> Vec<&'static Stmt> {
-    [diagnostics::ALL, app::ALL, cache::ALL, changes::ALL, documents::ALL, entities::ALL, extensions::ALL, fact_dates::ALL, integrity::ALL, jobs::ALL, ontology::ALL, ontology_activity::ALL, objects::ALL, peers::ALL, redact::ALL, routing::ALL, secret_requests::ALL, secrets::ALL, skills::ALL, vaults::ALL].concat()
+    [diagnostics::ALL, access_reviews::ALL, app::ALL, cache::ALL, changes::ALL, documents::ALL, entities::ALL, extensions::ALL, fact_dates::ALL, integrity::ALL, jobs::ALL, ontology::ALL, ontology_activity::ALL, objects::ALL, peers::ALL, redact::ALL, routing::ALL, secret_requests::ALL, secrets::ALL, skills::ALL, subject::ALL, vaults::ALL].concat()
 }
 
 /// Every static control statement.
 pub fn all_control() -> Vec<&'static ControlStmt> {
-    [diagnostics::CONTROL_ALL, control::ALL, tenant::ALL, capsules::ALL, jobs::CONTROL_ALL, secret_requests::CONTROL_ALL].concat()
+    [diagnostics::CONTROL_ALL, control::ALL, tenant::ALL, capsules::ALL, jobs::CONTROL_ALL, secret_requests::CONTROL_ALL, subject::CONTROL_ALL, invitations::CONTROL_ALL].concat()
 }

@@ -32,6 +32,63 @@ expression: info(&db).await
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "access_review",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "open_slot"
+          ],
+          "index": "UNIQUE",
+          "name": "access_review_open_unique",
+          "table": "access_review"
+        },
+        {
+          "cols": [
+            "started_at"
+          ],
+          "index": "",
+          "name": "access_review_started_idx",
+          "table": "access_review"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "access_review_decision",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "review",
+            "subject"
+          ],
+          "index": "UNIQUE",
+          "name": "access_review_decision_unique",
+          "table": "access_review_decision"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "app_settings",
       "permissions": {
         "create": false,
@@ -609,7 +666,16 @@ expression: info(&db).await
         "select": false,
         "update": false
       },
-      "indexes": []
+      "indexes": [
+        {
+          "cols": [
+            "memory"
+          ],
+          "index": "",
+          "name": "fact_dates_redated_memory_idx",
+          "table": "fact_dates_redated"
+        }
+      ]
     },
     {
       "drop": false,
@@ -1446,6 +1512,38 @@ expression: info(&db).await
           "index": "UNIQUE",
           "name": "skill_vault_name_idx",
           "table": "skill"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "subject_export",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "requested_by"
+          ],
+          "index": "",
+          "name": "subject_export_requested_by",
+          "table": "subject_export"
+        },
+        {
+          "cols": [
+            "subject"
+          ],
+          "index": "",
+          "name": "subject_export_subject",
+          "table": "subject_export"
         }
       ]
     },

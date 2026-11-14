@@ -1,6 +1,7 @@
 //! Statements for the fact-date backfill (`jobs::fact_dates`). See the module docs in store/mod.rs.
 //!
-//! Both walks (the backfill over `memory`, undo over the ledger) are record-id range scans (`type::record(table, $key>..)`), so each batch starts at the
+//! Both walks (the backfill over `memory`, undo over the ledger) are record-id range scans (`FROM $range`, a bound record-id range `table:<cursor>>..`; `type::record` is outside the
+//! hardened function list), so each batch starts at the
 //! cursor instead of scanning the table from its start (`WHERE id > $cursor` plans as a table scan with
 //! a filter on SurrealDB 3.3.5). Each re-date is a compare-and-set on the fact still being undated,
 //! unedited, tied to the same record and never re-dated before, written in one transaction with its
@@ -38,7 +39,7 @@ macro_rules! memory_row {
 // Every row of the batch comes back (the cursor must move past it); the job picks the candidates.
 pub const MEMORY_FIRST: Stmt = Stmt::new("fact_dates.memory_first", concat!("SELECT ", memory_row!(), " FROM memory:.. LIMIT $limit"));
 pub const MEMORY_AFTER: Stmt =
-    Stmt::new("fact_dates.memory_after", concat!("SELECT ", memory_row!(), " FROM type::record('memory', $key>..) LIMIT $limit"));
+    Stmt::new("fact_dates.memory_after", concat!("SELECT ", memory_row!(), " FROM $range LIMIT $limit"));
 
 /// The same rows for given memories (a supersede check dating facts the walk has not reached yet).
 pub const MEMORY_BY_ID: Stmt = Stmt::new("fact_dates.memory_by_id", concat!("SELECT ", memory_row!(), " FROM $ids"));
@@ -71,7 +72,7 @@ pub const LEDGER_FIRST: Stmt = Stmt::new(
 pub const LEDGER_AFTER: Stmt = Stmt::new(
     "fact_dates.ledger_after",
     "SELECT id, memory, memory.vault AS vault, previous, previous_asserted, occurred_at, asserted_at, undone_at \
-     FROM type::record('fact_dates_redated', $key>..) LIMIT $limit",
+     FROM $range LIMIT $limit",
 );
 
 /// Undoes one re-date: the fact gets its previous dates back unless they changed since (then that change

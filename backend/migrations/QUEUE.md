@@ -8,9 +8,9 @@ Owned by the lead. One line per reserved migration number (docs/architecture/nex
 - States: `reserved`, `locked`, `merged`. Applied files are immutable, so a number never changes once its file is on `main`.
 - `scripts/ci/check-migrations.sh` (the `scripts` CI job) checks that the numbers in `MIGRATIONS` and `CONTROL_MIGRATIONS` are contiguous and unique, that every file is registered under its own number and name, and that a file whose number is listed here is `locked` or `merged` under the same name.
 
-Tenant set: next free 0044.
+Tenant set: 0044 is the audit chain's access reviews (compliance PR03); 0045 is subject export and erasure (compliance PR08); 0046 is fact dates (#249). Next free: 0047.
 
-Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension to user records (PR #162). Next free: 0009.
+Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension to user records (PR #162); 0009 is enforced MFA (compliance PR04); 0010 is the audit chain (compliance PR03); 0011 is subject erasure (compliance PR08); 0012 is organisation invitations (#247). Next free: 0013.
 
 | set | number | name | lane | PR | state |
 |---|---|---|---|---|---|
@@ -34,8 +34,14 @@ Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension t
 | tenant | 0039 | entity_name_lookup | Gate 2: space selection | #185 | merged |
 | tenant | 0040 | object_paging | Ontology objects | #206 | merged |
 | tenant | 0041 | composio_connector | Composio connector | #205 | merged |
-| tenant | 0042 | ontology_activity | Ontology PR3 activity | #207 | locked |
-| tenant | 0043 | chat_turn_order | Chat #220 | pending | reserved |
-| tenant | 0046 | fact_dates | Memory T1 (fact dates) | pending | reserved |
+| tenant | 0042 | ontology_activity | Ontology PR3 activity | #207 | merged |
+| tenant | 0043 | chat_turn_order | Chat #220 | #238 (reserved by #237) | locked |
+| tenant | 0044 | audit_chain | Compliance PR03 (audit chain, access reviews) | #245 | locked |
+| tenant | 0045 | erasure | Lane C: subject export and erasure (compliance PR08) | #246 | locked |
+| tenant | 0046 | fact_dates | Memory T1 (fact dates) | #249 | locked |
 | control | 0007 | secret_audit_index | L3 Broker | #123 (#122), 2.0.9 | merged |
 | control | 0008 | user_admin_suspend | Admin (#144) | #162, 2.0.9 | merged |
+| control | 0009 | mfa | Compliance PR04 (enforced MFA) | #244 | locked |
+| control | 0010 | audit_chain | Compliance PR03 (audit chain) | #245 | locked |
+| control | 0011 | erasure | Lane C: subject export and erasure (compliance PR08) | #246 | locked |
+| control | 0012 | org_invitations | Enterprise: org invitations | #247 | locked |

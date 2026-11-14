@@ -22,11 +22,17 @@ pub const CACHE_RECORDS_IN_RANGE: Stmt = Stmt::new(
     "SELECT id, occurred_at FROM cache_record WHERE (vault IN $vaults OR ($own AND vault = NONE AND owner = $owner)) \
      AND deleted = false AND occurred_at >= $since AND occurred_at <= $until ORDER BY occurred_at DESC LIMIT $limit",
 );
-/// Dated by when the fact happened (`occurred_at`) if its writer said, else when it was written.
+/// A memory's date in recall (`cache::recall::MEMORY_DATE`, `OBSERVATION_DATE`): a fact is dated by
+/// when it happened (`occurred_at`) if its writer said, else when it was last written (`updated_at`,
+/// else `created_at`); an observation by its last update, and only when `$obs` (the caller's `types`
+/// names observations). Facts, then observations, each newest first and limited in the database.
 pub const MEMORIES_IN_RANGE: Stmt = Stmt::new(
     "cache.memories_in_range",
-    "SELECT id, occurred_at ?? created_at AS at FROM memory WHERE vault = $vault \
-     AND (occurred_at ?? created_at) >= $since AND (occurred_at ?? created_at) <= $until ORDER BY at DESC LIMIT $limit",
+    "SELECT id, occurred_at ?? updated_at ?? created_at AS at FROM memory WHERE vault = $vault AND type != \"observation\" \
+     AND (occurred_at ?? updated_at ?? created_at) >= $since AND (occurred_at ?? updated_at ?? created_at) <= $until \
+     ORDER BY at DESC LIMIT $limit; \
+     SELECT id, updated_at ?? created_at AS at FROM memory WHERE $obs AND vault = $vault AND type = \"observation\" \
+     AND (updated_at ?? created_at) >= $since AND (updated_at ?? created_at) <= $until ORDER BY at DESC LIMIT $limit",
 );
 
 /// A record's sync links, to tell whether a replay changed only them.
@@ -68,7 +74,7 @@ pub const MEMORIES_FOR_RECALL: Stmt = Stmt::new(
 /// Relations the graph arm surfaced, as names, when both ends are in the vault being searched.
 pub const RELATIONS_FOR_RECALL: Stmt = Stmt::new(
     "cache.relations_for_recall",
-    "SELECT id, label, in.name AS a, out.name AS b, created_at FROM $ids WHERE in.vault = $vault AND out.vault = $vault",
+    "SELECT id, label, in.name AS a, out.name AS b, created_at, occurred_at FROM $ids WHERE in.vault = $vault AND out.vault = $vault",
 );
 /// A vector for a memory, unless its text changed since it was read for embedding.
 pub const SET_MEMORY_EMBEDDING: Stmt =

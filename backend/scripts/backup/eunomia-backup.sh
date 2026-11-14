@@ -3,7 +3,8 @@
 #   eunomia-backup loop              nightly at 03:00 local time (TZ), forever
 #   eunomia-backup now [prefix]      one encrypted export now (prefix: manual|daily|weekly)
 #   eunomia-backup list              list backup files
-#   eunomia-backup restore FILE [--wipe]   FILE is a name in /backups or a path
+#   eunomia-backup restore FILE [--wipe] [--erasures F | --without-erasures]   FILE is a name in /backups or a path
+#   eunomia-backup erasures [OUT]    the live erasure records, for an off-box copy (restore --erasures OUT)
 # Files are `surreal export` output, encrypted then authenticated (encrypt-then-MAC):
 #   line 1: "EUNOMIA-BK2 <salt hex>"; then AES-256-CBC ciphertext; then a 64-char hex HMAC-SHA256 of
 #   everything before it. Key and IV come from PBKDF2 of BACKUP_ENCRYPTION_KEY and the salt; the MAC
@@ -253,7 +254,7 @@ decrypt_to() { # decrypt_to FILE OUT
 }
 
 restore_one() { # restore_one FILE DB [--wipe]
-  plain="$(mktemp)"; trap 'rm -f "$plain"' EXIT
+  plain="$(mktemp)"; trap 'rm -f "$plain" "${kept:-}"' EXIT
   decrypt_to "$1" "$plain"
   if [ "${3:-}" = "--wipe" ]; then
     log "wiping database $NS/$2"
@@ -267,29 +268,114 @@ restore_one() { # restore_one FILE DB [--wipe]
   rm -f "$plain"
 }
 
+# keep_erasures OUT: the erasure records of the live control database (docs/privacy/subject-rights.md)
+# as an import script that merges them back (INSERT IGNORE), so restoring a backup taken before an
+# erasure never forgets it: the backend erases those accounts (and restored rows they owned) again when
+# it starts. Returns 0 with OUT written (empty when there is no erasure yet), 2 when the namespace has no
+# control database to read them from, 1 when it has one but it could not be read.
+keep_erasures() {
+  : > "$1"
+  info="$(echo 'INFO FOR NS;' | "$SURREAL" sql --endpoint "$ENDPOINT" --user "$USER_" --pass "$PASS_" --ns "$NS" --hide-welcome --json 2>/dev/null)" || return 1
+  echo "$info" | grep -q '"databases"' || return 1
+  echo "$info" | grep -q '"control"' || return 2
+  x="$(mktemp)" || return 1
+  if ! "$SURREAL" export --log none --endpoint "$ENDPOINT" --user "$USER_" --pass "$PASS_" --ns "$NS" --db control \
+       --only --tables erasure --records true "$x" >/dev/null 2>&1; then
+    rm -f "$x"; return 1
+  fi
+  if grep -q '^INSERT \[' "$x"; then
+    { echo "OPTION IMPORT;"
+      grep -E '^DEFINE TABLE erasure ' "$x" | sed 's/^DEFINE TABLE erasure /DEFINE TABLE IF NOT EXISTS erasure /'
+      grep -E '^DEFINE (FIELD|INDEX) ' "$x"
+      grep -E '^INSERT \[' "$x" | sed 's/^INSERT \[/INSERT IGNORE INTO erasure [/'
+    } > "$1"
+  fi
+  rm -f "$x"
+}
+
+# carry_erasures KEPT EXTRA: merges the kept live records, then an off-box copy (--erasures FILE), into control.
+carry_erasures() {
+  for k in "$1" "$2"; do
+    [ -n "$k" ] && [ -s "$k" ] || continue
+    "$SURREAL" import --endpoint "$ENDPOINT" --user "$USER_" --pass "$PASS_" --ns "$NS" --db control "$k" \
+      || die "restored, but could not merge the erasure records back into control: run the restore again (the merge is safe to repeat), or erase those people again from Settings > People"
+  done
+  log "kept the erasure records made after this backup; the backend erases those accounts again when it starts"
+}
+
+# erasures_before_control: before a restore that replaces control, reads the live erasure records into
+# $kept, or stops the restore: restoring control without them would bring every person erased since the
+# backup back. --without-erasures (WITHOUT=1) skips that, --erasures FILE (EXTRA) supplies an off-box copy.
+erasures_before_control() {
+  kept="$(mktemp)"
+  rc=0; keep_erasures "$kept" || rc=$?
+  case "$rc" in
+    0) ;;
+    2) rm -f "$kept"; kept=""
+       [ -n "$WITHOUT" ] || [ -n "$EXTRA" ] || die "this server has no control database to read the erasure records from (a fresh server?). Restoring control without them can bring back people who were erased after this backup was taken. Pass --erasures FILE with a copy made by 'eunomia-backup erasures', or --without-erasures to restore anyway." ;;
+    *) rm -f "$kept"; kept=""
+       [ -n "$WITHOUT" ] || [ -n "$EXTRA" ] || die "could not read the erasure records from the live control database, so the restore was stopped before touching anything: restoring control without them would bring back people erased after this backup was taken. Check that SurrealDB is reachable and try again; or pass --erasures FILE (an off-box copy from 'eunomia-backup erasures'), which is merged in their place; or --without-erasures to restore without any." ;;
+  esac
+  [ -z "$kept" ] || [ -s "$kept" ] || { rm -f "$kept"; kept=""; }
+}
+
 do_restore() {
   need_key
-  f="${1:-}"; [ -n "$f" ] || die "usage: restore NAME [--wipe]"
+  f=""; WIPE=""; WITHOUT=""; EXTRA=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --wipe) WIPE="--wipe" ;;
+      --without-erasures) WITHOUT=1 ;;
+      --erasures) shift; EXTRA="${1:-}"; [ -s "$EXTRA" ] || die "--erasures needs a file made by 'eunomia-backup erasures'" ;;
+      *) [ -z "$f" ] || die "usage: restore NAME [--wipe] [--erasures FILE | --without-erasures]"; f="$1" ;;
+    esac
+    shift
+  done
+  [ -n "$f" ] || die "usage: restore NAME [--wipe] [--erasures FILE | --without-erasures]"
+  name="$f"
   [ -e "$f" ] || f="$DIR/$f"
-  [ -e "$f" ] || die "no such backup: $1 (try: list)"
+  [ -e "$f" ] || die "no such backup: $name (try: list)"
+  kept=""
   if [ -d "$f" ]; then
+    [ ! -f "$f/control.surql.enc" ] || erasures_before_control
     for file in "$f"/*.surql.enc; do
       d="$(basename "$file" .surql.enc)"
-      restore_one "$file" "$d" "${2:-}"
+      restore_one "$file" "$d" "$WIPE"
     done
+    [ ! -f "$f/control.surql.enc" ] || carry_erasures "$kept" "$EXTRA"
+    [ -z "$kept" ] || rm -f "$kept"
     if [ -f "$f/documents.tar.enc" ]; then
       mkdir -p "$DOCS_DIR" 2>/dev/null; [ -w "$DOCS_DIR" ] || die "$f holds documents but $DOCS_DIR is not writable here"
       plain="$(mktemp)"
       decrypt_to "$f/documents.tar.enc" "$plain"
-      [ "${2:-}" != "--wipe" ] || find "$DOCS_DIR" -mindepth 1 -delete
+      [ "$WIPE" != "--wipe" ] || find "$DOCS_DIR" -mindepth 1 -delete
       tar -C "$DOCS_DIR" -xf "$plain" || { rm -f "$plain"; die "could not unpack the documents into $DOCS_DIR"; }
       rm -f "$plain"
       log "restored the documents into $DOCS_DIR"
     fi
   else
-    restore_one "$f" "$DB" "${2:-}"
+    # one database's file: a tenancy file (control.surql.enc, org_<uuid>.surql.enc) goes back into its
+    # own database, anything else into the single database of a pre-tenancy install
+    target="$DB"
+    base="$(basename "$f" .surql.enc)"
+    case "$base" in control|org_[0-9a-f]*) target="$base" ;; esac
+    [ "$target" != control ] || erasures_before_control
+    restore_one "$f" "$target" "$WIPE"
+    [ "$target" != control ] || carry_erasures "$kept" "$EXTRA"
+    [ -z "$kept" ] || rm -f "$kept"
+    # an org database alone: control keeps its erasure records, and the backend erases again the
+    # restored rows of anyone erased since (by their reference) when it starts
   fi
   log "restored $f"
+}
+
+# erasures [OUT]: the live erasure records as a merge script, for an off-box copy (restore --erasures OUT).
+do_erasures() {
+  out="${1:-}"; tmp="$(mktemp)"
+  rc=0; keep_erasures "$tmp" || rc=$?
+  [ "$rc" -eq 0 ] || { rm -f "$tmp"; die "could not read the erasure records (no control database, or SurrealDB unreachable)"; }
+  [ -s "$tmp" ] || echo "OPTION IMPORT;" > "$tmp"
+  if [ -n "$out" ]; then mv "$tmp" "$out"; log "wrote the erasure records to $out; keep a copy off this machine"; else cat "$tmp"; rm -f "$tmp"; fi
 }
 
 secs_to_next_3am() {
@@ -311,5 +397,6 @@ case "${1:-}" in
   now) do_backup "${2:-manual}" ;;
   list) ls -lh "$DIR" ;;
   restore) shift; do_restore "$@" ;;
-  *) die "usage: eunomia-backup loop | now [prefix] | list | restore NAME [--wipe]" ;;
+  erasures) shift; do_erasures "$@" ;;
+  *) die "usage: eunomia-backup loop | now [prefix] | list | restore NAME [--wipe] [--erasures FILE | --without-erasures] | erasures [OUT]" ;;
 esac

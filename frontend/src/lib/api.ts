@@ -58,6 +58,13 @@ async function saveResponse(res: Response, path: string, name: string): Promise<
   URL.revokeObjectURL(url);
 }
 
+/** Downloads a ready data export (the zip archive of `GET /api/export/subject/{id}`). */
+export async function downloadSubjectExport(id: string): Promise<void> {
+  const path = `/api/export/subject/${encodeURIComponent(id)}`;
+  const res = await fetch(`${API_URL}${path}`, { credentials: "include", headers: { traceparent: traceparent() } });
+  await saveResponse(res, path, "eunomia-data-export.zip");
+}
+
 /** Downloads a document's original bytes (`kind: "download"`) or its export manifest with vectors (`"export"`). */
 export async function downloadDocumentFile(id: string, filename: string, kind: "download" | "export"): Promise<void> {
   const path = `/api/documents/${encodeURIComponent(id)}/${kind}`;

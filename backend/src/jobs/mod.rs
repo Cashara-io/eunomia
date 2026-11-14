@@ -43,6 +43,10 @@ pub mod kind {
     pub const SUPERSEDE: &str = "supersede";
     /// Redact secrets stored before writes were redacted, once per org per detector version (`redact_backfill`).
     pub const REDACT_BACKFILL: &str = "redact_backfill";
+    /// Build one person's data export archive (`subject::export`).
+    pub const SUBJECT_EXPORT: &str = "subject_export";
+    /// Erase one person and write the completion record (`subject::erase`).
+    pub const SUBJECT_ERASE: &str = "subject_erase";
     /// Date facts extracted before extraction passed the record's date on, once per org (`fact_dates`).
     pub const FACT_DATES_BACKFILL: &str = "fact_dates_backfill";
 }

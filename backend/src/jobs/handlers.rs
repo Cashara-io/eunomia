@@ -27,6 +27,8 @@ pub fn registry() -> Registry {
         .register(kind::INDEX_DOCUMENT, crate::documents::index_job)
         .register(kind::SUPERSEDE, supersede)
         .register(kind::REDACT_BACKFILL, redact_backfill)
+        .register(kind::SUBJECT_EXPORT, crate::subject::export::export_job)
+        .register(kind::SUBJECT_ERASE, crate::subject::erase::erase_job)
         .register(kind::FACT_DATES_BACKFILL, fact_dates_backfill)
 }
 
@@ -60,6 +62,7 @@ async fn sync(state: AppState, job: Job) -> Result<(), JobError> {
             let retry = crate::sources::scheduler::offline_retry_job(state.db.org(), &job.owner, source);
             super::enqueue_lossy(&state.control, retry).await;
         }
+        (None, Some("erased")) => tracing::info!(source, "source sync skipped: the account is erased"),
         (None, Some(_)) => tracing::info!(source, "source sync skipped: already running"),
         (None, None) => tracing::info!(source, report = %report, "source synced"),
     }

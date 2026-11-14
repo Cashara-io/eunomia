@@ -53,7 +53,9 @@ pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (40, "object_paging", include_str!("../migrations/tenant/0040_object_paging.surql")),
     (41, "composio_connector", include_str!("../migrations/tenant/0041_composio_connector.surql")),
     (42, "ontology_activity", include_str!("../migrations/tenant/0042_ontology_activity.surql")),
-    // 0043 to 0045 are reserved by other lanes (migrations/QUEUE.md) and land before this one
+    (43, "chat_turn_order", include_str!("../migrations/tenant/0043_chat_turn_order.surql")),
+    (44, "audit_chain", include_str!("../migrations/tenant/0044_audit_chain.surql")),
+    (45, "erasure", include_str!("../migrations/tenant/0045_erasure.surql")),
     (46, "fact_dates", include_str!("../migrations/tenant/0046_fact_dates.surql")),
 ];
 
@@ -74,7 +76,54 @@ pub const CONTROL_MIGRATIONS: &[(u32, &str, &str)] = &[
     (6, "oidc_identity", include_str!("../migrations/control/0006_oidc_identity.surql")),
     (7, "secret_audit_index", include_str!("../migrations/control/0007_secret_audit_index.surql")),
     (8, "user_admin_suspend", include_str!("../migrations/control/0008_user_admin_suspend.surql")),
+    (9, "mfa", include_str!("../migrations/control/0009_mfa.surql")),
+    (10, "audit_chain", include_str!("../migrations/control/0010_audit_chain.surql")),
+    (11, "erasure", include_str!("../migrations/control/0011_erasure.surql")),
+    (12, "org_invitations", include_str!("../migrations/control/0012_org_invitations.surql")),
 ];
+
+/// The first number missing from `list`, which must run 1, 2, 3, ... with no gap. A gap is final:
+/// the scheduler queues an org's migration only while its version is below the latest, so a number
+/// skipped now would never be applied once it lands (backend/migrations/QUEUE.md).
+pub fn first_gap(list: &[(u32, &str, &str)]) -> Option<u32> {
+    list.iter().enumerate().find(|(i, m)| m.0 != *i as u32 + 1).map(|(i, _)| i as u32 + 1)
+}
+
+/// Registered tenant migrations an org database lacks although it applied a later one: a number
+/// that was missing from the build that migrated it (a lane run ahead of the queue). The scheduler
+/// only migrates orgs below the latest version, so these would never be applied by themselves.
+pub fn skipped_tenant_migrations(applied: &[u32]) -> Vec<u32> {
+    let Some(&top) = applied.iter().max() else { return Vec::new() };
+    MIGRATIONS.iter().map(|m| m.0).filter(|v| *v < top && !applied.contains(v)).collect()
+}
+
+/// Refuses to boot when the registered tenant or control migrations are not contiguous.
+/// `scripts/ci/check-migrations.sh` checks the same in CI; this makes a binary built past that
+/// check refuse to start instead of skipping a migration for good. Builds with the `test-support`
+/// feature (the test suite) and `EUNOMIA_ALLOW_MIGRATION_GAP=1` (a developer running a lane before
+/// the numbers ahead of it have landed) only log it.
+pub fn require_contiguous() -> crate::error::AppResult<()> {
+    let gaps: Vec<String> = [("tenant", MIGRATIONS), ("control", CONTROL_MIGRATIONS)]
+        .iter()
+        .filter_map(|(set, list)| first_gap(list).map(|n| format!("{set} {n:04}")))
+        .collect();
+    if gaps.is_empty() {
+        return Ok(());
+    }
+    let msg = format!(
+        "this build registers migrations with a gap (missing: {}): an org would never get the missing one. \
+         Build it after the missing migrations land, or renumber (backend/migrations/QUEUE.md).",
+        gaps.join(", ")
+    );
+    let allowed = cfg!(feature = "test-support") || std::env::var("EUNOMIA_ALLOW_MIGRATION_GAP").is_ok_and(|v| v.trim() == "1");
+    // straight to stderr: the log layer redacts formatted messages, and an operator must see why
+    if allowed {
+        eprintln!("warning: {msg} (allowed: test build or EUNOMIA_ALLOW_MIGRATION_GAP=1)");
+        return Ok(());
+    }
+    eprintln!("error: {msg}");
+    Err(crate::error::AppError::internal(msg))
+}
 
 /// The last tenant migration the legacy single database may be brought to before its data moves out
 /// (0009 drops the tables the move is about to read).
@@ -419,3 +468,29 @@ async fn merge_into(db: &Db, winner: &mut Entity, loser: &Entity) -> surrealdb::
     Ok(())
 }
 
+
+#[cfg(test)]
+mod contiguity_tests {
+    use super::first_gap;
+
+    #[test]
+    fn a_gap_in_registered_migrations_is_found() {
+        assert_eq!(first_gap(&[(1, "a", ""), (2, "b", ""), (3, "c", "")]), None);
+        assert_eq!(first_gap(&[(1, "a", ""), (2, "b", ""), (4, "d", "")]), Some(3), "a number skipped");
+        assert_eq!(first_gap(&[(2, "b", "")]), Some(1), "a missing first");
+        assert_eq!(first_gap(&[(1, "a", ""), (1, "a", "")]), Some(2), "a number twice");
+        assert_eq!(first_gap(&[]), None);
+    }
+
+    #[test]
+    fn a_number_skipped_below_the_newest_applied_is_reported() {
+        let all: Vec<u32> = super::MIGRATIONS.iter().map(|m| m.0).collect();
+        assert!(super::skipped_tenant_migrations(&all).is_empty());
+        let mut without_ten: Vec<u32> = all.iter().copied().filter(|v| *v != 10).collect();
+        assert_eq!(super::skipped_tenant_migrations(&without_ten), vec![10]);
+        // missing only at the top is just "behind", which the scheduler handles
+        without_ten.retain(|v| *v < 10);
+        assert!(super::skipped_tenant_migrations(&without_ten).is_empty());
+        assert!(super::skipped_tenant_migrations(&[]).is_empty());
+    }
+}

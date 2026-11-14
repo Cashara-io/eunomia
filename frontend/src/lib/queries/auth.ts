@@ -60,21 +60,35 @@ export function useRevokeSession() {
   });
 }
 
+/** What a correct password leads to: a session, or the second step (`verify` a code, or `enrol` first
+ * because the server requires two-step verification). */
+export type SignIn = { kind: "session"; me: Me } | { kind: "mfa"; step: "verify" | "enrol" };
+
+function toSignIn(r: unknown): SignIn {
+  if (r && typeof r === "object" && "mfa_required" in r) {
+    return { kind: "mfa", step: (r as { mfa_required: string }).mfa_required === "enrol" ? "enrol" : "verify" };
+  }
+  return { kind: "session", me: r as Me };
+}
+
 // A new session means a different user: nothing cached under the old one may survive.
-const useSessionMutation = <V>(fn: (v: V) => Promise<Me>) => {
+const useSessionMutation = <V>(fn: (v: V) => Promise<unknown>) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: fn,
-    onSuccess: (me) => {
+    mutationFn: async (v: V) => toSignIn(await fn(v)),
+    onSuccess: (r) => {
+      if (r.kind !== "session") return;
       qc.clear();
-      qc.setQueryData(authKeys.me(), me);
+      qc.setQueryData(authKeys.me(), r.me);
     },
   });
 };
 export const useLogin = () =>
   useSessionMutation(({ email, password }: { email: string; password: string }) => call(login({ body: { email, password } })));
 export const useRegister = () =>
-  useSessionMutation(({ email, password }: { email: string; password: string }) => call(register({ body: { email, password } })));
+  useSessionMutation(({ email, password, invitation }: { email: string; password: string; invitation?: string }) =>
+    call(register({ body: { email, password, invitation } }))
+  );
 
 export function useLogout() {
   const qc = useQueryClient();

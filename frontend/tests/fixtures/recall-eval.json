@@ -48,5 +48,20 @@
     { "kind": "no-answer", "vault": "personal", "query": "quantum chromodynamics lecture notes", "expected": [] },
     { "kind": "dated", "vault": "personal", "query": "Acme pilot agreement", "time_range": ["2024-01-01", "2024-12-31T23:59:59Z"], "expected": ["p-acme-pilot-2024"] },
     { "kind": "dated", "vault": "personal", "query": "where did Grace move", "time_range": ["2022-01-01", "2022-12-31T23:59:59Z"], "expected": ["p-grace-berlin-2022"] }
-  ]
+  ],
+  "ranking": {
+    "about": "Recall-ranking cases (date filter and cross-vault fusion), scored by the second test in recall-eval.spec.ts on their own users, so the main corpus and its metrics stay as they were. A memory's 'occurred_at' goes to memory_write; a query's 'time_range' to recall; 'excluded' memories must never be returned; vault 'all' recalls with no vault_id (personal and shared ranked together).",
+    "memories": [
+      { "key": "r-pricing-march", "vault": "personal", "subject": "Pricing Committee", "kind": "organisation", "text": "Pricing decision: the Pro plan moves to 49 dollars a month.", "occurred_at": "2026-03-10" },
+      { "key": "r-pricing-old", "vault": "personal", "subject": "Pricing Committee", "kind": "organisation", "text": "Pricing decision: the Pro plan stays at 39 dollars a month.", "occurred_at": "2025-11-02" },
+      { "key": "r-kettle-march", "vault": "personal", "subject": "Kitchen", "kind": "location", "text": "Bought a new kettle for the office.", "occurred_at": "2026-03-31" },
+      { "key": "r-pricing-weak", "vault": "shared", "subject": "Sales Notes", "kind": "organisation", "text": "Pricing came up briefly in the sales sync." }
+    ],
+    "queries": [
+      { "kind": "dated", "vault": "personal", "query": "pricing decision for the Pro plan", "time_range": ["2026-03-01", "2026-03-31"], "expected": ["r-pricing-march"], "excluded": ["r-pricing-old", "r-kettle-march"] },
+      { "kind": "dated-empty-query", "vault": "personal", "query": "", "time_range": ["2026-03-01", "2026-03-31"], "expected": ["r-kettle-march", "r-pricing-march"], "excluded": ["r-pricing-old"] },
+      { "kind": "dated-no-match", "vault": "personal", "query": "Did the landlord renew the lease?", "time_range": ["2026-03-01", "2026-03-31"], "expected": [], "excluded": ["r-kettle-march", "r-pricing-march", "r-pricing-old"] },
+      { "kind": "multi-vault", "vault": "all", "query": "Pro plan pricing decision", "expected": ["r-pricing-march", "r-pricing-old"] }
+    ]
+  }
 }

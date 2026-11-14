@@ -125,6 +125,8 @@ struct Ids {
     session_id: String,
     grant_id: String,
     trace: String,
+    /// an open organisation invitation whose record id and token hash carry the canary
+    invitation: String,
 }
 
 impl Org {
@@ -333,13 +335,17 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         CREATE credential_ref SET reference = 'op://Ops/Item/field', provider = 'onepassword_connect', vault = $v, label = $c, created_by = $u;
         CREATE $sp SET kind = 'onepassword_connect', host = $c, token_enc = 'enc:v1:planted', created_by = $u, updated_by = $u;
         CREATE secret_request SET vault = $v, name = 'planted', label = $c, description = $c, target_hosts = ['api.example.com'], requested_by = $u, actor_id = $c, client_name = $c, expires_at = time::now() + 1d;
-        CREATE vault_secret SET vault = $v, name = 'planted', label = $c, value_enc = $senc, allowed_hosts = ['api.example.com'], allowed_actors = [$c], created_by = $u;";
+        CREATE vault_secret SET vault = $v, name = 'planted', label = $c, value_enc = $senc, allowed_hosts = ['api.example.com'], allowed_actors = [$c], created_by = $u;
+        LET $ar = (CREATE ONLY access_review SET org = $rorg, open_slot = $c, started_by = $u, started_by_email = $c, snapshot = {people: [{email: $c}]}, snapshot_hash = $c).id;
+        CREATE access_review_decision SET review = $ar, subject = $u, subject_email = $c, decision = 'keep', note = $c, reviewer = $u, reviewer_email = $c;
+        CREATE subject_export SET subject = $u, requested_by = $u, status = 'ready', manifest = {note: $c}, archive = <bytes>$c;";
     let uid = user.id.clone();
     db.test_raw()
         .query(sql)
         .bind(("u", uid.clone()))
         .bind(("thread", eunomia_backend::rid::parse(&ids.thread).unwrap()))
         .bind(("c", canary.clone()))
+        .bind(("rorg", user.org.key()))
         .bind(("enc", enc))
         // a held secret whose value is the canary, encrypted as the fill route stores it
         .bind(("senc", crypto::encrypt(&state.settings.encryption_key, &canary)))
@@ -394,10 +400,15 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         CREATE $mem SET user = $u, org = $org, role = 'owner';
         CREATE identity SET user = $u, issuer = 'https://idp.example', subject = $c, email = $c;
         CREATE audit_event SET user = $u, actor_kind = 'user', actor_id = 'plant', action = 'plant', target = $c, outcome = 'ok';
+        CREATE audit_head SET ledger = $c, seq = 0, hash = $c, genesis_at = time::now();
+        CREATE audit_checkpoint SET ledger = $c, seq = 0, hash = $c, kind = 'periodic', at = time::now();
         CREATE tool_usage SET org = $okey, bucket = time::now(), user = $u, actor_kind = 'user', actor_id = 'plant', channel = 'mcp', session = $c, tool = 'recall', calls = 1;
         LET $g = (CREATE oauth_grant SET owner = $u, client_id = 'client-x', client_name = $c, scope = ['memory:read'], resource = 'http://localhost:8001/mcp' RETURN VALUE id)[0];
         CREATE oauth_token SET kind = 'access', token_hash = $c, family = $g, expires_at = time::now() + 15m;
         CREATE oauth_code SET code_hash = $c, owner = $u, client_id = 'client-x', redirect_uri = 'http://localhost/cb', code_challenge = $c, scope = ['memory:read'], resource = 'http://x', expires_at = time::now() + 1m;
+        CREATE erasure SET org = $okey_bare, subject_ref = $c, requested_by = 'operator', status = 'done', open_slot = $c, counts = {note: $c};
+        CREATE $lock SET erasure = (SELECT VALUE id FROM erasure WHERE open_slot = $c)[0];
+        CREATE $inv SET org = $org, email = 'invitee@example.net', role = 'member', token_hash = $c, invited_by = $u, expires_at = time::now() + 7d, slot = string::concat(<string>$org, '/invitee@example.net');
         RETURN $g;";
     let mut res = state
         .control
@@ -405,13 +416,17 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         .query(control_sql)
         .bind(("org", user.org.record()))
         .bind(("okey", user.org.to_string()))
+        .bind(("okey_bare", user.org.key()))
         .bind(("u", uid.clone()))
         .bind(("c", canary.clone()))
         .bind(("mem", surrealdb::types::RecordId::new("membership", canary.clone())))
+        .bind(("lock", surrealdb::types::RecordId::new("erasure_lock", canary.clone())))
+        .bind(("inv", surrealdb::types::RecordId::new("org_invitation", canary.clone())))
         .await
         .unwrap();
     let grant: Option<surrealdb::types::RecordId> = res.take(res.num_statements() - 1).unwrap();
     ids.grant_id = grant.unwrap().to_string();
+    ids.invitation = surrealdb::types::RecordId::new("org_invitation", canary.clone()).to_string();
 
     Org { name, user, token, canary, ids }
 }
@@ -459,6 +474,9 @@ const NO_SECRET_ROWS: &[&str] = &[
     "change_seq",    // one counter per vault
     "peer_instance",  // one random identifier per database (peer vaults), no content
     "redact_backfill", // one progress row: a stage, a cursor id and counts, never content
+    "mfa_recovery_code", // a user id and a SHA-256 per recovery code, never content (tests/mfa.rs)
+    "mfa_challenge",     // a pending second sign-in step: a user id and a token hash, gone in minutes
+    "instance_setting",  // one instance-wide security row (require_mfa), not per org
     "fact_dates_backfill", // one progress row: a cursor id, a cutoff and counts, never content
     "fact_dates_redated",  // the backfill's ledger: memory and record ids and dates, never content
 ];
@@ -539,6 +557,8 @@ fn path_value(param: &str, victim: &Org) -> String {
         "id" => victim.ids.extension.clone(),
         "session_id" => victim.ids.session_id.clone(),
         "grant_id" => victim.ids.grant_id.clone(),
+        // its key carries the canary in brackets (`org_invitation:⟨CANARY-...⟩`), which a URI cannot hold as is
+        "invitation_id" => victim.ids.invitation.bytes().map(|b| if b.is_ascii_alphanumeric() || b == b'_' || b == b':' { (b as char).to_string() } else { format!("%{b:02X}") }).collect(),
         "trace_id" => victim.ids.trace.clone(),
         "owner_id" => victim.user.id.to_string(),
         "email" => "beta@example.com".into(),
@@ -794,7 +814,7 @@ async fn mutation_check_removing_one_filter_turns_the_suite_red() {
 
     type Case = (&'static str, &'static [(&'static str, &'static str)], fn(&Org) -> Call);
     // (what it covers, [(statement, filter text)], the call that reads it)
-    let cases: [Case; 11] = [
+    let cases: [Case; 12] = [
         ("chat threads", &[("app.chat_thread_list", "WHERE owner = $owner")], |_| Call::Route("/api/chat/threads".into())),
         ("chat messages", &[("app.chat_messages_for_owner", "WHERE owner = $owner")], |_| Call::Route("/api/export".into())),
         ("audit", &[("app.audit_list", "WHERE owner = $owner")], |_| Call::Route("/api/audit?limit=500".into())),
@@ -806,6 +826,8 @@ async fn mutation_check_removing_one_filter_turns_the_suite_red() {
         ("entity graph", &[("entities.select_by_vault", "WHERE vault = $vault")], |_| Call::Tool("entities_graph", json!({}))),
         ("cache list", &[("cache.list_records", "owner = $owner")], |_| Call::Tool("list", json!({"type": "note"}))),
         ("routed records", &[("cache.list_records", "vault IN $vaults")], |_| Call::Tool("list", json!({"type": "note"}))),
+        // control statements: the control database is shared, so the org filter is the only layer
+        ("org invitations", &[("invitations.list", "WHERE org = $org")], |_| Call::Route("/api/org/invitations".into())),
     ];
     let probe = |caller: &Org, victim: &Org, call: Call| {
         let w = &w;
@@ -907,6 +929,162 @@ async fn other_orgs_users_cannot_be_probed_by_email() {
     let strip = |v: &Value, email: &str| v["error"].as_str().unwrap().replace(email, "<email>");
     assert_eq!(strip(&other_org, "beta@example.com"), strip(&nobody, "nobody@example.com"), "{other_org} vs {nobody}");
     assert!(other_org["error"].as_str().unwrap().contains("no user with email"));
+}
+
+/// Organisation invitations live in the shared control database, so only the org filter keeps them
+/// apart. An owner of org A, signed in, with B's invitation id and B's members' emails: lists, seats,
+/// resend and withdraw see nothing of B's and change nothing of B's, and inviting B's member looks like
+/// inviting nobody.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn org_admins_cannot_see_or_touch_another_orgs_invitations_or_members() {
+    let _g = SERIAL.lock().await;
+    let w = build(Mode::Normal).await;
+    let cookie = |email: &str| {
+        let router = w.router.clone();
+        let email = email.to_string();
+        async move {
+            let ((status, body), set) =
+                common::http(&router, "POST", "/api/auth/login", Some(json!({"email": email, "password": common::PASSWORD})), None, None).await;
+            assert_eq!(status, axum::http::StatusCode::OK, "{body}");
+            set.unwrap().split(';').next().unwrap().to_string()
+        }
+    };
+    let (a_cookie, b_cookie) = (cookie("alpha@example.com").await, cookie("beta@example.com").await);
+    // B also has a member who joined through an invitation, and another open invitation
+    let ((status, created), _) =
+        common::http(&w.router, "POST", "/api/org/invitations", Some(json!({"email": "bea@example.com"})), None, Some(&b_cookie)).await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{created}");
+    let b_token = created["token"].as_str().unwrap().to_string();
+    let b_inv = created["invitation"]["id"].as_str().unwrap().to_string();
+    let b_list_before = common::http(&w.router, "GET", "/api/org/invitations", None, None, Some(&b_cookie)).await.0 .1;
+    let b_seats = common::http(&w.router, "GET", "/api/org/seats", None, None, Some(&b_cookie)).await.0 .1;
+    assert_eq!(b_list_before.as_array().unwrap().len(), 2, "{b_list_before}");
+
+    let mut seen = String::new();
+    for (method, path) in [
+        ("GET", "/api/org/invitations".to_string()),
+        ("GET", "/api/org/seats".to_string()),
+        ("POST", format!("/api/org/invitations/{}/resend", path_value("invitation_id", &w.b))),
+        ("DELETE", format!("/api/org/invitations/{}", path_value("invitation_id", &w.b))),
+        ("POST", format!("/api/org/invitations/{b_inv}/resend")),
+        ("DELETE", format!("/api/org/invitations/{b_inv}")),
+    ] {
+        let ((status, body), _) = common::http(&w.router, method, &path, None, None, Some(&a_cookie)).await;
+        if method != "GET" {
+            assert_eq!((status.as_u16(), body["code"].as_str()), (404, Some("invitation.not_found")), "{method} {path}: {body}");
+        }
+        seen.push_str(&body.to_string());
+    }
+    for leak in [w.b.canary.as_str(), b_inv.as_str(), "bea@example.com", &b_token] {
+        assert!(!seen.contains(leak), "A learned {leak} from B's invitations: {seen}");
+    }
+    let a_seats: Value = common::http(&w.router, "GET", "/api/org/seats", None, None, Some(&a_cookie)).await.0 .1;
+    assert_eq!(a_seats, json!({"active_members": 1, "suspended_members": 0, "pending_invitations": 1}), "A counts only its own");
+
+    // B's side is exactly as it was: same invitations (same ids, same expiry), same seats, link still works
+    let b_list_after = common::http(&w.router, "GET", "/api/org/invitations", None, None, Some(&b_cookie)).await.0 .1;
+    assert_eq!(b_list_after, b_list_before);
+    assert_eq!(common::http(&w.router, "GET", "/api/org/seats", None, None, Some(&b_cookie)).await.0 .1, b_seats);
+    let ((status, _), _) = common::http(&w.router, "POST", "/api/invitations/lookup", Some(json!({"token": b_token})), None, None).await;
+    assert_eq!(status.as_u16(), 200);
+
+    // inviting B's owner from A looks exactly like inviting an email with no account
+    let invite = |email: &'static str| {
+        let (router, c) = (w.router.clone(), a_cookie.clone());
+        async move { common::http(&router, "POST", "/api/org/invitations", Some(json!({"email": email})), None, Some(&c)).await.0 }
+    };
+    let (s1, to_b) = invite("beta@example.com").await;
+    let (s2, to_nobody) = invite("nobody@example.com").await;
+    assert_eq!((s1, s2), (axum::http::StatusCode::OK, axum::http::StatusCode::OK), "{to_b} {to_nobody}");
+    let keys = |v: &Value| v["invitation"].as_object().unwrap().keys().cloned().collect::<Vec<_>>();
+    assert_eq!(keys(&to_b), keys(&to_nobody));
+    // and B's owner cannot use it to slip into A: an account is in one org
+    let ((status, body), _) =
+        common::http(&w.router, "POST", "/api/invitations/accept", Some(json!({"token": to_b["token"]})), None, Some(&b_cookie)).await;
+    assert_eq!((status.as_u16(), body["code"].as_str()), (409, Some("invitation.other_org")), "{body}");
+    assert_eq!(models_user::user_by_email(&w.state.control, "beta@example.com").await.unwrap().unwrap().org, w.b.user.org);
+}
+
+/// Every invitation statement that names an org filters on it, and the suite sees it go: each case is
+/// clean with the filter and leaks (or acts on the other org) without it. The control database is shared
+/// by every org, so for these statements the filter is the only wall.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn invitation_routes_go_red_when_their_org_filter_is_removed() {
+    let _g = SERIAL.lock().await;
+    let w = build(Mode::Normal).await;
+    let login = |email: &'static str| {
+        let router = w.router.clone();
+        async move {
+            let ((status, body), set) =
+                common::http(&router, "POST", "/api/auth/login", Some(json!({"email": email, "password": common::PASSWORD})), None, None).await;
+            assert_eq!(status, axum::http::StatusCode::OK, "{body}");
+            set.unwrap().split(';').next().unwrap().to_string()
+        }
+    };
+    let a = login("alpha@example.com").await;
+    // a plain member of A who also holds an `admin` membership row in B (newer, so A stays their home)
+    let ((_, made), _) = common::http(&w.router, "POST", "/api/org/invitations", Some(json!({"email": "mo@example.com"})), None, Some(&a)).await;
+    let ((status, _), _) = common::http(&w.router, "POST", "/api/auth/register", Some(json!({"email": "mo@example.com", "password": common::PASSWORD, "invitation": made["token"]})), None, None).await;
+    assert_eq!(status.as_u16(), 200);
+    let mo = models_user::user_by_email(&w.state.control, "mo@example.com").await.unwrap().unwrap();
+    w.state.control.test_raw()
+        .query("CREATE membership SET user = $u, org = $o, role = 'admin', slot = string::concat(<string>$o, '/', <string>$u), created_at = time::now() + 1d")
+        .bind(("u", mo.id.clone()))
+        .bind(("o", w.b.user.org.record()))
+        .await.unwrap().check().unwrap();
+    let m = login("mo@example.com").await;
+    let b_inv = path_value("invitation_id", &w.b);
+    let b_canary = w.b.canary.clone();
+
+    // (statements and the filter text to drop, what a leak looks like)
+    let call = |method: &'static str, path: String, body: Option<Value>, cookie: String| {
+        let router = w.router.clone();
+        async move { common::http(&router, method, &path, body, None, Some(&cookie)).await.0 }
+    };
+    let leaked = |case: &str| {
+        let (a, m, b_inv, b_canary) = (a.clone(), m.clone(), b_inv.clone(), b_canary.clone());
+        let case = case.to_string();
+        async move {
+            match case.as_str() {
+                "list" => call("GET", "/api/org/invitations".into(), None, a).await.1.to_string().contains(&b_canary),
+                "seats" => call("GET", "/api/org/seats".into(), None, a).await.1["pending_invitations"] != json!(1),
+                "resend" => call("POST", format!("/api/org/invitations/{b_inv}/resend"), None, a).await.0.as_u16() == 200,
+                "revoke" => call("DELETE", format!("/api/org/invitations/{b_inv}"), None, a).await.0.as_u16() == 200,
+                "member email" => {
+                    // A asks to invite B's owner: "already in this organisation" would say B's owner has an account
+                    let (status, body) = call("POST", "/api/org/invitations".into(), Some(json!({"email": "beta@example.com"})), a.clone()).await;
+                    if status.as_u16() == 200 {
+                        let id = body["invitation"]["id"].as_str().unwrap().to_string();
+                        call("DELETE", format!("/api/org/invitations/{id}"), None, a).await;
+                    }
+                    body["detail"] == "That person is already in this organisation."
+                }
+                // mo's role in A is member; with the filter gone, B's `admin` row would make mo a manager of A
+                "role" => call("GET", "/api/org/invitations".into(), None, m).await.0.as_u16() == 200,
+                _ => unreachable!(),
+            }
+        }
+    };
+    let cases: &[(&str, &[(&str, &str)])] = &[
+        ("list", &[("invitations.list", "WHERE org = $org")]),
+        ("seats", &[("invitations.seats", "WHERE org = $org")]),
+        ("resend", &[("invitations.role_of", "AND org = $org"), ("invitations.resend", "AND org = $org")]),
+        ("member email", &[("control.email_in_org", "AND id IN (SELECT VALUE user FROM membership WHERE org = $org)")]),
+        ("role", &[("invitations.role_in_org", "AND org = $org")]),
+        // last: it really withdraws B's invitation once the filter is gone
+        ("revoke", &[("invitations.role_of", "AND org = $org"), ("invitations.revoke", "AND org = $org")]),
+    ];
+    for (case, _) in cases {
+        assert!(!leaked(case).await, "{case} leaks before any mutation");
+    }
+    for (case, stmts) in cases {
+        for (stmt, from) in *stmts {
+            isolation::mutate(stmt, from, if from.starts_with("WHERE") { "WHERE true" } else { "AND true" });
+        }
+        let hit = leaked(case).await;
+        isolation::clear_mutations();
+        assert!(hit, "removing the org filter from {stmts:?} ({case}) must show or touch the other org's data");
+    }
 }
 
 /// The runtime counter is exposed to admins and reads zero.

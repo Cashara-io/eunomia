@@ -69,12 +69,25 @@ VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usag
 # Tables this checkout's tenant migrations add (0023_changes: the change log and its per-vault
 # counter; 0024_redact_backfill: the backfill's per-org marker; 0028_peers: peer vaults;
 # 0031_credential_refs: the credential broker's references and provider settings;
-# 0032_secret_requests: secret requests and the secrets Eunomia holds for agents; 0046_fact_dates: the
-# fact-date backfill's per-org marker and its ledger of re-dated facts (empty: the seed cites no record); 0033_ontology: the kinds
-# and link types a vault's owners reviewed; 0034_ontology_properties: typed properties and their values; 0035_ontology_metrics: certified metrics). Where <from-tag> lacks one, the update must add it to
+# 0032_secret_requests: secret requests and the secrets Eunomia holds for agents; 0033_ontology: the kinds
+# and link types a vault's owners reviewed; 0034_ontology_properties: typed properties and their values; 0035_ontology_metrics: certified metrics;
+# 0044_audit_chain: access reviews and their decisions; 0045_erasure: data-subject export archives;
+# 0046_fact_dates: the fact-date backfill's per-org marker and its ledger of re-dated facts, empty because
+# the seed cites no record). Where <from-tag> lacks one, the update must add it to
 # every org database, holding only what the backfill writes (new_rows below). Their counts are checked
 # on their own, so they are left out of the before/after diff.
-NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill peer_instance peer_share peer_link peer_item credential_ref secret_provider secret_request vault_secret ontology_kind ontology_link ontology_property entity_property ontology_metric ontology_event composio_file fact_dates_backfill fact_dates_redated}"
+NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill peer_instance peer_share peer_link peer_item credential_ref secret_provider secret_request vault_secret ontology_kind ontology_link ontology_property entity_property ontology_metric ontology_event composio_file access_review access_review_decision subject_export fact_dates_backfill fact_dates_redated}"
+# Control tables added by control migrations (0009: two-step verification; 0011: erasure records and the
+# per-workspace erasure locks; 0012: organisation invitations). Empty after an update: nothing backfills them, and the boot-time erasure
+# re-apply (subject::reapply_on_start) writes nothing while no erasure was ever recorded.
+NEW_CONTROL_TABLES="${UPDATE_PATH_NEW_CONTROL_TABLES:-mfa_recovery_code mfa_challenge instance_setting erasure erasure_lock org_invitation}"
+# The audit chain's control tables (control 0010, docs/audit-chain.md): one head per ledger and its
+# checkpoints. They follow audit_event (volatile): a ledger gets its head and genesis checkpoint when its
+# first event after the update is sealed (the redaction backfill's event, a sign-in), and its head moves
+# with every later event. So their counts are not compared exactly; the "audit chain" checks below check what must
+# hold instead: every head is its ledger's newest sealed event, one genesis per ledger, the rows from
+# before the update stay unchained and untouched, and a re-run only appends to the chain.
+CHAIN_TABLES="${UPDATE_PATH_CHAIN_TABLES:-audit_head audit_checkpoint}"
 BUILT_FROM=0
 # A fake GitHub token shape (built here, never a real one) in one fact: the backfill must redact it.
 FAKE_GH="ghp_$(printf 'Ab1Cd2Ef3G%.0s' 1 2 3 4)"
@@ -134,7 +147,7 @@ counts() { # counts: "<db>.<table> <rows>" for control and every org database, s
       'to_entries[] | "\($db).\($t[.key]) \(.value.result[0].count // 0)"'
   done | sort
 }
-stable() { awk -v v=" $VOLATILE $NEW_TABLES " '{ split($1, a, "."); if (index(v, " " a[2] " ") == 0) print }' "$1"; }
+stable() { awk -v v=" $VOLATILE $NEW_TABLES $CHAIN_TABLES " '{ split($1, a, "."); if (index(v, " " a[2] " ") == 0) print }' "$1"; }
 tables() { cut -d' ' -f1 "$1"; }
 # new_rows DB TABLE : the rows a NEW_TABLES table holds right after the update. None (nothing backfills
 # the change log), bar what the redaction backfill (0024) writes: one marker row per org and, in the org
@@ -146,13 +159,36 @@ new_rows() {
     *) echo 0 ;;
   esac
 }
-expected_new() { # expected_new COUNTS-BEFORE : "<db>.<table> <new_rows>" for each NEW_TABLES table an org database lacked
+expected_new() { # expected_new COUNTS-BEFORE : "<db>.<table> <new_rows>" for each NEW_TABLES table an org database lacked, and each NEW_CONTROL_TABLES table control lacked (empty)
   local db t
-  for db in $(tables "$1" | cut -d. -f1 | grep '^org_' | sort -u); do
-    for t in $NEW_TABLES; do grep -q "^$db\.$t " "$1" || echo "$db.$t $(new_rows "$db" "$t")"; done
-  done | sort
+  {
+    for db in $(tables "$1" | cut -d. -f1 | grep '^org_' | sort -u); do
+      for t in $NEW_TABLES; do grep -q "^$db\.$t " "$1" || echo "$db.$t $(new_rows "$db" "$t")"; done
+    done
+    for t in $NEW_CONTROL_TABLES; do grep -q "^control\.$t " "$1" || echo "control.$t 0"; done
+  } | sort
 }
 added() { awk 'NR == FNR { seen[$1] = 1; next } !($1 in seen)' "$1" "$2" | sort; }   # added BEFORE AFTER : lines of AFTER whose table BEFORE lacks
+no_chain() { awk -v v=" $CHAIN_TABLES " '{ split($1, a, "."); if (index(v, " " a[2] " ") == 0) print }'; }   # drops the chain tables (the "audit chain" checks cover them)
+# The audit chain, read from control. chain_events: "<ledger> <seq> <hash>" of every sealed event.
+chain_events() { echo 'SELECT ledger, seq, hash FROM audit_event WHERE seq != NONE ORDER BY ledger, seq;' | sql control | jq -r '.[0].result[] | "\(.ledger) \(.seq) \(.hash)"'; }
+legacy_events() { echo 'SELECT count() FROM audit_event WHERE ledger = NONE GROUP ALL;' | sql control | jq -r '.[0].result[0].count // 0'; }
+chain_pending() { echo 'SELECT count() FROM audit_event WHERE pending = true GROUP ALL;' | sql control | jq -r '.[0].result[0].count // 0'; }
+# chain_consistent : every head is its ledger's newest sealed event (seq and hash), every ledger with a
+# sealed event has a head, each head has exactly one genesis checkpoint, and no checkpoint is of a kind
+# an update cannot write (only genesis and periodic: no retention cut runs here).
+chain_consistent() {
+  local heads ev gen kinds
+  heads="$(echo 'SELECT ledger, seq, hash FROM audit_head ORDER BY ledger;' | sql control | jq -r '.[0].result[] | "\(.ledger) \(.seq) \(.hash)"' | sort)"
+  ev="$(chain_events | awk '{ last[$1] = $0 } END { for (l in last) print last[l] }' | sort)"
+  [ "$heads" = "$ev" ] || { log "heads: $heads"; log "newest sealed events: $ev"; return 1; }
+  gen="$(echo "SELECT ledger, count() AS n FROM audit_checkpoint WHERE kind = 'genesis' GROUP BY ledger;" | sql control | jq -r '.[0].result[] | "\(.ledger) \(.n)"' | sort)"
+  [ "$gen" = "$(echo "$heads" | awk 'NF { print $1, 1 }' | sort)" ] || { log "genesis checkpoints: $gen"; return 1; }
+  kinds="$(echo 'SELECT VALUE kind FROM audit_checkpoint;' | sql control | jq -r '.[0].result[]' | sort -u | tr '\n' ' ')"
+  case " $kinds" in *retention*) log "checkpoint kinds: $kinds"; return 1 ;; esac
+}
+# wait_sealed SECONDS : nothing left pending (the background sealer and the leader's replay catch up)
+wait_sealed() { local until=$((SECONDS + $1)); while [ $SECONDS -lt $until ]; do [ "$(chain_pending)" = 0 ] && return 0; sleep 3; done; return 1; }
 others_empty() { # others_empty COUNTS ORG : the change log (change, change_seq) outside ORG holds no row
   awk -v org="$2" -v n=" change change_seq " '{ split($1, a, "."); if (a[1] != org && index(n, " " a[2] " ") && $2 != 0) bad = 1 } END { exit bad }' "$1"
 }
@@ -591,9 +627,18 @@ new_empty() { awk 'NR==FNR { seen[$1] = 1; next } !($1 in seen) && $2 == 0' "$1"
 check "per-table row counts unchanged (bar $VOLATILE; _migration grown by the new migrations)" diff "$W/stable-expected.txt" "$W/stable-after.txt"
 diff "$W/stable-expected.txt" "$W/stable-after.txt" | head -20
 check "no table gone after the update" test -z "$(added "$W/counts-after.txt" "$W/counts-before.txt")"
-expected_new "$W/counts-before.txt" > "$W/new-expected.txt"; added "$W/counts-before.txt" "$W/counts-after.txt" > "$W/new-after.txt"
+expected_new "$W/counts-before.txt" > "$W/new-expected.txt"; added "$W/counts-before.txt" "$W/counts-after.txt" | no_chain > "$W/new-after.txt"
 check "the new tables are exactly the migrations' ($NEW_TABLES), in every org database, holding only the backfill's rows" diff "$W/new-expected.txt" "$W/new-after.txt"
 diff "$W/new-expected.txt" "$W/new-after.txt" | head -20
+# The audit chain (control 0010). The rows the old release wrote have no ledger: the update chains none of
+# them and deletes none (more may have been written by the old release after the snapshot, the update
+# request itself). What is sealed after the update is one consistent chain per ledger.
+LEGACY_BEFORE="$(awk '$1 == "control.audit_event" { print $2 }' "$W/counts-before.txt")"
+check "the audit chain: everything written since the update is sealed" wait_sealed 120
+LEGACY_AFTER="$(legacy_events)"
+check "the audit chain: the $LEGACY_BEFORE events from before the update stay unchained and kept ($LEGACY_AFTER now)" test "${LEGACY_AFTER:-0}" -ge "${LEGACY_BEFORE:-0}"
+check "the audit chain: each head is its ledger's newest sealed event, one genesis each" chain_consistent
+chain_events > "$W/chain-after.txt"
 # The redaction backfill (tenant 0024), waited for above: the seeded token is gone and the marker is in
 # its place, one finished marker row and one redact.backfill event per org, the rewrite in the change log
 # (0023) as an update by system. The counts above already hold its effect: it rewrites rows, it adds or
@@ -667,7 +712,15 @@ check "no new ledger rows" diff "$W/ledgers-after.txt" "$W/ledgers-again.txt"
 counts > "$W/counts-again.txt"; stable "$W/counts-again.txt" > "$W/stable-again.txt"
 check "counts unchanged after the re-run" diff "$W/stable-expected.txt" "$W/stable-again.txt"
 diff "$W/stable-expected.txt" "$W/stable-again.txt" | head -20
-check "the new tables' counts unchanged after the re-run (the backfill does not run twice)" diff "$W/new-expected.txt" <(added "$W/counts-before.txt" "$W/counts-again.txt")
+check "the new tables' counts unchanged after the re-run (the backfill does not run twice)" diff "$W/new-expected.txt" <(added "$W/counts-before.txt" "$W/counts-again.txt" | no_chain)
+# The chain may grow on the re-run (a restart can seal new events), but only by appending: every event
+# sealed after the update is still there with the same sequence number and hash, and the rows from before
+# the update are still unchained.
+check "the audit chain after the re-run: everything sealed" wait_sealed 120
+chain_events > "$W/chain-again.txt"
+check "the audit chain after the re-run: only appended to (every event sealed after the update unchanged)" test -z "$(awk 'NR == FNR { seen[$0] = 1; next } !($0 in seen)' "$W/chain-again.txt" "$W/chain-after.txt")"
+check "the audit chain after the re-run: the events from before the update still unchained" test "$(legacy_events)" = "$LEGACY_AFTER"
+check "the audit chain after the re-run: each head is its ledger's newest sealed event, one genesis each" chain_consistent
 check "no new redact.backfill event on the re-run" test "$(backfill_events)" = "$BACKFILL_EVENTS"
 check "the fact is still redacted" bash -c 'case "$1" in *"[redacted: github token]"*) exit 0;; esac; exit 1' _ "$(memtext)"
 

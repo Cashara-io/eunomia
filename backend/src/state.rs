@@ -21,6 +21,8 @@ pub struct AppStateInner {
     pub large_bodies: crate::ratelimit::LargeBodies,
     /// Failed sign-ins per account and per OAuth client (see `ratelimit::FailThrottle`).
     pub fail_throttle: crate::ratelimit::FailThrottle,
+    /// Organisation invitations created, resent, looked up and accepted (see `invitations.rs`).
+    pub invite_limiter: crate::ratelimit::RateLimiter,
     /// Generic refusal budget per credential, with timer-flushed suppression summaries.
     pub(crate) scope_refusal_audit: crate::audit::scope_refusals::ScopeRefusals,
     /// Credentials verified in the last few seconds (see `auth::Credentials`).
@@ -60,7 +62,10 @@ impl AppState {
     pub async fn build(settings: &Settings, config: surrealdb::opt::Config) -> AppResult<AppState> {
         // before anything derives a database password from the key
         crate::connectors::crypto::require_key(settings)?;
+        // a gap in the registered migrations would skip a number for good (docs/audit-chain.md)
+        crate::migrate::require_contiguous()?;
         crate::redact::init();
+        crate::audit::chain::set_detail_key(&settings.encryption_key);
         let templates = crate::db::connect_all(settings, config).await?;
         let template = &templates[0];
         let provisioner = Provisioner::connect(template, settings);
@@ -78,23 +83,55 @@ impl AppState {
             None => crate::connectors::crypto::rotate_tenant_passwords(settings, &control).await?,
         };
         let pool = Pool::new(templates, control.clone(), settings);
+        if let Some(p) = &provisioner {
+            let repair = std::env::var("EUNOMIA_REPAIR_MIGRATIONS").is_ok_and(|v| v.trim() == "1");
+            guard_skipped_migrations(p, &control, &pool, repair).await?;
+        }
         let scope_refusal_audit = crate::audit::scope_refusals::ScopeRefusals::new(control.clone());
-        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner, settings: settings.clone(), composio_publishing: Default::default(), large_bodies: Default::default(), fail_throttle: Default::default(), scope_refusal_audit, credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
+        // every process drains its own audit replay queue, leader or not
+        crate::audit::chain::start_drain();
+        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner, settings: settings.clone(), composio_publishing: Default::default(), large_bodies: Default::default(), fail_throttle: Default::default(), invite_limiter: Default::default(), scope_refusal_audit, credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
     }
 
     /// Connect to an install that is already set up, without provisioning or moving anything
     /// (`eunomia replay` reads a live database and must not change it).
     pub async fn attach(settings: &Settings, config: surrealdb::opt::Config) -> AppResult<AppState> {
         crate::connectors::crypto::require_key(settings)?;
+        crate::audit::chain::set_detail_key(&settings.encryption_key);
         let templates = crate::db::connect_all(settings, config).await?;
         let control = crate::pool::connect_control(&templates, settings).await?;
         let pool = Pool::new(templates, control.clone(), settings);
         let scope_refusal_audit = crate::audit::scope_refusals::ScopeRefusals::new(control.clone());
-        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner: None, settings: settings.clone(), composio_publishing: Default::default(), large_bodies: Default::default(), fail_throttle: Default::default(), scope_refusal_audit, credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
+        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner: None, settings: settings.clone(), composio_publishing: Default::default(), large_bodies: Default::default(), fail_throttle: Default::default(), invite_limiter: Default::default(), scope_refusal_audit, credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
     }
 
     /// The org's database, bundled with the app state.
     pub async fn org(&self, org: &OrgId) -> AppResult<OrgState> {
         Ok(OrgState { app: self.clone(), db: self.pool.for_org(org).await? })
     }
+}
+
+/// An org whose database applied a migration numbered above one it lacks is not served: with the
+/// missing one unapplied its data may not be what the code expects, and nothing would ever apply
+/// it. Each is reported by id on stderr and in the log. `repair` (`EUNOMIA_REPAIR_MIGRATIONS=1` at
+/// boot) applies the missing migrations instead (they run after newer ones, so read their notes first);
+/// see docs/audit-chain.md, "Migration numbers".
+pub async fn guard_skipped_migrations(p: &Provisioner, control: &crate::pool::ControlDb, pool: &Pool, repair: bool) -> AppResult<()> {
+    let gaps = p.find_migration_gaps(control).await?;
+    for (org, missing) in gaps {
+        let list = missing.iter().map(|v| format!("{v:04}")).collect::<Vec<_>>().join(", ");
+        if repair {
+            eprintln!("warning: org {} lacks tenant migration(s) {list} below ones it has; applying them now (EUNOMIA_REPAIR_MIGRATIONS=1)", org.key());
+            p.migrate_org(control, &org).await?;
+            pool.unblock(&org);
+            continue;
+        }
+        let why = format!(
+            "This organisation's database is missing migration(s) {list}, which newer ones were applied over. It is not served until an operator repairs it (docs/audit-chain.md, \"Migration numbers\")."
+        );
+        eprintln!("error: org {} lacks tenant migration(s) {list} below ones it has: not serving it. Restart once with EUNOMIA_REPAIR_MIGRATIONS=1 to apply them.", org.key());
+        tracing::error!(org = %org.key(), "org database lacks a migration below its newest: not serving it");
+        pool.block(&org, why);
+    }
+    Ok(())
 }

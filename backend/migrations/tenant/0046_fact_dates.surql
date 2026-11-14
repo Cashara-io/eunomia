@@ -41,3 +41,9 @@ DEFINE FIELD OVERWRITE redated_at ON fact_dates_redated TYPE datetime DEFAULT ti
 -- set by an undo: the previous dates are back (unless they changed since), and the row stays so no
 -- later run dates the fact again
 DEFINE FIELD OVERWRITE undone_at ON fact_dates_redated TYPE option<datetime>;
+-- A ledger row goes with its fact: whatever deletes a memory (a person's delete, a source's removal, a
+-- re-extract, a data subject's erasure) takes its row too, so the ledger never names a fact that is gone.
+DEFINE INDEX OVERWRITE fact_dates_redated_memory_idx ON fact_dates_redated FIELDS memory;
+DEFINE EVENT OVERWRITE fact_dates_redated_follows_memory ON memory
+    WHEN $event = "DELETE"
+    THEN (DELETE fact_dates_redated WHERE memory = $before.id);
