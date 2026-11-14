@@ -72,12 +72,15 @@ pub const ALL: &[&ControlStmt] = &[
     &IDENTITY_LIST_FOR_USER,
     &IDENTITY_DELETE_USER,
     &AUTH_SESSION_REVOKE_OWNER,
+    &AUTH_SET_ASIDE,
+    &AUTH_SET_ASIDE_UNDO,
     &ADMIN_AUDIT_PAGE,
     &ADMIN_PEOPLE,
     &ADMIN_LAST_SEEN,
     &ADMIN_TOKEN_NAMES,
     &ADMIN_TOKEN_COUNTS,
     &USER_ADMIN_FLAG,
+    &USER_EMAIL_LC,
     &USER_SET_ADMIN,
     &USER_SET_SUSPENDED,
     &MFA_USER_STATE,
@@ -110,6 +113,7 @@ pub const ALL: &[&ControlStmt] = &[
     &MFA_SESSION_BY_SID,
     &INSTANCE_SECURITY_GET,
     &INSTANCE_SECURITY_SET,
+    &USER_SUSPENDED,
 ];
 
 /// `$via` is how the browser signed in (`password` or `oidc`); `$mfa` marks a session that passed a second factor.
@@ -436,6 +440,26 @@ pub const IDENTITY_DELETE_USER: ControlStmt = ControlStmt::new("control.identity
 pub const AUTH_SESSION_REVOKE_OWNER: ControlStmt =
     ControlStmt::new("control.auth_session_revoke_owner", "UPDATE session SET revoked = true WHERE owner = $owner AND revoked = false");
 
+/// Sets an account aside when a provider-verified sign-in for its address starts a new account instead
+/// (`routers/oidc.rs`, `start_fresh`): suspended (every way in and every job refuse it), its sign-in address
+/// replaced by a placeholder no address can match, its sessions ended. Its data is not touched. The raw
+/// `email` keeps the old address after the placeholder, for the operator reviewing it.
+pub const AUTH_SET_ASIDE: ControlStmt = ControlStmt::new(
+    "control.auth_set_aside",
+    "BEGIN TRANSACTION; \
+     UPDATE $user SET suspended_at = (suspended_at ?? time::now()), email_lc = string::concat('set-aside:', <string>$user), \
+        email = string::concat('set-aside:', <string>$user, ' (was ', email, ')'); \
+     UPDATE session SET revoked = true WHERE owner = $user AND revoked = false; \
+     DELETE mfa_challenge WHERE user = $user; \
+     COMMIT TRANSACTION;",
+);
+
+/// Undoes [`AUTH_SET_ASIDE`] when the new account could not be made (ended sessions stay ended).
+pub const AUTH_SET_ASIDE_UNDO: ControlStmt = ControlStmt::new(
+    "control.auth_set_aside_undo",
+    "UPDATE $user SET email = $email, email_lc = $email_lc, suspended_at = $suspended_at",
+);
+
 // workspace admin (routers/admin.rs)
 
 /// A page of the security ledger for one org, newest first: rows of its members plus the
@@ -455,7 +479,7 @@ pub const ADMIN_AUDIT_PAGE: ControlStmt = ControlStmt::new(
 /// Every account in an org, oldest first.
 pub const ADMIN_PEOPLE: ControlStmt = ControlStmt::new(
     "control.admin_people",
-    "SELECT id, email, created_at, admin, suspended_at, mfa_secret_enc != NONE AS mfa, password_hash != NONE AS has_password \
+    "SELECT id, email, email_lc, created_at, admin, suspended_at, mfa_secret_enc != NONE AS mfa, password_hash != NONE AS has_password \
      FROM user WHERE id IN (SELECT VALUE user FROM membership WHERE org = $org) ORDER BY created_at, id",
 );
 
@@ -473,12 +497,19 @@ pub const ADMIN_TOKEN_NAMES: ControlStmt = ControlStmt::new("control.admin_token
 pub const ADMIN_TOKEN_COUNTS: ControlStmt =
     ControlStmt::new("control.admin_token_counts", "SELECT owner, count() AS n FROM api_token WHERE owner IN $ids GROUP BY owner");
 
+/// The stored, normalized address of an account (`authz::is_operator`). A legacy duplicate holds a
+/// `duplicate:` placeholder instead.
+pub const USER_EMAIL_LC: ControlStmt = ControlStmt::new("control.user_email_lc", "SELECT VALUE email_lc FROM user WHERE id = $id LIMIT 1");
+
 /// Whether an admin granted this account admin rights in the app (`authz::is_admin`).
 pub const USER_ADMIN_FLAG: ControlStmt = ControlStmt::new("control.user_admin_flag", "SELECT admin FROM user WHERE id = $id LIMIT 1");
 
 /// Grants (`true`) or takes back (`NONE`) admin rights granted in the app.
 pub const USER_SET_ADMIN: ControlStmt =
     ControlStmt::new("control.user_set_admin", "UPDATE user SET admin = $admin WHERE id = $id RETURN id");
+
+/// When an account was suspended (`NONE` while active; no row for a record that is not an account).
+pub const USER_SUSPENDED: ControlStmt = ControlStmt::new("control.user_suspended", "SELECT VALUE suspended_at FROM user WHERE id = $id LIMIT 1");
 
 /// Suspends (now) or restores an account. Suspending again keeps the first time.
 pub const USER_SET_SUSPENDED: ControlStmt = ControlStmt::new(

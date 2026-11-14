@@ -1467,6 +1467,18 @@ export type LinkCheck = {
     values: number;
 };
 
+export type LinkChoice = {
+    /**
+     * The existing account's password: proves it is yours, and links without removing anything.
+     */
+    password?: string | null;
+    /**
+     * `true`: you don't know the password. A new, empty account is made for you; the existing one is set
+     * aside (suspended, nothing of it inherited) for a server operator to review, restore or erase.
+     */
+    start_fresh?: boolean;
+};
+
 export type LinkDecideBody = {
     decision: LinkDecision;
     from_kind: string;
@@ -1483,6 +1495,35 @@ export type LinkDecision = {
 } | {
     action: 'describe';
     description: string;
+};
+
+export type LinkDone = {
+    /**
+     * Set when the password was right but the account's second step comes first: `verify` (enter the
+     * account's authenticator code) or `enrol` (this server requires two-step verification: set it up).
+     * No session and no link yet; the response sets the short-lived second-step cookie, and the link is
+     * made when that step passes.
+     */
+    mfa?: string | null;
+    /**
+     * Where to go next.
+     */
+    next: string;
+    /**
+     * A new account was made and the existing one set aside.
+     */
+    started_fresh: boolean;
+};
+
+export type LinkInfo = {
+    /**
+     * The address both the provider and the existing account have.
+     */
+    email: string;
+    /**
+     * "Continue with {provider}".
+     */
+    provider: string;
 };
 
 /**
@@ -3748,6 +3789,50 @@ export type OidcCallbackResponses = {
 };
 
 export type OidcCallbackResponse = OidcCallbackResponses[keyof OidcCallbackResponses];
+
+export type OidcLinkInfoData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/oidc/link';
+};
+
+export type OidcLinkInfoErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcLinkInfoError = OidcLinkInfoErrors[keyof OidcLinkInfoErrors];
+
+export type OidcLinkInfoResponses = {
+    200: LinkInfo;
+};
+
+export type OidcLinkInfoResponse = OidcLinkInfoResponses[keyof OidcLinkInfoResponses];
+
+export type OidcLinkData = {
+    body: LinkChoice;
+    path?: never;
+    query?: never;
+    url: '/api/auth/oidc/link';
+};
+
+export type OidcLinkErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcLinkError = OidcLinkErrors[keyof OidcLinkErrors];
+
+export type OidcLinkResponses = {
+    200: LinkDone;
+};
+
+export type OidcLinkResponse = OidcLinkResponses[keyof OidcLinkResponses];
 
 export type OidcStartData = {
     body?: never;

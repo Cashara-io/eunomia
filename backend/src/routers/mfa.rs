@@ -195,10 +195,17 @@ async fn link_after_second_step(state: &AppState, c: &mfa::Challenge, issuer: &s
         }
         Err(e) => return Err(e),
     }
-    crate::store::control::AUTH_SESSION_REVOKE_OWNER.on(&state.control).bind(("owner", c.user.clone())).await?.check()?;
-    state.credentials.clear();
+    // An account with a password got here through "link to my account" (its password was proved): linked,
+    // nothing removed, as without two-step verification. One without a password ends its other sessions, as
+    // an immediate link does (`routers/oidc.rs::map_identity`).
+    let proved_password = mfa::status(&state.control, &c.user).await?.available;
+    if !proved_password {
+        crate::store::control::AUTH_SESSION_REVOKE_OWNER.on(&state.control).bind(("owner", c.user.clone())).await?.check()?;
+        state.credentials.clear();
+    }
     let actor = authz::Actor { kind: "user", id: crate::rid::RecordIdExt::to_string(&c.user) };
-    crate::audit::record(&state.control, crate::audit::Event { user: Some(&c.user), actor: &actor, action: "auth.oidc_link", target: "", outcome: "ok", detail: "linked to the existing account with this email, after its second step" }).await;
+    let detail = if proved_password { "linked after the account's password and its second step" } else { "linked to the existing account with this email, after its second step" };
+    crate::audit::record(&state.control, crate::audit::Event { user: Some(&c.user), actor: &actor, action: "auth.oidc_link", target: "", outcome: "ok", detail }).await;
     Ok(())
 }
 
@@ -264,6 +271,10 @@ async fn challenge_enrol_confirm(State(state): State<AppState>, https: Option<Ex
     let c = mfa::find_challenge(&state.control, &headers, "enrol").await?;
     // the password was proved by this sign-in: no second ask
     let recovery_codes = mfa::confirm_enrolment(&state, &c.user, &body.code, Some(&c), None).await?;
+    // a single sign-on identity waiting on this enrolment is linked only now (`routers/oidc.rs` link flow)
+    if let (Some(issuer), Some(subject)) = (&c.link_issuer, &c.link_subject) {
+        link_after_second_step(&state, &c, issuer, subject).await?;
+    }
     let user = finish(&state, &c, "second step: set up an authenticator").await?;
     let token = crate::auth::start_session(&state.control, &state.settings.jwt_secret, &user, crate::routers::auth::user_agent_from(&headers).as_deref(), Via::parse(&c.via), true).await?;
     let me = auth_out(&state, user).await?;

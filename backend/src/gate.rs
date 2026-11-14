@@ -73,6 +73,8 @@ pub fn explicit_class(method: &Method, path: &str) -> Option<Class> {
         // the browser leaves for the provider (a redirect, nothing to guess) and comes back (a code exchange: limited per client address like login)
         ["api", "auth", "oidc", "start"] => Public,
         ["api", "auth", "oidc", "callback"] => AuthAttempt,
+        // after a provider sign-in, before a session: proving a password here is limited like login
+        ["api", "auth", "oidc", "link"] => AuthAttempt,
         ["api", "auth", "logout" | "bootstrap"] => Public,
         ["api", "auth", "me"] => Any,
         // the second step of a password sign-in: no session yet (the short-lived MFA cookie), limited per client address like login

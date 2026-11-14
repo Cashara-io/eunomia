@@ -49,7 +49,7 @@ test.describe("Two-step verification", () => {
     await page.getByRole("button", { name: "Turn on two-step verification" }).click();
     const list = page.getByTestId("mfa-recovery-codes");
     await expect(list).toBeVisible();
-    const codes = (await list.locator("li").allInnerTexts()).map((c) => c.trim());
+    const codes = (await list.getByTestId("mfa-codes-list").locator("li").allInnerTexts()).map((c) => c.trim());
     expect(codes).toHaveLength(10);
     const existing = page.getByTestId("mfa-existing-access");
     await expect(existing).toContainText("made-before-mfa");

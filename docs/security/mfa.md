@@ -31,6 +31,12 @@ Turning the switch on or off is recorded in the operator's activity log, as are 
 
 An account that set up its own authenticator passes it on every sign-in route, single sign-on included, **even when the ID token says the provider used a second factor**: that factor proves who holds the provider identity, not who owns the Eunomia account. The person gets the same pending second step as after a password: no session until the code. The only exception is an operator's explicit choice that the provider owns MFA for this server, `OIDC_REQUIRE_MFA=true`, whose claim check the token must pass anyway; then it goes straight in and the session counts as verified.
 
+**Linking to an account that has a password** (`/login/link`, see [deployment.md](../deployment.md)). A provider sign-in whose verified email belongs to an account with a password asks before linking: the person proves the password, or starts a new account and the old one is set aside. Two-step verification adds three rules, none of which apply when `OIDC_REQUIRE_MFA=true`:
+
+- A right password for an account with its own authenticator does not link or sign in. It opens that account's second step (`mfa: verify`), and the identity is linked only when the code passes, so this path is exactly as strong as a password sign-in. Nothing is removed by the link.
+- While the server requires two-step verification, a right password for an account without an authenticator opens setup (`mfa: enrol`), and the link is made when setup is confirmed. The link flow never hands out a session that skips the requirement.
+- Starting fresh is refused while the old account has an authenticator: its owner uses the password and code, or an operator resets two-step verification. Setting an account aside also deletes its half-finished second-step challenges.
+
 Nothing irreversible happens before the second step. When a single sign-on identity would be linked to an existing account by its verified email, and that account has its own authenticator, the link (which also ends the account's other sessions) waits until the code passes. A wrong or abandoned second step leaves the account exactly as it was. Accounts without their own authenticator are unchanged: they are linked at once and the provider owns their second factor, unless `OIDC_REQUIRE_MFA` is set.
 
 | Setting | Default | Meaning |

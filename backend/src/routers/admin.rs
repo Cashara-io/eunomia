@@ -57,7 +57,7 @@ pub enum AuditCategory {
     Server,
 }
 
-const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.failed", "auth.mfa_failed", "auth.mfa_recovery_used", "auth.reauth", "auth.mfa_secret_unreadable"];
+const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.oidc_set_aside", "auth.failed", "auth.mfa_failed", "auth.mfa_recovery_used", "auth.reauth", "auth.mfa_secret_unreadable"];
 const ADMIN_ACTIONS: &[&str] = &["admin.grant", "admin.revoke", "user.suspend", "user.restore", "admin.token_revoke", "admin.require_mfa"];
 
 impl AuditCategory {
@@ -328,7 +328,9 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "auth.oidc_login" if ok && detail.contains("second step pending") => return "Single sign-on checked; asked for the account's authenticator code".into(),
         "auth.oidc_login" if ok => return "Signed in with single sign-on".into(),
         "auth.oidc_login" => return "Single sign-on sign-in failed".into(),
-        "auth.oidc_link" => "Linked a single sign-on account".into(),
+        "auth.oidc_link" if ok => "Linked a single sign-on account".into(),
+        "auth.oidc_link" => return "Linking single sign-on failed (wrong password)".into(),
+        "auth.oidc_set_aside" => format!("Set aside {}: a single sign-on for its address started a new account instead", kv(detail, "email").unwrap_or("an account")),
         "auth.register" => "Created an account".into(),
         "auth.failed" => return "Used a sign-in or token that is no longer valid".into(),
         "auth.token_create" => format!("Created the API token {}", name("(since revoked)")),
@@ -362,7 +364,7 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
 }
 
 /// Actions whose failed sentence already says why ([`describe`] returns early for them).
-const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.failed", "auth.mfa_failed", "auth.reauth", "auth.mfa_secret_unreadable", "oauth.consent", "authz.denied"];
+const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.oidc_link", "auth.failed", "auth.mfa_failed", "auth.reauth", "auth.mfa_secret_unreadable", "oauth.consent", "authz.denied"];
 
 /// Why an action failed, from the error code it ended with, in words; empty when it worked.
 /// The exact cause a failed attempt recorded in its detail (`why=...`), when it recorded one.
@@ -540,6 +542,10 @@ struct PersonRow {
     #[serde(default)]
     #[surreal(default)]
     email: String,
+    /// The stored, normalized address (`duplicate:` for a legacy duplicate): what operator status is read from.
+    #[serde(default)]
+    #[surreal(default)]
+    email_lc: Option<String>,
     created_at: Option<Datetime>,
     #[serde(default)]
     #[surreal(default)]
@@ -647,7 +653,7 @@ fn signup_policy(mode: &str, allowlist: &str, operators: &str) -> SignupPolicy {
 fn admin_source(row: &PersonRow, creator: Option<&RecordId>) -> &'static str {
     if creator == Some(&row.id) {
         "creator"
-    } else if authz::operator_email_listed(&row.email) {
+    } else if authz::stored_email_is_operator(row.email_lc.as_deref()) {
         "operator"
     } else if row.admin == Some(true) {
         "granted"
@@ -726,7 +732,7 @@ async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport>
     let mut signup = signup_policy(&env("SIGNUP"), &env("SIGNUP_ALLOWLIST"), &env("EUNOMIA_ADMIN_EMAILS"));
     // the operator list and the instance-wide allowlist (other organisations' invitees) are the server
     // operator's: an admin granted in the app sees the policy in words only
-    let operator = authz::is_operator(user) || creator.as_ref() == Some(&user.id);
+    let operator = authz::is_operator(&state.control, user).await? || creator.as_ref() == Some(&user.id);
     if !operator {
         signup.allowlist.clear();
         signup.operators.clear();
@@ -1128,6 +1134,7 @@ mod tests {
         let row = |id: &str, admin: bool, suspended: bool| PersonRow {
             id: crate::rid::parse(id).unwrap(),
             email: format!("{}@x.test", id.trim_start_matches("user:")),
+            email_lc: None,
             created_at: None,
             admin: admin.then_some(true),
             suspended_at: suspended.then(Datetime::now),

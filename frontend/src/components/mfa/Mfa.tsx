@@ -147,7 +147,7 @@ export function RecoveryCodes({ codes, onDone, doneLabel = "Done", children }: {
         Save these recovery codes somewhere safe, like a password manager. Each one signs you in once if you lose your
         authenticator app. They won&apos;t be shown again.
       </p>
-      <ul className="grid grid-cols-2 gap-x-6 gap-y-1.5 p-4 rounded-[10px] font-mono text-detail max-w-[360px]" style={{ background: "var(--surface-raised)" }}>
+      <ul data-testid="mfa-codes-list" className="grid grid-cols-2 gap-x-6 gap-y-1.5 p-4 rounded-[10px] font-mono text-detail max-w-[360px]" style={{ background: "var(--surface-raised)" }}>
         {codes.map((c) => (
           <li key={c}>{c}</li>
         ))}
