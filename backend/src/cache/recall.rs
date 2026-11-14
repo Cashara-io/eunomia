@@ -763,6 +763,40 @@ fn newest_in_window(lists: Vec<Vec<(Datetime, String)>>, limit: usize) -> Vec<St
     dated.into_iter().take(limit).map(|(_, k)| k).collect()
 }
 
+/// For each memory the text arm found, the share of the query's terms it matched (0..1].
+fn term_coverage(per_term: &[Vec<(String, f64)>]) -> HashMap<String, f64> {
+    let mut matched: HashMap<String, usize> = HashMap::new();
+    for hits in per_term {
+        let mut seen = HashSet::new();
+        for (key, _) in hits {
+            if seen.insert(key) {
+                *matched.entry(key.clone()).or_insert(0) += 1;
+            }
+        }
+    }
+    let terms = per_term.len().max(1) as f64;
+    matched.into_iter().map(|(k, n)| (k, n as f64 / terms)).collect()
+}
+
+/// Reciprocal Rank Fusion over `arms` ([`cs::rrf_scores`]), except that the memory text arm (index
+/// 4) counts each item by the share of the query's terms it matched. RRF keeps only rank, so without
+/// this a fact matching one word of "Pro plan pricing decision" sits two ranks below one matching
+/// all four, a gap of about 3%, which the recency boost (up to -50%) then overturns: a weak fact
+/// written today outranked the dated exact answer. Scaled by coverage, a partial match stays below
+/// a full one whatever their ages.
+fn fuse(arms: &[Vec<String>], coverage: &HashMap<String, f64>) -> HashMap<String, f64> {
+    let mut scores = cs::rrf_scores(arms);
+    if let Some(text) = arms.get(4) {
+        for (rank, key) in text.iter().enumerate() {
+            let share = coverage.get(key).copied().unwrap_or(1.0);
+            if let Some(s) = scores.get_mut(key) {
+                *s -= (1.0 - share) / (60.0 + rank as f64 + 1.0);
+            }
+        }
+    }
+    scores
+}
+
 /// Per-vault ranked lists of an arm without a score, as one list: rank 1 of every vault, then rank 2,
 /// and so on (vaults in `lists` order), each key once, at most `limit`.
 fn interleave<'a>(lists: impl IntoIterator<Item = &'a Vec<String>>, limit: usize) -> Vec<String> {
@@ -1091,6 +1125,7 @@ pub async fn recall(
     }
     let graph = interleave(passes.iter().map(|p| &p.graph), pool);
     let relation = interleave(passes.iter().map(|p| &p.between), pool);
+    let coverage = term_coverage(&per_term);
     let memory = cs::rank_term_hits(per_term, pool);
     let memory_semantic = by_similarity(passes.iter_mut().map(|p| std::mem::take(&mut p.semantic)), pool);
     let mut arms = [records.semantic.clone(), records.keyword.clone(), graph, Vec::new(), memory, memory_semantic, relation];
@@ -1121,7 +1156,7 @@ pub async fn recall(
         "recall: arm candidates"
     );
 
-    let rrf = cs::rrf_scores(&arms);
+    let rrf = fuse(&arms, &coverage);
     if rrf.is_empty() {
         return Ok(Recalled { items: Vec::new(), incomplete: notes.into_vec() });
     }
@@ -1375,6 +1410,26 @@ mod tests {
         assert_eq!(to_chrono(b).to_rfc3339(), "2026-04-01T00:00:00+00:00");
         let span = Span { since: d("2026-03-01T00:00:00Z"), until: d("2026-03-31T12:00:00Z"), observations: false };
         assert_eq!(to_chrono(index_safe(&span).1).to_rfc3339(), "2026-03-31T12:00:00+00:00");
+    }
+
+    #[test]
+    fn a_partial_text_match_counts_by_the_share_of_terms_it_matched() {
+        let hit = |k: &str| (k.to_string(), 1.0);
+        // four terms: "full" matches all of them, "weak" one
+        let per_term = vec![vec![hit("full"), hit("weak")], vec![hit("full")], vec![hit("full")], vec![hit("full")]];
+        let cov = term_coverage(&per_term);
+        assert_eq!(cov["full"], 1.0);
+        assert_eq!(cov["weak"], 0.25);
+        let arms: Vec<Vec<String>> = vec![vec![], vec![], vec![], vec![], vec!["full".into(), "weak".into()], vec![], vec![]];
+        let s = fuse(&arms, &cov);
+        assert!((s["full"] - 1.0 / 61.0).abs() < 1e-12, "a full match keeps its RRF share");
+        assert!((s["weak"] - 0.25 / 62.0).abs() < 1e-12);
+        // the recency boost's full range (0.5 to 1.0) no longer flips them
+        let now = Utc::now();
+        assert!(s["full"] * boost(1, Some(now - Duration::days(400)), now) > s["weak"] * boost(1, Some(now), now));
+        // other arms are untouched
+        let arms: Vec<Vec<String>> = vec![vec!["weak".into()], vec![], vec![], vec![], vec![], vec![], vec![]];
+        assert!((fuse(&arms, &cov)["weak"] - 1.0 / 61.0).abs() < 1e-12);
     }
 
     #[test]
