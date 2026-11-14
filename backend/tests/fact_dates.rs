@@ -511,7 +511,9 @@ async fn editing_a_replaced_fact_or_only_its_type_tells_nothing() {
     assert_eq!(dates(&app, &cto).await, cto_before);
     let (vp_key, cto_key) = (vp.to_string(), cto.to_string());
     let jobs = supersede_jobs(&app).await;
-    assert!(!jobs.iter().any(|k| (k.contains(vp_key.as_str()) || k.contains(cto_key.as_str())) && k.contains(":v")), "no edit queued a check: {jobs:?}");
+    // an edit's check is keyed `<memory>:v<version>`; match that suffix on the id itself, since a record id can start with "v"
+    let (vp_edit, cto_edit) = (format!("{vp_key}:v"), format!("{cto_key}:v"));
+    assert!(!jobs.iter().any(|k| k.contains(vp_edit.as_str()) || k.contains(cto_edit.as_str())), "no edit queued a check: {jobs:?}");
 }
 
 // ---- deleting the replacing fact ------------------------------------------------------------
