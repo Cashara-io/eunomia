@@ -27,7 +27,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/security", get(get_security).put(put_security))
 }
 
-async fn require_admin(state: &AppState, user: &User) -> AppResult<()> {
+pub(crate) async fn require_admin(state: &AppState, user: &User) -> AppResult<()> {
     if authz::is_admin(&state.control, user).await? {
         Ok(())
     } else {
@@ -58,7 +58,10 @@ pub enum AuditCategory {
 }
 
 const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.oidc_set_aside", "auth.failed", "auth.mfa_failed", "auth.mfa_recovery_used", "auth.reauth", "auth.mfa_secret_unreadable"];
-const ADMIN_ACTIONS: &[&str] = &["admin.grant", "admin.revoke", "user.suspend", "user.restore", "admin.token_revoke", "admin.require_mfa"];
+const ADMIN_ACTIONS: &[&str] = &[
+    "admin.grant", "admin.revoke", "user.suspend", "user.restore", "admin.token_revoke", "admin.require_mfa",
+    "access_review.start", "access_review.decide", "access_review.complete", "audit.export",
+];
 
 impl AuditCategory {
     /// `(prefix, exact actions, excluded actions)` for the ledger query; all empty means every event.
@@ -358,6 +361,15 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "source.reextract" => "Re-read a source".into(),
         "redact.backfill" => "Removed secrets from stored history".into(),
         "legacy.move" => "Moved data over from the previous version".into(),
+        "access_review.start" => format!("Started an access review of {} people", kv(detail, "people").unwrap_or("the")),
+        "access_review.decide" => match kv(detail, "decision") {
+            Some("keep") => format!("Decided in an access review to keep {email}'s access"),
+            Some("remove") => format!("Decided in an access review to remove {email}'s access"),
+            Some("suspend") => format!("Decided in an access review to suspend {email}"),
+            _ => "Recorded an access review decision".into(),
+        },
+        "access_review.complete" => "Completed an access review".into(),
+        "audit.export" => format!("Exported the security log ({} events)", kv(detail, "events").unwrap_or("0")),
         other => other.to_string(),
     };
     if ok { s } else { couldnt(&s) }
@@ -461,6 +473,7 @@ async fn get_workspace_audit(State(state): State<AppState>, user: User, Query(q)
     let mut rows: Vec<LedgerRow> = store::control::ADMIN_AUDIT_PAGE
         .on(&state.control)
         .bind(("org", user.org.record()))
+        .bind(("instance", authz::sees_instance(&state.control, &user).await?))
         .bind(("prefix", prefix.to_string()))
         .bind(("actions", actions.iter().map(|a| a.to_string()).collect::<Vec<_>>()))
         .bind(("exclude", exclude.iter().map(|a| a.to_string()).collect::<Vec<_>>()))
@@ -537,28 +550,28 @@ async fn get_workspace_audit(State(state): State<AppState>, user: User, Query(q)
 // ---------------------------------------------------------------- people
 
 #[derive(Debug, Deserialize, SurrealValue)]
-struct PersonRow {
-    id: RecordId,
+pub(crate) struct PersonRow {
+    pub(crate) id: RecordId,
     #[serde(default)]
     #[surreal(default)]
-    email: String,
+    pub(crate) email: String,
     /// The stored, normalized address (`duplicate:` for a legacy duplicate): what operator status is read from.
     #[serde(default)]
     #[surreal(default)]
-    email_lc: Option<String>,
-    created_at: Option<Datetime>,
+    pub(crate) email_lc: Option<String>,
+    pub(crate) created_at: Option<Datetime>,
     #[serde(default)]
     #[surreal(default)]
-    admin: Option<bool>,
+    pub(crate) admin: Option<bool>,
     #[serde(default)]
     #[surreal(default)]
-    suspended_at: Option<Datetime>,
+    pub(crate) suspended_at: Option<Datetime>,
     #[serde(default)]
     #[surreal(default)]
-    mfa: bool,
+    pub(crate) mfa: bool,
     #[serde(default)]
     #[surreal(default)]
-    has_password: bool,
+    pub(crate) has_password: bool,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -650,7 +663,7 @@ fn signup_policy(mode: &str, allowlist: &str, operators: &str) -> SignupPolicy {
 }
 
 /// Why `row` is an admin, as [`Person::admin`] spells it.
-fn admin_source(row: &PersonRow, creator: Option<&RecordId>) -> &'static str {
+pub(crate) fn admin_source(row: &PersonRow, creator: Option<&RecordId>) -> &'static str {
     if creator == Some(&row.id) {
         "creator"
     } else if authz::stored_email_is_operator(row.email_lc.as_deref()) {
@@ -668,7 +681,7 @@ fn another_admin_left(rows: &[PersonRow], creator: Option<&RecordId>, target: &R
     rows.iter().any(|r| &r.id != target && r.suspended_at.is_none() && !admin_source(r, creator).is_empty())
 }
 
-async fn people_rows(state: &AppState, user: &User) -> AppResult<Vec<PersonRow>> {
+pub(crate) async fn people_rows(state: &AppState, user: &User) -> AppResult<Vec<PersonRow>> {
     Ok(store::control::ADMIN_PEOPLE.on(&state.control).bind(("org", user.org.record())).await?.take(0)?)
 }
 

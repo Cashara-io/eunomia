@@ -157,6 +157,8 @@ async fn enrol_sign_in_with_a_code_refuse_replay_and_spend_recovery_codes_once()
     for a in ["auth.mfa_enrol", "auth.mfa_failed", "auth.mfa_recovery_used"] {
         assert!(actions.iter().any(|x| x == a), "{a} in {actions:?}");
     }
+    // and each is in the hash-chained log, in this org's ledger (docs/audit-chain.md)
+    common::assert_chained(app.control(), &["auth.mfa_enrol", "auth.mfa_failed", "auth.mfa_recovery_used", "auth.login"]).await;
     let ((_, page), _) = common::http(&app.router, "GET", "/api/admin/audit?category=signins", None, None, Some(&session)).await;
     let summaries: Vec<&str> = page["results"].as_array().unwrap().iter().filter_map(|r| r["summary"].as_str()).collect();
     assert!(summaries.contains(&"Signed in with two-step verification"), "{summaries:?}");
@@ -268,6 +270,8 @@ async fn requiring_mfa_means_no_session_without_it() {
     let ((_, body), set) = login(&app, "carol@example.com").await;
     assert!(body.get("mfa_required").is_none(), "{body}");
     assert!(pair(&set).starts_with("eunomia_session="));
+    // both switches are in the hash-chained log
+    common::assert_chained(app.control(), &["admin.require_mfa"]).await;
 }
 
 #[tokio::test]
@@ -318,6 +322,7 @@ async fn new_tokens_and_mfa_changes_need_a_fresh_second_factor() {
     for a in ["auth.mfa_recovery_regenerate", "auth.mfa_disable"] {
         assert!(actions.iter().any(|x| x == a), "{a} in {actions:?}");
     }
+    common::assert_chained(app.control(), &["auth.mfa_recovery_regenerate", "auth.mfa_disable"]).await;
 }
 
 /// An install upgraded from before MFA: its sessions carry no `via` or `mfa_at`, its users no MFA fields.

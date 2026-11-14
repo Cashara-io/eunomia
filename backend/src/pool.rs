@@ -149,6 +149,12 @@ pub struct OrgDb {
 }
 
 impl ControlDb {
+    /// Identifies this handle (and its clones) within the process: the audit chain keys its
+    /// background sealers by database, so two app states in one process (tests) never share one.
+    pub fn identity(&self) -> usize {
+        Arc::as_ptr(&self.raw) as *const () as usize
+    }
+
     /// The raw client. The `RawKey` token can only be made inside `store/`, so nothing else compiles a call.
     pub(crate) fn raw(&self, _: crate::store::RawKey) -> &Db {
         self.raw.pick()
@@ -252,6 +258,9 @@ struct Inner {
     /// Isolation suite only: every org gets this one database (the "shared database" mode).
     #[cfg(feature = "test-support")]
     shared: Mutex<Option<Route>>,
+    /// Orgs not served, and why: their database applied a migration numbered above one it lacks
+    /// (`provisioning::Provisioner::find_migration_gaps`, checked at boot).
+    blocked: Mutex<HashMap<OrgId, String>>,
 }
 
 /// Per-org connection cache with an LRU cap. `for_org` is the only way to get an [`OrgDb`].
@@ -282,7 +291,18 @@ impl Pool {
             signins: AtomicU64::new(0),
             #[cfg(feature = "test-support")]
             shared: Mutex::new(None),
+            blocked: Mutex::new(HashMap::new()),
         }))
+    }
+
+    /// Stops serving `org` (`tenant.schema_behind` with `why`) until [`Pool::unblock`].
+    pub fn block(&self, org: &OrgId, why: String) {
+        self.0.blocked.lock().unwrap_or_else(|e| e.into_inner()).insert(*org, why);
+        self.evict(org);
+    }
+
+    pub fn unblock(&self, org: &OrgId) {
+        self.0.blocked.lock().unwrap_or_else(|e| e.into_inner()).remove(org);
     }
 
     /// The control handle this pool reads routes from.
@@ -293,6 +313,9 @@ impl Pool {
     /// The org's database handle. Errors with `tenant.not_found` for an org with no ready route (and
     /// counts it as a query without org context) and `tenant.schema_behind` below schema N-1.
     pub async fn for_org(&self, org: &OrgId) -> AppResult<OrgDb> {
+        if let Some(why) = self.0.blocked.lock().unwrap_or_else(|e| e.into_inner()).get(org).cloned() {
+            return Err(AppError::coded(ErrorCode::TenantSchemaBehind, why));
+        }
         if let Some(db) = self.cached(org) {
             return Ok(db);
         }

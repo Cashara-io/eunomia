@@ -23,6 +23,126 @@ export type AccessOut = {
     vaults: Array<VaultRef>;
 };
 
+/**
+ * A review with its snapshot and decisions.
+ */
+export type AccessReview = AccessReviewSummary & {
+    decisions: Array<AccessReviewDecision>;
+    /**
+     * Who had access to what when the review started: `people`, each with `spaces`, `tokens`,
+     * `apps` and `sessions`.
+     */
+    snapshot: {
+        [key: string]: unknown;
+    };
+    snapshot_hash: string;
+    /**
+     * People nobody has decided about yet.
+     */
+    undecided: Array<string>;
+    /**
+     * The caller: they cannot decide about themselves.
+     */
+    you: string;
+};
+
+export type AccessReviewAuditLink = {
+    created_at?: string | null;
+    /**
+     * The event's detail as written (`result=<hash> keep=.. remove=.. suspend=.. not_reviewed=..`).
+     * Its SHA-256 is the event's `detail_digest` in the chain.
+     */
+    detail: string;
+    hash?: string | null;
+    ledger: string;
+    seq?: number | null;
+};
+
+/**
+ * A person's decision in a review.
+ */
+export type AccessReviewDecision = {
+    decided_at?: string | null;
+    /**
+     * `keep`, `remove` or `suspend`.
+     */
+    decision: string;
+    email: string;
+    note: string;
+    reviewer: string;
+    reviewer_id: string;
+    user_id: string;
+};
+
+export type AccessReviewDecisionBody = {
+    /**
+     * `keep`, `remove` or `suspend`.
+     */
+    decision: string;
+    /**
+     * Why, in a sentence (optional, at most 500 characters).
+     */
+    note?: string;
+};
+
+/**
+ * A completed review as a file: the snapshot, the decisions, both hashes and the security log
+ * event that recorded the completion.
+ */
+export type AccessReviewExport = {
+    audit_event?: null | AccessReviewAuditLink;
+    /**
+     * True when the chained completion event commits to this review as it is now: its detail
+     * names this `result` document's hash and the chain holds that detail's plain SHA-256. False
+     * means the review was changed after it was completed (even if `result_hash` was recomputed).
+     * The offline verifier checks the same: `verify-audit-export.py LOG.json --review THIS.json`.
+     */
+    chain_matches: boolean;
+    decisions: Array<AccessReviewDecision>;
+    /**
+     * The document `result_hash` is the SHA-256 of (canonical JSON: keys sorted, no spaces).
+     */
+    result: {
+        [key: string]: unknown;
+    };
+    result_hash: string;
+    /**
+     * True when `result` still hashes to the `result_hash` recorded at completion.
+     */
+    result_hash_matches: boolean;
+    /**
+     * Who had access to what at the start; `snapshot_hash` is its SHA-256 (canonical JSON).
+     */
+    snapshot: {
+        [key: string]: unknown;
+    };
+    snapshot_hash: string;
+    snapshot_hash_matches: boolean;
+};
+
+/**
+ * One review in the list.
+ */
+export type AccessReviewSummary = {
+    completed_at?: string | null;
+    completed_by?: string | null;
+    id: string;
+    people: number;
+    result_hash?: string | null;
+    started_at?: string | null;
+    started_by: string;
+    /**
+     * `open` or `completed`.
+     */
+    status: string;
+    /**
+     * Decisions per outcome once completed: `keep`, `remove`, `suspend`, `not_reviewed`.
+     */
+    summary?: {
+        [key: string]: unknown;
+    } | null;
+};
+
 export type AckOut = {
     /**
      * Ids that were leased and are now done. Ids that are unknown, already done or not leased are skipped.
@@ -115,6 +235,48 @@ export type AmbiguousTarget = {
  */
 export type AuditCategory = 'all' | 'changes' | 'spaces' | 'signins' | 'tokens' | 'apps' | 'admin' | 'sharing' | 'server';
 
+/**
+ * Where and how a chain stops verifying.
+ */
+export type AuditChainBreak = {
+    /**
+     * `altered` (an event's content no longer matches its hash), `link` (an event does not
+     * follow the one before it), `missing` (events are gone), `duplicate`, `head` (the newest
+     * event is not the recorded head), `checkpoint` (a checkpoint disagrees with its event) or
+     * `genesis`.
+     */
+    kind: string;
+    /**
+     * The break in plain words.
+     */
+    message: string;
+    /**
+     * The sequence number where the chain stops verifying, when there is one.
+     */
+    seq?: number | null;
+};
+
+/**
+ * A point a verifier can start from or compare against.
+ */
+export type AuditCheckpoint = {
+    /**
+     * RFC 3339.
+     */
+    at: string;
+    hash: string;
+    /**
+     * `genesis` (the chain's start, seq 0), `retention` (the last event the retention window
+     * deleted), `periodic` (a copy of the head) or `export` (written into an export file).
+     */
+    kind: string;
+    /**
+     * For `retention`: how many events that cut deleted.
+     */
+    pruned?: number | null;
+    seq: number;
+};
+
 export type AuditEntry = {
     args_summary: string;
     created_at?: string | null;
@@ -123,10 +285,136 @@ export type AuditEntry = {
     tool_name: string;
 };
 
+/**
+ * The fields one event's hash covers, in their canonical form.
+ */
+export type AuditEventFields = {
+    action: string;
+    actor_id: string;
+    actor_kind: string;
+    created_at: string;
+    detail_digest: string;
+    id: string;
+    ledger: string;
+    outcome: string;
+    prev_hash: string;
+    seq: number;
+    target: string;
+    trace_id: string;
+    user?: string | null;
+};
+
+/**
+ * An offline-verifiable slice of one ledger. Metadata only: no memory text, chat content,
+ * prompts, secrets or free-text detail (the detail is committed by its hash).
+ */
+export type AuditExport = {
+    anchor?: null | AuditCheckpoint;
+    break?: null | AuditChainBreak;
+    /**
+     * Stored checkpoints inside the range, plus one every 1000 events and one at the last event.
+     */
+    checkpoints: Array<AuditCheckpoint>;
+    events: Array<AuditExportEvent>;
+    /**
+     * `eunomia-audit-export`.
+     */
+    format: string;
+    /**
+     * The requested range, RFC 3339; empty when open.
+     */
+    from: string;
+    generated_at: string;
+    head?: null | AuditCheckpoint;
+    ledger: string;
+    next_seq?: number | null;
+    /**
+     * The server's own check of the events in this file.
+     */
+    ok: boolean;
+    /**
+     * The file's own range: its first and last event, the ledger's head when it was made, and how
+     * many events were still unsealed (written, not yet in the chain) and so are not in it. The
+     * offline verifier checks it against the events and the head.
+     */
+    range: AuditExportRange;
+    to: string;
+    /**
+     * True when the range held more than one export carries; `next_seq` is where to resume.
+     */
+    truncated: boolean;
+    /**
+     * The canonical form the hashes use (`eunomia.audit.v1`).
+     */
+    version: string;
+};
+
+/**
+ * One event in an export: its canonical fields (the detail only as its hash) and stored hash.
+ */
+export type AuditExportEvent = AuditEventFields & {
+    hash: string;
+};
+
+export type AuditExportRange = {
+    first_seq?: number | null;
+    head_hash?: string | null;
+    head_seq?: number | null;
+    last_seq?: number | null;
+    unsealed: number;
+};
+
 export type AuditPage = {
     has_more: boolean;
     results: Array<AuditEntry>;
     total: number;
+};
+
+/**
+ * The result of walking one ledger.
+ */
+export type AuditVerification = {
+    anchor?: null | AuditCheckpoint;
+    /**
+     * For the `instance` ledger: events written before the chain started, which have no hash.
+     */
+    before_chain: number;
+    break?: null | AuditChainBreak;
+    /**
+     * Events whose hash and link were checked.
+     */
+    checked: number;
+    /**
+     * When the check ran, RFC 3339.
+     */
+    checked_at: string;
+    /**
+     * Events whose detail could not be checked against its digest because the encryption key
+     * changed since they were written (their hash and link were still checked).
+     */
+    detail_unchecked: number;
+    first_seq?: number | null;
+    head_hash?: string | null;
+    head_seq?: number | null;
+    last_seq?: number | null;
+    ledger: string;
+    /**
+     * True when every stored event verified from the anchor to the head.
+     */
+    ok: boolean;
+    /**
+     * Events written but not sealed yet (sealed by the next replay).
+     */
+    pending: number;
+};
+
+export type AuditVerifyReport = {
+    /**
+     * The workspace's own ledger first, then, for a server operator (or any admin while the
+     * install has one workspace), the `instance` ledger: events with no workspace, such as sign-ins
+     * with an unknown email.
+     */
+    ledgers: Array<AuditVerification>;
 };
 
 export type AuthModeOut = 'password' | 'both' | 'oidc';
@@ -3233,6 +3521,147 @@ export type WorkspaceAuditPage = {
     results: Array<WorkspaceAuditEntry>;
 };
 
+export type ListAccessReviewsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/access-reviews';
+};
+
+export type ListAccessReviewsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListAccessReviewsError = ListAccessReviewsErrors[keyof ListAccessReviewsErrors];
+
+export type ListAccessReviewsResponses = {
+    200: Array<AccessReviewSummary>;
+};
+
+export type ListAccessReviewsResponse = ListAccessReviewsResponses[keyof ListAccessReviewsResponses];
+
+export type StartAccessReviewData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/access-reviews';
+};
+
+export type StartAccessReviewErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type StartAccessReviewError = StartAccessReviewErrors[keyof StartAccessReviewErrors];
+
+export type StartAccessReviewResponses = {
+    200: AccessReview;
+};
+
+export type StartAccessReviewResponse = StartAccessReviewResponses[keyof StartAccessReviewResponses];
+
+export type GetAccessReviewData = {
+    body?: never;
+    path: {
+        review_id: string;
+    };
+    query?: never;
+    url: '/api/admin/access-reviews/{review_id}';
+};
+
+export type GetAccessReviewErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetAccessReviewError = GetAccessReviewErrors[keyof GetAccessReviewErrors];
+
+export type GetAccessReviewResponses = {
+    200: AccessReview;
+};
+
+export type GetAccessReviewResponse = GetAccessReviewResponses[keyof GetAccessReviewResponses];
+
+export type CompleteAccessReviewData = {
+    body?: never;
+    path: {
+        review_id: string;
+    };
+    query?: never;
+    url: '/api/admin/access-reviews/{review_id}/complete';
+};
+
+export type CompleteAccessReviewErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type CompleteAccessReviewError = CompleteAccessReviewErrors[keyof CompleteAccessReviewErrors];
+
+export type CompleteAccessReviewResponses = {
+    200: AccessReview;
+};
+
+export type CompleteAccessReviewResponse = CompleteAccessReviewResponses[keyof CompleteAccessReviewResponses];
+
+export type DecideAccessReviewData = {
+    body: AccessReviewDecisionBody;
+    path: {
+        review_id: string;
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/access-reviews/{review_id}/decisions/{user_id}';
+};
+
+export type DecideAccessReviewErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DecideAccessReviewError = DecideAccessReviewErrors[keyof DecideAccessReviewErrors];
+
+export type DecideAccessReviewResponses = {
+    200: AccessReview;
+};
+
+export type DecideAccessReviewResponse = DecideAccessReviewResponses[keyof DecideAccessReviewResponses];
+
+export type ExportAccessReviewData = {
+    body?: never;
+    path: {
+        review_id: string;
+    };
+    query?: never;
+    url: '/api/admin/access-reviews/{review_id}/export';
+};
+
+export type ExportAccessReviewErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ExportAccessReviewError = ExportAccessReviewErrors[keyof ExportAccessReviewErrors];
+
+export type ExportAccessReviewResponses = {
+    200: AccessReviewExport;
+};
+
+export type ExportAccessReviewResponse = ExportAccessReviewResponses[keyof ExportAccessReviewResponses];
+
 export type ListWorkspaceAuditData = {
     body?: never;
     path?: never;
@@ -3264,6 +3693,64 @@ export type ListWorkspaceAuditResponses = {
 };
 
 export type ListWorkspaceAuditResponse = ListWorkspaceAuditResponses[keyof ListWorkspaceAuditResponses];
+
+export type ExportAuditChainData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Start of the range (inclusive): RFC 3339 or `YYYY-MM-DD` (UTC midnight). Omit for the oldest kept event.
+         */
+        from?: string;
+        /**
+         * End of the range (exclusive): RFC 3339 or `YYYY-MM-DD`. Omit for the newest event.
+         */
+        to?: string;
+        /**
+         * `org` (default): this workspace's events. `instance`: events with no workspace (server
+         * operators only on a host with several workspaces).
+         */
+        ledger?: string;
+    };
+    url: '/api/admin/audit/export';
+};
+
+export type ExportAuditChainErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ExportAuditChainError = ExportAuditChainErrors[keyof ExportAuditChainErrors];
+
+export type ExportAuditChainResponses = {
+    200: AuditExport;
+};
+
+export type ExportAuditChainResponse = ExportAuditChainResponses[keyof ExportAuditChainResponses];
+
+export type VerifyAuditChainData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/audit/verify';
+};
+
+export type VerifyAuditChainErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type VerifyAuditChainError = VerifyAuditChainErrors[keyof VerifyAuditChainErrors];
+
+export type VerifyAuditChainResponses = {
+    200: AuditVerifyReport;
+};
+
+export type VerifyAuditChainResponse = VerifyAuditChainResponses[keyof VerifyAuditChainResponses];
 
 export type ListPeopleData = {
     body?: never;

@@ -638,6 +638,10 @@ async fn starting_fresh_sets_the_old_account_aside_and_nothing_of_it_works_or_sh
     assert_eq!(count_rows(&app, "SELECT count() AS n FROM api_token WHERE owner = $u GROUP ALL", &old).await, 1, "kept for review, not deleted");
     let audit: Vec<Value> = app.state.control.test_raw().query("SELECT user FROM audit_event WHERE action = 'auth.oidc_set_aside'").await.unwrap().take(0).unwrap();
     assert_eq!(audit, vec![json!({"user": old.id.to_string()})]);
+    // in the hash-chained log, in the set-aside account's org ledger (its membership is kept)
+    common::assert_chained(&app.state.control, &["auth.oidc_set_aside"]).await;
+    let ledger: Vec<Value> = app.state.control.test_raw().query("SELECT VALUE ledger FROM audit_event WHERE action = 'auth.oidc_set_aside'").await.unwrap().take(0).unwrap();
+    assert!(ledger[0].as_str().unwrap().starts_with("org:"), "{ledger:?}");
 
     // the choice is spent; the next sign-in is an ordinary one into the new account
     for body in [json!({"start_fresh": true}), json!({"password": PASSWORD})] {

@@ -9,6 +9,293 @@
     "version": "1"
   },
   "paths": {
+    "/api/admin/access-reviews": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Access reviews, newest first (admin only)",
+        "operationId": "listAccessReviews",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AccessReviewSummary"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Start an access review: snapshot who has access to what (admin only, browser session)",
+        "description": "One review can be open at a time. The snapshot lists every person, their role, admin rights and suspension, their spaces, and their API tokens, connected apps and live sessions by name and count. It never holds a secret.",
+        "operationId": "startAccessReview",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessReview"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/access-reviews/{review_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "One access review with its snapshot and decisions (admin only)",
+        "operationId": "getAccessReview",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessReview"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/access-reviews/{review_id}/complete": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Complete an access review; it can't be changed afterwards (admin only, browser session)",
+        "description": "Everyone must have a decision, except you: your own access is recorded as not reviewed when no other admin decided it. The completion, with the hash of the review, goes into the security log.",
+        "operationId": "completeAccessReview",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessReview"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/access-reviews/{review_id}/decisions/{user_id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Record a decision about one person in an open access review (admin only, browser session)",
+        "description": "Deciding again replaces the earlier decision while the review is open. You cannot decide about your own access. A decision is a record: suspending or removing the person is done from People.",
+        "operationId": "decideAccessReview",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessReviewDecisionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessReview"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/access-reviews/{review_id}/export": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Download a completed access review with the hashes that tie it to the security log (admin only)",
+        "operationId": "exportAccessReview",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessReviewExport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/admin/audit": {
       "get": {
         "tags": [
@@ -66,6 +353,115 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkspaceAuditPage"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/audit/export": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Download the security log for a time range, with checkpoints to verify it offline (admin only)",
+        "description": "Metadata only: who, what, when, on which record and the outcome. Free-text detail is replaced by a keyed digest (HMAC-SHA256 under a server key), so the file holds no memory text, chat content, prompts or secrets and still verifies. At most 50,000 events per file: `truncated` and `next_seq` say where to continue.",
+        "operationId": "exportAuditChain",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Start of the range (inclusive): RFC 3339 or `YYYY-MM-DD` (UTC midnight). Omit for the oldest kept event.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "End of the range (exclusive): RFC 3339 or `YYYY-MM-DD`. Omit for the newest event.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ledger",
+            "in": "query",
+            "description": "`org` (default): this workspace's events. `instance`: events with no workspace (server\noperators only on a host with several workspaces).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditExport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/audit/verify": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Check that the security log was not altered (admin only)",
+        "description": "Seals anything still pending, then walks the workspace's hash chain and the instance chain from their starting checkpoints to their newest event and reports the first break: an edited, deleted or reordered event.",
+        "operationId": "verifyAuditChain",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditVerifyReport"
                 }
               }
             }
@@ -9421,6 +9817,255 @@
           }
         }
       },
+      "AccessReview": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AccessReviewSummary"
+          },
+          {
+            "type": "object",
+            "required": [
+              "snapshot",
+              "snapshot_hash",
+              "decisions",
+              "undecided",
+              "you"
+            ],
+            "properties": {
+              "decisions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AccessReviewDecision"
+                }
+              },
+              "snapshot": {
+                "type": "object",
+                "description": "Who had access to what when the review started: `people`, each with `spaces`, `tokens`,\n`apps` and `sessions`."
+              },
+              "snapshot_hash": {
+                "type": "string"
+              },
+              "undecided": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "People nobody has decided about yet."
+              },
+              "you": {
+                "type": "string",
+                "description": "The caller: they cannot decide about themselves."
+              }
+            }
+          }
+        ],
+        "description": "A review with its snapshot and decisions."
+      },
+      "AccessReviewAuditLink": {
+        "type": "object",
+        "required": [
+          "ledger",
+          "detail"
+        ],
+        "properties": {
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "description": "The event's detail as written (`result=<hash> keep=.. remove=.. suspend=.. not_reviewed=..`).\nIts SHA-256 is the event's `detail_digest` in the chain."
+          },
+          "hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ledger": {
+            "type": "string"
+          },
+          "seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "AccessReviewDecision": {
+        "type": "object",
+        "description": "A person's decision in a review.",
+        "required": [
+          "user_id",
+          "email",
+          "decision",
+          "note",
+          "reviewer_id",
+          "reviewer"
+        ],
+        "properties": {
+          "decided_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decision": {
+            "type": "string",
+            "description": "`keep`, `remove` or `suspend`."
+          },
+          "email": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "reviewer": {
+            "type": "string"
+          },
+          "reviewer_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        }
+      },
+      "AccessReviewDecisionBody": {
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "type": "string",
+            "description": "`keep`, `remove` or `suspend`."
+          },
+          "note": {
+            "type": "string",
+            "description": "Why, in a sentence (optional, at most 500 characters)."
+          }
+        }
+      },
+      "AccessReviewExport": {
+        "type": "object",
+        "description": "A completed review as a file: the snapshot, the decisions, both hashes and the security log\nevent that recorded the completion.",
+        "required": [
+          "result",
+          "result_hash",
+          "result_hash_matches",
+          "snapshot",
+          "snapshot_hash",
+          "snapshot_hash_matches",
+          "chain_matches",
+          "decisions"
+        ],
+        "properties": {
+          "audit_event": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AccessReviewAuditLink",
+                "description": "The completion's place in the hash-chained security log, once sealed."
+              }
+            ]
+          },
+          "chain_matches": {
+            "type": "boolean",
+            "description": "True when the chained completion event commits to this review as it is now: its detail\nnames this `result` document's hash and the chain holds that detail's plain SHA-256. False\nmeans the review was changed after it was completed (even if `result_hash` was recomputed).\nThe offline verifier checks the same: `verify-audit-export.py LOG.json --review THIS.json`."
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessReviewDecision"
+            }
+          },
+          "result": {
+            "type": "object",
+            "description": "The document `result_hash` is the SHA-256 of (canonical JSON: keys sorted, no spaces)."
+          },
+          "result_hash": {
+            "type": "string"
+          },
+          "result_hash_matches": {
+            "type": "boolean",
+            "description": "True when `result` still hashes to the `result_hash` recorded at completion."
+          },
+          "snapshot": {
+            "type": "object",
+            "description": "Who had access to what at the start; `snapshot_hash` is its SHA-256 (canonical JSON)."
+          },
+          "snapshot_hash": {
+            "type": "string"
+          },
+          "snapshot_hash_matches": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AccessReviewSummary": {
+        "type": "object",
+        "description": "One review in the list.",
+        "required": [
+          "id",
+          "status",
+          "started_by",
+          "people"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completed_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "people": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "result_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started_by": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "`open` or `completed`."
+          },
+          "summary": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Decisions per outcome once completed: `keep`, `remove`, `suspend`, `not_reviewed`."
+          }
+        }
+      },
       "AckOut": {
         "type": "object",
         "required": [
@@ -9662,6 +10307,67 @@
           "server"
         ]
       },
+      "AuditChainBreak": {
+        "type": "object",
+        "description": "Where and how a chain stops verifying.",
+        "required": [
+          "kind",
+          "message"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`altered` (an event's content no longer matches its hash), `link` (an event does not\nfollow the one before it), `missing` (events are gone), `duplicate`, `head` (the newest\nevent is not the recorded head), `checkpoint` (a checkpoint disagrees with its event) or\n`genesis`."
+          },
+          "message": {
+            "type": "string",
+            "description": "The break in plain words."
+          },
+          "seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The sequence number where the chain stops verifying, when there is one."
+          }
+        }
+      },
+      "AuditCheckpoint": {
+        "type": "object",
+        "description": "A point a verifier can start from or compare against.",
+        "required": [
+          "seq",
+          "hash",
+          "at",
+          "kind"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "hash": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "description": "`genesis` (the chain's start, seq 0), `retention` (the last event the retention window\ndeleted), `periodic` (a copy of the head) or `export` (written into an export file)."
+          },
+          "pruned": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "For `retention`: how many events that cut deleted."
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "AuditEntry": {
         "type": "object",
         "required": [
@@ -9691,6 +10397,231 @@
           }
         }
       },
+      "AuditEventFields": {
+        "type": "object",
+        "description": "The fields one event's hash covers, in their canonical form.",
+        "required": [
+          "ledger",
+          "seq",
+          "prev_hash",
+          "id",
+          "created_at",
+          "actor_kind",
+          "actor_id",
+          "action",
+          "target",
+          "outcome",
+          "trace_id",
+          "detail_digest"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "actor_id": {
+            "type": "string"
+          },
+          "actor_kind": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "detail_digest": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "ledger": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "prev_hash": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "target": {
+            "type": "string"
+          },
+          "trace_id": {
+            "type": "string"
+          },
+          "user": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AuditExport": {
+        "type": "object",
+        "description": "An offline-verifiable slice of one ledger. Metadata only: no memory text, chat content,\nprompts, secrets or free-text detail (the detail is committed by its hash).",
+        "required": [
+          "format",
+          "version",
+          "generated_at",
+          "ledger",
+          "from",
+          "to",
+          "events",
+          "checkpoints",
+          "range",
+          "truncated",
+          "ok"
+        ],
+        "properties": {
+          "anchor": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AuditCheckpoint",
+                "description": "The point the first event hangs from: its sequence minus one and its `prev_hash`."
+              }
+            ]
+          },
+          "break": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AuditChainBreak"
+              }
+            ]
+          },
+          "checkpoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditCheckpoint"
+            },
+            "description": "Stored checkpoints inside the range, plus one every 1000 events and one at the last event."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditExportEvent"
+            }
+          },
+          "format": {
+            "type": "string",
+            "description": "`eunomia-audit-export`."
+          },
+          "from": {
+            "type": "string",
+            "description": "The requested range, RFC 3339; empty when open."
+          },
+          "generated_at": {
+            "type": "string"
+          },
+          "head": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AuditCheckpoint",
+                "description": "The ledger's head when the export was made."
+              }
+            ]
+          },
+          "ledger": {
+            "type": "string"
+          },
+          "next_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "The server's own check of the events in this file."
+          },
+          "range": {
+            "$ref": "#/components/schemas/AuditExportRange",
+            "description": "The file's own range: its first and last event, the ledger's head when it was made, and how\nmany events were still unsealed (written, not yet in the chain) and so are not in it. The\noffline verifier checks it against the events and the head."
+          },
+          "to": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True when the range held more than one export carries; `next_seq` is where to resume."
+          },
+          "version": {
+            "type": "string",
+            "description": "The canonical form the hashes use (`eunomia.audit.v1`)."
+          }
+        }
+      },
+      "AuditExportEvent": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AuditEventFields"
+          },
+          {
+            "type": "object",
+            "required": [
+              "hash"
+            ],
+            "properties": {
+              "hash": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "One event in an export: its canonical fields (the detail only as its hash) and stored hash."
+      },
+      "AuditExportRange": {
+        "type": "object",
+        "required": [
+          "unsealed"
+        ],
+        "properties": {
+          "first_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "head_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "head_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "last_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "unsealed": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "AuditPage": {
         "type": "object",
         "required": [
@@ -9711,6 +10642,118 @@
           "total": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "AuditVerification": {
+        "type": "object",
+        "description": "The result of walking one ledger.",
+        "required": [
+          "ledger",
+          "ok",
+          "checked",
+          "pending",
+          "before_chain",
+          "detail_unchecked",
+          "checked_at"
+        ],
+        "properties": {
+          "anchor": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AuditCheckpoint",
+                "description": "The checkpoint the walk started from (the genesis, or the last retention cut)."
+              }
+            ]
+          },
+          "before_chain": {
+            "type": "integer",
+            "format": "int64",
+            "description": "For the `instance` ledger: events written before the chain started, which have no hash."
+          },
+          "break": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AuditChainBreak",
+                "description": "The first break, if any."
+              }
+            ]
+          },
+          "checked": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Events whose hash and link were checked.",
+            "minimum": 0
+          },
+          "checked_at": {
+            "type": "string",
+            "description": "When the check ran, RFC 3339."
+          },
+          "detail_unchecked": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Events whose detail could not be checked against its digest because the encryption key\nchanged since they were written (their hash and link were still checked).",
+            "minimum": 0
+          },
+          "first_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "head_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "head_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "last_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "ledger": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "True when every stored event verified from the anchor to the head."
+          },
+          "pending": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Events written but not sealed yet (sealed by the next replay)."
+          }
+        }
+      },
+      "AuditVerifyReport": {
+        "type": "object",
+        "required": [
+          "ledgers"
+        ],
+        "properties": {
+          "ledgers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditVerification"
+            },
+            "description": "The workspace's own ledger first, then, for a server operator (or any admin while the\ninstall has one workspace), the `instance` ledger: events with no workspace, such as sign-ins\nwith an unknown email."
           }
         }
       },
