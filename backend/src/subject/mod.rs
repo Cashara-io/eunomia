@@ -84,6 +84,10 @@ struct ConfirmRow {
     #[serde(default)]
     #[surreal(default)]
     email: String,
+    /// The stored, normalised address: operator status is read from it, never from the raw `email`.
+    #[serde(default)]
+    #[surreal(default)]
+    email_lc: Option<String>,
     #[serde(default)]
     #[surreal(default)]
     password_hash: Option<String>,
@@ -266,7 +270,7 @@ pub async fn check_erasable(control: &ControlDb, user: &RecordId, who: &Requeste
     if row.legal_hold_at.is_some() {
         return Err(hold_error());
     }
-    protected_account(control, user, &row.email, who).await?;
+    protected_account(control, user, row.email_lc.as_deref(), who).await?;
     let (pending, held) = pending_and_held(control, user).await?;
     let plans = plan(control, user, &pending, &held, allow_close, false).await?;
     if plans.is_empty() {
@@ -277,7 +281,7 @@ pub async fn check_erasable(control: &ControlDb, user: &RecordId, who: &Requeste
 
 /// The first account is never erased in the app, and an operator's account only by its owner. Checked on
 /// every request path, including one that joins an erasure already open.
-async fn protected_account(control: &ControlDb, user: &RecordId, email: &str, who: &Requester) -> AppResult<()> {
+async fn protected_account(control: &ControlDb, user: &RecordId, email_lc: Option<&str>, who: &Requester) -> AppResult<()> {
     if crate::capsules::first_user(control).await?.as_ref() == Some(user) {
         // the oldest account is always an admin (`authz::is_admin`): erasing it would quietly make the next one an admin
         return Err(AppError::coded(
@@ -285,7 +289,7 @@ async fn protected_account(control: &ControlDb, user: &RecordId, email: &str, wh
             "This is the account that set up the server, so it can't be erased in the app. The server's operator can remove it (docs/privacy/subject-rights.md).",
         ));
     }
-    if !matches!(who, Requester::Myself) && crate::authz::operator_email_listed(email) {
+    if !matches!(who, Requester::Myself) && crate::authz::stored_email_is_operator(email_lc) {
         return Err(AppError::coded(ErrorCode::AuthForbidden, "This is a server operator's account: only its owner can erase it."));
     }
     Ok(())
@@ -313,7 +317,7 @@ pub async fn request_erasure(state: &AppState, user: &RecordId, who: Requester, 
     if open_ticket(&state.control, &subject_refs(&state.settings, user)).await?.is_some() {
         if !matches!(who, Requester::Reapply) {
             let row = confirm_row(&state.control, user).await?;
-            protected_account(&state.control, user, &row.email, &who).await?;
+            protected_account(&state.control, user, row.email_lc.as_deref(), &who).await?;
         }
         let plans = if allow_close {
             let (pending, held) = pending_and_held(&state.control, user).await?;

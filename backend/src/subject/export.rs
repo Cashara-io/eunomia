@@ -316,6 +316,11 @@ struct Redactions {
 }
 
 /// One workspace's part of the archive, under `workspaces/<key>/`.
+/// The workspace's access reviews that list the person (`store::subject::ACCESS_REVIEWS_ABOUT`).
+async fn access_reviews_about(db: &crate::pool::OrgDb, subject: &RecordId) -> AppResult<Vec<Value>> {
+    Ok(q::ACCESS_REVIEWS_ABOUT.on(db).bind(("u", subject.clone())).bind(("uid", crate::audit::chain::rid(subject))).await?.take(0)?)
+}
+
 async fn workspace_part(state: &OrgState, subject: &RecordId, zip: &mut Zip, categories: &mut Vec<Value>, red: &mut Redactions) -> AppResult<()> {
     let db = &state.db;
     let key = state.db.org().key();
@@ -370,6 +375,8 @@ async fn workspace_part(state: &OrgState, subject: &RecordId, zip: &mut Zip, cat
     put(zip, categories, ws, "sources", &format!("{dir}/sources.json"), sources.len(), json!(sources))?;
     put(zip, categories, ws, "recordings", &format!("{dir}/recordings.json"), recordings.len(), json!(recordings))?;
     put(zip, categories, ws, "extensions", &format!("{dir}/extensions.json"), extensions.len(), json!(extensions))?;
+    let reviews = access_reviews_about(db, subject).await?;
+    put(zip, categories, ws, "access_reviews", &format!("{dir}/access_reviews.json"), reviews.len(), json!(reviews))?;
 
     // the document files themselves
     let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
@@ -551,6 +558,8 @@ async fn build_organisation(app: &AppState, state: &OrgState, subject: &RecordId
     put(&mut zip, &mut categories, ws, "api_tokens", "api_tokens.json", tokens.len(), json!(tokens))?;
     put(&mut zip, &mut categories, ws, "connected_apps", "connected_apps.json", apps.len(), json!(apps))?;
     put(&mut zip, &mut categories, ws, "audit_events", "audit_events.json", audit.len(), json!(audit))?;
+    let reviews = access_reviews_about(db, subject).await?;
+    put(&mut zip, &mut categories, ws, "access_reviews", "access_reviews.json", reviews.len(), json!(reviews))?;
     let mut red = Redactions::default();
     let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
     if !state.settings.documents_backend.is_empty() {

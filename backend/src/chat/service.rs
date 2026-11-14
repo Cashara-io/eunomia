@@ -452,13 +452,37 @@ fn row_to_api_message(row: &MessageRow) -> Value {
     msg
 }
 
+/// Old histories can contain incomplete or misordered tool exchanges. Only replay an assistant
+/// call when all its results immediately follow it, and never replay an orphan result.
+fn replay_history(rows: &[MessageRow]) -> Vec<Value> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < rows.len() {
+        let row = &rows[i];
+        if row.role == "tool" { i += 1; continue; }
+        if let Some(calls) = row.tool_calls.as_ref().filter(|calls| !calls.is_empty()) {
+            let mut pending: std::collections::BTreeSet<_> = calls.iter().filter_map(|c| c["id"].as_str()).collect();
+            let end = i + 1 + calls.len();
+            let valid = row.role == "assistant" && pending.len() == calls.len() && end <= rows.len()
+                && rows[i+1..end].iter().all(|r| r.role == "tool" && r.tool_call_id.as_deref().is_some_and(|id| pending.remove(id)))
+                && pending.is_empty();
+            if valid { out.extend(rows[i..end].iter().map(row_to_api_message)); i = end; }
+            else { i += 1; }
+        } else { out.push(row_to_api_message(row)); i += 1; }
+    }
+    out
+}
+
 async fn rows_for_thread(db: &OrgDb, owner: &RecordId, thread_id: &RecordId) -> AppResult<Vec<MessageRow>> {
     let mut res = store::app::CHAT_MESSAGES_FOR_THREAD
         .on(db)
         .bind(("owner", owner.clone()))
         .bind(("thread_id", thread_id.clone()))
         .await?;
-    Ok(res.take(0)?)
+    let mut rows: Vec<MessageRow> = res.take(0)?;
+    // Decode before sorting: the database can return fractional timestamp strings out of order.
+    rows.sort_by_key(|row| row.created_at);
+    Ok(rows)
 }
 
 /// `None` if the thread doesn't exist / isn't owned by `owner`.
@@ -476,31 +500,15 @@ pub async fn history(db: &OrgDb, owner: &RecordId, thread_id: &RecordId) -> AppR
 pub async fn history_all(db: &OrgDb, owner: &RecordId) -> AppResult<Vec<MessageOut>> {
     let mut res =
         store::app::CHAT_MESSAGES_FOR_OWNER.on(db).bind(("owner", owner.clone())).await?;
-    let rows: Vec<MessageRow> = res.take(0)?;
+    let mut rows: Vec<MessageRow> = res.take(0)?;
+    rows.sort_by_key(|row| row.created_at);
     Ok(messages_out(rows))
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn persist(
-    db: &OrgDb,
-    owner: &RecordId,
-    thread_id: &RecordId,
-    role: &str,
-    content: &str,
-    tool_calls: Option<Vec<Value>>,
-    tool_call_id: Option<&str>,
-) -> AppResult<MessageRow> {
-    let mut res = store::app::CHAT_MESSAGE_CREATE
-        .on(db)
-        .bind(("owner", owner.clone()))
-        .bind(("thread_id", thread_id.clone()))
-        .bind(("role", role.to_string()))
-        .bind(("content", content.to_string()))
-        .bind(("tool_calls", tool_calls))
-        .bind(("tool_call_id", tool_call_id.map(str::to_string)))
-        .await?;
-    let rows: Vec<MessageRow> = res.take(0)?;
-    rows.into_iter().next().ok_or_else(|| AppError::internal("insert returned no row"))
+async fn persist(db: &OrgDb, turn: &super::turn::Turn, role: &str, content: &str) -> AppResult<()> {
+    #[cfg(any(test, feature = "test-support"))]
+    if role == "assistant" { crate::sources::mock::chat_write_checkpoint(&turn.thread, "answer_write").await; }
+    turn.append(db, vec![json!({"role":role, "content":content})]).await
 }
 
 /// Deletes every message in the thread (keeps the thread itself, now
@@ -641,11 +649,24 @@ pub async fn send_stream(
     user_message: String,
     tx: mpsc::Sender<ChatEvent>,
 ) {
+    let turn = super::turn::Turn::new(&thread_id, &user.id);
+    let work = async {
+        tokio::time::timeout(super::turn::WAIT, turn.acquire(&state.db)).await
+            .map_err(|_| (ErrorCode::DbConflict, "The previous reply is still finishing. Please try again shortly.".to_string()))?
+            .map_err(|e| (e.code, e.message))?;
+        tokio::select! {
+            result = turn.keep_alive(&state.db) => result.map_err(|e| (e.code, e.message)),
+            result = run_send(&state, &user, &thread_id, &user_message, &tx, &turn) => result,
+        }
+    };
     let result = tokio::select! {
         biased;
-        _ = tx.closed() => return,
-        result = crate::views::TURN_STARTED.scope(Datetime::default(), run_send(&state, &user, &thread_id, &user_message, &tx)) => result,
+        _ = tx.closed() => Ok(()),
+        result = crate::views::TURN_STARTED.scope(Datetime::default(), work) => result,
     };
+    // Release outside the cancellation select, after dropping the old turn future. A request
+    // already submitted to the database is still subject to the transaction's token check.
+    turn.release(&state.db).await;
     if let Err((code, message)) = result {
         let event = ChatEvent::Error { message, code: code.as_str().to_string(), trace_id: crate::telemetry::current_trace_id() };
         let _ = tx.send(event).await;
@@ -737,6 +758,7 @@ async fn run_send(
     thread_id: &RecordId,
     user_message: &str,
     tx: &mpsc::Sender<ChatEvent>,
+    turn: &super::turn::Turn,
 ) -> Result<(), Failed> {
     let owner = &user.id;
     let db = &state.db;
@@ -747,10 +769,10 @@ async fn run_send(
     let existing_rows = rows_for_thread(db, owner, thread_id).await.map_err(|e| (e.code, e.message))?;
     let is_first_message = existing_rows.is_empty();
     let mut messages: Vec<Value> = vec![json!({ "role": "system", "content": SYSTEM_PROMPT })];
-    messages.extend(existing_rows.iter().map(row_to_api_message));
+    messages.extend(replay_history(&existing_rows));
 
     if tx.is_closed() { return Ok(()); }
-    persist(db, owner, thread_id, "user", user_message, None, None).await.map_err(|e| (e.code, e.message))?;
+    persist(db, turn, "user", user_message).await.map_err(|e| (e.code, e.message))?;
     if tx.is_closed() { return Ok(()); }
     if is_first_message {
         touch_thread(db, thread_id, Some(&derive_title(user_message))).await.map_err(|e| (e.code, e.message))?;
@@ -813,7 +835,7 @@ async fn run_send(
             crate::sources::mock::chat_write_checkpoint(thread_id, "answer_ready").await;
             if tx.send(ChatEvent::Text { delta: content.clone(), tree: checked.clone() }).await.is_err() { return Ok(()); }
             if tx.is_closed() { return Ok(()); }
-            persist(db, owner, thread_id, "assistant", &stored, None, None).await.map_err(|e| (e.code, e.message))?;
+            persist(db, turn, "assistant", &stored).await.map_err(|e| (e.code, e.message))?;
             #[cfg(any(test, feature = "test-support"))]
             crate::sources::mock::chat_write_checkpoint(thread_id, "answer_saved").await;
             let _ = tx.send(ChatEvent::Done { reply: content, tree: checked, tool_calls_made }).await;
@@ -834,7 +856,7 @@ async fn run_send(
 
         // Keep the entire exchange in memory until every call has a result.
         // A disconnect can drop any await below without leaving dangling calls.
-        let mut batch = vec![json!({"role":"assistant", "content":stored, "tool_calls":tool_calls_dump, "created_at":Datetime::default()})];
+        let mut batch = vec![json!({"role":"assistant", "content":stored, "tool_calls":tool_calls_dump})];
         messages.push(json!({ "role": "assistant", "content": content, "tool_calls": tool_calls_dump }));
 
         for tc in ordered {
@@ -862,15 +884,15 @@ async fn run_send(
 
             said.tool_result(&result);
             let result_text = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
-            batch.push(json!({"role":"tool", "content":result_text, "tool_call_id":tc.id, "created_at":Datetime::default()}));
+            batch.push(json!({"role":"tool", "content":result_text, "tool_call_id":tc.id}));
             messages.push(json!({ "role": "tool", "tool_call_id": tc.id, "content": as_untrusted_data(&result_text) }));
             let view = (name == crate::views::TOOL && result.get("error").is_none()).then_some(result);
             let _ = tx.send(ChatEvent::ToolResult { id: tc.id, name, view }).await;
         }
         if tx.is_closed() { return Ok(()); }
-        store::app::CHAT_TOOL_BATCH_CREATE.on(db)
-            .bind(("owner", owner.clone())).bind(("thread_id", thread_id.clone()))
-            .bind(("messages", batch)).await.map_err(|e| { let e = AppError::from(e); (e.code, e.message) })?;
+        #[cfg(any(test, feature = "test-support"))]
+        crate::sources::mock::chat_write_checkpoint(thread_id, "tool_batch_write").await;
+        turn.append(db, batch).await.map_err(|e| (e.code, e.message))?;
         // after the calls: a reply that says what it is saving ("Saved: ...") must not refuse that save
         said.row("assistant", &content);
     }
@@ -972,6 +994,24 @@ mod tests {
             tool_call_id: tool_call_id.map(str::to_string),
             created_at: Datetime::default(),
         }
+    }
+
+    #[test]
+    fn replay_drops_incomplete_calls_and_orphan_results() {
+        let calls = Some(vec![json!({"id":"one"}), json!({"id":"two"})]);
+        let rows = vec![row("user", "old", None, None),
+            row("assistant", "unfinished", calls.clone(), None),
+            row("tool", "{}", None, Some("one")),
+            row("user", "next", None, None),
+            row("tool", "{}", None, Some("two")),
+            row("assistant", "complete", calls, None),
+            row("tool", "{}", None, Some("two")),
+            row("tool", "{}", None, Some("one")),
+            row("assistant", "answer", None, None)];
+        let replay = replay_history(&rows);
+        assert_eq!(replay.iter().map(|m| m["role"].as_str().unwrap()).collect::<Vec<_>>(),
+            ["user", "user", "assistant", "tool", "tool", "assistant"]);
+        assert_eq!(replay[2]["content"], "complete");
     }
 
     #[test]

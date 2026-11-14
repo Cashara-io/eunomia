@@ -141,6 +141,9 @@ function PersonData({ p, onError, iOwn, iOperate }: { p: Person; onError: (f: Fa
   const adminHasPassword = useMe().data?.has_password ?? true;
   const [confirming, setConfirming] = useState(false);
   const [typed, setTyped] = useState("");
+  // the operator's own two-step verification: a second factor from the last 10 minutes, or a code now
+  const [stepUp, setStepUp] = useState(false);
+  const [mfaCode, setMfaCode] = useState("");
   const [done, setDone] = useState<string | null>(null);
   const held = !!p.legal_hold_at;
 
@@ -221,11 +224,22 @@ function PersonData({ p, onError, iOwn, iOperate }: { p: Person; onError: (f: Fa
           className="flex flex-col gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            void run(
-              () => erase.mutateAsync(adminHasPassword ? { user_id: p.id, password: typed } : { user_id: p.id }),
-              `${p.email} was not deleted.`,
-              "Deletion started. They are signed out, and their data is removed in the next few minutes."
-            ).then(() => setConfirming(false));
+            const mfa_code = stepUp && mfaCode.trim() ? mfaCode.trim() : undefined;
+            void (async () => {
+              onError(null);
+              setDone(null);
+              try {
+                await erase.mutateAsync(adminHasPassword ? { user_id: p.id, password: typed, mfa_code } : { user_id: p.id, mfa_code });
+                setDone("Deletion started. They are signed out, and their data is removed in the next few minutes.");
+                setConfirming(false);
+              } catch (err) {
+                if ((err as { code?: string }).code === "auth.step_up_required") {
+                  setStepUp(true);
+                  return;
+                }
+                onError(failure(err, `${p.email} was not deleted.`));
+              }
+            })();
           }}
         >
           <span style={{ color: "var(--ink-dim)" }}>
@@ -245,7 +259,19 @@ function PersonData({ p, onError, iOwn, iOperate }: { p: Person; onError: (f: Fa
                 onChange={(e) => setTyped(e.target.value)}
               />
             )}
-            <button type="submit" className="btn btn-danger-solid btn-sm" disabled={(adminHasPassword && !typed) || erase.isPending}>
+            {stepUp && (
+              <input
+                className="field h-8 px-3 w-[9rem] font-mono"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                placeholder="123456"
+                aria-label="Authenticator code"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+              />
+            )}
+            <button type="submit" className="btn btn-danger-solid btn-sm" disabled={(adminHasPassword && !typed) || erase.isPending || (stepUp && !mfaCode.trim())}>
               {erase.isPending ? "Deleting…" : "Delete"}
             </button>
             <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label="Cancel" onClick={() => setConfirming(false)}>
@@ -570,7 +596,7 @@ export function PeopleSection() {
               <th className="text-left w-[100px]">Last active</th>
               <th className="text-right w-[70px] hidden lg:table-cell">Spaces</th>
               <th className="text-left w-[90px]">API tokens</th>
-              <th className="text-right w-[260px]">
+              <th className="text-right w-[210px]">
                 <span className="sr-only">Actions</span>
               </th>
             </tr>

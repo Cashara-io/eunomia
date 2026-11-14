@@ -407,6 +407,7 @@ pub const OBJECT_EXISTS: Stmt = Stmt::new("subject.object_exists", "RETURN file:
 
 pub const ALL: &[&Stmt] = &[
     &MEMBERSHIPS,
+    &ACCESS_REVIEWS_ABOUT,
     &AUTHORED,
     &OWNED,
     &EXPORT_CREATE,
@@ -442,19 +443,33 @@ pub const ALL: &[&Stmt] = &[
 /// The account as the subject sees it, with how they sign in and where they belong.
 pub const ACCOUNT: ControlStmt = ControlStmt::new(
     "subject.account",
-    "SELECT email, created_at, onboarded_at, admin, suspended_at, legal_hold_at, (password_hash != NONE) AS has_password FROM ONLY $u; \
+    "SELECT email, created_at, onboarded_at, admin, suspended_at, legal_hold_at, (password_hash != NONE) AS has_password, \
+        mfa_enabled_at AS two_step_enabled_at, count((SELECT id FROM mfa_recovery_code WHERE user = $u AND used_at IS NONE)) AS recovery_codes_unused FROM ONLY $u; \
      SELECT issuer, subject, email, created_at, last_login_at FROM identity WHERE user = $u; \
      SELECT <string> org AS org, org.name AS org_name, role, created_at FROM membership WHERE user = $u; \
      SELECT name, scopes, created_at, last_used_at, expires_at FROM api_token WHERE owner = $u; \
-     SELECT user_agent, created_at, last_seen_at, revoked FROM session WHERE owner = $u; \
+     SELECT user_agent, created_at, last_seen_at, revoked, via, mfa_at FROM session WHERE owner = $u; \
      SELECT client_name, client_id, scope, created_at, last_used_at FROM oauth_grant WHERE owner = $u; \
      SELECT action, target, outcome, actor_kind, detail, created_at FROM audit_event WHERE user = $u ORDER BY created_at; \
      SELECT tool, channel, calls, errors, bucket FROM tool_usage WHERE user = $u ORDER BY bucket",
 );
 
+/// The access reviews of this workspace that list the person: their own row of the snapshot (what they
+/// had access to when the review started) and the decisions about them. Not who reviewed them, and not
+/// anyone else's row (third-party protection).
+pub const ACCESS_REVIEWS_ABOUT: Stmt = Stmt::new(
+    "subject.access_reviews_about",
+    "SELECT <string> id AS review, status, started_at, completed_at, (snapshot.people[WHERE user_id = $uid])[0] AS your_access, \
+       (SELECT decision, note, decided_at FROM access_review_decision WHERE review = $parent.id AND subject = $u) AS decisions_about_you \
+     FROM access_review WHERE $uid IN snapshot.people.*.user_id ORDER BY started_at",
+);
+
 /// The subject's password hash (the self-service erasure asks for the password again) and hold.
 pub const CONFIRM_ROW: ControlStmt =
-    ControlStmt::new("subject.confirm_row", "SELECT email, password_hash, legal_hold_at, suspended_at FROM ONLY $u");
+    ControlStmt::new("subject.confirm_row", "SELECT email, email_lc, password_hash, legal_hold_at, suspended_at FROM ONLY $u");
+
+/// Another account that signs in with `$email` (an erasure of a set-aside account leaves that address alone).
+pub const EMAIL_HOLDER: ControlStmt = ControlStmt::new("subject.email_holder", "SELECT VALUE id FROM user WHERE email_lc = $email AND id != $u LIMIT 1");
 
 /// People under a legal hold (they keep their content and cannot inherit anyone's).
 pub const HELD_USERS: ControlStmt = ControlStmt::new("subject.held_users", "SELECT VALUE id FROM user WHERE legal_hold_at IS NOT NONE");
@@ -655,11 +670,17 @@ pub const USER_ORGS: ControlStmt = ControlStmt::new("subject.user_orgs", "SELECT
 /// The subject's API token ids (actor ids in the audit trail and the change log).
 pub const TOKEN_IDS: ControlStmt = ControlStmt::new("subject.token_ids", "SELECT VALUE <string> id FROM api_token WHERE owner = $u");
 
-/// Everything the control database holds about the subject. Their audit events stay (the security
-/// ledger is append-only and pruned only by retention) but no longer name them: the actor id, a
-/// target that is their id and their email anywhere in the detail become "erased", and a row filed
-/// under them gets `user:erased`, an account that never exists, so no workspace's activity log lists
-/// it (a row with no user would show in every workspace's log, like a failed sign-in).
+/// Everything the control database holds about the subject, including their two-step recovery codes
+/// and pending second-step challenges (a challenge carrying their address for a pending link too).
+/// Their audit events stay (the security ledger is append-only and pruned only by retention) but no
+/// longer name them. An event not yet sealed into the hash chain (or written before the chain): the
+/// actor id, a target that is their id and their email anywhere in the detail become "erased", and a
+/// row filed under them gets `user:erased`, an account that never exists, so no workspace's activity log
+/// lists it (a row with no user would show in every workspace's log, like a failed sign-in). A sealed
+/// event: its hash covers the ids and the detail's keyed digest, so the ids stay (they belong to an
+/// account that no longer exists) and the detail is replaced (`$sealed_detail`,
+/// `audit::chain::ERASED_DETAIL`) where the event is filed under them or the detail names their email or
+/// id; the chain still verifies (docs/privacy/subject-rights.md, "Audit trail").
 pub const ERASE_CONTROL: ControlStmt = ControlStmt::at(
     "subject.erase_control",
     "BEGIN TRANSACTION; \
@@ -675,17 +696,23 @@ pub const ERASE_CONTROL: ControlStmt = ControlStmt::at(
      LET $fc = (UPDATE failure_capsule SET user = NONE, args = '' WHERE user = <string> $u RETURN BEFORE); \
      UPDATE failure_capsule SET args = string::replace(args, <regex> $email_re, '[erased person]') WHERE string::contains(string::lowercase(args), $email_lc) RETURN NONE; \
      UPDATE erasure SET requester = NONE WHERE requester = $u RETURN NONE; \
+     LET $mr = (DELETE mfa_recovery_code WHERE user = $u RETURN BEFORE); \
+     LET $mc = (DELETE mfa_challenge WHERE user = $u OR string::lowercase(link_email ?? '') = $email_lc RETURN BEFORE); \
+     UPDATE instance_setting SET updated_by = NONE WHERE updated_by = $u RETURN NONE; \
      LET $ae = (UPDATE audit_event SET user = IF user = $u THEN user:erased ELSE user END, actor_id = IF actor_id IN $actors THEN 'erased' ELSE actor_id END, \
         target = IF target IN $actors OR string::contains(target, $key) THEN 'erased' ELSE target END, \
         detail = string::replace(detail, <regex> $email_re, '[erased person]') \
-        WHERE user = $u OR actor_id IN $actors OR target IN $actors OR string::contains(target, $key) OR string::contains(string::lowercase(detail), $email_lc) RETURN BEFORE); \
+        WHERE seq IS NONE AND (user = $u OR actor_id IN $actors OR target IN $actors OR string::contains(target, $key) OR string::contains(string::lowercase(detail), $email_lc)) RETURN BEFORE); \
+     LET $as = (UPDATE audit_event SET detail = $sealed_detail \
+        WHERE seq IS NOT NONE AND detail != $sealed_detail AND (user = $u OR string::contains(string::lowercase(detail), $email_lc) OR string::contains(detail, $key)) RETURN BEFORE); \
      LET $ms = (DELETE membership WHERE user = $u RETURN BEFORE); \
      LET $us = (DELETE $u RETURN BEFORE); \
      RETURN { app_connections: array::len($og) + array::len($ot) + array::len($oc), api_tokens: array::len($at), sessions: array::len($se), \
         sign_in_identities: array::len($id), usage_counters: array::len($tu), jobs: array::len($jb), failure_capsules: array::len($fc), \
-        audit_events_anonymised: array::len($ae), org_memberships: array::len($ms), account: array::len($us) }; \
+        audit_events_anonymised: array::len($ae), audit_event_details_erased: array::len($as), two_step_codes_and_challenges: array::len($mr) + array::len($mc), \
+        org_memberships: array::len($ms), account: array::len($us) }; \
      COMMIT TRANSACTION;",
-    16,
+    20,
 );
 
 /// The control half of the post-check: every control table that can name the subject. All must be 0.
@@ -702,7 +729,12 @@ pub const CONTROL_RESIDUE: ControlStmt = ControlStmt::new(
        tool_usage: count((SELECT id FROM tool_usage WHERE user = $u)), \
        job: count((SELECT id FROM job WHERE owner = $u)), \
        failure_capsule: count((SELECT id FROM failure_capsule WHERE user = <string> $u OR string::contains(string::lowercase(args), $email_lc))), \
-       audit_event: count((SELECT id FROM audit_event WHERE user = $u OR actor_id IN $actors OR target IN $actors OR string::contains(target, $key) OR string::contains(string::lowercase(detail), $email_lc))), \
+       audit_event: count((SELECT id FROM audit_event WHERE string::contains(string::lowercase(detail), $email_lc) \
+          OR (seq IS NONE AND (user = $u OR actor_id IN $actors OR target IN $actors OR string::contains(target, $key))) \
+          OR (seq IS NOT NONE AND detail != $sealed_detail AND (user = $u OR string::contains(detail, $key))))), \
+       mfa_recovery_code: count((SELECT id FROM mfa_recovery_code WHERE user = $u)), \
+       mfa_challenge: count((SELECT id FROM mfa_challenge WHERE user = $u OR string::lowercase(link_email ?? '') = $email_lc)), \
+       instance_setting: count((SELECT id FROM instance_setting WHERE updated_by = $u)), \
        erasure: count((SELECT id FROM erasure WHERE (subject = $u OR requester = $u) AND id != $erasure)) \
      }",
 );
@@ -710,6 +742,7 @@ pub const CONTROL_RESIDUE: ControlStmt = ControlStmt::new(
 pub const CONTROL_ALL: &[&ControlStmt] = &[
     &ACCOUNT,
     &CONFIRM_ROW,
+    &EMAIL_HOLDER,
     &HELD_USERS,
     &ORG_MEMBERSHIPS,
     &OPEN_SUBJECTS,

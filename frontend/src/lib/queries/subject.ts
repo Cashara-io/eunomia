@@ -43,7 +43,7 @@ export function useStartExport() {
  * sign-in from the last 10 minutes). `close_workspace` confirms closing a workspace you are the only member of. */
 export const useEraseMe = () =>
   useMutation({
-    mutationFn: (body: { password?: string; close_workspace?: boolean }) => call(eraseMyAccount({ body })),
+    mutationFn: (body: { password?: string; close_workspace?: boolean; mfa_code?: string }) => call(eraseMyAccount({ body })),
   });
 
 /** What has been done about your data: exports an admin made, erasure requests, holds, admin actions on your account. */
@@ -62,7 +62,8 @@ export function useErasePerson() {
   return useMutation({
     // server operators only: the operator's own password (one with single sign-on only needs a sign-in from
     // the last 10 minutes); it erases the whole account
-    mutationFn: ({ user_id, password }: { user_id: string; password?: string }) => call(erasePerson({ path: { user_id }, body: { password } })),
+    mutationFn: ({ user_id, password, mfa_code }: { user_id: string; password?: string; mfa_code?: string }) =>
+      call(erasePerson({ path: { user_id }, body: { password, ...(mfa_code ? { mfa_code } : {}) } })),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: adminKeys.people() });
       void qc.invalidateQueries({ queryKey: subjectKeys.erasures() });

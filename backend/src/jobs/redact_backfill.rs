@@ -128,7 +128,7 @@ async fn report(state: &OrgState, p: &Progress) {
     );
     let detail = format!("version={DETECTOR_VERSION} memory={} skill={} audit_log={}", p.changed_memory, p.changed_skill, p.changed_audit_log);
     let actor = Actor { kind: "system", id: "system".into() };
-    audit::record(&state.control, Event { user: None, actor: &actor, action: "redact.backfill", target: &org, outcome: "ok", detail: &detail }).await;
+    audit::record_in_org(&state.control, &state.db.org(), Event { user: None, actor: &actor, action: "redact.backfill", target: &org, outcome: "ok", detail: &detail }).await;
 }
 
 /// `true` when the compare-and-set wrote the row (it still held the text that was read).

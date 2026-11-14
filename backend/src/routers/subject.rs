@@ -110,6 +110,10 @@ struct EraseMe {
     /// in it is deleted). Without it such a request is refused with `subject.workspace_closes`.
     #[serde(default)]
     close_workspace: bool,
+    /// With two-step verification on: a code from your authenticator, unless you signed in with one in
+    /// the last 10 minutes (`auth.step_up_required` otherwise).
+    #[serde(default)]
+    mfa_code: Option<String>,
 }
 
 #[utoipa::path(
@@ -118,7 +122,7 @@ struct EraseMe {
     path = "/api/account/erasure",
     tag = "export",
     summary = "Delete your account and your data (browser session, confirmed with your password)",
-    description = "An account with no password (single sign-on only) confirms with a sign-in from the last 10 minutes (`subject.reauthenticate` otherwise). Checks the confirmation, then suspends the account and signs it out everywhere, and queues the erasure. Refused with `subject.legal_hold` while an admin holds the account, `subject.last_owner` when you own a workspace that has other members and no other owner, and `subject.workspace_closes` until you confirm closing a workspace you are the only member of. What is deleted and what is kept: docs/privacy/subject-rights.md.",
+    description = "An account with no password (single sign-on only) confirms with a sign-in from the last 10 minutes (`subject.reauthenticate` otherwise). With two-step verification on, it also needs a second factor from the last 10 minutes or `mfa_code` (`auth.step_up_required`). Checks the confirmation, then suspends the account and signs it out everywhere, and queues the erasure. Refused with `subject.legal_hold` while an admin holds the account, `subject.last_owner` when you own a workspace that has other members and no other owner, and `subject.workspace_closes` until you confirm closing a workspace you are the only member of. What is deleted and what is kept: docs/privacy/subject-rights.md.",
     request_body = EraseMe,
     responses((status = 200, body = ErasureTicket), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = [])),
@@ -128,6 +132,8 @@ async fn erase_me(State(state): State<AppState>, user: User, headers: HeaderMap,
     let res = async {
         let signed_in_at = subject::session_signed_in_at(&state.control, &user.id, crate::auth::session_sid(&state.settings.jwt_secret, &headers)).await?;
         subject::confirm(&state.control, &user.id, Confirmation::SelfService { password: body.password.as_deref(), signed_in_at }).await?;
+        // irreversible, like issuing a credential: the same step-up (crate::mfa::step_up)
+        crate::mfa::step_up(&state, &user, &headers, body.mfa_code.as_deref()).await?;
         subject::request_erasure(&state, &user.id, Requester::Myself, body.close_workspace).await
     }
     .await;
@@ -162,6 +168,10 @@ struct ErasePerson {
     /// Confirms closing any workspace whose only member the person is.
     #[serde(default)]
     close_workspace: bool,
+    /// With two-step verification on for your account: a code from your authenticator, unless you
+    /// signed in with one in the last 10 minutes (`auth.step_up_required` otherwise).
+    #[serde(default)]
+    mfa_code: Option<String>,
 }
 
 #[utoipa::path(
@@ -170,7 +180,7 @@ struct ErasePerson {
     path = "/api/admin/people/{user_id}/erasure",
     tag = "admin",
     summary = "Erase someone's whole account and data (server operators only, browser session, confirmed with your own password)",
-    description = "Only a server operator (an address in EUNOMIA_ADMIN_EMAILS, or the server's first account): the whole account in every workspace, as if the person had deleted it themselves. An admin of a workspace who is not an operator can't erase anyone in this release. Refused for your own account (use Settings > Data), for the first account and other operators' accounts, with `subject.legal_hold` while the account is held, with `subject.last_owner` when the person owns a workspace with other members, and with `subject.workspace_closes` until you confirm closing a workspace the person is the only member of.",
+    description = "Only a server operator (an address in EUNOMIA_ADMIN_EMAILS, or the server's first account): the whole account in every workspace, as if the person had deleted it themselves. An admin of a workspace who is not an operator can't erase anyone in this release. With two-step verification on for your account, it also needs a second factor from the last 10 minutes or `mfa_code` (`auth.step_up_required`). Refused for your own account (use Settings > Data), for the first account and other operators' accounts, with `subject.legal_hold` while the account is held, with `subject.last_owner` when the person owns a workspace with other members, and with `subject.workspace_closes` until you confirm closing a workspace the person is the only member of.",
     params(("user_id" = String, Path)),
     request_body = ErasePerson,
     responses((status = 200, body = ErasureTicket), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
@@ -192,6 +202,7 @@ async fn erase_person(State(state): State<AppState>, user: User, headers: Header
         let signed_in_at = subject::session_signed_in_at(&state.control, &user.id, crate::auth::session_sid(&state.settings.jwt_secret, &headers)).await?;
         let how = Confirmation::Admin { admin: &user.id, password: body.password.as_deref(), signed_in_at };
         subject::confirm(&state.control, &target, how).await?;
+        crate::mfa::step_up(&state, &user, &headers, body.mfa_code.as_deref()).await?;
         subject::request_erasure(&state, &target, Requester::Operator(user.id.clone()), body.close_workspace).await
     }
     .await;

@@ -228,7 +228,9 @@ async fn seed(app: &TestApp, who: &User, bob: &User) -> Seeded {
         .check()
         .unwrap();
 
-    // control: an identity, an audit event naming their email, usage, an OAuth grant with a token and a code, a capsule, a job
+    // control: an identity, an audit event naming their email, usage, an OAuth grant with a token and a code, a capsule, a job,
+    // two-step recovery codes and challenges (one of another account's, carrying their address for a pending link), the
+    // instance setting they changed last
     jobs::enqueue(&state.control, NewJob::new("no_such_kind", who.id.clone(), format!("seed-{mark}")).in_org(who.org)).await.unwrap();
     let control_sql = "
         CREATE identity SET user = $u, issuer = 'https://idp.example', subject = $c, email = $email;
@@ -239,7 +241,11 @@ async fn seed(app: &TestApp, who: &User, bob: &User) -> Seeded {
         CREATE oauth_token SET kind = 'access', token_hash = $c, family = $g, expires_at = time::now() + 15m;
         CREATE oauth_code SET code_hash = $c, owner = $u, client_id = 'client-x', redirect_uri = 'http://localhost/cb', code_challenge = $c, scope = ['memory:read'], resource = 'http://x', expires_at = time::now() + 1m;
         CREATE failure_capsule SET kind = 'tool', name = 'recall', source = 'test', status = 500, code = 'internal', trace_id = $c, version = 'x', args = '{q: secret}', user = <string> $u;
-        CREATE failure_capsule SET kind = 'tool', name = 'vault_invite', source = 'test', status = 500, code = 'internal', trace_id = 'x', version = 'x', args = string::concat('{email: ', string::uppercase($email), '}'), user = <string> $admin;";
+        CREATE failure_capsule SET kind = 'tool', name = 'vault_invite', source = 'test', status = 500, code = 'internal', trace_id = 'x', version = 'x', args = string::concat('{email: ', string::uppercase($email), '}'), user = <string> $admin;
+        CREATE mfa_recovery_code SET user = $u, code_hash = $c;
+        CREATE mfa_challenge SET user = $u, token_hash = $c, purpose = 'verify', expires_at = time::now() + 5m;
+        CREATE mfa_challenge SET user = $admin, token_hash = string::concat($c, '-link'), purpose = 'verify', link_issuer = 'https://idp.example', link_subject = $c, link_email = string::uppercase($email), expires_at = time::now() + 5m;
+        UPSERT instance_setting:security SET updated_by = $u;";
     state
         .control
         .test_raw()
@@ -292,7 +298,15 @@ async fn rows_naming(state: &AppState, org: &eunomia_backend::pool::OrgDb, needl
         let rows: Vec<Value> = state.control.test_raw().query(format!("SELECT * FROM {t}")).await.unwrap().take(0).unwrap();
         for r in rows {
             let text = r.to_string().to_lowercase();
-            if needles.iter().any(|n| text.contains(&n.to_lowercase())) {
+            // an event sealed into the audit chain keeps the ids its hash covers (of an account that is gone):
+            // there an email counts anywhere, an id only in the detail
+            let hit = if *t == "audit_event" && r["seq"].is_number() {
+                let detail = r["detail"].as_str().unwrap_or_default().to_lowercase();
+                needles.iter().any(|n| if n.contains('@') { text.contains(&n.to_lowercase()) } else { detail.contains(&n.to_lowercase()) })
+            } else {
+                needles.iter().any(|n| text.contains(&n.to_lowercase()))
+            };
+            if hit {
                 hits.push(format!("control {t}: {}", text.chars().take(300).collect::<String>()));
             }
         }
@@ -1111,14 +1125,14 @@ async fn single_sign_on_needs_a_recent_sign_in_and_an_operator_can_cancel() {
     let app = TestApp::new().await;
     let uma = common::register(&app.state, "uma@example.com").await;
     app.state.control.test_raw().query("UPDATE $u SET password_hash = NONE").bind(("u", uma.id.clone())).await.unwrap().check().unwrap();
-    let token = eunomia_backend::auth::start_session(&app.state.control, &app.state.settings.jwt_secret, &uma, None).await.unwrap();
+    let token = eunomia_backend::auth::start_session(&app.state.control, &app.state.settings.jwt_secret, &uma, None, eunomia_backend::auth::Via::Oidc, false).await.unwrap();
     let cookie = format!("{}={token}", eunomia_backend::auth::SESSION_COOKIE);
     // a session signed in an hour ago is not proof
     app.state.control.test_raw().query("UPDATE session SET created_at = time::now() - 1h WHERE owner = $u").bind(("u", uma.id.clone())).await.unwrap().check().unwrap();
     let (s, b) = req(&app.router, "POST", "/api/account/erasure", Some(json!({})), None, Some(&cookie)).await;
     assert_eq!((s, json_of(&b)["code"].clone()), (403, json!("subject.reauthenticate")));
     // a fresh sign-in is
-    let token = eunomia_backend::auth::start_session(&app.state.control, &app.state.settings.jwt_secret, &uma, None).await.unwrap();
+    let token = eunomia_backend::auth::start_session(&app.state.control, &app.state.settings.jwt_secret, &uma, None, eunomia_backend::auth::Via::Oidc, false).await.unwrap();
     let cookie = format!("{}={token}", eunomia_backend::auth::SESSION_COOKIE);
     let (s, b) = req(&app.router, "POST", "/api/account/erasure", Some(json!({})), None, Some(&cookie)).await;
     assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
@@ -1139,7 +1153,7 @@ async fn single_sign_on_needs_a_recent_sign_in_and_an_operator_can_cancel() {
     assert!(suspended[0].is_null(), "the account is no longer suspended: {suspended:?}");
 
     // once the erasure has started deleting it cannot be cancelled: it completes, or waits
-    let token = eunomia_backend::auth::start_session(&app.state.control, &app.state.settings.jwt_secret, &uma, None).await.unwrap();
+    let token = eunomia_backend::auth::start_session(&app.state.control, &app.state.settings.jwt_secret, &uma, None, eunomia_backend::auth::Via::Oidc, false).await.unwrap();
     let cookie = format!("{}={token}", eunomia_backend::auth::SESSION_COOKIE);
     let (s, b) = req(&app.router, "POST", "/api/account/erasure", Some(json!({})), None, Some(&cookie)).await;
     assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
@@ -1200,4 +1214,223 @@ async fn someone_held_or_being_erased_still_reads_a_shared_space_and_keeps_their
     }
     assert!(account_exists(&app, &ana).await && account_exists(&app, &cleo).await);
     let _ = tx.send(true);
+}
+
+/// Runs the offline verifier (`scripts/audit/verify-audit-export.py`) on an export, as an auditor would.
+/// `None` when python3 is not installed.
+fn offline_verify(doc: &Value) -> Option<(Option<i32>, String)> {
+    if std::process::Command::new("python3").arg("--version").output().is_err() {
+        eprintln!("python3 not found: offline verifier not run");
+        return None;
+    }
+    let script = concat!(env!("CARGO_MANIFEST_DIR"), "/../scripts/audit/verify-audit-export.py");
+    let dir = std::env::temp_dir().join(format!("erasure-audit-{}", uuid::Uuid::new_v4().simple()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("export.json");
+    std::fs::write(&path, doc.to_string()).unwrap();
+    let out = std::process::Command::new("python3").arg("-I").arg(script).arg(&path).output().unwrap();
+    std::fs::remove_dir_all(&dir).ok();
+    Some((out.status.code(), format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))))
+}
+
+#[tokio::test]
+async fn erasing_someone_keeps_the_audit_chain_verifiable_and_takes_their_details_out() {
+    use eunomia_backend::audit::chain;
+    let _serial = SERIAL.lock().await;
+    let (app, _stop) = app_with_worker().await;
+    let vic = common::register(&app.state, "Vic@Example.com").await;
+    let ledger = chain::org_ledger(&vic.org);
+    // chained events of theirs and about them: their own export request, and an operator's hold and lift
+    // (whose details name their email)
+    let cookie = login(&app.router, &vic.email).await;
+    assert_eq!(req(&app.router, "POST", "/api/export/subject", None, None, Some(&cookie)).await.0, 200);
+    let operator = app.session_cookie().await;
+    for hold in [true, false] {
+        let (s, _) = req(&app.router, "PUT", &format!("/api/admin/people/{}/legal-hold", vic.id.to_string()), Some(json!({"hold": hold})), None, Some(&operator)).await;
+        assert_eq!(s, 200);
+    }
+    common::sys(chain::replay(&app.state.control)).await.unwrap();
+    let before = chain::verify(&app.state.control, &ledger).await.unwrap();
+    assert!(before.ok, "{before:?}");
+    let about: Vec<Value> = app.state.control.test_raw().query("SELECT * FROM audit_event WHERE ledger = $l AND seq IS NOT NONE AND (user = $u OR string::contains(string::lowercase(detail), 'vic@example.com'))")
+        .bind(("l", ledger.clone())).bind(("u", vic.id.clone())).await.unwrap().take(0).unwrap();
+    assert!(about.len() >= 3, "sealed events about vic before the erasure: {about:?}");
+
+    let id = erase_route(&app, &vic, false).await;
+    let r = wait_status(&app, &id, "done").await;
+    assert!(r["post_check"].as_object().unwrap().values().all(|v| v == 0), "{r}");
+    common::sys(chain::replay(&app.state.control)).await.unwrap();
+
+    // the chain still verifies, on the server and offline; the erased details count as unchecked
+    let after = chain::verify(&app.state.control, &ledger).await.unwrap();
+    assert!(after.ok, "the chain verifies after the erasure: {after:?}");
+    assert!(r["counts"]["audit_event_details_erased"].as_i64().unwrap() >= 3, "{r}");
+    assert!(after.detail_unchecked >= 3, "{after:?}");
+    let doc = serde_json::to_value(chain::export(&app.state.control, &ledger, None, None).await.unwrap()).unwrap();
+    assert_eq!(doc["ok"], true, "{doc}");
+    if let Some((code, out)) = offline_verify(&doc) {
+        assert_eq!(code, Some(0), "the offline verifier accepts the ledger after the erasure: {out}");
+    }
+    // and nothing in the ledger shows their email; their sealed events keep only the ids the hash covers
+    let rows: Vec<Value> = app.state.control.test_raw().query("SELECT * FROM audit_event").await.unwrap().take(0).unwrap();
+    for row in &rows {
+        assert!(!row.to_string().to_lowercase().contains("vic@example.com"), "the email is gone from the ledger: {row}");
+    }
+    for row in rows.iter().filter(|r| r["user"] == vic.id.to_string() && r["seq"].is_number()) {
+        assert_eq!(row["detail"], chain::ERASED_DETAIL, "{row}");
+    }
+    assert!(!account_exists(&app, &vic).await);
+}
+
+#[tokio::test]
+async fn with_two_step_verification_erasing_needs_a_fresh_second_factor() {
+    let _serial = SERIAL.lock().await;
+    let (app, _stop) = app_with_worker().await;
+    let enrol = |cookie: String| {
+        let router = app.router.clone();
+        async move {
+            let (s, e) = req(&router, "POST", "/api/auth/mfa/enrol", Some(json!({"password": common::PASSWORD})), None, Some(&cookie)).await;
+            assert_eq!(s, 200, "{}", String::from_utf8_lossy(&e));
+            let secret = json_of(&e)["secret"].as_str().unwrap().to_string();
+            let code = eunomia_backend::mfa::code_at(&secret, u64::try_from(chrono::Utc::now().timestamp()).unwrap()).unwrap();
+            let (s, done) = req(&router, "POST", "/api/auth/mfa/enrol/confirm", Some(json!({"code": code})), None, Some(&cookie)).await;
+            assert_eq!(s, 200, "{}", String::from_utf8_lossy(&done));
+            json_of(&done)["recovery_codes"].as_array().unwrap().iter().map(|c| c.as_str().unwrap().to_string()).collect::<Vec<_>>()
+        }
+    };
+    let stale = |u: &User| {
+        let (control, id) = (app.state.control.clone(), u.id.clone());
+        async move { control.test_raw().query("UPDATE session SET mfa_at = time::now() - 1h WHERE owner = $u").bind(("u", id)).await.unwrap().check().unwrap() }
+    };
+
+    // the person: password, then a second factor from the last 10 minutes or a code now
+    let wes = common::register(&app.state, "wes@example.com").await;
+    let cookie = login(&app.router, &wes.email).await;
+    let codes = enrol(cookie.clone()).await;
+    stale(&wes).await;
+    app.state.credentials.clear();
+    let (s, b) = req(&app.router, "POST", "/api/account/erasure", Some(json!({"password": common::PASSWORD})), None, Some(&cookie)).await;
+    assert_eq!((s, json_of(&b)["code"].clone()), (403, json!("auth.step_up_required")), "{}", String::from_utf8_lossy(&b));
+    let (s, b) = req(&app.router, "POST", "/api/account/erasure", Some(json!({"password": common::PASSWORD, "mfa_code": "000000"})), None, Some(&cookie)).await;
+    assert_eq!((s, json_of(&b)["code"].clone()), (401, json!("auth.mfa_invalid")));
+    assert!(control_rows(&app.state, "SELECT VALUE id FROM erasure WHERE subject = $u", ("u", json!(wes.id.to_string()))).await.is_empty(), "nothing was queued");
+    assert_eq!(req(&app.router, "GET", "/api/auth/me", None, None, Some(&cookie)).await.0, 200, "nor suspended");
+    let (s, b) = req(&app.router, "POST", "/api/account/erasure", Some(json!({"password": common::PASSWORD, "mfa_code": codes[0]})), None, Some(&cookie)).await;
+    assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
+    wait_status(&app, json_of(&b)["id"].as_str().unwrap(), "done").await;
+
+    // the operator: their own password, then their own second factor
+    let xan = common::register(&app.state, "xan@example.com").await;
+    let operator = app.session_cookie().await;
+    let codes = enrol(operator.clone()).await;
+    stale(&app.user).await;
+    app.state.credentials.clear();
+    let path = format!("/api/admin/people/{}/erasure", xan.id.to_string());
+    let (s, b) = req(&app.router, "POST", &path, Some(json!({"password": common::PASSWORD})), None, Some(&operator)).await;
+    assert_eq!((s, json_of(&b)["code"].clone()), (403, json!("auth.step_up_required")), "{}", String::from_utf8_lossy(&b));
+    assert!(account_exists(&app, &xan).await);
+    let (s, b) = req(&app.router, "POST", &path, Some(json!({"password": common::PASSWORD, "mfa_code": codes[0]})), None, Some(&operator)).await;
+    assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
+    wait_status(&app, json_of(&b)["id"].as_str().unwrap(), "done").await;
+}
+
+#[tokio::test]
+async fn access_reviews_are_exported_to_the_person_and_kept_when_they_are_erased() {
+    let _serial = SERIAL.lock().await;
+    let (app, _stop) = app_with_worker().await;
+    let yan = common::register(&app.state, "yan@example.com").await;
+    let operator = app.session_cookie().await;
+    let (s, review) = req(&app.router, "POST", "/api/admin/access-reviews", None, None, Some(&operator)).await;
+    assert_eq!(s, 200, "{}", String::from_utf8_lossy(&review));
+    let rid = json_of(&review)["id"].as_str().unwrap().to_string();
+    let decide = format!("/api/admin/access-reviews/{rid}/decisions/{}", eunomia_backend::audit::chain::rid(&yan.id));
+    assert_eq!(req(&app.router, "PUT", &decide, Some(json!({"decision": "keep", "note": "reads the team space"})), None, Some(&operator)).await.0, 200);
+    assert_eq!(req(&app.router, "POST", &format!("/api/admin/access-reviews/{rid}/complete"), None, None, Some(&operator)).await.0, 200);
+
+    // the person's own export holds their row of the snapshot and the decision about them, not the reviewer
+    let cookie = login(&app.router, &yan.email).await;
+    let (s, b) = req(&app.router, "POST", "/api/export/subject", None, None, Some(&cookie)).await;
+    assert_eq!(s, 200);
+    let eid = json_of(&b)["id"].as_str().unwrap().to_string();
+    wait_for("yan's export", || async {
+        let (_, b) = req(&app.router, "GET", "/api/export/subject", None, None, Some(&cookie)).await;
+        json_of(&b).as_array().unwrap().iter().any(|e| e["id"] == eid.as_str() && e["status"] == "ready")
+    })
+    .await;
+    let (s, zip) = req(&app.router, "GET", &format!("/api/export/subject/{eid}"), None, None, Some(&cookie)).await;
+    assert_eq!(s, 200);
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(zip)).unwrap();
+    let mut text = String::new();
+    archive.by_name(&format!("workspaces/{}/access_reviews.json", yan.org.key())).unwrap().read_to_string(&mut text).unwrap();
+    let reviews: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(reviews[0]["your_access"]["email"], "yan@example.com", "{reviews}");
+    assert_eq!(reviews[0]["decisions_about_you"][0]["decision"], "keep", "{reviews}");
+    assert!(!text.contains(&app.user.email), "the reviewer and other people's rows are not in it: {text}");
+    let mut account = String::new();
+    archive.by_name("account.json").unwrap().read_to_string(&mut account).unwrap();
+    assert!(account.contains("two_step_enabled_at") && account.contains("recovery_codes_unused"), "{account}");
+
+    // a completed review is frozen: the erasure finishes and the review stays as recorded
+    let db = common::org_db(&app.state, &yan).await;
+    let before: Vec<Value> = db.test_raw().query("SELECT * FROM type::record($r)").bind(("r", rid.clone())).await.unwrap().take(0).unwrap();
+    let id = erase_route(&app, &yan, false).await;
+    let r = wait_status(&app, &id, "done").await;
+    assert!(r["post_check"].as_object().unwrap().values().all(|v| v == 0), "{r}");
+    let after: Vec<Value> = db.test_raw().query("SELECT * FROM type::record($r)").bind(("r", rid.clone())).await.unwrap().take(0).unwrap();
+    assert_eq!(before, after, "the completed review is kept unchanged");
+    let (s, export) = req(&app.router, "GET", &format!("/api/admin/access-reviews/{rid}/export"), None, None, Some(&operator)).await;
+    assert_eq!(s, 200);
+    assert_eq!((json_of(&export)["result_hash_matches"].clone(), json_of(&export)["chain_matches"].clone()), (json!(true), json!(true)), "it still matches the chain");
+
+    // closing a workspace with a completed review: everything else goes, the frozen review stays
+    let solo = common::register_personal(&app.state, "solo-review@example.com").await;
+    let solo_db = common::org_db(&app.state, &solo).await;
+    solo_db.test_raw().query("CREATE access_review:old SET org = $o, status = 'completed', started_by = $u, started_by_email = $e, snapshot = {}, snapshot_hash = 'x'")
+        .bind(("o", solo.org.key())).bind(("u", solo.id.clone())).bind(("e", solo.email.clone())).await.unwrap().check().unwrap();
+    let id = erase_route(&app, &solo, true).await;
+    let r = wait_status(&app, &id, "done").await;
+    assert_eq!(r["post_check"]["closed_workspace_rows"], 0, "{r}");
+    let kept: Vec<Value> = solo_db.test_raw().query("SELECT VALUE id FROM access_review").await.unwrap().take(0).unwrap();
+    assert_eq!(kept.len(), 1, "the frozen review stays in the closed database for the operator who drops it");
+}
+
+#[tokio::test]
+async fn a_set_aside_account_is_erased_by_its_kept_address_unless_another_account_has_it() {
+    let _serial = SERIAL.lock().await;
+    let (app, _stop) = app_with_worker().await;
+    let operator = app.session_cookie().await;
+    let db = common::org_db(&app.state, &app.user).await;
+    let set_aside = |u: &User| {
+        let (control, id) = (app.state.control.clone(), u.id.clone());
+        async move { eunomia_backend::store::control::AUTH_SET_ASIDE.on(&control).bind(("user", id)).await.unwrap().check().unwrap() }
+    };
+    let erase = |u: &User| {
+        let (router, cookie, path) = (app.router.clone(), operator.clone(), format!("/api/admin/people/{}/erasure", u.id.to_string()));
+        async move {
+            let (s, b) = req(&router, "POST", &path, Some(json!({"password": common::PASSWORD})), None, Some(&cookie)).await;
+            assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
+            json_of(&b)["id"].as_str().unwrap().to_string()
+        }
+    };
+    // nobody else has the address: it is erased like any account's
+    let zed = common::register(&app.state, "zed@example.com").await;
+    call(&app.state, &app.user, "memory_write", json!({"subject_name": "Desk", "subject_kind": "organisation", "text": "ask ZED@example.com"})).await;
+    set_aside(&zed).await;
+    let id = erase(&zed).await;
+    let r = wait_status(&app, &id, "done").await;
+    assert!(r["post_check"].as_object().unwrap().values().all(|v| v == 0), "{r}");
+    assert!(!account_exists(&app, &zed).await);
+    assert!(texts(&db).await.iter().any(|t| t == "ask [erased person]"), "the kept address is scrubbed: {:?}", texts(&db).await);
+
+    // a new account signs in with the address now: the set-aside one goes, the address stays the new one's
+    let amy = common::register(&app.state, "amy@example.com").await;
+    call(&app.state, &app.user, "memory_write", json!({"subject_name": "Desk", "subject_kind": "organisation", "text": "ask amy@example.com"})).await;
+    set_aside(&amy).await;
+    let amy_now = common::register(&app.state, "amy@example.com").await;
+    assert_ne!(amy_now.id, amy.id);
+    let id = erase(&amy).await;
+    let r = wait_status(&app, &id, "done").await;
+    assert!(r["post_check"].as_object().unwrap().values().all(|v| v == 0), "{r}");
+    assert!(!account_exists(&app, &amy).await && account_exists(&app, &amy_now).await);
+    assert!(texts(&db).await.iter().any(|t| t == "ask amy@example.com"), "the address belongs to the new account: not scrubbed");
 }

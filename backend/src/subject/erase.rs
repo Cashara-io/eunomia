@@ -156,6 +156,17 @@ fn never_matches() -> String {
 }
 
 /// The case-insensitive pattern for an email (bound as a parameter, never spliced into SQL).
+/// The address an account signs in with, normalised. For an account set aside by "Start fresh"
+/// (`email = "set-aside:<id> (was <address>)"`, `routers/oidc.rs`) it is the kept old address.
+pub fn sign_in_address(raw: &str) -> String {
+    let addr = raw
+        .strip_prefix("set-aside:")
+        .and_then(|rest| rest.find(" (was ").map(|i| &rest[i + " (was ".len()..]))
+        .map(|a| a.strip_suffix(')').unwrap_or(a))
+        .unwrap_or(raw);
+    crate::models_user::normalize_email(addr)
+}
+
 pub fn email_pattern(email_lc: &str) -> String {
     format!("(?i){}", regex::escape(email_lc))
 }
@@ -312,6 +323,7 @@ async fn run(state: &AppState, erasure: &RecordId) -> Result<Outcome, AppError> 
             .bind(("actors", work.actors.clone()))
             .bind(("email_re", email_re.clone()))
             .bind(("email_lc", email_lc.clone()))
+            .bind(("sealed_detail", crate::audit::chain::ERASED_DETAIL))
             .await?;
         add_counts(&mut counts, &res.take::<Option<Value>>(q::ERASE_CONTROL.slot)?.unwrap_or_default());
         state.credentials.forget_user(&subject);
@@ -322,6 +334,7 @@ async fn run(state: &AppState, erasure: &RecordId) -> Result<Outcome, AppError> 
             .bind(("actors", work.actors.clone()))
             .bind(("email_lc", email_lc.clone()))
             .bind(("erasure", erasure.clone()))
+            .bind(("sealed_detail", crate::audit::chain::ERASED_DETAIL))
             .await?;
         add_into(&mut check, &res.take::<Option<Value>>(0)?.unwrap_or_default());
     }
@@ -428,7 +441,16 @@ async fn capture(state: &AppState, subject: &RecordId, row: &ErasureRow) -> Resu
         email: String,
     }
     let email_row: Option<EmailRow> = q::CONFIRM_ROW.on(&state.control).bind(("u", subject.clone())).await?.take(0)?;
-    let email_lc = email_row.map(|r| crate::models_user::normalize_email(&r.email)).filter(|e| !e.is_empty());
+    let mut email_lc = email_row.as_ref().map(|r| sign_in_address(&r.email)).filter(|e| !e.is_empty());
+    // an account set aside by "Start fresh" keeps its old address only in its raw email; when another
+    // account now signs in with that address, the address is that account's, so it is not scrubbed
+    // from what stays (the set-aside account's ids are still erased everywhere)
+    if let (true, Some(addr)) = (email_row.as_ref().is_some_and(|r| r.email.starts_with("set-aside:")), email_lc.clone()) {
+        let holder: Vec<RecordId> = q::EMAIL_HOLDER.on(&state.control).bind(("email", addr)).bind(("u", subject.clone())).await?.take(0)?;
+        if !holder.is_empty() {
+            email_lc = None;
+        }
+    }
     let mut actors: Vec<String> = q::TOKEN_IDS.on(&state.control).bind(("u", subject.clone())).await?.take(0)?;
     actors.push(subject.to_string());
     let key = crate::rid::key_string(subject.key()).unwrap_or_else(never_matches);
@@ -677,23 +699,41 @@ pub async fn count_all_rows(db: &crate::pool::OrgDb) -> Result<i64, AppError> {
     }
     let mut rows = 0i64;
     for t in crate::store::TENANT_TABLES {
-        let n: Vec<N> = crate::store::dynamic(db, "subject.closed_org_count", format!("SELECT count() FROM {t} GROUP ALL")).await?.take(0)?;
+        let n: Vec<N> = crate::store::dynamic(db, "subject.closed_org_count", format!("SELECT count() FROM {t}{} GROUP ALL", kept_where(t))).await?.take(0)?;
         rows += n.first().map_or(0, |n| n.count);
     }
     Ok(rows)
 }
 
-/// Empties every org table (a workspace that closes with its only member).
+/// Empties every org table (a workspace that closes with its only member), except completed access
+/// reviews and their decisions: tenant 0044 freezes them (any update or delete is refused), so they stay
+/// in the closed database, as the access-control record they are, until an operator drops it.
 pub async fn empty_all_tables(db: &crate::pool::OrgDb) -> Result<(), AppError> {
     for t in crate::store::TENANT_TABLES {
-        crate::store::dynamic(db, "subject.closed_org_delete", format!("DELETE {t} RETURN NONE")).await?.check()?;
+        crate::store::dynamic(db, "subject.closed_org_delete", format!("DELETE {t}{} RETURN NONE", kept_where(t))).await?.check()?;
     }
     Ok(())
+}
+
+/// The rows of `table` a closing workspace may remove: all, but for the frozen completed access reviews.
+fn kept_where(table: &str) -> &'static str {
+    match table {
+        "access_review" => " WHERE status != 'completed'",
+        "access_review_decision" => " WHERE review.status != 'completed'",
+        _ => "",
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_set_aside_account_is_known_by_its_kept_address() {
+        assert_eq!(sign_in_address("Alice@Example.com"), "alice@example.com");
+        assert_eq!(sign_in_address("set-aside:user:abc (was Alice@Example.com)"), "alice@example.com");
+        assert_eq!(sign_in_address("set-aside:user:abc"), "set-aside:user:abc");
+    }
 
     #[test]
     fn residue_lists_only_nonzero_tables() {

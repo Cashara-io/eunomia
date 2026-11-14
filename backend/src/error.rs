@@ -26,6 +26,11 @@ pub enum ErrorCode {
     AuthSessionExpired,
     AuthPasswordDisabled,
     AuthSuspended,
+    AuthMfaRequired,
+    AuthMfaInvalid,
+    AuthMfaChallengeExpired,
+    AuthStepUpRequired,
+    AuthMfaUnreadable,
     RateLimited,
     TenantDenied,
     TenantNotFound,
@@ -58,6 +63,11 @@ pub enum ErrorCode {
     ValidationInvalid,
     OntologyRejected,
     OntologyStaleRevision,
+    AccessReviewNotFound,
+    AccessReviewOpen,
+    AccessReviewCompleted,
+    AccessReviewSelf,
+    AccessReviewIncomplete,
     DbConflict,
     DbDuplicate,
     SubjectLegalHold,
@@ -83,6 +93,11 @@ impl ErrorCode {
         ErrorCode::AuthSessionExpired,
         ErrorCode::AuthPasswordDisabled,
         ErrorCode::AuthSuspended,
+        ErrorCode::AuthMfaRequired,
+        ErrorCode::AuthMfaInvalid,
+        ErrorCode::AuthMfaChallengeExpired,
+        ErrorCode::AuthStepUpRequired,
+        ErrorCode::AuthMfaUnreadable,
         ErrorCode::RateLimited,
         ErrorCode::TenantDenied,
         ErrorCode::TenantNotFound,
@@ -115,6 +130,11 @@ impl ErrorCode {
         ErrorCode::ValidationInvalid,
         ErrorCode::OntologyRejected,
         ErrorCode::OntologyStaleRevision,
+        ErrorCode::AccessReviewNotFound,
+        ErrorCode::AccessReviewOpen,
+        ErrorCode::AccessReviewCompleted,
+        ErrorCode::AccessReviewSelf,
+        ErrorCode::AccessReviewIncomplete,
         ErrorCode::DbConflict,
         ErrorCode::DbDuplicate,
         ErrorCode::SubjectLegalHold,
@@ -140,6 +160,11 @@ impl ErrorCode {
             ErrorCode::AuthSessionExpired => "auth.session_expired",
             ErrorCode::AuthPasswordDisabled => "auth.password_disabled",
             ErrorCode::AuthSuspended => "auth.suspended",
+            ErrorCode::AuthMfaRequired => "auth.mfa_required",
+            ErrorCode::AuthMfaInvalid => "auth.mfa_invalid",
+            ErrorCode::AuthMfaChallengeExpired => "auth.mfa_challenge_expired",
+            ErrorCode::AuthStepUpRequired => "auth.step_up_required",
+            ErrorCode::AuthMfaUnreadable => "auth.mfa_unreadable",
             ErrorCode::RateLimited => "rate.limited",
             ErrorCode::TenantDenied => "tenant.denied",
             ErrorCode::TenantNotFound => "tenant.not_found",
@@ -172,6 +197,11 @@ impl ErrorCode {
             ErrorCode::ValidationInvalid => "validation.invalid",
             ErrorCode::OntologyRejected => "ontology.rejected",
             ErrorCode::OntologyStaleRevision => "ontology.stale_revision",
+            ErrorCode::AccessReviewNotFound => "access_review.not_found",
+            ErrorCode::AccessReviewOpen => "access_review.open_exists",
+            ErrorCode::AccessReviewCompleted => "access_review.completed",
+            ErrorCode::AccessReviewSelf => "access_review.self_review",
+            ErrorCode::AccessReviewIncomplete => "access_review.incomplete",
             ErrorCode::DbConflict => "db.conflict",
             ErrorCode::DbDuplicate => "db.duplicate",
             ErrorCode::SubjectLegalHold => "subject.legal_hold",
@@ -189,10 +219,11 @@ impl ErrorCode {
 
     pub fn default_status(self) -> StatusCode {
         match self {
-            ErrorCode::AuthUnauthorized | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired => StatusCode::UNAUTHORIZED,
-            ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled
+            ErrorCode::AuthUnauthorized | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthMfaRequired | ErrorCode::AuthMfaInvalid | ErrorCode::AuthMfaChallengeExpired => StatusCode::UNAUTHORIZED,
+            ErrorCode::AuthStepUpRequired | ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled
             | ErrorCode::SecretHostDenied
-            | ErrorCode::SecretOutboundBlocked => StatusCode::FORBIDDEN,
+            | ErrorCode::SecretOutboundBlocked
+            | ErrorCode::AccessReviewSelf => StatusCode::FORBIDDEN,
             ErrorCode::SecretOutboundFailed => StatusCode::BAD_GATEWAY,
             ErrorCode::SecretRequestClosed => StatusCode::CONFLICT,
             ErrorCode::RateLimited | ErrorCode::ExtensionBufferFull => StatusCode::TOO_MANY_REQUESTS,
@@ -201,7 +232,8 @@ impl ErrorCode {
             ErrorCode::DocumentUnsupportedType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             ErrorCode::ChangesResync => StatusCode::GONE,
             ErrorCode::TenantProvisioningDisabled => StatusCode::NOT_IMPLEMENTED,
-            ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision
+            ErrorCode::AuthMfaUnreadable | ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision
+            | ErrorCode::AccessReviewOpen | ErrorCode::AccessReviewCompleted | ErrorCode::AccessReviewIncomplete
             | ErrorCode::SubjectLegalHold | ErrorCode::SubjectLastOwner | ErrorCode::SubjectWorkspaceCloses | ErrorCode::SubjectExportNotReady => StatusCode::CONFLICT,
             ErrorCode::SubjectConfirmationFailed | ErrorCode::SubjectReauthenticate => StatusCode::FORBIDDEN,
             ErrorCode::AuthNotFound
@@ -215,7 +247,8 @@ impl ErrorCode {
             | ErrorCode::ToolNotFound
             | ErrorCode::TenantNotFound
             | ErrorCode::ResourceNotFound
-            | ErrorCode::DocumentNotFound => StatusCode::NOT_FOUND,
+            | ErrorCode::DocumentNotFound
+            | ErrorCode::AccessReviewNotFound => StatusCode::NOT_FOUND,
             ErrorCode::ConnectorNotConnected | ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected => StatusCode::BAD_REQUEST,
             ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked | ErrorCode::Internal => {
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -395,6 +428,7 @@ mod tests {
             match c {
                 ErrorCode::AuthUnauthorized | ErrorCode::AuthForbidden | ErrorCode::AuthEmailTaken | ErrorCode::AuthNotFound
                 | ErrorCode::AuthScope | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::RateLimited
+                | ErrorCode::AuthMfaRequired | ErrorCode::AuthMfaInvalid | ErrorCode::AuthMfaChallengeExpired | ErrorCode::AuthStepUpRequired | ErrorCode::AuthMfaUnreadable
                 | ErrorCode::TenantDenied | ErrorCode::TenantNotFound | ErrorCode::TenantSchemaBehind
                 | ErrorCode::TenantProvisioningDisabled | ErrorCode::VaultNotFound | ErrorCode::VaultForbidden | ErrorCode::VaultNameTaken | ErrorCode::EntityNotFound
                 | ErrorCode::MemoryNotFound | ErrorCode::ChatThreadNotFound | ErrorCode::ConnectorNotFound
@@ -402,6 +436,7 @@ mod tests {
                 | ErrorCode::ResourceNotFound | ErrorCode::DocumentNotFound | ErrorCode::DocumentTooLarge
                 | ErrorCode::DocumentUnsupportedType | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable | ErrorCode::SecretRequestClosed | ErrorCode::SecretHostDenied
                 | ErrorCode::SecretOutboundBlocked | ErrorCode::SecretOutboundFailed | ErrorCode::ChangesResync | ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected | ErrorCode::OntologyStaleRevision | ErrorCode::DbConflict
+                | ErrorCode::AccessReviewNotFound | ErrorCode::AccessReviewOpen | ErrorCode::AccessReviewCompleted | ErrorCode::AccessReviewSelf | ErrorCode::AccessReviewIncomplete
                 | ErrorCode::DbDuplicate | ErrorCode::SubjectLegalHold | ErrorCode::SubjectLastOwner | ErrorCode::SubjectWorkspaceCloses | ErrorCode::SubjectConfirmationFailed | ErrorCode::SubjectReauthenticate
                 | ErrorCode::SubjectExportNotReady | ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked
                 | ErrorCode::Internal => {}

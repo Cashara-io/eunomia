@@ -3,11 +3,10 @@
 import { DownloadSimpleIcon, XIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
 import { downloadExport, downloadSubjectExport } from "@/lib/api";
 import type { ExportRow } from "@/lib/gen";
 import { useMe } from "@/lib/queries/auth";
+import { leaveTo } from "@/lib/queries/client";
 import { useEraseMe, useMyDataActivity, useStartExport, useSubjectExports } from "@/lib/queries/subject";
 import { ICON, PanelHead, StatusLine } from "./shared";
 
@@ -67,8 +66,6 @@ function ExportLine({ e }: { e: ExportRow }) {
 function DeleteAccount() {
   const me = useMe();
   const erase = useEraseMe();
-  const router = useRouter();
-  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [secret, setSecret] = useState("");
   const [error, setError] = useState<Failure | null>(null);
@@ -78,14 +75,21 @@ function DeleteAccount() {
   const hasPassword = me.data?.has_password ?? true;
   // single sign-on only: the proof is a sign-in from the last 10 minutes
   const [reauth, setReauth] = useState(false);
+  // two-step verification on: deleting needs a second factor from the last 10 minutes, or a code now
+  const [stepUp, setStepUp] = useState(false);
+  const [mfaCode, setMfaCode] = useState("");
 
   async function confirm() {
     setError(null);
     try {
-      await erase.mutateAsync({ ...(hasPassword ? { password: secret } : {}), close_workspace: closes && closeOk });
-      // signed out everywhere: nothing cached for this account is valid any more
-      qc.clear();
-      router.replace("/login?erased=1");
+      await erase.mutateAsync({
+        ...(hasPassword ? { password: secret } : {}),
+        close_workspace: closes && closeOk,
+        ...(stepUp && mfaCode.trim() ? { mfa_code: mfaCode.trim() } : {}),
+      });
+      // signed out everywhere: a full load drops everything cached for this account, and nothing that
+      // fails meanwhile (its session is gone) redirects elsewhere
+      leaveTo("/login?erased=1");
     } catch (e) {
       if ((e as { code?: string }).code === "subject.workspace_closes") {
         setCloses(true);
@@ -93,6 +97,10 @@ function DeleteAccount() {
       }
       if ((e as { code?: string }).code === "subject.reauthenticate") {
         setReauth(true);
+        return;
+      }
+      if ((e as { code?: string }).code === "auth.step_up_required") {
+        setStepUp(true);
         return;
       }
       setError(failure(e, "Your account was not deleted."));
@@ -151,6 +159,21 @@ function DeleteAccount() {
               , then come back here to confirm.
             </p>
           )}
+{stepUp && (
+            <label className="flex flex-col gap-1 max-w-[16rem]">
+              <span className="label">Authenticator code</span>
+              <input
+                className="field h-10 px-3 font-mono"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                placeholder="123456"
+                aria-label="Authenticator code"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+              />
+            </label>
+          )}
           {closes && (
             <label className="flex items-start gap-2 text-[13px] max-w-[60ch]" data-testid="close-workspace">
               <input type="checkbox" className="mt-1" checked={closeOk} onChange={(e) => setCloseOk(e.target.checked)} />
@@ -162,7 +185,7 @@ function DeleteAccount() {
           )}
           {error && <ErrorLine error={error} />}
           <div className="flex items-center gap-2">
-            <button type="submit" className="btn btn-danger-solid" disabled={(hasPassword && !secret) || erase.isPending || (closes && !closeOk)}>
+            <button type="submit" className="btn btn-danger-solid" disabled={(hasPassword && !secret) || erase.isPending || (closes && !closeOk) || (stepUp && !mfaCode.trim())}>
               {erase.isPending ? "Deleting…" : "Delete my account and data"}
             </button>
             <button

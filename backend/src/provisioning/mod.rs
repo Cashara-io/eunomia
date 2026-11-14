@@ -218,6 +218,32 @@ impl Provisioner {
         }
     }
 
+    /// Ready orgs whose database lacks a registered migration below one it has applied, with the
+    /// numbers it lacks (see `migrate::skipped_tenant_migrations`). Reads every org's `_migration`
+    /// ledger with one root session.
+    pub async fn find_migration_gaps(&self, control: &ControlDb) -> AppResult<Vec<(OrgId, Vec<u32>)>> {
+        #[derive(serde::Deserialize, surrealdb::types::SurrealValue)]
+        struct T {
+            org: surrealdb::types::RecordId,
+            db: String,
+            status: String,
+        }
+        let tenants: Vec<T> = store::tenant::LIST.on(control).await?.take(0)?;
+        let rt = self.open().await?;
+        let mut out = Vec::new();
+        for t in tenants.into_iter().filter(|t| t.status == "ready") {
+            let Some(org) = crate::rid::key_string(&t.org.key).and_then(|k| OrgId::parse(&k)) else { continue };
+            let s = self.session(&rt, &t.db).await?;
+            let applied: Vec<i64> = store::root(&s, "provisioning.applied_versions", "SELECT VALUE version FROM _migration").await?.take(0)?;
+            let applied: Vec<u32> = applied.into_iter().filter_map(|v| u32::try_from(v).ok()).collect();
+            let missing = crate::migrate::skipped_tenant_migrations(&applied);
+            if !missing.is_empty() {
+                out.push((org, missing));
+            }
+        }
+        Ok(out)
+    }
+
     /// Apply pending tenant migrations to one org's database (the `migrate_tenant` job).
     pub async fn migrate_org(&self, control: &ControlDb, org: &OrgId) -> AppResult<()> {
         let Some(t) = self.tenant_state(control, org).await? else {
