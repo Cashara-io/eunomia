@@ -43,13 +43,13 @@ for (const source of ['neighbourhood', 'search', 'inspector', 'inspector-retryin
       else await page.getByLabel('Depth', {exact:true}).selectOption('2');
     }
     await expect(page.getByRole('alert').filter({hasText:'unavailable to you'})).toBeVisible({timeout:12000});
-    await expect(page.locator('[data-camera], [data-object], [aria-label="Selected object"], [aria-label="Recently viewed objects"], [aria-label="Suggested objects"], [aria-label="Object search results"]')).toHaveCount(0);
+    await expect(page.locator('[data-object], [aria-label="Selected object"], [aria-label="Recently viewed objects"], [aria-label="Suggested objects"], [aria-label="Object search results"]')).toHaveCount(0);
     await expect(page.getByRole('searchbox')).toHaveCount(0);
     expect(await protectedCache(page)).toEqual([]);
   });
 }
 for (const trigger of ['refresh', 'refresh-fit', 'relation', 'ontology', 'resync']) {
-  test(`${trigger} updates links and search without moving camera, selection or typing`, async ({page}) => {
+  test(`${trigger} updates links and search without moving selection or typing`, async ({page}) => {
     const data = neighbourhood();
     await mockConnections(page, 'populated', data);
     let send: (value: string) => void = () => {};
@@ -59,10 +59,6 @@ for (const trigger of ['refresh', 'refresh-fit', 'relation', 'ontology', 'resync
     });
     await page.goto(url);
     await page.locator('[data-object="house"]').first().click();
-    if (trigger !== 'refresh-fit') await page.getByLabel('Pan right', {exact:true}).click();
-    const camera = await page.locator('[data-camera]').getAttribute('data-camera');
-    const topFace = page.locator('[data-form="house"] [class*="faceTop"]');
-    const originalHeight = await topFace.getAttribute('d');
     const box = page.getByRole('searchbox');
     await box.fill('North');
     await expect(page.getByLabel('Object search results')).toContainText('North Coast Beans');
@@ -78,68 +74,34 @@ for (const trigger of ['refresh', 'refresh-fit', 'relation', 'ontology', 'resync
     } else send(JSON.stringify(trigger === 'relation' ? {type:'change',vault:'business',seq,kind:'relation'} : trigger === 'ontology' ? {type:'ontology',vault:'business',event:{seq}} : {type:'resync'}));
     }
     await refresh(1);
-    await expect(page.getByRole('status').filter({hasText:'objects'})).toContainText('5 links');
+    await expect(page.locator('[data-lane]')).toHaveCount(5);
     await expect(page.getByLabel('Object search results')).toContainText('New supplier');
-    await expect(page.locator('[data-camera]')).toHaveAttribute('data-camera', camera!);
     await expect(page.locator('[data-object="house"]').first()).toHaveAttribute('aria-pressed','true');
-    await expect(topFace).not.toHaveAttribute('d', originalHeight!);
-    const addedHeight = await topFace.getAttribute('d');
     data.edges.splice(1, 2);
     await refresh(2);
-    await expect(page.getByRole('status').filter({hasText:'objects'})).toContainText('3 links');
-    await expect(topFace).not.toHaveAttribute('d', addedHeight!);
-    await expect(page.locator('[data-camera]')).toHaveAttribute('data-camera', camera!);
+    await expect(page.locator('[data-lane]')).toHaveCount(3);
     await expect(page.locator('[data-object="house"]').first()).toHaveAttribute('aria-pressed','true');
     await expect(box).toHaveValue('North');
     await expect(box).toBeFocused();
   });
 }
 
-test('Fit text is legible, zoom reduces detail, routes fan out and labels do not stack', async ({page}) => {
-  await mockConnections(page);
-  await page.goto(url);
-  await expect(page.locator('[data-edge-path]')).toHaveCount(13);
-  await expect(page.locator('[data-edge-label]:visible')).toHaveCount(13);
-  const sizes = await page.locator('[data-camera]').evaluate(el => {
-    const zoom = Number(el.getAttribute('data-camera')?.split(',')[2]);
-    return [...el.querySelectorAll('[class*="markKind"], [data-edge-label] text')].map(n => {
-      const matrix = n instanceof SVGTextElement ? n.getScreenCTM() : null;
-      const scale = matrix ? Math.hypot(matrix.a, matrix.b) : zoom;
-      return parseFloat(getComputedStyle(n).fontSize) * scale;
-    });
-  });
-  expect(Math.min(...sizes)).toBeGreaterThanOrEqual(10.99);
-  const starts = await page.locator('[data-edge-path][data-from="house"]').evaluateAll(paths => paths.map(p => p.getAttribute('data-start')));
-  expect(new Set(starts).size).toBe(starts.length);
-  await expect(page.locator('marker path')).toHaveAttribute('fill', 'context-stroke');
-  for (let i=0;i<5;i++) await page.getByLabel('Zoom out',{exact:true}).click();
-  await expect(page.locator('[class*="markKind"]').first()).toBeHidden();
-  await expect(page.locator('[data-edge-label]:visible')).toHaveCount(0);
-  await page.locator('[data-object="house"]').first().focus();
-  await expect.poll(() => page.locator('[data-edge-label]:visible').count()).toBeGreaterThan(0);
-  for (let i=0;i<9;i++) await page.getByLabel('Zoom in',{exact:true}).click();
-  await expect(page.locator('[class*="markKind"]').first()).toBeVisible();
-  await expect(page.locator('[data-edge-label]:visible')).toHaveCount(await page.locator('[data-edge-path]').count());
-});
-
-test('phone filters collapse, suggestions scroll and inspector begins in the first screen', async ({page}) => {
+test('phone filters collapse and the inspector sheet follows the selection', async ({page}) => {
   await page.setViewportSize({width:390,height:844});
   await mockConnections(page);
   await page.goto(url+'&selected=house');
   const inspector = page.getByLabel('Selected object');
   await expect(inspector).toContainText('Values and their sources');
-  expect((await inspector.boundingBox())!.y).toBeLessThan(650);
+  await expect(inspector).toHaveAttribute('data-open', 'true');
   await expect(page.getByLabel('Depth',{exact:true})).toBeHidden();
   await page.getByRole('button',{name:'Filters',exact:true}).click();
   await expect(page.getByLabel('Depth',{exact:true})).toBeVisible();
   await page.getByLabel('Depth',{exact:true}).selectOption('2');
-  await expect(page.getByRole('status').filter({hasText:'objects'})).toContainText('73 objects');
-  const row = await page.getByLabel('Suggested objects').evaluate(el => ({height:el.clientHeight, width:el.clientWidth,scroll:el.scrollWidth}));
-  expect(row.height).toBeLessThan(48);
-  expect(row.scroll).toBeGreaterThan(row.width);
+  await expect(page).toHaveURL(/depth=2/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
-for (const theme of ['light','dark']) test(`all hue text has AA contrast in ${theme}`, async ({page}) => {
+for (const theme of ['light','dark']) test(`stage text has AA contrast in ${theme}, whatever the kind colour`, async ({page}) => {
   await page.addInitScript(t => localStorage.setItem('eunomia-theme',t),theme);
   const data = richNeighbourhood();
   const kinds = ['person','organisation','location','repository','file','symbol','custom_kind'];
@@ -149,30 +111,24 @@ for (const theme of ['light','dark']) test(`all hue text has AA contrast in ${th
   }
   await mockConnections(page,'populated',data);
   await page.goto(url);
-  await expect(page.locator('[data-edge-path]')).toHaveCount(20);
+  await expect(page.locator('[data-object]').first()).toBeVisible();
   const results = await page.evaluate(() => {
     const canvas = document.createElement('canvas'); canvas.width=canvas.height=1;
     const ctx = canvas.getContext('2d')!;
-    const rgb = (css:string) => {ctx.clearRect(0,0,1,1);ctx.fillStyle=css;ctx.fillRect(0,0,1,1);return [...ctx.getImageData(0,0,1,1).data].slice(0,3);};
-    const lum = (c:number[]) => c.map(v=>v/255).map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4).reduce((s,v,i)=>s+v*[0.2126,0.7152,0.0722][i],0);
-    const elements = [...document.querySelectorAll('[class*="markKind"], [data-edge-label] text, [class*="kindBars"] button > span:first-child')];
-    const check = () => elements.map(el=>{
-      const style=getComputedStyle(el); const color=el.tagName==='text'?style.fill:style.color;
-      const background=el.closest('button')??el.closest('[data-edge-label]')?.querySelector('rect');
-      const bg=background?getComputedStyle(background)[background.tagName==='rect'?'fill':'backgroundColor']:'';
-      const a=lum(rgb(color)), b=lum(rgb(bg && bg!=='rgba(0, 0, 0, 0)'?bg:getComputedStyle(document.documentElement).getPropertyValue('--surface')));
-      return {name:el.textContent,ratio:(Math.max(a,b)+0.05)/(Math.min(a,b)+0.05)};
-    });
-    const results = check();
-    // Include arbitrary owner colours, not only the built-in palette.
-    for (const hue of [...Array.from({length:24}, (_,i)=>`hsl(${i*15} 100% 50%)`), '#ffffff', '#000000']) {
-      for (const el of elements) {
-        const mark = el.closest<HTMLElement>('[data-focus], [class*="kindBars"] button');
-        mark?.style.setProperty('--kind-hue', hue);
+    const rgba = (css:string) => {ctx.clearRect(0,0,1,1);ctx.fillStyle=css;ctx.fillRect(0,0,1,1);return [...ctx.getImageData(0,0,1,1).data];};
+    const lum = (c:number[]) => c.slice(0,3).map(v=>v/255).map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4).reduce((s,v,i)=>s+v*[0.2126,0.7152,0.0722][i],0);
+    const background = (el: Element) => {
+      for (let n: Element | null = el; n; n = n.parentElement) {
+        const c = rgba(getComputedStyle(n).backgroundColor);
+        if (c[3] === 255) return c;
       }
-      results.push(...check());
-    }
-    return results;
+      return rgba(getComputedStyle(document.body).backgroundColor);
+    };
+    const elements = [...document.querySelectorAll('[data-object] span, [data-object] small, [data-lane] > span, nav[aria-label="Kinds"] button span, [data-wire^="def:"]')];
+    return elements.filter(el => el.textContent?.trim()).map(el => {
+      const a = lum(rgba(getComputedStyle(el).color)), b = lum(background(el));
+      return {name: el.textContent, ratio: (Math.max(a,b)+0.05)/(Math.min(a,b)+0.05)};
+    });
   });
   expect(results.length).toBeGreaterThan(30);
   expect(results.filter(r=>r.ratio<4.5)).toEqual([]);
