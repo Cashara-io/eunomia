@@ -477,6 +477,8 @@ const NO_SECRET_ROWS: &[&str] = &[
     "mfa_recovery_code", // a user id and a SHA-256 per recovery code, never content (tests/mfa.rs)
     "mfa_challenge",     // a pending second sign-in step: a user id and a token hash, gone in minutes
     "instance_setting",  // one instance-wide security row (require_mfa), not per org
+    "fact_dates_backfill", // one progress row: a cursor id, a cutoff and counts, never content
+    "fact_dates_redated",  // the backfill's ledger: memory and record ids and dates, never content
 ];
 
 // ---- the attack -----------------------------------------------------------------------------

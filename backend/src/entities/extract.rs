@@ -23,7 +23,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 use serde_json::{json, Value};
-use surrealdb::types::RecordId;
+use surrealdb::types::{Datetime, RecordId};
 use crate::rid::RecordIdExt;
 
 use crate::config::Settings;
@@ -336,6 +336,7 @@ async fn apply_extraction(
     vault: Option<&RecordId>,
     data: &ExtractionData,
     kinds: &[ExtraKind],
+    occurred_at: Option<Datetime>,
 ) -> AppResult<HashSet<String>> {
     let mut entity_ids: HashMap<(String, String), (RecordId, String)> = HashMap::new();
     let mut touched: HashSet<String> = HashSet::new();
@@ -415,8 +416,10 @@ async fn apply_extraction(
                 if fact.is_empty() {
                     continue;
                 }
-                service::add_memory(db, owner, &entry_id, fact, Some(source_record_id), "world").await?;
-                touched.insert(entry_id.to_string());
+                // `None`: this record already told the subject this (a re-sync or a retried job)
+                if service::add_memory_at(db, owner, &entry_id, fact, Some(source_record_id), "world", occurred_at).await?.is_some() {
+                    touched.insert(entry_id.to_string());
+                }
             }
         }
     }
@@ -433,8 +436,9 @@ async fn apply_extraction(
             Err(e) => return Err(e),
         };
         for fact in item.entity.facts.iter().filter(|f| !f.is_empty()) {
-            service::add_memory(db, owner, &entry_id, fact, Some(source_record_id), "world").await?;
-            touched.insert(entry_id.to_string());
+            if service::add_memory_at(db, owner, &entry_id, fact, Some(source_record_id), "world", occurred_at).await?.is_some() {
+                touched.insert(entry_id.to_string());
+            }
         }
     }
 
@@ -459,6 +463,19 @@ async fn apply_extraction(
     }
 
     Ok(touched)
+}
+
+/// When the facts drawn from a record happened: the record's own `occurred_at`, which each connector
+/// sets to its "when" (a message's sent time, an event's start, a page's or issue's last edit, a
+/// transaction's or charge's time, a recording's start, an uploaded document's upload time).
+///
+/// `None` keeps the write time as the fact's date (recall and supersession fall back to `created_at`).
+/// That is the case for a record with no date (an Up Bank category or account, a demo account), a date
+/// that does not parse, and the Unix epoch itself, which a mapper produces from a missing timestamp
+/// (Stripe's `created` absent maps to 1970-01-01).
+pub(crate) fn fact_date(occurred_at: Option<&str>) -> Option<Datetime> {
+    let at = chrono::DateTime::parse_from_rfc3339(occurred_at?.trim()).ok()?.with_timezone(&chrono::Utc);
+    (at.timestamp() > 0).then(|| Datetime::from(at))
 }
 
 /// Best-effort entity extraction + upsert for one ingested record. Never
@@ -508,7 +525,7 @@ pub async fn extract_entities(
         cap_email(&mut data);
     }
 
-    match apply_extraction(db, owner, &record.id, record.vault.as_ref(), &data, &kinds).await {
+    match apply_extraction(db, owner, &record.id, record.vault.as_ref(), &data, &kinds, fact_date(record.occurred_at.as_deref())).await {
         Ok(touched) => Ok(touched),
         Err(e) => {
             tracing::warn!("entity extraction upsert failed for {}: {}", record.id, e.message);
@@ -520,6 +537,19 @@ pub async fn extract_entities(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_record_date_becomes_the_fact_date_and_a_missing_or_sentinel_one_does_not() {
+        let at = fact_date(Some("2024-02-29T23:00:00+00:00")).expect("a dated record dates its facts");
+        assert_eq!(crate::sources::base::datetime_to_chrono(&at).unwrap().to_rfc3339(), "2024-02-29T23:00:00+00:00");
+        // offsets are normalised to UTC
+        let at = fact_date(Some("2024-03-01T10:00:00+11:00")).unwrap();
+        assert_eq!(crate::sources::base::datetime_to_chrono(&at).unwrap().to_rfc3339(), "2024-02-29T23:00:00+00:00");
+        assert!(fact_date(None).is_none(), "no date: the write time stands");
+        assert!(fact_date(Some("")).is_none());
+        assert!(fact_date(Some("last spring")).is_none());
+        assert!(fact_date(Some("1970-01-01T00:00:00+00:00")).is_none(), "the epoch is a missing timestamp, not a date");
+    }
 
     #[test]
     fn should_extract_skips_short_bodies() {

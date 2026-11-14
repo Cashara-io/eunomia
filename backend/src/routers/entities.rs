@@ -305,7 +305,8 @@ async fn update_memory(
 ) -> AppResult<Json<service::MemoryOut>> {
     let state = state.org(&user.org).await?;
     let rid = parse_record_id(&memory_id)?;
-    let memory = service::update_memory(&state.db, &user.id, &rid, body.text.as_deref(), body.mem_type.as_deref()).await?;
+    // the same path as the memory_update tool: the edit is re-checked for supersession
+    let memory = crate::entities::tools::memory_update(&state, &user.id, &rid, body.text.as_deref(), body.mem_type.as_deref()).await?;
     memory.map(Json).ok_or_else(|| AppError::coded(ErrorCode::MemoryNotFound, "not found"))
 }
 
@@ -326,7 +327,8 @@ async fn delete_memory(
 ) -> AppResult<Json<Value>> {
     let state = state.org(&user.org).await?;
     let rid = parse_record_id(&memory_id)?;
-    let deleted = service::delete_memory(&state.db, &user.id, &rid).await?;
+    // the same path as the memory_delete tool: facts the deleted one replaced are re-checked
+    let deleted = crate::entities::tools::memory_delete(&state, &user.id, &rid).await?;
     if !deleted {
         return Err(AppError::coded(ErrorCode::MemoryNotFound, "not found"));
     }

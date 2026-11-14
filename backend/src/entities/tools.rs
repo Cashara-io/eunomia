@@ -128,11 +128,8 @@ pub async fn memory_write(
     occurred_at: Option<&str>,
 ) -> AppResult<service::WriteMemoryOut> {
     let occurred_at = occurred_at.map(|s| crate::cache::search::parse_datetime("occurred_at", s).map(surrealdb::types::Datetime::from)).transpose()?;
-    let out = service::write_memory(&state.db, owner, subject_name, subject_kind, text, source_record_id, mem_type, vault_id).await?;
-    let memory_rid = crate::rid::parse(&out.memory.id).map_err(|_| crate::error::AppError::internal("memory id did not round-trip"))?;
-    if let Some(at) = occurred_at {
-        crate::store::cache::SET_MEMORY_OCCURRED_AT.on(&state.db).bind(("id", memory_rid.clone())).bind(("at", at)).await?.check()?;
-    }
+    // the date goes in with the fact, in one statement: no reader ever sees it undated
+    let out = service::write_memory(&state.db, owner, subject_name, subject_kind, text, source_record_id, mem_type, vault_id, occurred_at).await?;
     embed_soon(state, owner);
     if out.memory.mem_type != "observation" && super::supersede::enabled(&state.db, &state.settings, owner).await {
         let subject = crate::rid::parse(&out.entity.id).map_err(|_| crate::error::AppError::internal("entity id did not round-trip"))?;
@@ -159,14 +156,46 @@ fn embed_soon(state: &OrgState, owner: &RecordId) {
 /// Memories embedded right after a write (the new one and any backlog alongside it).
 const EMBED_SOON_BATCH: usize = 16;
 
+/// Edits a fact. Changing the text of a current raw fact is being told it again (its `asserted_at` moves
+/// to now), so it is checked again, like a new write, against the subject's other facts. A type-only
+/// edit, or an edit of a replaced fact (which stays replaced), tells nothing and queues nothing.
 pub async fn memory_update(
-    db: &OrgDb,
+    state: &OrgState,
     owner: &RecordId,
     memory_id: &RecordId,
     text: Option<&str>,
     new_type: Option<&str>,
 ) -> AppResult<Option<service::MemoryOut>> {
-    service::update_memory(db, owner, memory_id, text, new_type).await
+    let out = service::update_memory_told(&state.db, owner, memory_id, text, new_type).await?;
+    if let Some((m, true)) = &out
+        && let (Ok(subject), Ok(id)) = (crate::rid::parse(&m.subject), crate::rid::parse(&m.id))
+    {
+        recheck(state, owner, &subject, &id, Some(m.version)).await;
+    }
+    Ok(out.map(|(m, _)| m))
+}
+
+/// Deletes a memory. The facts it had replaced are current again, and each gets a supersede check.
+pub async fn memory_delete(state: &OrgState, owner: &RecordId, memory_id: &RecordId) -> AppResult<bool> {
+    let Some(restored) = service::delete_memory_restoring(&state.db, owner, memory_id).await? else { return Ok(false) };
+    for (subject, id) in &restored {
+        recheck(state, owner, subject, id, None).await;
+    }
+    Ok(true)
+}
+
+/// Queues a supersede check for one raw fact: after an edit that told it again (keyed by its new
+/// `version`, so it is not taken for the check its first write queued), or after it became current
+/// again. Best effort, like the check after a write.
+async fn recheck(state: &OrgState, owner: &RecordId, subject: &RecordId, id: &RecordId, version: Option<i64>) {
+    if !super::supersede::enabled(&state.db, &state.settings, owner).await {
+        return;
+    }
+    let job = match version {
+        Some(v) => crate::jobs::handlers::supersede_edit_job(state.db.org(), owner, subject, id, v),
+        None => crate::jobs::handlers::supersede_restored_job(state.db.org(), owner, subject, id),
+    };
+    crate::jobs::enqueue_lossy(&state.control, job).await;
 }
 
 pub async fn entity_update(
@@ -178,10 +207,6 @@ pub async fn entity_update(
     summary: Option<&str>,
 ) -> AppResult<Option<service::EntityOut>> {
     service::update_entity(db, owner, entity_id, name, aliases, summary).await
-}
-
-pub async fn memory_delete(db: &OrgDb, owner: &RecordId, memory_id: &RecordId) -> AppResult<bool> {
-    service::delete_memory(db, owner, memory_id).await
 }
 
 pub async fn entity_delete(db: &OrgDb, owner: &RecordId, entity_id: &RecordId) -> AppResult<bool> {

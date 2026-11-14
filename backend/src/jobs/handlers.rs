@@ -29,6 +29,7 @@ pub fn registry() -> Registry {
         .register(kind::REDACT_BACKFILL, redact_backfill)
         .register(kind::SUBJECT_EXPORT, crate::subject::export::export_job)
         .register(kind::SUBJECT_ERASE, crate::subject::erase::erase_job)
+        .register(kind::FACT_DATES_BACKFILL, fact_dates_backfill)
 }
 
 /// The org database a job works in. A missing org is permanent; a database that is not ready or is
@@ -260,9 +261,31 @@ async fn redact_backfill(state: AppState, job: Job) -> Result<(), JobError> {
     Ok(())
 }
 
+/// The org's fact-date backfill, from its saved cursor to the end. A crash or a lost lease resumes it there.
+async fn fact_dates_backfill(state: AppState, job: Job) -> Result<(), JobError> {
+    let state = org_state(&state, &job).await?;
+    super::fact_dates::run(&state, None).await?;
+    Ok(())
+}
+
 /// One supersede check per written fact.
 pub fn supersede_job(org: crate::pool::OrgId, owner: &RecordId, subject: &RecordId, memory: &RecordId) -> NewJob {
-    let key = format!("{}:{}:{}", kind::SUPERSEDE, org.key(), memory.to_string());
+    supersede_job_keyed(org, owner, subject, memory, format!("{}:{}:{}", kind::SUPERSEDE, org.key(), memory.to_string()))
+}
+
+/// One supersede check per edit of a fact (`version` is the fact's version after the edit), so it is not
+/// taken for the check its first write already queued.
+pub fn supersede_edit_job(org: crate::pool::OrgId, owner: &RecordId, subject: &RecordId, memory: &RecordId, version: i64) -> NewJob {
+    supersede_job_keyed(org, owner, subject, memory, format!("{}:{}:{}:v{version}", kind::SUPERSEDE, org.key(), memory.to_string()))
+}
+
+/// One supersede check for a fact that became current again (the fact that replaced it was deleted).
+pub fn supersede_restored_job(org: crate::pool::OrgId, owner: &RecordId, subject: &RecordId, memory: &RecordId) -> NewJob {
+    let at = chrono::Utc::now().timestamp_millis();
+    supersede_job_keyed(org, owner, subject, memory, format!("{}:{}:{}:restored:{at}", kind::SUPERSEDE, org.key(), memory.to_string()))
+}
+
+fn supersede_job_keyed(org: crate::pool::OrgId, owner: &RecordId, subject: &RecordId, memory: &RecordId, key: String) -> NewJob {
     NewJob::new(kind::SUPERSEDE, owner.clone(), key)
         .in_org(org)
         .payload(json!({ "subject": subject.to_string(), "memory": memory.to_string() }))

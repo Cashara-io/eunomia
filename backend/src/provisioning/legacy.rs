@@ -38,6 +38,7 @@ const TENANT_COPY: &[&str] = &[
     "symbol", "entity", "memory", "chat_thread", "chat_message", "audit_log", "embed_cache", "pocket_recording", "document", "extension", "extension_event", "skill", "change", "change_seq",
     "redact_backfill", "peer_instance", "peer_share", "peer_link", "peer_item", "credential_ref", "secret_provider", "secret_request", "vault_secret",
     "ontology_kind", "ontology_link", "ontology_property", "entity_property", "ontology_metric", "ontology_event", "composio_file", "access_review", "access_review_decision", "subject_export",
+    "fact_dates_backfill", "fact_dates_redated",
 ];
 const TENANT_EDGES: &[&str] = &["linked_to", "relates_to"];
 
