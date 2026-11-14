@@ -26,7 +26,8 @@ pub const AUTHORED: Stmt = Stmt::new(
      SELECT <string> id AS id, 'file' AS kind, name, aliases, summary, <string> vault AS vault, created_at FROM file WHERE owner = $u AND vault IN $readable; \
      SELECT <string> id AS id, 'symbol' AS kind, name, aliases, summary, <string> vault AS vault, created_at FROM symbol WHERE owner = $u AND vault IN $readable; \
      SELECT <string> id AS id, kind, name, aliases, summary, <string> vault AS vault, created_at FROM entity WHERE owner = $u AND vault IN $readable; \
-     SELECT <string> id AS id, <string> subject AS subject, text, type, status, proof_count, <string> vault AS vault, occurred_at, created_at, updated_at FROM memory WHERE owner = $u AND vault IN $readable ORDER BY created_at; \
+     SELECT <string> id AS id, <string> subject AS subject, text, type, status, proof_count, <string> vault AS vault, occurred_at, asserted_at, \
+        (IF superseded_by THEN <string> superseded_by ELSE NONE END) AS superseded_by, created_at, updated_at FROM memory WHERE owner = $u AND vault IN $readable ORDER BY created_at; \
      SELECT <string> id AS id, <string> in AS from, <string> out AS to, label, created_at FROM relates_to WHERE owner = $u AND in.vault IN $readable AND out.vault IN $readable; \
      SELECT <string> id AS id, name, description, body, <string> vault AS vault, created_at FROM skill WHERE owner = $u AND vault IN $readable; \
      SELECT <string> id AS id, filename, media_type, size_bytes, sha256, object_path, status, <string> vault AS vault, created_at FROM document WHERE owner = $u AND vault IN $readable AND status != 'deleted'",
@@ -129,6 +130,7 @@ pub const REASSIGN: Stmt = Stmt::at(
      UPDATE relates_to SET owner = $to WHERE owner = $u AND (in.vault = $vault OR out.vault = $vault) RETURN NONE; \
      LET $recs = (SELECT VALUE id FROM cache_record WHERE owner = $u AND vault = $vault); \
      UPDATE memory SET source = NONE WHERE source IN $recs RETURN NONE; \
+     UPDATE fact_dates_redated SET source = NONE WHERE source IN $recs RETURN NONE; \
      UPDATE relates_to SET source = NONE WHERE source IN $recs RETURN NONE; \
      UPDATE entity_property SET source = NONE WHERE source IN $recs RETURN NONE; \
      DELETE linked_to WHERE in IN $recs OR out IN $recs RETURN NONE; \
@@ -144,7 +146,7 @@ pub const REASSIGN: Stmt = Stmt::at(
      UPDATE secret_request SET requested_by = $to WHERE requested_by = $u AND vault = $vault RETURN NONE; \
      RETURN { n: $n, documents: $docs }; \
      COMMIT TRANSACTION;",
-    24, // BEGIN 0, LET 1, the updates, deletes and LETs 2 to 23, RETURN 24
+    25, // BEGIN 0, LET 1, the updates, deletes and LETs 2 to 24, RETURN 25
 );
 
 /// The subject's email in what stays in the workspace (shared spaces, other people's own spaces and
@@ -189,6 +191,7 @@ pub const ERASE_SPACES: Stmt = Stmt::at(
      LET $r = (DELETE relates_to WHERE in.vault IN $solo OR out.vault IN $solo RETURN BEFORE); \
      LET $l = (DELETE linked_to WHERE in IN $records OR out.vault IN $solo RETURN BEFORE); \
      LET $m = (DELETE memory WHERE vault IN $solo RETURN BEFORE); \
+     UPDATE fact_dates_redated SET source = NONE WHERE source IN $records RETURN NONE; \
      LET $p = (DELETE entity_property WHERE vault IN $solo RETURN BEFORE); \
      LET $e = array::concat((DELETE person WHERE vault IN $solo RETURN BEFORE), (DELETE organisation WHERE vault IN $solo RETURN BEFORE), \
         (DELETE location WHERE vault IN $solo RETURN BEFORE), (DELETE repository WHERE vault IN $solo RETURN BEFORE), (DELETE file WHERE vault IN $solo RETURN BEFORE), \
@@ -201,10 +204,11 @@ pub const ERASE_SPACES: Stmt = Stmt::at(
         (DELETE ontology_metric WHERE vault IN $solo RETURN BEFORE), (DELETE ontology_event WHERE vault IN $solo RETURN BEFORE), (DELETE extension WHERE vault IN $solo RETURN BEFORE)); \
      RETURN { relations: array::len($r) + array::len($l), memories: array::len($m), entities: array::len($e) + array::len($p), synced_records: array::len($c), skills: array::len($s), space_settings: array::len($x) }; \
      COMMIT TRANSACTION;",
-    10, // BEGIN 0, nine LETs 1 to 9, RETURN 10
+    11, // BEGIN 0, nine LETs and one update 1 to 10, RETURN 11
 );
 
-/// Everything else the subject owns in the org database, wherever it is. What is left in a space with
+/// Everything else the subject owns in the org database, wherever it is. Another person's fact that one
+/// of theirs had replaced (`superseded_by`, tenant 0046) is current again, as when a source is deleted. What is left in a space with
 /// other readers was reassigned first ([`REASSIGN`]), so what still names the subject here is theirs
 /// alone. The actor columns (`$actors`: the user id and their API token ids) and the subject's email as
 /// an actor name become "erased".
@@ -215,9 +219,11 @@ pub const ERASE_OWNED: Stmt = Stmt::at(
      LET $r = (DELETE relates_to WHERE owner = $u OR in.owner = $u OR out.owner = $u RETURN BEFORE); \
      LET $l = (DELETE linked_to WHERE in IN $records OR out.owner = $u RETURN BEFORE); \
      LET $m = (DELETE memory WHERE owner = $u RETURN BEFORE); \
+     UPDATE memory SET status = NONE, superseded_by = NONE WHERE superseded_by IN $m.id RETURN NONE; \
      LET $e = array::concat((DELETE person WHERE owner = $u RETURN BEFORE), (DELETE organisation WHERE owner = $u RETURN BEFORE), \
         (DELETE location WHERE owner = $u RETURN BEFORE), (DELETE repository WHERE owner = $u RETURN BEFORE), (DELETE file WHERE owner = $u RETURN BEFORE), \
         (DELETE symbol WHERE owner = $u RETURN BEFORE), (DELETE entity WHERE owner = $u RETURN BEFORE)); \
+     UPDATE fact_dates_redated SET source = NONE WHERE source IN $records RETURN NONE; \
      LET $c = (DELETE cache_record WHERE owner = $u RETURN BEFORE); \
      LET $d = (DELETE document WHERE owner = $u RETURN BEFORE); \
      LET $s = (DELETE skill WHERE owner = $u RETURN BEFORE); \
@@ -250,7 +256,7 @@ pub const ERASE_OWNED: Stmt = Stmt::at(
         skills: array::len($s), chat_threads: array::len($ct), chat_messages: array::len($cm), tool_log: array::len($al), sources: array::len($src), recordings: array::len($pr), \
         extensions: array::len($ex), settings: array::len($st), sharing_and_secrets: array::len($sec), exports: array::len($xp) }; \
      COMMIT TRANSACTION;",
-    33, // BEGIN 0, the LETs and updates 1 to 32, RETURN 33
+    35, // BEGIN 0, the LETs and updates 1 to 34, RETURN 35
 );
 
 /// The subject's own memberships (active, pending or left), after everything they decide is done.
@@ -309,7 +315,8 @@ pub const RESIDUE: Stmt = Stmt::new(
        ontology_event: count((SELECT id FROM ontology_event WHERE actor IN $actors OR string::lowercase(actor_name ?? '') = $email_lc)), \
        vault: count((SELECT id FROM vault WHERE id IN $solo OR (id IN $kept AND string::contains(string::lowercase(name), $email_lc)) OR ontology_actor IN $actors OR string::lowercase(ontology_actor_name ?? '') = $email_lc)), \
        change: count((SELECT id FROM change WHERE actor IN $actors)), \
-       subject_export: count((SELECT id FROM subject_export WHERE subject = $u OR requested_by = $u)) \
+       subject_export: count((SELECT id FROM subject_export WHERE subject = $u OR requested_by = $u)), \
+       fact_dates_redated: count((SELECT id FROM fact_dates_redated WHERE memory.owner = $u OR memory.id = NONE OR (source != NONE AND source.id = NONE))) \
      }",
 );
 

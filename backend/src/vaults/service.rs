@@ -925,6 +925,9 @@ struct EntityRow {
 struct MemoryRow {
     #[serde(default)]
     #[surreal(default)]
+    id: Option<RecordId>,
+    #[serde(default)]
+    #[surreal(default)]
     text: String,
     #[serde(rename = "type", default = "default_memory_type")]
     #[surreal(rename = "type", default = "default_memory_type")]
@@ -932,6 +935,18 @@ struct MemoryRow {
     #[serde(default)]
     #[surreal(default)]
     source: Option<RecordId>,
+    #[serde(default)]
+    #[surreal(default)]
+    occurred_at: Option<Datetime>,
+    #[serde(default)]
+    #[surreal(default)]
+    asserted_at: Option<Datetime>,
+    #[serde(default)]
+    #[surreal(default)]
+    status: Option<String>,
+    #[serde(default)]
+    #[surreal(default)]
+    superseded_by: Option<RecordId>,
 }
 
 fn default_memory_type() -> String {
@@ -1148,6 +1163,10 @@ async fn copy_into(db: &OrgDb, user_id: &RecordId, src: &RecordId, dest: &Record
         }
     }
 
+    // copied fact ids, old -> new, and each copied replaced fact with the old id of what replaced it
+    #[allow(clippy::mutable_key_type)] // RecordId hashes by value; the interior mutability is never touched
+    let mut memory_map: HashMap<RecordId, RecordId> = HashMap::new();
+    let mut replaced: Vec<(RecordId, RecordId)> = Vec::new();
     for (old_id, new_id) in id_map.clone() {
         let mut res = store::vaults::MEMORIES_OF.on(db)
             .bind(("id", old_id))
@@ -1162,15 +1181,34 @@ async fn copy_into(db: &OrgDb, user_id: &RecordId, src: &RecordId, dest: &Record
             if FAIL_COPY_AT.load(std::sync::atomic::Ordering::SeqCst) > 0 && FAIL_COPY_AT.fetch_sub(1, std::sync::atomic::Ordering::SeqCst) == 1 {
                 return Err(AppError::internal("injected vault copy failure"));
             }
-            store::vaults::COPY_MEMORY.on(db)
+            let mut res = store::vaults::COPY_MEMORY.on(db)
             .bind(("owner", user_id.clone()))
             .bind(("vault", dest.clone()))
             .bind(("subject", new_id.clone()))
             .bind(("text", mem.text))
             .bind(("type", mem.mem_type))
             .bind(("source", mem.source.map(|s| chunk_map.get(&s).cloned().unwrap_or(s))))
+            .bind(("occurred_at", mem.occurred_at))
+            .bind(("asserted_at", mem.asserted_at))
+            .bind(("status", mem.status))
             .await?;
+            #[derive(Deserialize, SurrealValue)]
+            struct Created {
+                id: RecordId,
+            }
+            let created: Vec<Created> = res.take(0)?;
+            if let (Some(old), Some(new)) = (mem.id, created.into_iter().next()) {
+                if let Some(by) = mem.superseded_by {
+                    replaced.push((new.id.clone(), by));
+                }
+                memory_map.insert(old, new.id);
+            }
         }
+    }
+    // A replaced fact points at its copied replacer; when that one is not in the copy (another vault, or
+    // folded into a fact the destination already had) the link is cleared and the fact stays replaced.
+    for (new_id, old_by) in replaced {
+        store::vaults::SET_SUPERSEDED_BY.on(db).bind(("id", new_id)).bind(("by", memory_map.get(&old_by).cloned())).await?.check()?;
     }
 
     #[allow(clippy::mutable_key_type)] // RecordId hashes by value; the interior mutability is never touched

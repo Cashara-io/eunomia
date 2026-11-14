@@ -71,10 +71,12 @@ VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usag
 # 0031_credential_refs: the credential broker's references and provider settings;
 # 0032_secret_requests: secret requests and the secrets Eunomia holds for agents; 0033_ontology: the kinds
 # and link types a vault's owners reviewed; 0034_ontology_properties: typed properties and their values; 0035_ontology_metrics: certified metrics;
-# 0044_audit_chain: access reviews and their decisions; 0045_erasure: data-subject export archives). Where <from-tag> lacks one, the update must add it to
+# 0044_audit_chain: access reviews and their decisions; 0045_erasure: data-subject export archives;
+# 0046_fact_dates: the fact-date backfill's per-org marker and its ledger of re-dated facts, empty because
+# the seed cites no record). Where <from-tag> lacks one, the update must add it to
 # every org database, holding only what the backfill writes (new_rows below). Their counts are checked
 # on their own, so they are left out of the before/after diff.
-NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill peer_instance peer_share peer_link peer_item credential_ref secret_provider secret_request vault_secret ontology_kind ontology_link ontology_property entity_property ontology_metric ontology_event composio_file access_review access_review_decision subject_export}"
+NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill peer_instance peer_share peer_link peer_item credential_ref secret_provider secret_request vault_secret ontology_kind ontology_link ontology_property entity_property ontology_metric ontology_event composio_file access_review access_review_decision subject_export fact_dates_backfill fact_dates_redated}"
 # Control tables added by control migrations (0009: two-step verification; 0011: erasure records and the
 # per-workspace erasure locks; 0012: organisation invitations). Empty after an update: nothing backfills them, and the boot-time erasure
 # re-apply (subject::reapply_on_start) writes nothing while no erasure was ever recorded.
@@ -152,7 +154,7 @@ tables() { cut -d' ' -f1 "$1"; }
 # whose seeded fact held the fake token in plain text, the rewrite in the change log and its vault's counter.
 new_rows() {
   case "$2" in
-    redact_backfill) echo 1 ;;
+    redact_backfill|fact_dates_backfill) echo 1 ;;
     change|change_seq) if [ "$1" = "$ORG_A" ] && [ "$PLAIN_SECRET" = 1 ]; then echo 1; else echo 0; fi ;;
     *) echo 0 ;;
   esac
@@ -202,6 +204,13 @@ wait_backfilled() { # wait_backfilled SECONDS : one redact.backfill audit event 
   local until=$((SECONDS + $1))
   while [ $SECONDS -lt $until ]; do [ "$(backfill_events)" = "$(org_dbs | wc -l | tr -d ' ')" ] && return 0; sleep 3; done
   log "the backfill had not finished in every org after $1 s: $(backfill_events) events"; return 1
+}
+# The fact-date backfill (tenant 0046): one facts.backfill_dates audit event per org once it has run.
+dated_events() { echo "SELECT count() FROM audit_event WHERE action = 'facts.backfill_dates' GROUP ALL;" | sql control | jq -r '.[0].result[0].count // 0'; }
+wait_dated() { # wait_dated SECONDS
+  local until=$((SECONDS + $1))
+  while [ $SECONDS -lt $until ]; do [ "$(dated_events)" -ge "$(org_dbs | wc -l | tr -d ' ')" ] && return 0; sleep 3; done
+  log "the fact-date backfill had not finished in every org after $1 s: $(dated_events) events"; return 1
 }
 backfill_events() { echo "SELECT count() FROM audit_event WHERE action = 'redact.backfill' GROUP ALL;" | sql control | jq -r '.[0].result[0].count // 0'; }
 ledgers() { # "<db> <rows> <max version>" for every _migration ledger
@@ -604,6 +613,8 @@ if [ "$BACKFILL_RERUNS" = 1 ]; then
 else
   BACKFILL_EVENTS="$EVENTS_BEFORE"
 fi
+# the fact-date backfill (tenant 0046) is queued on the same slow tick; its marker is a new table's row
+if [ "$(dated_events)" = 0 ]; then wait_dated 900; check "the fact-date backfill finished in every org (bounded wait)" test $? -eq 0; fi
 wait_jobs 120
 wait_embeddings 600; check "no embedding backlog after the update" test $? -eq 0
 counts > "$W/counts-after.txt"; ledgers > "$W/ledgers-after.txt"

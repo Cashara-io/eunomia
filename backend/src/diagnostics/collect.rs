@@ -80,7 +80,7 @@ pub async fn collect(state: &AppState) -> AppResult<Vec<(String, String)>> {
         // Codes and kinds are application enums. Never export arbitrary database strings.
         let code = failure["last_error_code"].as_str().unwrap_or("");
         failure["last_error_code"] = json!(crate::error::ErrorCode::ALL.iter().find(|c| c.as_str() == code).map(|c| c.as_str()).unwrap_or("unknown"));
-        failure["kind"] = json!(if ["sync", "embed", "extract", "consolidate", "prune_capsules", "prune_auth", "migrate_tenant", "index_document", "supersede", "redact_backfill"].contains(&failure["kind"].as_str().unwrap_or("")) { failure["kind"].clone() } else { json!("unknown") });
+        failure["kind"] = json!(if ["sync", "embed", "extract", "consolidate", "prune_capsules", "prune_auth", "migrate_tenant", "index_document", "supersede", "redact_backfill", "fact_dates_backfill"].contains(&failure["kind"].as_str().unwrap_or("")) { failure["kind"].clone() } else { json!("unknown") });
     }
     let mut embedding_jobs: Vec<Value> = q::EMBED_JOBS.on(&state.control).await?.take(0)?;
     if embedding_jobs.len() > 1000 { notes.push("Embedding job groups capped at 1000"); }
