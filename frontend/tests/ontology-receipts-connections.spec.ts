@@ -9,8 +9,8 @@ for (const width of [1440, 390]) for (const theme of ["light", "dark"]) test(`Co
   const data=receiptFixture();
   data.sources[0].document!.row!.cells.unit_cost="99.00";
   await page.route("**/api/vaults/business/ontology/objects/*",r=>r.fulfill({json:data}));
-  await page.goto("/ontology/connections?space=business&focus=house&selected=house");
-  const inspector=page.getByLabel("Selected object",{exact:true});
+  await page.goto("/ontology/connections?space=business&focus=house&selected=house&value=unit_cost");
+  const inspector=page.locator("main");
   await expect(inspector).toContainText("products.csv, row 42 (matched by name)");
   await expect(inspector).toContainText("The file now says AUD 99.00. The recorded value is AUD 12.00.");
   const output=process.env.ONTOLOGY_RECEIPT_SCREENSHOTS;

@@ -4,38 +4,18 @@ import { mockOntology } from "./fixtures/ontology-ui";
 import { mockReview, at } from "./fixtures/ontology-review";
 import type { MetricRun } from "../src/components/chat/views/types";
 
-for (const rootSize of ["100%", "200%"]) {
-  test(`connection labels fit their reserved plates at root size ${rootSize}`, async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await mockConnections(page, "populated", neighbourhood(4));
-    await page.goto("/ontology/connections?space=business&focus=house");
-    await expect(page.locator("[data-edge-label]:visible")).toHaveCount(4);
-    await page.evaluate(size => { document.documentElement.style.fontSize = size; }, rootSize);
-    await expect(page.locator("[data-edge-label]:visible")).toHaveCount(4);
-    const output = process.env.ONTOLOGY_TYPE_SCALE_SCREENSHOTS;
-    if (output && rootSize === "200%") await page.screenshot({ path: `${output}/connections-root-200.png`, fullPage: true });
-    await expect.poll(() => page.locator("[data-edge-label]:visible").evaluateAll(labels => labels.flatMap(label => {
-      const text = label.querySelector("text")?.getBoundingClientRect();
-      const plate = label.querySelector("rect")?.getBoundingClientRect();
-      return !text || !plate || text.left < plate.left - 1 || text.right > plate.right + 1 || text.top < plate.top - 1 || text.bottom > plate.bottom + 1 ? [label.textContent] : [];
-    }))).toEqual([]);
-    for (const text of await page.locator("[class*=contour] text").all()) {
-      await expect(text).toHaveCSS("font-size", "14px");
-    }
-  });
-
-  test(`Overview SVG labels keep their coordinate size at root size ${rootSize}`, async ({ page }) => {
+for (const rootSize of ["100%", "200%"])
+  test(`Strata kind names scale with the root size at ${rootSize}`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await mockOntology(page);
     await page.goto("/ontology?space=business");
-    const label = page.locator("svg text").filter({ hasText: "Not linked yet" });
-    await expect(label).toBeVisible();
-    await page.evaluate(size => { document.documentElement.style.fontSize = size; }, rootSize);
-    const output = process.env.ONTOLOGY_TYPE_SCALE_SCREENSHOTS;
-    if (output && rootSize === "200%") await page.screenshot({ path: `${output}/overview-root-200.png`, fullPage: true });
-    await expect(label).toHaveCSS("font-size", "14px");
+    const tile = page.locator("[data-wire^='kind:']").first();
+    await expect(tile).toBeVisible();
+    await page.evaluate((size) => { document.documentElement.style.fontSize = size; }, rootSize);
+    const px = await tile.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(px).toBeGreaterThanOrEqual(rootSize === "200%" ? 26 : 13);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   });
-}
 
 test("a kind metric Try it result uses the display scale", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });

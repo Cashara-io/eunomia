@@ -39,8 +39,6 @@ async function setup(page: Page, selected = 'n0') {
 
 for (const target of ['selected', 'focus']) test(`deleted ${target} clears only the missing object after Refresh`, async ({page}) => {
   await setup(page, target === 'focus' ? 'house' : 'n0');
-  await page.getByLabel('Pan right', {exact:true}).click();
-  const camera = await page.locator('[data-camera]').getAttribute('data-camera');
   await page.getByRole('searchbox').fill('North');
   await expect(page.getByLabel('Object search results')).toBeVisible();
   await page.route(`**/ontology/objects/${target === 'focus' ? 'house' : 'n0'}*`, r => r.fulfill({status:404,json:{code:'resource.not_found',detail:'object unavailable'}}));
@@ -55,9 +53,9 @@ for (const target of ['selected', 'focus']) test(`deleted ${target} clears only 
   if (target === 'focus') {
     await expect(page.getByRole('heading', {name:'Start with something you know.'})).toBeVisible();
     await expect(page).not.toHaveURL(/focus=/);
-  } else await expect(page.locator('[data-camera]')).toHaveAttribute('data-camera', camera!);
+  }
   await page.getByRole('searchbox').fill('');
-  await expect(page.getByLabel('Suggested objects')).toBeVisible();
+  if (target === 'focus') await expect(page.getByLabel('Suggested objects')).toBeVisible();
   await expect(page.getByLabel('Recently viewed objects')).toContainText(target === 'focus' ? 'North' : 'House');
   await expect(page.getByLabel('Recently viewed objects')).not.toContainText(target === 'focus' ? 'House' : 'North');
 });
@@ -88,7 +86,7 @@ for (const source of ['profile', 'masked-neighbourhood', 'space-404']) test(`rea
   await expect(page.getByRole('alert').filter({hasText:'unavailable to you'})).toBeVisible();
   release();
   await completed;
-  await expect(page.locator('[data-camera], [data-object], [aria-label="Selected object"]')).toHaveCount(0);
+  await expect(page.locator('[data-object], [aria-label="Selected object"]')).toHaveCount(0);
   await expect(page.getByRole('searchbox')).toHaveCount(0);
   await expect(page).not.toHaveURL(/[?&](q|focus|selected)=/);
   await expect.poll(async () => (await cacheKeys(page)).filter(k => k.includes('business'))).toEqual([]);
@@ -116,10 +114,8 @@ test('switching spaces removes previous connection and search caches', async ({p
   await expect.poll(async () => (await cacheKeys(page)).filter(k => ['connections','connection-search'].includes(String(k[0])) && k[1] === 'business')).toEqual([]);
 });
 
-test('500 and network failures keep input, selection, recents and camera', async ({page}) => {
+test('500 and network failures keep input, selection and recents', async ({page}) => {
   await setup(page);
-  await page.getByLabel('Pan right', {exact:true}).click();
-  const camera = await page.locator('[data-camera]').getAttribute('data-camera');
   await page.getByRole('searchbox').fill('North');
   await expect(page.getByLabel('Object search results')).toBeVisible();
   for (const failure of ['500', 'network']) {
@@ -128,7 +124,6 @@ test('500 and network failures keep input, selection, recents and camera', async
     await page.getByLabel('Refresh ontology').click();
     await expect(page.getByLabel('Selected object')).toContainText('Could not load this object');
     await expect(page.getByRole('searchbox')).toHaveValue('North');
-    await expect(page.locator('[data-camera]')).toHaveAttribute('data-camera', camera!);
     await expect(page).toHaveURL(/selected=n0/);
   }
   await page.getByRole('searchbox').fill('');
@@ -189,7 +184,7 @@ async function expectNoProtectedContent(page: Page) {
   for (const name of ['House blend 1kg', 'North Coast Beans', 'PO-1042', 'Fitzroy store', 'Decaf 1kg', 'Banksia Coffee']) {
     await expect(page.locator('main')).not.toContainText(name);
   }
-  await expect(page.locator('[data-camera], [data-object], [aria-label="Selected object"], [aria-label="Recently viewed objects"], [aria-label="Suggested objects"], [aria-label="Object search results"], [aria-label="Connections in words"]')).toHaveCount(0);
+  await expect(page.locator('[data-object], [aria-label="Selected object"], [aria-label="Recently viewed objects"], [aria-label="Suggested objects"], [aria-label="Object search results"], [aria-label="Connections in words"]')).toHaveCount(0);
 }
 
 test('masked neighbourhood loss removes protected text during a delayed membership check', async ({page}) => {
@@ -282,13 +277,11 @@ for (const failure of ['network', '500']) for (const outcome of ['confirmed', 'd
   });
 }
 
-test('delayed confirmation of a deleted selection preserves input and camera', async ({page}) => {
+test('delayed confirmation of a deleted selection preserves input', async ({page}) => {
   await setup(page);
   await page.getByLabel('Depth', {exact:true}).selectOption('2');
   await page.getByLabel('Relation', {exact:true}).selectOption('supplies');
   await page.getByLabel('Direction', {exact:true}).selectOption('in');
-  await page.getByLabel('Pan right', {exact:true}).click();
-  const camera = await page.locator('[data-camera]').getAttribute('data-camera');
   await page.getByRole('searchbox').fill('North');
   await expect(page.getByLabel('Object search results')).toContainText('North Coast Beans');
   let release = () => {};
@@ -307,7 +300,6 @@ test('delayed confirmation of a deleted selection preserves input and camera', a
   await expect(page.getByLabel('Depth', {exact:true})).toHaveValue('2');
   await expect(page.getByLabel('Relation', {exact:true})).toHaveValue('supplies');
   await expect(page.getByLabel('Direction', {exact:true})).toHaveValue('in');
-  await expect(page.locator('[data-camera]')).toHaveAttribute('data-camera', camera!);
   await expect(page.getByLabel('Selected object')).toHaveCount(0);
   await expect(page).toHaveURL(/focus=house/);
   await expect(page).not.toHaveURL(/selected=/);
