@@ -382,7 +382,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Err(e) => return Ok(e),
                 };
                 let result =
-                    entities_tools::memory_update(&state.db, owner, &rid, a.text.as_deref(), a.mem_type.as_deref()).await;
+                    entities_tools::memory_update(state, owner, &rid, a.text.as_deref(), a.mem_type.as_deref()).await;
                 Ok(to_tool_value(result.and_then(|m| m.ok_or_else(|| crate::error::AppError::coded(crate::error::ErrorCode::MemoryNotFound, "memory not found")))))
             })
         }),
@@ -407,7 +407,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(v) => v,
                     Err(e) => return Ok(e),
                 };
-                let result = entities_tools::memory_delete(&state.db, owner, &rid).await;
+                let result = entities_tools::memory_delete(state, owner, &rid).await;
                 Ok(to_tool_value(result.map(|deleted| json!({ "deleted": deleted }))))
             })
         }),

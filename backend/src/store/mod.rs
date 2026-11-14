@@ -29,6 +29,7 @@ pub mod documents;
 pub mod diagnostics;
 pub mod entities;
 pub mod extensions;
+pub mod fact_dates;
 pub mod integrity;
 pub mod invitations;
 pub mod jobs;
@@ -295,7 +296,7 @@ pub const TENANT_TABLES: &[&str] = &[
     "file", "symbol", "memory", "relates_to", "chat_thread", "chat_message", "audit_log", "embed_cache", "pocket_recording",
     "document", "extension", "extension_event", "skill", "change", "change_seq", "redact_backfill", "peer_instance", "peer_share", "peer_link", "peer_item",
     "credential_ref", "secret_provider", "secret_request", "vault_secret", "ontology_kind", "ontology_link", "ontology_property",
-    "entity_property", "ontology_metric", "ontology_event", "access_review", "access_review_decision", "subject_export",
+    "entity_property", "ontology_metric", "ontology_event", "access_review", "access_review_decision", "subject_export", "fact_dates_backfill", "fact_dates_redated",
 ];
 
 /// The first table `sql` names that lives in the other database. A table is recognised where
@@ -365,7 +366,7 @@ pub fn crossing_table(sql: &str, in_org: bool) -> Option<String> {
 
 /// Every static tenant statement, for the `every_query_executes` test.
 pub fn all() -> Vec<&'static Stmt> {
-    [diagnostics::ALL, access_reviews::ALL, app::ALL, cache::ALL, changes::ALL, documents::ALL, entities::ALL, extensions::ALL, integrity::ALL, jobs::ALL, ontology::ALL, ontology_activity::ALL, objects::ALL, peers::ALL, redact::ALL, routing::ALL, secret_requests::ALL, secrets::ALL, skills::ALL, subject::ALL, vaults::ALL].concat()
+    [diagnostics::ALL, access_reviews::ALL, app::ALL, cache::ALL, changes::ALL, documents::ALL, entities::ALL, extensions::ALL, fact_dates::ALL, integrity::ALL, jobs::ALL, ontology::ALL, ontology_activity::ALL, objects::ALL, peers::ALL, redact::ALL, routing::ALL, secret_requests::ALL, secrets::ALL, skills::ALL, subject::ALL, vaults::ALL].concat()
 }
 
 /// Every static control statement.

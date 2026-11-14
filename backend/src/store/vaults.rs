@@ -183,11 +183,16 @@ pub const MERGE_ENTITY_INTO: Stmt = Stmt::new(
 
 pub const MEMORIES_OF: Stmt = Stmt::new("vaults.memories_of", "SELECT * FROM memory WHERE subject = $id AND vault = $vault");
 
+/// A copied fact keeps both its dates and its status (a replaced fact stays replaced); its
+/// `superseded_by` is set afterwards ([`SET_SUPERSEDED_BY`]) once the copy's ids are known.
 pub const COPY_MEMORY: Stmt = Stmt::new(
     "vaults.copy_memory",
     "CREATE memory SET owner = $owner, vault = $vault, subject = $subject, text = $text, \
-                 type = $type, source = $source RETURN AFTER",
+                 type = $type, source = $source, occurred_at = $occurred_at, asserted_at = $asserted_at, status = $status RETURN AFTER",
 );
+/// The copied fact that replaced a copied fact (NONE: the replacing fact is not in the copy; the fact
+/// stays replaced).
+pub const SET_SUPERSEDED_BY: Stmt = Stmt::new("vaults.set_superseded_by", "UPDATE $id SET superseded_by = $by");
 
 pub const RELATIONS_FROM: Stmt = Stmt::new("vaults.relations_from", "SELECT * FROM relates_to WHERE in = $id");
 
@@ -237,6 +242,7 @@ pub const ALL: &[&Stmt] = &[
     &MERGE_ENTITY_INTO,
     &MEMORIES_OF,
     &COPY_MEMORY,
+    &SET_SUPERSEDED_BY,
     &RELATIONS_FROM,
     &SAME_RELATION,
     &COPY_RELATION,

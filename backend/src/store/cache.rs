@@ -76,8 +76,6 @@ pub const RELATIONS_FOR_RECALL: Stmt = Stmt::new(
     "cache.relations_for_recall",
     "SELECT id, label, in.name AS a, out.name AS b, created_at, occurred_at FROM $ids WHERE in.vault = $vault AND out.vault = $vault",
 );
-/// When a fact happened, as its writer said (`memory_write`'s `occurred_at`).
-pub const SET_MEMORY_OCCURRED_AT: Stmt = Stmt::new("cache.set_memory_occurred_at", "UPDATE $id SET occurred_at = $at");
 /// A vector for a memory, unless its text changed since it was read for embedding.
 pub const SET_MEMORY_EMBEDDING: Stmt =
     Stmt::new("cache.set_memory_embedding", "UPDATE $id SET embedding = $embedding, embedding_spec = $spec WHERE text = $text");
@@ -145,6 +143,8 @@ pub const DELETE_SOURCE_DATA: Stmt = Stmt::at(
         LET $ids = $mems.id;
         LET $subjects = array::distinct($mems.subject);
         DELETE $ids;
+        -- facts the deleted ones replaced are current again (memory.superseded_by, tenant 0046)
+        UPDATE memory SET status = NONE, superseded_by = NONE WHERE superseded_by IN $ids;
         DELETE memory WHERE type = "observation" AND subject IN $subjects
             AND array::len(source_memories ?? []) > 0 AND array::len(array::complement(source_memories ?? [], $ids)) = 0;
         UPDATE memory SET status = "stale", updated_at = time::now(),
@@ -157,7 +157,7 @@ pub const DELETE_SOURCE_DATA: Stmt = Stmt::at(
         DELETE $records;
         RETURN { records: array::len($records), memories: array::len($ids), deleted: (SELECT VALUE [<string> id, <string> vault] FROM $mems) };
         COMMIT TRANSACTION;"#,
-    12, // BEGIN 0, four LETs 1 to 4, six writes 5 to 10, DELETE 11, RETURN 12
+    13, // BEGIN 0, four LETs 1 to 4, seven writes 5 to 11, DELETE 12, RETURN 13
 );
 
 /// What re-extracting one connection would replace: its live records, the facts (not observations),
@@ -193,6 +193,7 @@ pub const REEXTRACT_CLEAR: Stmt = Stmt::at(
         LET $obs = (SELECT VALUE id FROM memory WHERE type = "observation" AND subject IN $subjects
             AND array::len(source_memories ?? []) > 0 AND array::len(array::complement(source_memories ?? [], $ids)) = 0);
         DELETE $ids;
+        UPDATE memory SET status = NONE, superseded_by = NONE WHERE superseded_by IN $ids;
         DELETE $obs;
         UPDATE memory SET status = "stale", updated_at = time::now(),
             source_memories = IF source_memories THEN array::complement(source_memories, $ids) ELSE NONE END
@@ -201,7 +202,7 @@ pub const REEXTRACT_CLEAR: Stmt = Stmt::at(
         RETURN { records: (SELECT id, content_hash FROM cache_record WHERE id IN $records), memories: array::len($ids),
                  relations: array::len($rels), observations: array::len($obs) };
         COMMIT TRANSACTION;"#,
-    11, // BEGIN 0, six LETs 1 to 6, four writes 7 to 10, RETURN 11
+    12, // BEGIN 0, six LETs 1 to 6, five writes 7 to 11, RETURN 12
 );
 
 /// Earlier Gmail records from the 90 days before `$at` (oldest first) whose sender contains `$addr`, for
@@ -236,7 +237,6 @@ pub const ALL: &[&Stmt] = &[
     &LIVE_NEIGHBOURS,
     &SET_EMBEDDING,
     &SET_MEMORY_EMBEDDING,
-    &SET_MEMORY_OCCURRED_AT,
     &RELATIONS_FOR_RECALL,
     &LINKS_OUT,
     &LINKS_OUT_REL,

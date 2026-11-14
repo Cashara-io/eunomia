@@ -97,7 +97,7 @@ The erasure writes the same content-free change rows the product's normal paths 
 | --- | --- | --- | --- |
 | `vault`, `vault_member` | membership `user`; `ontology_actor`, `ontology_actor_name` | spaces with role and status | memberships deleted last; spaces only they could read deleted; actor fields anonymised |
 | `person`, `organisation`, `location`, `repository`, `file`, `symbol`, `entity` | `owner` | what they authored in spaces they can still read | shared: reassigned; theirs alone: deleted; `E` in names, summaries and aliases replaced |
-| `memory` | `owner`, text | what they authored in spaces they can still read | shared: reassigned; theirs alone: deleted; `E` in text replaced |
+| `memory` | `owner`, text | what they authored in spaces they can still read (with `occurred_at`, `asserted_at` and `superseded_by`) | shared: reassigned; theirs alone: deleted; `E` in text replaced; another person's fact that one of theirs had replaced (`superseded_by`) is current again |
 | `relates_to`, `linked_to` | `owner`; edges to their rows | relations they authored between readable entities | shared: reassigned; otherwise deleted with either end |
 | `entity_property` | through the space | | deleted with the space |
 | `cache_record` (synced records, document chunks) | `owner`, and the record id (it starts with the owner's key) | their synced records with no space or in readable spaces (chunks are covered by the documents) | deleted with their vectors, also in shared spaces (a reassigned document is indexed again as the new owner's) |
@@ -118,7 +118,8 @@ The erasure writes the same content-free change rows the product's normal paths 
 | `embed_cache` | nobody directly: keyed by a keyed hash of the text | | the org's whole cache is cleared (it only saves embedding calls), because the person's entries cannot be told apart |
 | `subject_export` | `subject`, `requested_by` | | deleted (archives about or asked for by the person) |
 | `access_review`, `access_review_decision` | the snapshot's row for the person (`user_id`, `email`, their spaces, token and app names), a decision's `subject`, `subject_email` and `note`; `started_by`, `completed_by`, `reviewer` and their emails | their own row of each snapshot and the decisions about them (`access_reviews.json`), not who reviewed them or anyone else's row | **kept unchanged** (see "Access reviews" below) |
-| `change_seq`, `peer_instance`, `redact_backfill` | nobody | | untouched |
+| `fact_dates_redated` (the fact-date backfill's ledger: a memory id, its record id and dates, never text) | the memory and the record id (it starts with the owner's key) | not exported (the memory's own `occurred_at` and `asserted_at` are, in `memories.json`) | a row goes with its memory whenever the memory is deleted (a database event); its `source` link to the person's deleted records is cleared |
+| `change_seq`, `peer_instance`, `redact_backfill`, `fact_dates_backfill` | nobody | | untouched |
 
 ### Outside the databases
 

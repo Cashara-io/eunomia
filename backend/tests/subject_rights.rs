@@ -1223,6 +1223,79 @@ async fn someone_held_or_being_erased_still_reads_a_shared_space_and_keeps_their
 
 /// Runs the offline verifier (`scripts/audit/verify-audit-export.py`) on an export, as an auditor would.
 /// `None` when python3 is not installed.
+/// The fact-date backfill's ledger (tenant 0046) names a person's facts and, through the record id, the
+/// person: its rows go with the facts, and the post-check proves none is left.
+#[tokio::test]
+async fn erasure_leaves_no_fact_date_ledger_rows() {
+    let _serial = SERIAL.lock().await;
+    let (app, _stop) = app_with_worker().await;
+    let alice = common::register(&app.state, "dana@example.com").await;
+    let db = common::org_db(&app.state, &alice).await;
+    let w = call(&app.state, &alice, "memory_write", json!({"subject_name": "Dana Scully", "subject_kind": "person", "text": "Dana likes tea"})).await;
+    let (subject, vault) = (w["entity"]["id"].as_str().unwrap().to_string(), w["entity"]["vault"].as_str().unwrap().to_string());
+    // a fact extracted from one of her synced records before facts carried dates
+    let record = format!("cache_record:`{}:gmail:m1`", alice.id.key_str());
+    let raw = |q: String| {
+        let db = db.clone();
+        async move { db.test_raw().query(q).await.unwrap().check().unwrap() }
+    };
+    raw(format!(
+        "CREATE {record} SET owner = {u}, source = 'gmail', type = 'gmail.message', external_id = 'm1', title = 't', body_text = 'b', \
+         occurred_at = d'2023-04-01T09:30:00Z', url = '', payload = {{}}, content_hash = 'fx', ingested_at = time::now(), updated_at = time::now(), deleted = false; \
+         CREATE memory SET owner = {u}, vault = {vault}, subject = {subject}, text = 'Dana agreed to lead the pilot', type = 'world', source = {record}; \
+         DELETE fact_dates_backfill",
+        u = alice.id.to_string()
+    ))
+    .await;
+    let org = app.state.org(&alice.org).await.unwrap();
+    common::sys(eunomia_backend::jobs::fact_dates::run(&org, None)).await.unwrap();
+    let ledger = || async { db.test_raw().query("SELECT VALUE id FROM fact_dates_redated").await.unwrap().take::<Vec<RecordId>>(0).unwrap().len() };
+    assert_eq!(ledger().await, 1, "the backfill dated her fact");
+
+    let id = erase_route(&app, &alice, false).await;
+    let done = wait_status(&app, &id, "done").await;
+    assert_eq!(done["post_check"]["fact_dates_redated"], json!(0), "the post-check covers the ledger: {done}");
+    assert_eq!(ledger().await, 0, "no ledger row outlives her facts");
+}
+
+/// A fact the person had replaced in a space that stays (someone else's fact, `superseded_by` theirs) is
+/// current again once their fact is erased, rather than hidden behind a fact that is gone.
+#[tokio::test]
+async fn erasing_a_replacing_fact_makes_the_fact_it_replaced_current_again() {
+    let _serial = SERIAL.lock().await;
+    let app = TestApp::new().await;
+    let db = app.db().await;
+    let u = app.user.id.to_string();
+    let w = call(&app.state, &app.user, "memory_write", json!({"subject_name": "Ada Lovelace", "subject_kind": "person", "text": "Ada likes tea"})).await;
+    let (subject, vault) = (w["entity"]["id"].as_str().unwrap().to_string(), w["entity"]["vault"].as_str().unwrap().to_string());
+    db.test_raw()
+        .query(format!(
+            "CREATE memory:theirs SET owner = {u}, vault = {vault}, subject = {subject}, text = 'Ada works at Globex', type = 'world'; \
+             CREATE memory:others SET owner = user:someone_else, vault = {vault}, subject = {subject}, text = 'Ada works at Acme', type = 'world', \
+                status = 'superseded', superseded_by = memory:theirs"
+        ))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    // as the erasure job runs it: retried on a commit conflict (the write's own background work, its embedding)
+    let mut res = eunomia_backend::tx::with_retry(|| async {
+        eunomia_backend::store::subject::ERASE_OWNED
+            .on(&db)
+            .bind(("u", app.user.id.clone()))
+            .bind(("heir", app.user.id.clone()))
+            .bind(("actors", vec![u.clone()]))
+            .bind(("email_lc", app.user.email.to_lowercase()))
+            .await?
+            .check()
+    })
+    .await
+    .unwrap();
+    let _: Option<Value> = res.take(eunomia_backend::store::subject::ERASE_OWNED.slot).unwrap();
+    let rows: Vec<Value> = db.test_raw().query("SELECT status, superseded_by FROM memory:others").await.unwrap().take(0).unwrap();
+    assert!(rows[0].get("status").is_none_or(Value::is_null) && rows[0].get("superseded_by").is_none_or(Value::is_null), "{rows:?}");
+}
+
 fn offline_verify(doc: &Value) -> Option<(Option<i32>, String)> {
     if std::process::Command::new("python3").arg("--version").output().is_err() {
         eprintln!("python3 not found: offline verifier not run");

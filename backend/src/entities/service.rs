@@ -841,6 +841,12 @@ pub async fn add_memory(
     source_record_id: Option<&str>,
     mem_type: &str,
 ) -> AppResult<MemoryOut> {
+    let vault = writable_subject_vault(db, owner, subject_id).await?;
+    Ok(insert_memory(db, owner, subject_id, &vault, text, source_record_id, mem_type, None, None, false).await?.0)
+}
+
+/// The vault of `subject_id`, if `owner` may write memories there.
+async fn writable_subject_vault(db: &OrgDb, owner: &RecordId, subject_id: &RecordId) -> AppResult<RecordId> {
     let subject_row = select_entity(db, subject_id)
         .await?
         .ok_or_else(|| AppError::bad_request(format!("subject entity not found: {}", subject_id.to_string())))?;
@@ -850,10 +856,38 @@ pub async fn add_memory(
             format!("not a member of {}'s vault", subject_row.vault.to_string()),
         ));
     }
-    Ok(insert_memory(db, owner, subject_id, &subject_row.vault, text, source_record_id, mem_type).await?.0)
+    Ok(subject_row.vault)
+}
+
+/// [`add_memory`] for a fact drawn from a source record dated `occurred_at` (`None`: undated). The record
+/// date is both when the fact happened and when we were told it (`asserted_at`, never later than the
+/// write; see docs/concepts.md). Both are written in the same statement as the fact.
+///
+/// The same telling is not written twice: when the subject already has a raw fact from this record
+/// with the same normalised text ([`same_claim`]), nothing is written and `None` comes back, so a
+/// re-synced record (or a retried extraction job) neither duplicates its facts nor re-tells them now.
+pub async fn add_memory_at(
+    db: &OrgDb,
+    owner: &RecordId,
+    subject_id: &RecordId,
+    text: &str,
+    source_record_id: Option<&str>,
+    mem_type: &str,
+    occurred_at: Option<Datetime>,
+) -> AppResult<Option<MemoryOut>> {
+    let vault = writable_subject_vault(db, owner, subject_id).await?;
+    let (memory, _, created) = insert_memory(db, owner, subject_id, &vault, text, source_record_id, mem_type, occurred_at, occurred_at, true).await?;
+    Ok(created.then_some(memory))
+}
+
+/// A fact's text as a claim: case, spacing and a closing full stop do not make it a different claim.
+pub fn same_claim(a: &str, b: &str) -> bool {
+    let norm = |t: &str| t.split_whitespace().collect::<Vec<_>>().join(" ").trim_end_matches('.').trim_end().to_lowercase();
+    norm(a) == norm(b)
 }
 
 /// [`add_memory`] once the subject and its vault are known and the caller may write there.
+#[allow(clippy::too_many_arguments)]
 async fn insert_memory(
     db: &OrgDb,
     owner: &RecordId,
@@ -862,7 +896,11 @@ async fn insert_memory(
     text: &str,
     source_record_id: Option<&str>,
     mem_type: &str,
-) -> AppResult<(MemoryOut, String)> {
+    occurred_at: Option<Datetime>,
+    told_at: Option<Datetime>,
+    // a fact from a source record: skip it when the subject already has the same claim from that record
+    once_per_source: bool,
+) -> AppResult<(MemoryOut, String, bool)> {
     // every memory write (tools, REST, extraction) lands here, so this is the one place secrets are dropped
     let mut redacted = Vec::new();
     let text = crate::redact::redact(text, &mut redacted);
@@ -881,6 +919,14 @@ async fn insert_memory(
     // deterministic ids.
     let stmt = if is_obs { &q::WRITE_OBSERVATION } else { &q::WRITE_FACT };
     let _guard = lock(&subject_id.to_string()).await;
+    if let (true, false, Some(src)) = (once_per_source, is_obs, &source) {
+        let mut res = q::SAME_SOURCE_FACTS.on(db).bind(("source", src.clone())).bind(("subject", subject_id.clone())).await?.check()?;
+        let same: Vec<MemoryRow> = res.take(0)?;
+        if let Some(existing) = same.into_iter().find(|m| same_claim(&m.text, &text)) {
+            let vault_name = existing.vault_name.clone();
+            return Ok((memory_out(&existing, None), vault_name, false));
+        }
+    }
     let memory = with_retry_dup(|| async {
         let mut res = stmt
             .on(db)
@@ -891,6 +937,8 @@ async fn insert_memory(
             .bind(("type", mem_type.to_string()))
             .bind(("source", source.clone()))
             .bind(("obs_id", obs_id.clone()))
+            .bind(("occurred_at", occurred_at))
+            .bind(("told_at", told_at))
             .await?
             .check()?;
         let rows: Vec<MemoryRow> = res.take(stmt.slot)?;
@@ -901,7 +949,7 @@ async fn insert_memory(
     let op = if memory.version > 1 { changes::UPDATED } else { changes::CREATED };
     changes::record(db, vault, op, changes::MEMORY, &memory.id).await;
 
-    Ok((MemoryOut { redacted, ..memory_out(&memory, None) }, memory.vault_name))
+    Ok((MemoryOut { redacted, ..memory_out(&memory, None) }, memory.vault_name, true))
 }
 
 /// Deterministic id of a subject's observation when it is first created, so
@@ -926,6 +974,8 @@ pub async fn write_memory(
     source_record_id: Option<&str>,
     mem_type: &str,
     vault_id: Option<&RecordId>,
+    // when the fact happened; it is told now whatever this says
+    occurred_at: Option<Datetime>,
 ) -> AppResult<WriteMemoryOut> {
     authz::require_scope(Action::WriteMemories.scope())?;
     // upsert_grounded resolved and checked the vault for a write, and the entity lives in it:
@@ -934,7 +984,7 @@ pub async fn write_memory(
     let entity_rid: RecordId =
         crate::rid::parse(&entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
     let vault: RecordId = crate::rid::parse(&entity.vault).map_err(|_| AppError::internal("vault id did not round-trip"))?;
-    let (memory, vault_name) = insert_memory(db, owner, &entity_rid, &vault, text, source_record_id, mem_type).await?;
+    let (memory, vault_name, _) = insert_memory(db, owner, &entity_rid, &vault, text, source_record_id, mem_type, occurred_at, None, false).await?;
     let possible_duplicates = if created { possible_duplicates(db, &entity).await? } else { Vec::new() };
     Ok(WriteMemoryOut { entity, memory, possible_duplicates, kind_mapped, vault_name })
 }
@@ -1121,15 +1171,26 @@ async fn find_relation(db: &OrgDb, from_id: &RecordId, to_id: &RecordId, label: 
 /// doesn't exist or `owner` isn't a member of its vault, rather than
 /// erroring -- mirrors `get_entity`'s not-found-is-None convention.
 pub async fn delete_memory(db: &OrgDb, owner: &RecordId, memory_id: &RecordId) -> AppResult<bool> {
+    Ok(delete_memory_restoring(db, owner, memory_id).await?.is_some())
+}
+
+/// [`delete_memory`], returning `(subject, fact)` for each fact the deleted one had replaced: those are
+/// current again, and the caller should queue a supersede check on each. `None`: nothing deleted.
+pub async fn delete_memory_restoring(db: &OrgDb, owner: &RecordId, memory_id: &RecordId) -> AppResult<Option<Vec<(RecordId, RecordId)>>> {
     require_memory_id(memory_id)?;
     let row: Option<MemoryRow> = store::get(db, memory_id).await?;
-    let Some(row) = row else { return Ok(false) };
+    let Some(row) = row else { return Ok(None) };
     if !accessible(db, owner, &row.vault, Action::WriteMemories).await? {
-        return Ok(false);
+        return Ok(None);
+    }
+    #[derive(Deserialize, SurrealValue)]
+    struct Restored {
+        id: RecordId,
+        subject: RecordId,
     }
     // A deleted raw fact leaves its subject's observation's lineage and makes it stale; an
     // observation built from nothing but this fact is deleted with it (one transaction).
-    with_retry(|| async {
+    let mut res = with_retry(|| async {
         q::DELETE_MEMORY
             .on(db)
             .bind(("id", memory_id.clone()))
@@ -1139,9 +1200,13 @@ pub async fn delete_memory(db: &OrgDb, owner: &RecordId, memory_id: &RecordId) -
             .check()
     })
     .await?;
+    let restored: Vec<Restored> = res.take(q::DELETE_MEMORY.slot)?;
     // ponytail: an observation deleted along with its only fact gets no row of its own; recall finds it gone
     changes::record(db, &row.vault, changes::DELETED, changes::MEMORY, memory_id).await;
-    Ok(true)
+    for r in &restored {
+        changes::record(db, &row.vault, changes::UPDATED, changes::MEMORY, &r.id).await;
+    }
+    Ok(Some(restored.into_iter().map(|r| (r.subject, r.id)).collect()))
 }
 
 /// Memory types a raw fact can be switched between by [`update_memory`];
@@ -1176,6 +1241,18 @@ pub async fn update_memory(
     text: Option<&str>,
     new_type: Option<&str>,
 ) -> AppResult<Option<MemoryOut>> {
+    Ok(update_memory_told(db, owner, memory_id, text, new_type).await?.map(|(m, _)| m))
+}
+
+/// [`update_memory`], and whether the edit told the fact again: it changed the text of a current raw
+/// fact (the statements set `asserted_at` by the same rule; the caller queues a supersede check).
+pub async fn update_memory_told(
+    db: &OrgDb,
+    owner: &RecordId,
+    memory_id: &RecordId,
+    text: Option<&str>,
+    new_type: Option<&str>,
+) -> AppResult<Option<(MemoryOut, bool)>> {
     require_memory_id(memory_id)?;
     let row: Option<MemoryRow> = store::get(db, memory_id).await?;
     let Some(row) = row else { return Ok(None) };
@@ -1186,6 +1263,10 @@ pub async fn update_memory(
     let mut redacted = Vec::new();
     let text = text.map(|t| crate::redact::redact(t, &mut redacted));
     let text = text.as_deref();
+    let told = new_type.unwrap_or(&row.mem_type) != "observation"
+        && row.mem_type != "observation"
+        && row.status.as_deref() != Some("superseded")
+        && text.is_some_and(|t| t != row.text);
 
     let stmt = match (text, new_type) {
         (Some(_), Some(_)) => &q::UPDATE_MEMORY_TEXT_TYPE,
@@ -1210,7 +1291,7 @@ pub async fn update_memory(
     let rows: Vec<MemoryRow> = res.take(stmt.slot)?;
     let updated = rows.into_iter().next().ok_or_else(|| AppError::internal("memory update returned no row"))?;
     changes::record(db, &row.vault, changes::UPDATED, changes::MEMORY, memory_id).await;
-    Ok(Some(MemoryOut { redacted, ..memory_out(&updated, None) }))
+    Ok(Some((MemoryOut { redacted, ..memory_out(&updated, None) }, told)))
 }
 
 /// A memory's stored text, if `owner` may write it.

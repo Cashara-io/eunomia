@@ -9,7 +9,7 @@ One page: how work that must not block a request (syncs, embeddings, entity extr
 | Field | Meaning |
 |-------|---------|
 | `org` | Org key, or `NONE`. |
-| `kind` | Handler name: `sync`, `embed`, `extract`, `consolidate`, `supersede`, `prune_capsules`, `migrate_tenant`, `redact_backfill`. |
+| `kind` | Handler name: `sync`, `embed`, `extract`, `consolidate`, `supersede`, `prune_capsules`, `migrate_tenant`, `redact_backfill`, `fact_dates_backfill`. |
 | `owner` | `record<user>`; the fairness unit. |
 | `payload` | Ids only (`{"source": "up_bank"}`, `{"record": "..."}`, `{"subject": "person:x"}`). Never content. |
 | `idempotency_key` | UNIQUE. The record id is derived from it too, so a second enqueue is a no-op. |
@@ -74,6 +74,7 @@ Every process with the worker role tries `UPDATE job_leader:scheduler ... WHERE 
 | consolidation | `memory` observations with `status = 'stale'` (set by fact writes), when an LLM key exists | `consolidate` per entity | `consolidate:<subject>:<10 min window>` | every tick |
 | tenant schema | `tenant.schema_version` below the schema this code writes | `migrate_tenant` per org | `migrate_tenant:<org>:<version>` | every tick |
 | secret backfill | the org's `redact_backfill:v<version>` row has no `done_at` (org at schema 24 or later) | `redact_backfill` per org | `redact_backfill:<org>:<detector version>:<1 h window>` (a dead one is queued again next window) | every 10 ticks |
+| fact-date backfill | the org's `fact_dates_backfill:v<version>` row has no `done_at` (org at schema 46 or later) | `fact_dates_backfill` per org: dates facts extracted before facts carried their record's date, then flags possibly wrong replacements in its ledger (`jobs::fact_dates`) | `fact_dates_backfill:<org>:<version>:<1 h window>` | every 10 ticks |
 | extraction | queued by ingest for each changed record (not polled) | `extract` per record | `extract:<owner>:<record>:<content hash>` | on ingest |
 | supersession | queued by `memory_write` for each raw fact, when an LLM key exists (not polled) | `supersede` per fact | `supersede:<org>:<memory>` | on write |
 

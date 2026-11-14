@@ -644,6 +644,45 @@ expression: info(&db).await
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "fact_dates_backfill",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": []
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "fact_dates_redated",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "memory"
+          ],
+          "index": "",
+          "name": "fact_dates_redated_memory_idx",
+          "table": "fact_dates_redated"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "file",
       "permissions": {
         "create": false,
@@ -836,6 +875,14 @@ expression: info(&db).await
           ],
           "index": "",
           "name": "memory_subject_type_idx",
+          "table": "memory"
+        },
+        {
+          "cols": [
+            "superseded_by"
+          ],
+          "index": "",
+          "name": "memory_superseded_by_idx",
           "table": "memory"
         },
         {
