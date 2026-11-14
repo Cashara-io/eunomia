@@ -55,6 +55,7 @@ pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (42, "ontology_activity", include_str!("../migrations/tenant/0042_ontology_activity.surql")),
     (43, "chat_turn_order", include_str!("../migrations/tenant/0043_chat_turn_order.surql")),
     (44, "audit_chain", include_str!("../migrations/tenant/0044_audit_chain.surql")),
+    (45, "erasure", include_str!("../migrations/tenant/0045_erasure.surql")),
 ];
 
 /// The tenant schema version this code writes. An org database is current at this version.
@@ -76,6 +77,7 @@ pub const CONTROL_MIGRATIONS: &[(u32, &str, &str)] = &[
     (8, "user_admin_suspend", include_str!("../migrations/control/0008_user_admin_suspend.surql")),
     (9, "mfa", include_str!("../migrations/control/0009_mfa.surql")),
     (10, "audit_chain", include_str!("../migrations/control/0010_audit_chain.surql")),
+    (11, "erasure", include_str!("../migrations/control/0011_erasure.surql")),
 ];
 
 /// The first number missing from `list`, which must run 1, 2, 3, ... with no gap. A gap is final:

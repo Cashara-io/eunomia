@@ -205,6 +205,16 @@ export type ActivityPage = {
     next_before?: string | null;
 };
 
+/**
+ * A row of the person's own activity about their data.
+ */
+export type ActivityRow = {
+    action: string;
+    created_at?: string | null;
+    detail?: string;
+    outcome: string;
+};
+
 export type AdminChange = {
     /**
      * `true` makes the person an admin, `false` takes admin rights away.
@@ -1079,6 +1089,94 @@ export type EntityUpdate = {
     summary?: string | null;
 };
 
+export type EraseMe = {
+    /**
+     * You confirm that a workspace whose only member you are is closed with your account (everything
+     * in it is deleted). Without it such a request is refused with `subject.workspace_closes`.
+     */
+    close_workspace?: boolean;
+    /**
+     * With two-step verification on: a code from your authenticator, unless you signed in with one in
+     * the last 10 minutes (`auth.step_up_required` otherwise).
+     */
+    mfa_code?: string | null;
+    /**
+     * Your password, typed again. Required when the account has one.
+     */
+    password?: string | null;
+};
+
+export type ErasePerson = {
+    /**
+     * Confirms closing any workspace whose only member the person is.
+     */
+    close_workspace?: boolean;
+    /**
+     * With two-step verification on for your account: a code from your authenticator, unless you
+     * signed in with one in the last 10 minutes (`auth.step_up_required` otherwise).
+     */
+    mfa_code?: string | null;
+    /**
+     * Your own password, typed again (an operator who signs in only with single sign-on confirms with a
+     * sign-in from the last 10 minutes instead).
+     */
+    password?: string | null;
+};
+
+/**
+ * The record a completed erasure leaves, for the People page (no personal data: an opaque reference,
+ * per-category counts, the post-check result and the review counts).
+ */
+export type ErasureRecord = {
+    completed_at?: string | null;
+    /**
+     * Rows removed or anonymised per category.
+     */
+    counts: {
+        [key: string]: unknown;
+    };
+    /**
+     * When it took its first irreversible step; none while it can still be cancelled.
+     */
+    deleting_at?: string | null;
+    error?: string | null;
+    id: string;
+    /**
+     * Rows still naming the person per table after the erasure: every value is 0 when it passed.
+     */
+    post_check: {
+        [key: string]: unknown;
+    };
+    requested_at: string;
+    /**
+     * `self`, `operator` or `reapply` (a restore brought the person back and they were erased again).
+     */
+    requested_by: string;
+    /**
+     * Mentions of the person's email left in content other people wrote, for review.
+     */
+    review?: {
+        [key: string]: unknown;
+    };
+    status: string;
+    /**
+     * The keyed hash of the erased account's id (never the id or the email).
+     */
+    subject_ref: string;
+};
+
+/**
+ * An erasure as the routes report it.
+ */
+export type ErasureTicket = {
+    id: string;
+    requested_at: string;
+    /**
+     * `pending`, `running`, `held`, `done`, `failed` or `cancelled`.
+     */
+    status: string;
+};
+
 export type EventDetail = {
     attempts: number;
     body: {
@@ -1118,6 +1216,33 @@ export type EventOut = {
      */
     id: string;
     received_at: string;
+};
+
+/**
+ * What the exports list shows (never the archive).
+ */
+export type ExportRow = {
+    created_at: string;
+    error?: string | null;
+    expires_at: string;
+    id: string;
+    /**
+     * Categories and counts (empty until ready).
+     */
+    manifest?: {
+        [key: string]: unknown;
+    };
+    requested_by?: string | null;
+    /**
+     * `self` (the person's own, every workspace) or `organisation` (an admin's, one workspace).
+     */
+    scope?: string;
+    size_bytes?: number;
+    /**
+     * `pending`, `ready` or `failed`.
+     */
+    status: string;
+    subject?: string | null;
 };
 
 export type ExtensionOut = {
@@ -1387,6 +1512,25 @@ export type HelperStatus = {
      * The helper's version when running.
      */
     version?: string | null;
+};
+
+export type HoldChange = {
+    /**
+     * `true` places a legal hold (the account cannot be erased), `false` lifts it.
+     */
+    hold: boolean;
+};
+
+export type HoldState = {
+    /**
+     * An erasure of this account is open. A hold placed now parks it (`held`) before its next
+     * irreversible step; lifting the hold resumes it.
+     */
+    erasure_open: boolean;
+    /**
+     * When the hold was placed, RFC 3339; none when there is no hold.
+     */
+    legal_hold_at?: string | null;
 };
 
 export type HookOut = {
@@ -2289,6 +2433,10 @@ export type Person = {
      */
     last_active?: string | null;
     /**
+     * When an admin placed a legal hold on the account, RFC 3339; none when there is none. A held account cannot be erased.
+     */
+    legal_hold_at?: string | null;
+    /**
      * Two-step verification: `on`, `off`, or `provider` for an account that signs in only through single
      * sign-on (its identity provider handles the second factor).
      */
@@ -2309,6 +2457,11 @@ export type Person = {
      * How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`).
      */
     tokens: number;
+    /**
+     * The workspace's owner (one per workspace). An owner whose workspace has other members hands it
+     * over (`/api/admin/people/{user_id}/workspace-owner`) before their account can be erased.
+     */
+    workspace_owner: boolean;
 };
 
 export type PersonToken = {
@@ -2547,6 +2700,13 @@ export type ReadinessOut = {
      */
     strict: boolean;
     vault: string;
+};
+
+export type Reapplied = {
+    /**
+     * Erasures queued again: accounts a restore brought back, and restored rows whose owner was erased.
+     */
+    queued: number;
 };
 
 export type RecentRecording = {
@@ -3521,6 +3681,50 @@ export type WorkspaceAuditPage = {
     results: Array<WorkspaceAuditEntry>;
 };
 
+export type MyDataActivityData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/account/activity';
+};
+
+export type MyDataActivityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type MyDataActivityError = MyDataActivityErrors[keyof MyDataActivityErrors];
+
+export type MyDataActivityResponses = {
+    200: Array<ActivityRow>;
+};
+
+export type MyDataActivityResponse = MyDataActivityResponses[keyof MyDataActivityResponses];
+
+export type EraseMyAccountData = {
+    body: EraseMe;
+    path?: never;
+    query?: never;
+    url: '/api/account/erasure';
+};
+
+export type EraseMyAccountErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type EraseMyAccountError = EraseMyAccountErrors[keyof EraseMyAccountErrors];
+
+export type EraseMyAccountResponses = {
+    200: ErasureTicket;
+};
+
+export type EraseMyAccountResponse = EraseMyAccountResponses[keyof EraseMyAccountResponses];
+
 export type ListAccessReviewsData = {
     body?: never;
     path?: never;
@@ -3752,6 +3956,74 @@ export type VerifyAuditChainResponses = {
 
 export type VerifyAuditChainResponse = VerifyAuditChainResponses[keyof VerifyAuditChainResponses];
 
+export type ListErasuresData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/erasures';
+};
+
+export type ListErasuresErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListErasuresError = ListErasuresErrors[keyof ListErasuresErrors];
+
+export type ListErasuresResponses = {
+    200: Array<ErasureRecord>;
+};
+
+export type ListErasuresResponse = ListErasuresResponses[keyof ListErasuresResponses];
+
+export type ReapplyErasuresData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/erasures/reapply';
+};
+
+export type ReapplyErasuresErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ReapplyErasuresError = ReapplyErasuresErrors[keyof ReapplyErasuresErrors];
+
+export type ReapplyErasuresResponses = {
+    200: Reapplied;
+};
+
+export type ReapplyErasuresResponse = ReapplyErasuresResponses[keyof ReapplyErasuresResponses];
+
+export type CancelErasureData = {
+    body?: never;
+    path: {
+        erasure_id: string;
+    };
+    query?: never;
+    url: '/api/admin/erasures/{erasure_id}/cancel';
+};
+
+export type CancelErasureErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type CancelErasureError = CancelErasureErrors[keyof CancelErasureErrors];
+
+export type CancelErasureResponses = {
+    200: Array<ErasureRecord>;
+};
+
+export type CancelErasureResponse = CancelErasureResponses[keyof CancelErasureResponses];
+
 export type ListPeopleData = {
     body?: never;
     path?: never;
@@ -3797,6 +4069,78 @@ export type SetPersonAdminResponses = {
 };
 
 export type SetPersonAdminResponse = SetPersonAdminResponses[keyof SetPersonAdminResponses];
+
+export type ErasePersonData = {
+    body: ErasePerson;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/erasure';
+};
+
+export type ErasePersonErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ErasePersonError = ErasePersonErrors[keyof ErasePersonErrors];
+
+export type ErasePersonResponses = {
+    200: ErasureTicket;
+};
+
+export type ErasePersonResponse = ErasePersonResponses[keyof ErasePersonResponses];
+
+export type StartPersonExportData = {
+    body?: never;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/export';
+};
+
+export type StartPersonExportErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type StartPersonExportError = StartPersonExportErrors[keyof StartPersonExportErrors];
+
+export type StartPersonExportResponses = {
+    200: ExportRow;
+};
+
+export type StartPersonExportResponse = StartPersonExportResponses[keyof StartPersonExportResponses];
+
+export type SetPersonLegalHoldData = {
+    body: HoldChange;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/legal-hold';
+};
+
+export type SetPersonLegalHoldErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetPersonLegalHoldError = SetPersonLegalHoldErrors[keyof SetPersonLegalHoldErrors];
+
+export type SetPersonLegalHoldResponses = {
+    200: HoldState;
+};
+
+export type SetPersonLegalHoldResponse = SetPersonLegalHoldResponses[keyof SetPersonLegalHoldResponses];
 
 export type SetPersonSuspendedData = {
     body: SuspendChange;
@@ -3870,6 +4214,30 @@ export type RevokePersonTokenResponses = {
 };
 
 export type RevokePersonTokenResponse = RevokePersonTokenResponses[keyof RevokePersonTokenResponses];
+
+export type MakeWorkspaceOwnerData = {
+    body?: never;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/workspace-owner';
+};
+
+export type MakeWorkspaceOwnerErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type MakeWorkspaceOwnerError = MakeWorkspaceOwnerErrors[keyof MakeWorkspaceOwnerErrors];
+
+export type MakeWorkspaceOwnerResponses = {
+    200: PeopleReport;
+};
+
+export type MakeWorkspaceOwnerResponse = MakeWorkspaceOwnerResponses[keyof MakeWorkspaceOwnerResponses];
 
 export type GetServerSecurityData = {
     body?: never;
@@ -5854,6 +6222,80 @@ export type ExportDataResponses = {
 };
 
 export type ExportDataResponse = ExportDataResponses[keyof ExportDataResponses];
+
+export type ListSubjectExportsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/export/subject';
+};
+
+export type ListSubjectExportsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListSubjectExportsError = ListSubjectExportsErrors[keyof ListSubjectExportsErrors];
+
+export type ListSubjectExportsResponses = {
+    200: Array<ExportRow>;
+};
+
+export type ListSubjectExportsResponse = ListSubjectExportsResponses[keyof ListSubjectExportsResponses];
+
+export type StartSubjectExportData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/export/subject';
+};
+
+export type StartSubjectExportErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type StartSubjectExportError = StartSubjectExportErrors[keyof StartSubjectExportErrors];
+
+export type StartSubjectExportResponses = {
+    200: ExportRow;
+};
+
+export type StartSubjectExportResponse = StartSubjectExportResponses[keyof StartSubjectExportResponses];
+
+export type DownloadSubjectExportData = {
+    body?: never;
+    path: {
+        /**
+         * The export's id, as listed
+         */
+        export_id: string;
+    };
+    query?: never;
+    url: '/api/export/subject/{export_id}';
+};
+
+export type DownloadSubjectExportErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DownloadSubjectExportError = DownloadSubjectExportErrors[keyof DownloadSubjectExportErrors];
+
+export type DownloadSubjectExportResponses = {
+    /**
+     * The zip archive
+     */
+    200: Blob | File;
+};
+
+export type DownloadSubjectExportResponse = DownloadSubjectExportResponses[keyof DownloadSubjectExportResponses];
 
 export type ListExtensionsData = {
     body?: never;

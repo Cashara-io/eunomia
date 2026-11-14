@@ -169,6 +169,7 @@ their local-dev defaults in production:
 | `CAPSULE_ARGS` | `off` | `off`: failure capsules keep only a hash and the JSON shape of a failed call's arguments. `redacted`: keep the arguments with secrets masked, so `eunomia replay` can re-run them. See [debugging](debugging.md). |
 | `AUDIT_RETENTION_DAYS` | `365` | The `prune_auth` job deletes audit events older than this. `0` keeps them forever. |
 | `TOOL_USAGE_RETENTION_DAYS` | `90` | The same job deletes the hourly tool-call counters (Settings, Usage) older than this. `0` keeps them forever. |
+| `EUNOMIA_EXPORT_MAX_MB` | `64` | The largest data export archive (Settings > Data, Export my data) the server keeps; a bigger one fails with a message saying so. Archives are kept for seven days. Erasure records are never pruned. See [subject-rights.md](privacy/subject-rights.md). |
 | `SESSION_RETENTION_DAYS` | `7` | The same job deletes browser sessions that expired (or were revoked) this many days ago. |
 | `CHANGE_LOG_RETENTION_DAYS` | `90` | The scheduler trims each vault's change log ([projects](projects.md#retention)) to rows newer than this, about hourly. `0` keeps rows whatever their age. |
 | `CHANGE_LOG_MAX_ROWS` | `100000` | The same trim keeps at most this many of a vault's newest change log rows. `0` means no cap. A client whose cursor falls below what is kept gets `changes.resync`. |
@@ -298,6 +299,8 @@ Older installs ran with an empty `ENCRYPTION_KEY`, so their stored connector cre
 An install whose existing key is shorter than 16 characters keeps working: it boots with a loud error in the log and `/readyz` carries a `warning`, because refusing would lock the owner out of data written under it (a new install with a short key is refused). Moving to a strong key is a key change, so the next paragraph applies: nothing re-encrypts for you.
 
 Changing a real key later has no such fallback: values written under the old key stop decrypting, so reconnect the connectors, re-enter the OpenAI key, and expect org databases to be unreachable until their users are redefined (see [architecture/tenancy.md](architecture/tenancy.md)). Do not change it casually. Two-step verification secrets are encrypted under the key too: after a change, an authenticator code answers `auth.mfa_unreadable` (409, never a 500, no attempt counted, audited as `auth.mfa_secret_unreadable`). The person signs in with a recovery code, turns two-step verification off in Settings with another recovery code (allowed even while it is required) and sets it up again. With `ENCRYPTION_KEY_LEGACY_EMPTY=1` a secret written under the empty key still decrypts. See [security/mfa.md](security/mfa.md).
+
+Erasure records are keyed hashes under the key, and a hash cannot be re-keyed. After any key change, set `ENCRYPTION_KEY_PREVIOUS` to the old key (comma separated for several) for as long as backups from before the change exist, so a restored account that was erased is still recognised and erased again ([privacy/subject-rights.md](privacy/subject-rights.md#resync-and-restore-suppression)).
 
 ## Backups
 

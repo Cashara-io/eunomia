@@ -105,3 +105,5 @@ Control migration 0010 and tenant migration 0044 (the audit chain, [audit-chain.
 - every head is its ledger's newest sealed event, with exactly one genesis checkpoint per ledger;
 - the events the old release wrote stay unchained and none is deleted;
 - on the re-run the chain is only appended to: every event sealed after the update keeps its sequence number and hash.
+
+Control migration 0011 and tenant migration 0045 (data-subject export and erasure, [privacy/subject-rights.md](privacy/subject-rights.md)) add `erasure` and `erasure_lock` to the control database and `subject_export` to every org database. They are listed in `UPDATE_PATH_NEW_CONTROL_TABLES` and `UPDATE_PATH_NEW_TABLES` and must be new and empty after an update and after the re-run: nothing backfills them, and the boot-time erasure re-apply (`subject::reapply_on_start`) only reads while no erasure has ever been recorded.

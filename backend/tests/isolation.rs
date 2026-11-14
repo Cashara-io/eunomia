@@ -335,7 +335,8 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         CREATE secret_request SET vault = $v, name = 'planted', label = $c, description = $c, target_hosts = ['api.example.com'], requested_by = $u, actor_id = $c, client_name = $c, expires_at = time::now() + 1d;
         CREATE vault_secret SET vault = $v, name = 'planted', label = $c, value_enc = $senc, allowed_hosts = ['api.example.com'], allowed_actors = [$c], created_by = $u;
         LET $ar = (CREATE ONLY access_review SET org = $rorg, open_slot = $c, started_by = $u, started_by_email = $c, snapshot = {people: [{email: $c}]}, snapshot_hash = $c).id;
-        CREATE access_review_decision SET review = $ar, subject = $u, subject_email = $c, decision = 'keep', note = $c, reviewer = $u, reviewer_email = $c;";
+        CREATE access_review_decision SET review = $ar, subject = $u, subject_email = $c, decision = 'keep', note = $c, reviewer = $u, reviewer_email = $c;
+        CREATE subject_export SET subject = $u, requested_by = $u, status = 'ready', manifest = {note: $c}, archive = <bytes>$c;";
     let uid = user.id.clone();
     db.test_raw()
         .query(sql)
@@ -403,6 +404,8 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         LET $g = (CREATE oauth_grant SET owner = $u, client_id = 'client-x', client_name = $c, scope = ['memory:read'], resource = 'http://localhost:8001/mcp' RETURN VALUE id)[0];
         CREATE oauth_token SET kind = 'access', token_hash = $c, family = $g, expires_at = time::now() + 15m;
         CREATE oauth_code SET code_hash = $c, owner = $u, client_id = 'client-x', redirect_uri = 'http://localhost/cb', code_challenge = $c, scope = ['memory:read'], resource = 'http://x', expires_at = time::now() + 1m;
+        CREATE erasure SET org = $okey_bare, subject_ref = $c, requested_by = 'operator', status = 'done', open_slot = $c, counts = {note: $c};
+        CREATE $lock SET erasure = (SELECT VALUE id FROM erasure WHERE open_slot = $c)[0];
         RETURN $g;";
     let mut res = state
         .control
@@ -410,9 +413,11 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         .query(control_sql)
         .bind(("org", user.org.record()))
         .bind(("okey", user.org.to_string()))
+        .bind(("okey_bare", user.org.key()))
         .bind(("u", uid.clone()))
         .bind(("c", canary.clone()))
         .bind(("mem", surrealdb::types::RecordId::new("membership", canary.clone())))
+        .bind(("lock", surrealdb::types::RecordId::new("erasure_lock", canary.clone())))
         .await
         .unwrap();
     let grant: Option<surrealdb::types::RecordId> = res.take(res.num_statements() - 1).unwrap();

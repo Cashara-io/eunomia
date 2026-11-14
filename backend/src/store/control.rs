@@ -562,6 +562,7 @@ pub const USER_IDS_OLDEST_FIRST: ControlStmt = ControlStmt::new("control.user_id
 /// Signup cleanup: every membership of a user whose signup failed.
 pub const MEMBERSHIP_DELETE_USER: ControlStmt = ControlStmt::new("control.membership_delete_user", "DELETE membership WHERE user = $user");
 
+
 /// `/readyz`: the control database answers.
 pub const READY_PING: ControlStmt = ControlStmt::new("app.ready_ping", "RETURN 1");
 
@@ -633,7 +634,7 @@ pub const ADMIN_AUDIT_PAGE: ControlStmt = ControlStmt::new(
 /// Every account in an org, oldest first.
 pub const ADMIN_PEOPLE: ControlStmt = ControlStmt::new(
     "control.admin_people",
-    "SELECT id, email, email_lc, created_at, admin, suspended_at, mfa_secret_enc != NONE AS mfa, password_hash != NONE AS has_password \
+    "SELECT id, email, email_lc, created_at, admin, suspended_at, mfa_secret_enc != NONE AS mfa, password_hash != NONE AS has_password, legal_hold_at \
      FROM user WHERE id IN (SELECT VALUE user FROM membership WHERE org = $org) ORDER BY created_at, id",
 );
 

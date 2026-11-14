@@ -61,6 +61,8 @@ const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_logi
 const ADMIN_ACTIONS: &[&str] = &[
     "admin.grant", "admin.revoke", "user.suspend", "user.restore", "admin.token_revoke", "admin.require_mfa",
     "access_review.start", "access_review.decide", "access_review.complete", "audit.export",
+    "subject.legal_hold", "subject.legal_hold_lift", "subject.erase_request", "subject.erase", "subject.export_request_admin",
+    "subject.export_download_admin", "org.owner_transfer", "subject.erase_cancel",
 ];
 
 impl AuditCategory {
@@ -309,6 +311,19 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "admin.revoke" => format!("Took admin rights away from {email}"),
         "user.suspend" => format!("Suspended {email}"),
         "user.restore" => format!("Restored access for {email}"),
+        "subject.legal_hold" => format!("Placed a legal hold on {email}"),
+        "subject.legal_hold_lift" => format!("Lifted the legal hold on {email}"),
+        "subject.erase_request" => match detail.split_whitespace().find_map(|kv| kv.strip_prefix("by=")) {
+            Some("self") => "Someone asked for their own account and data to be deleted".into(),
+            Some("reapply") => "A restore brought back an erased account; it is being erased again".into(),
+            _ => "Asked for an account and its data to be deleted".into(),
+        },
+        "subject.export_download_admin" => "Downloaded an export of this workspace's data about someone".into(),
+        "org.owner_transfer" => format!("Made {email} the workspace owner"),
+        "subject.erase_cancel" => "Cancelled an erasure before it deleted anything (the account is as it was)".into(),
+        "subject.erase" => return "Deleted an account and its data (the erasure record keeps the counts)".into(),
+        "subject.export_request" => "Exported their data".into(),
+        "subject.export_request_admin" => "Exported someone's data for them".into(),
         "admin.token_revoke" => match rest_of(detail, "token") {
             Some(t) => format!("Revoked {email}\u{2019}s API token \u{201c}{t}\u{201d}"),
             None => format!("Revoked an API token of {email}"),
@@ -572,6 +587,9 @@ pub(crate) struct PersonRow {
     #[serde(default)]
     #[surreal(default)]
     pub(crate) has_password: bool,
+    #[serde(default)]
+    #[surreal(default)]
+    pub(crate) legal_hold_at: Option<Datetime>,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -608,10 +626,16 @@ struct Person {
     /// When an admin suspended the account, RFC 3339; none while it is active.
     #[schema(value_type = Option<String>)]
     suspended_at: Option<Datetime>,
+    /// When an admin placed a legal hold on the account, RFC 3339; none when there is none. A held account cannot be erased.
+    #[schema(value_type = Option<String>)]
+    legal_hold_at: Option<Datetime>,
     /// The admin looking at the list.
     is_you: bool,
     /// How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`).
     tokens: i64,
+    /// The workspace's owner (one per workspace). An owner whose workspace has other members hands it
+    /// over (`/api/admin/people/{user_id}/workspace-owner`) before their account can be erased.
+    workspace_owner: bool,
     /// Two-step verification: `on`, `off`, or `provider` for an account that signs in only through single
     /// sign-on (its identity provider handles the second factor).
     mfa: String,
@@ -638,7 +662,7 @@ struct SignupPolicy {
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
-struct PeopleReport {
+pub(crate) struct PeopleReport {
     people: Vec<Person>,
     signup: SignupPolicy,
 }
@@ -720,6 +744,18 @@ async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport>
         .collect();
 
     let creator = crate::capsules::first_user(&state.control).await?;
+    #[derive(Deserialize, SurrealValue)]
+    struct OwnerRow {
+        user: RecordId,
+    }
+    let owner: Option<RecordId> = store::control::ORG_FIRST_OWNER
+        .on(&state.control)
+        .bind(("org", user.org.record()))
+        .await?
+        .take::<Vec<OwnerRow>>(0)?
+        .into_iter()
+        .next()
+        .map(|r| r.user);
     let people = rows
         .into_iter()
         .map(|r| {
@@ -732,11 +768,13 @@ async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport>
                 role: if admin.is_empty() { "member" } else { "admin" }.into(),
                 is_you: r.id == user.id,
                 tokens: token_counts.get(&key).copied().unwrap_or(0),
+                workspace_owner: owner.as_ref() == Some(&r.id),
                 mfa: if r.mfa { "on" } else if r.has_password { "off" } else { "provider" }.into(),
                 id: key,
                 email: r.email,
                 created_at: r.created_at,
                 suspended_at: r.suspended_at,
+                legal_hold_at: r.legal_hold_at,
             }
         })
         .collect();
@@ -777,6 +815,23 @@ struct AdminChange {
 struct SuspendChange {
     /// `true` suspends the account, `false` restores it.
     suspended: bool,
+}
+
+/// The people list as a response (`routers/subject.rs` answers with it after a handover).
+pub(crate) async fn people_response(state: &AppState, user: &User) -> AppResult<axum::response::Response> {
+    use axum::response::IntoResponse;
+    Ok(Json(people_report(state, user).await?).into_response())
+}
+
+/// The schema the handover route answers with.
+pub(crate) type PeopleReportRef = PeopleReport;
+
+/// For the data-subject routes (`routers/subject.rs`): the admin acting (browser session only), the
+/// account they act on (in their workspace) and its email.
+pub(crate) async fn person_in_workspace(state: &AppState, user: &User, user_id: &str) -> AppResult<(Option<RecordId>, RecordId, String)> {
+    let (rows, creator, target) = target_of(state, user, user_id).await?;
+    let email = rows.iter().find(|r| r.id == target).map(|r| r.email.clone()).unwrap_or_default();
+    Ok((creator, target, email))
 }
 
 /// The admin acting (browser session only) and the account they act on, which must be in their workspace.
@@ -862,6 +917,13 @@ async fn set_suspended(
     let email = row.email.clone();
     if body.suspended == row.suspended_at.is_some() {
         return Ok(Json(people_report(&state, &user).await?));
+    }
+    if !body.suspended && crate::subject::account_erasure_open(&state.control, &target).await? {
+        // an erasure of the whole account keeps it suspended until it finishes or an operator cancels it
+        return Err(AppError::coded(
+            ErrorCode::AuthForbidden,
+            "This account is being erased (or the erasure is waiting on a legal hold), so it can't be restored. A server operator can cancel the erasure, until it starts deleting.",
+        ));
     }
     if body.suspended {
         if target == user.id {
@@ -1151,6 +1213,7 @@ mod tests {
             created_at: None,
             admin: admin.then_some(true),
             suspended_at: suspended.then(Datetime::now),
+            legal_hold_at: None,
             mfa: false,
             has_password: true,
         };

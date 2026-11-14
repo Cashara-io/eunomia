@@ -9,6 +9,95 @@
     "version": "1"
   },
   "paths": {
+    "/api/account/activity": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "What has been done about your data: exports an admin made of it, erasure requests, legal holds, admin actions on your account",
+        "operationId": "myDataActivity",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActivityRow"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/account/erasure": {
+      "post": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Delete your account and your data (browser session, confirmed with your password)",
+        "description": "An account with no password (single sign-on only) confirms with a sign-in from the last 10 minutes (`subject.reauthenticate` otherwise). With two-step verification on, it also needs a second factor from the last 10 minutes or `mfa_code` (`auth.step_up_required`). Checks the confirmation, then suspends the account and signs it out everywhere, and queues the erasure. Refused with `subject.legal_hold` while an admin holds the account, `subject.last_owner` when you own a workspace that has other members and no other owner, and `subject.workspace_closes` until you confirm closing a workspace you are the only member of. What is deleted and what is kept: docs/privacy/subject-rights.md.",
+        "operationId": "eraseMyAccount",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EraseMe"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureTicket"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/admin/access-reviews": {
       "get": {
         "tags": [
@@ -487,6 +576,136 @@
         ]
       }
     },
+    "/api/admin/erasures": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Erasure records for the workspace, newest first (admin only)",
+        "description": "Each record keeps only an opaque reference to the person, the counts per category, the post-check (every value 0 when it passed) and the mentions of their email left in other people's content, for review.",
+        "operationId": "listErasures",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ErasureRecord"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/erasures/reapply": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "After restoring a backup: erase again everyone erased after the backup was taken (server operators only, browser session)",
+        "description": "Also runs by itself when the server starts. Matches live accounts, and the owners of rows in every workspace, against the erasure records; queues an erasure for each match. It acts on the whole server, like a restore.",
+        "operationId": "reapplyErasures",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reapplied"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/erasures/{erasure_id}/cancel": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Cancel an erasure that has not started deleting (server operators only, browser session)",
+        "description": "Stops an erasure before its first irreversible step, clears its working record (the email, token ids and file paths it held) and leaves the account exactly as it was (unsuspended if the request suspended it). Refused with `db.conflict` once deletion has begun: from then on it completes, or waits while held or failed and retried.",
+        "operationId": "cancelErasure",
+        "parameters": [
+          {
+            "name": "erasure_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ErasureRecord"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/admin/people": {
       "get": {
         "tags": [
@@ -561,6 +780,167 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PeopleReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/erasure": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Erase someone's whole account and data (server operators only, browser session, confirmed with your own password)",
+        "description": "Only a server operator (an address in EUNOMIA_ADMIN_EMAILS, or the server's first account): the whole account in every workspace, as if the person had deleted it themselves. An admin of a workspace who is not an operator can't erase anyone in this release. With two-step verification on for your account, it also needs a second factor from the last 10 minutes or `mfa_code` (`auth.step_up_required`). Refused for your own account (use Settings > Data), for the first account and other operators' accounts, with `subject.legal_hold` while the account is held, with `subject.last_owner` when the person owns a workspace with other members, and with `subject.workspace_closes` until you confirm closing a workspace the person is the only member of.",
+        "operationId": "erasePerson",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErasePerson"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureTicket"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/export": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Prepare a full data export for someone in the workspace (admin only, browser session)",
+        "description": "This workspace's data about the person only: what they wrote in its shared spaces, their spaces here, their account record, tokens and connected apps by name, and audit events about them. Not their personal space, private chat, synced records or other workspaces. You download it from Settings > Data; the person's own activity records that it was made.",
+        "operationId": "startPersonExport",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportRow"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/legal-hold": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Place or lift a legal hold on someone's account (admin places, server operator lifts; browser session)",
+        "description": "Any admin places a hold; only a server operator lifts it, and never a hold on their own account. Who placed it and who lifted it are recorded. While held, erasing the account is refused with `subject.legal_hold`, and an erasure already queued parks as `held` before its next irreversible step and resumes when the hold is lifted. Placing and lifting are both in the activity log, with who did each. A hold does not stop the audit retention window (AUDIT_RETENTION_DAYS).",
+        "operationId": "setPersonLegalHold",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoldChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldState"
                 }
               }
             }
@@ -729,6 +1109,53 @@
                   "items": {
                     "$ref": "#/components/schemas/PersonToken"
                   }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/workspace-owner": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Hand the workspace over to another member (the current owner or a server operator, browser session)",
+        "description": "A workspace has one owner. Only the current owner or a server operator hands it over, to an active member who is not suspended, not under a legal hold and not being erased. The change promotes exactly one membership or changes nothing, so the workspace always keeps an owner.",
+        "operationId": "makeWorkspaceOwner",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleReport"
                 }
               }
             }
@@ -4677,6 +5104,127 @@
           },
           {
             "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/export/subject": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Your data exports (including ones an admin started for you) and the ones you asked for as an admin, newest first",
+        "operationId": "listSubjectExports",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExportRow"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Prepare a full export of your data (a zip archive with a manifest; browser session)",
+        "description": "Queues a job that collects everything in scope about you in every workspace you belong to (account, spaces, what you wrote in spaces you can still read, documents and their files, synced records, chat, sources, tokens and connected apps by name, your audit events) into a zip archive kept for seven days. List exports to see when it is ready. Not available to API tokens or apps.",
+        "operationId": "startSubjectExport",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportRow"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/export/subject/{export_id}": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Download a ready data export (zip; browser session)",
+        "description": "Your own export (assembled from its part in every workspace you belong to), or a workspace export you started as an admin (while you are still an admin). Nobody else's own export, ever.",
+        "operationId": "downloadSubjectExport",
+        "parameters": [
+          {
+            "name": "export_id",
+            "in": "path",
+            "description": "The export's id, as listed",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The zip archive",
+            "content": {
+              "application/zip": {}
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
           }
         ]
       }
@@ -10242,6 +10790,31 @@
           }
         }
       },
+      "ActivityRow": {
+        "type": "object",
+        "description": "A row of the person's own activity about their data.",
+        "required": [
+          "action",
+          "outcome"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          }
+        }
+      },
       "AdminChange": {
         "type": "object",
         "required": [
@@ -12549,6 +13122,136 @@
           }
         }
       },
+      "EraseMe": {
+        "type": "object",
+        "properties": {
+          "close_workspace": {
+            "type": "boolean",
+            "description": "You confirm that a workspace whose only member you are is closed with your account (everything\nin it is deleted). Without it such a request is refused with `subject.workspace_closes`."
+          },
+          "mfa_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With two-step verification on: a code from your authenticator, unless you signed in with one in\nthe last 10 minutes (`auth.step_up_required` otherwise)."
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Your password, typed again. Required when the account has one."
+          }
+        }
+      },
+      "ErasePerson": {
+        "type": "object",
+        "properties": {
+          "close_workspace": {
+            "type": "boolean",
+            "description": "Confirms closing any workspace whose only member the person is."
+          },
+          "mfa_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With two-step verification on for your account: a code from your authenticator, unless you\nsigned in with one in the last 10 minutes (`auth.step_up_required` otherwise)."
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Your own password, typed again (an operator who signs in only with single sign-on confirms with a\nsign-in from the last 10 minutes instead)."
+          }
+        }
+      },
+      "ErasureRecord": {
+        "type": "object",
+        "description": "The record a completed erasure leaves, for the People page (no personal data: an opaque reference,\nper-category counts, the post-check result and the review counts).",
+        "required": [
+          "id",
+          "subject_ref",
+          "requested_by",
+          "status",
+          "counts",
+          "post_check",
+          "requested_at"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "counts": {
+            "type": "object",
+            "description": "Rows removed or anonymised per category."
+          },
+          "deleting_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When it took its first irreversible step; none while it can still be cancelled."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "post_check": {
+            "type": "object",
+            "description": "Rows still naming the person per table after the erasure: every value is 0 when it passed."
+          },
+          "requested_at": {
+            "type": "string"
+          },
+          "requested_by": {
+            "type": "string",
+            "description": "`self`, `operator` or `reapply` (a restore brought the person back and they were erased again)."
+          },
+          "review": {
+            "type": "object",
+            "description": "Mentions of the person's email left in content other people wrote, for review."
+          },
+          "status": {
+            "type": "string"
+          },
+          "subject_ref": {
+            "type": "string",
+            "description": "The keyed hash of the erased account's id (never the id or the email)."
+          }
+        }
+      },
+      "ErasureTicket": {
+        "type": "object",
+        "description": "An erasure as the routes report it.",
+        "required": [
+          "id",
+          "status",
+          "requested_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "requested_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "`pending`, `running`, `held`, `done`, `failed` or `cancelled`."
+          }
+        }
+      },
       "EventDetail": {
         "type": "object",
         "required": [
@@ -12624,6 +13327,61 @@
           },
           "received_at": {
             "type": "string"
+          }
+        }
+      },
+      "ExportRow": {
+        "type": "object",
+        "description": "What the exports list shows (never the archive).",
+        "required": [
+          "id",
+          "status",
+          "created_at",
+          "expires_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "manifest": {
+            "type": "object",
+            "description": "Categories and counts (empty until ready)."
+          },
+          "requested_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "description": "`self` (the person's own, every workspace) or `organisation` (an admin's, one workspace)."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "type": "string",
+            "description": "`pending`, `ready` or `failed`."
+          },
+          "subject": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -13261,6 +14019,37 @@
               "null"
             ],
             "description": "The helper's version when running."
+          }
+        }
+      },
+      "HoldChange": {
+        "type": "object",
+        "required": [
+          "hold"
+        ],
+        "properties": {
+          "hold": {
+            "type": "boolean",
+            "description": "`true` places a legal hold (the account cannot be erased), `false` lifts it."
+          }
+        }
+      },
+      "HoldState": {
+        "type": "object",
+        "required": [
+          "erasure_open"
+        ],
+        "properties": {
+          "erasure_open": {
+            "type": "boolean",
+            "description": "An erasure of this account is open. A hold placed now parks it (`held`) before its next\nirreversible step; lifting the hold resumes it."
+          },
+          "legal_hold_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the hold was placed, RFC 3339; none when there is no hold."
           }
         }
       },
@@ -15455,6 +16244,7 @@
           "role",
           "is_you",
           "tokens",
+          "workspace_owner",
           "mfa"
         ],
         "properties": {
@@ -15485,6 +16275,13 @@
             ],
             "description": "Latest browser session activity or API token use, RFC 3339; none if never seen."
           },
+          "legal_hold_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When an admin placed a legal hold on the account, RFC 3339; none when there is none. A held account cannot be erased."
+          },
           "mfa": {
             "type": "string",
             "description": "Two-step verification: `on`, `off`, or `provider` for an account that signs in only through single\nsign-on (its identity provider handles the second factor)."
@@ -15509,6 +16306,10 @@
             "type": "integer",
             "format": "int64",
             "description": "How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`)."
+          },
+          "workspace_owner": {
+            "type": "boolean",
+            "description": "The workspace's owner (one per workspace). An owner whose workspace has other members hands it\nover (`/api/admin/people/{user_id}/workspace-owner`) before their account can be erased."
           }
         }
       },
@@ -16120,6 +16921,19 @@
           },
           "vault": {
             "type": "string"
+          }
+        }
+      },
+      "Reapplied": {
+        "type": "object",
+        "required": [
+          "queued"
+        ],
+        "properties": {
+          "queued": {
+            "type": "integer",
+            "description": "Erasures queued again: accounts a restore brought back, and restored rows whose owner was erased.",
+            "minimum": 0
           }
         }
       },

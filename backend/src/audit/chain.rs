@@ -104,6 +104,11 @@ pub fn public_detail(action: &str) -> bool {
     matches!(action, "access_review.start" | "access_review.complete")
 }
 
+/// What a sealed event's detail becomes when the person it named is erased
+/// (docs/privacy/subject-rights.md, "Audit trail"). The hash covers the detail's digest, not the detail,
+/// so the chain still verifies; the detail itself can no longer be checked and counts as unchecked.
+pub const ERASED_DETAIL: &str = "[erased with the person it named]";
+
 /// HMAC-SHA256 of an event's detail under the detail key, hex.
 pub fn digest(detail: &str) -> String {
     use hmac::{Hmac, Mac};
@@ -631,6 +636,9 @@ impl Row {
     /// `Some(false)` when the detail no longer matches its digest, `None` when the digest was made
     /// under another detail key (the encryption key changed since), so it cannot be checked here.
     fn detail_matches(&self) -> Option<bool> {
+        if self.detail == ERASED_DETAIL && self.detail_digest.is_some() {
+            return None;
+        }
         match self.digest_key.as_deref() {
             Some(PLAIN) => Some(sha256_hex(&self.detail) == self.stored_digest()),
             Some(k) if k == detail_key_id() => Some(digest(&self.detail) == self.stored_digest()),
@@ -1414,6 +1422,33 @@ mod tests {
         assert!(!canonical(&none).contains(r#","user:u1","user","user:u1""#));
         assert!(canonical(&none).contains(r#"null,"user""#));
         assert!(canonical(&none).contains(r#""q\"\n\u0001é""#), "{}", canonical(&none));
+    }
+
+    #[test]
+    fn an_erased_detail_is_unchecked_and_any_other_change_is_altered() {
+        let row = |detail: &str| Row {
+            id: RecordId::new("audit_event", "e"),
+            ledger: None,
+            seq: Some(1),
+            prev_hash: None,
+            hash: None,
+            created_at: Datetime::from(Utc::now()),
+            user: None,
+            actor_kind: String::new(),
+            actor_id: String::new(),
+            action: String::new(),
+            target: String::new(),
+            outcome: String::new(),
+            trace_id: String::new(),
+            detail: detail.into(),
+            detail_digest: Some(digest("email=alice@example.com")),
+            digest_key: Some(detail_key_id().to_string()),
+        };
+        assert_eq!(row("email=alice@example.com").detail_matches(), Some(true));
+        assert_eq!(row(ERASED_DETAIL).detail_matches(), None, "erased: cannot be checked, not tampering");
+        assert_eq!(row("email=[erased person]").detail_matches(), Some(false), "rewritten in place is still a change");
+        let erased = row(ERASED_DETAIL);
+        assert_eq!(erased.stored().detail_digest, row("email=alice@example.com").stored().detail_digest, "the hashed digest is the one written");
     }
 
     #[test]

@@ -14,6 +14,8 @@ import SecondStep from "./SecondStep";
 const noSubscribe = () => () => {};
 /** `?email=` from "Sign in instead" on the register page. */
 const emailFromUrl = () => new URLSearchParams(window.location.search).get("email") ?? "";
+/** `?erased=1` after Settings > Data > Delete my account. */
+const erasedFromUrl = () => new URLSearchParams(window.location.search).get("erased") === "1";
 /** `?mfa=verify` from single sign-on into an account with its own authenticator: the second step is waiting. */
 const pendingFromUrl = () => (new URLSearchParams(window.location.search).get("mfa") === "verify" ? "verify" : "");
 
@@ -25,6 +27,7 @@ export default function LoginPage() {
   // null until typed in: the field then shows the email the link carried, if any.
   const [typedEmail, setEmail] = useState<string | null>(null);
   const prefill = useSyncExternalStore(noSubscribe, emailFromUrl, () => "");
+  const erased = useSyncExternalStore(noSubscribe, erasedFromUrl, () => false);
   const email = typedEmail ?? prefill;
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
@@ -85,6 +88,12 @@ export default function LoginPage() {
           </p>
         </div>
 
+        {erased && (
+          <p role="status" className="text-reading flex items-start gap-2" data-testid="account-erased">
+            <Info size={16} className="mt-1 shrink-0" aria-hidden />
+            Your account is being deleted. You have been signed out, and your data is removed in the next few minutes.
+          </p>
+        )}
         {oidcError && <ErrorLine error={oidcError} />}
 
         {pending ? (

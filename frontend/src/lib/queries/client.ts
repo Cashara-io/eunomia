@@ -34,9 +34,19 @@ export const isSessionEnded = (e: unknown) =>
   ((e.status === 401 && ["auth.unauthorized", "auth.session_expired", "auth.token_expired", "auth.mfa_required"].includes(e.code)) ||
     (e.status === 403 && e.code === "auth.suspended"));
 
+// set once the page is deliberately leaving (an account was just deleted): a 401 from a query still in
+// flight must not send it somewhere else
+let leaving = false;
+
+/** A full page load to `url` that no session-ended redirect overrides (it also drops every cached query). */
+export function leaveTo(url: string) {
+  leaving = true;
+  window.location.replace(url);
+}
+
 /** Sends any query or mutation that finds the session gone to /login, remembering where the user was. */
 async function onSessionEnded(e: unknown) {
-  if (typeof window === "undefined" || !isSessionEnded(e)) return;
+  if (typeof window === "undefined" || leaving || !isSessionEnded(e)) return;
   const { pathname, search } = window.location;
   if (/^\/(login|register|consent|onboarding)/.test(pathname)) return;
   // a fresh install has no account to sign in to: register, as AuthGuard does

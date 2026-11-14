@@ -31,6 +31,7 @@ operators and contributors.
 | [Background jobs](architecture/jobs.md) | The job queue, leases, workers, the scheduler leader and reconcilers |
 | [SurrealQL functions](architecture/surreal-functions.md) | The SurrealQL functions the backend uses, behind the hardened server's allow-list |
 | [Foundation plan](architecture/foundation-plan.md) | The 2.0 design, its implementation status and open questions |
+| [Data-subject export and erasure](privacy/subject-rights.md) | Where a person's data lives, the full export, verified erasure with its proof, legal holds, resync and restore suppression |
 | [Errors](errors.md) | Stable error codes and the problem+json format |
 | [Debugging](debugging.md) | Trace ids, failure capsules and `replay` |
 | [Observability](observability.md) | Optional OpenTelemetry export and the SigNoz profile |
