@@ -1,12 +1,12 @@
 {
   "catalogue_version": "1.0.0",
   "evidence_schema_version": "1.0.0",
-  "reviewed_on": "2026-11-14",
+  "reviewed_on": "2026-11-15",
   "snapshot": {
     "repository": "Cashara-io/eunomia",
-    "commit": "1e89a25158119019a971110b2c1fe759c05484bc",
+    "commit": "149f6476b615254dac5141ae54b2c81c99ab494c",
     "inventory_commit": "6116a00ff86fed992a917863e9a3515f70373b84",
-    "recheck": "Refreshed on 2026-11-14 at origin/main 1e89a251, 210 commits after 472c3bf1, including PR03 (#245), PR04 (#244), PR08 (#246), organisation invitations (#247), #242 and #243. Every capability has a new record at this commit: its baseline references were re-located and re-read, sentences the later code made false were rewritten, and new code was added. The baseline records (EV-Cxx-1) stay unchanged at 472c3bf1 as history.",
+    "recheck": "Refreshed on 2026-11-15 at origin/main 149f6476, 211 commits after 472c3bf1, including PR03 (#245), PR04 (#244), PR08 (#246), organisation invitations (#247), #242, #243 and fact dates (#249). Every capability has a new record at this commit: its baseline references were re-located and re-read, sentences the later code made false were rewritten, and new code was added. The baseline records (EV-Cxx-1) stay unchanged at 472c3bf1 as history.",
     "previous_commits": [
       "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70"
     ]
@@ -2042,7 +2042,7 @@
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. A subject export job (zip with a manifest, every inventory category across every workspace, third-party redaction) for the person, and a narrower export of one workspace's data about a member for its admin, exist (PR08). Identity is a browser session only (no re-authentication or step-up), assistant prose that repeats a name from an unreadable space is not detected, and archives above EUNOMIA_EXPORT_MAX_MB fail. E09.",
+      "finding": "Partial. A subject export job (zip with a manifest, every inventory category across every workspace, third-party redaction; facts carry `occurred_at`, `asserted_at` and `superseded_by`, and the fact-date ledger is deleted rather than exported) for the person, and a narrower export of one workspace's data about a member for its admin, exist (PR08). Identity is a browser session only (no re-authentication or step-up), assistant prose that repeats a name from an unreadable space is not detected, and archives above EUNOMIA_EXPORT_MAX_MB fail. E09.",
       "evidence": [
         "EV-C21-1",
         "EV-C21-2"
@@ -2099,7 +2099,7 @@
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. Subject-level erasure with confirmation, step-up, legal holds, a post-check that fails on residue, a completion record, resync stand-down and restore carry-over with re-apply exist (PR08). Not done: a legal hold does not pause retention windows and there is no per-category retention schedule; backups are not rewritten and a restore by other means loses later tombstones; an erased person's account and token ids stay on sealed audit events and completed access reviews keep their row; only an operator, not an org admin, can erase a member; names in free text are not searched. E08-E09,E24.",
+      "finding": "Partial. Subject-level erasure with confirmation, step-up, legal holds, a post-check that fails on residue, a completion record, resync stand-down and restore carry-over with re-apply exist (PR08); the post-check also covers the fact-date ledger, and erasing a person's fact that replaced someone else's makes the replaced fact current again (#249). Not done: a legal hold does not pause retention windows and there is no per-category retention schedule; backups are not rewritten and a restore by other means loses later tombstones; an erased person's account and token ids stay on sealed audit events and completed access reviews keep their row; only an operator, not an org admin, can erase a member; names in free text are not searched. E08-E09,E24.",
       "evidence": [
         "EV-C22-1",
         "EV-C22-2"
@@ -2227,7 +2227,7 @@
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. Entity and memory edits exist; verified request workflow, propagation and restricted processing absent. E20,E23,E24.",
+      "finding": "Partial. Entity and memory edits exist, and a fact told later replaces the earlier one with `superseded_by` recorded, deleting it restoring the fact it replaced (#249); a verified request workflow, propagation (peers do not receive fact dates) and restricted processing are absent. E20,E23,E24.",
       "evidence": [
         "EV-C24-1",
         "EV-C24-2"
@@ -3012,10 +3012,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C01-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -3150,10 +3150,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C02-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -3396,10 +3396,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Done",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C03-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -3569,10 +3569,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Done",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C04-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -3749,10 +3749,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Done",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C05-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -3901,10 +3901,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C06-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -3966,8 +3966,8 @@
         },
         {
           "path": "backend/src/routers/admin.rs",
-          "line_start": 1040,
-          "line_end": 1060,
+          "line_start": 1041,
+          "line_end": 1061,
           "inventory_id": "E06",
           "summary": "The instance switch is stepped up and clears the credential cache on this replica; other replicas follow within 20 seconds."
         },
@@ -4116,10 +4116,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C07-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -4258,8 +4258,8 @@
         },
         {
           "path": "backend/src/migrate.rs",
-          "line_start": 99,
-          "line_end": 125,
+          "line_start": 100,
+          "line_end": 126,
           "inventory_id": "E07",
           "summary": "Boot guard: a build whose registered migrations have a gap refuses to start."
         },
@@ -4474,10 +4474,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C08-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -4789,10 +4789,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C09-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -4990,10 +4990,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C10-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -5121,10 +5121,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Done",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C11-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -5217,10 +5217,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C12-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -5404,10 +5404,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C13-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -5612,10 +5612,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C14-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -5757,10 +5757,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C15-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -5958,10 +5958,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C16-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -6145,10 +6145,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C17-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -6262,10 +6262,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Done",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C18-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -6358,10 +6358,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C19-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -6503,10 +6503,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C20-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -6641,10 +6641,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C21-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -6692,8 +6692,8 @@
         },
         {
           "path": "docs/privacy/subject-rights.md",
-          "line_start": 187,
-          "line_end": 206,
+          "line_start": 188,
+          "line_end": 207,
           "inventory_id": "E09",
           "summary": "Approved scope, redaction, what is not redacted and what is left out; archives expire after seven days and are capped by EUNOMIA_EXPORT_MAX_MB."
         },
@@ -6710,6 +6710,20 @@
           "line_end": 250,
           "inventory_id": "E09",
           "summary": "Settings > Data: \"Export my data\", with the list of exports and their status."
+        },
+        {
+          "path": "backend/src/store/subject.rs",
+          "line_start": 29,
+          "line_end": 30,
+          "inventory_id": "E09",
+          "summary": "The export's facts carry `occurred_at`, `asserted_at` and `superseded_by` (#249)."
+        },
+        {
+          "path": "docs/privacy/subject-rights.md",
+          "line_start": 121,
+          "line_end": 121,
+          "inventory_id": "E09",
+          "summary": "The fact-date backfill ledger (`fact_dates_redated`) is deleted with the person's memories, not exported: the facts carry their own dates."
         }
       ],
       "limitations": [
@@ -6815,10 +6829,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C22-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -6860,7 +6874,7 @@
         {
           "path": "backend/src/migrate.rs",
           "line_start": 13,
-          "line_end": 82,
+          "line_end": 83,
           "inventory_id": "E24",
           "summary": "No Compliance, AI register or governance incident page in Settings navigation. Subject export and erasure records exist (PR08), but no general rights-case register (correction, restriction, objection, response deadlines), AI-risk, AI-incident, org AI policy or generated-content marking schema was found. Existing People, Access reviews, Audit, Usage, Backups and AI provider tabs are integration points, not missing pages to rebuild."
         },
@@ -6887,15 +6901,15 @@
         },
         {
           "path": "backend/src/store/subject.rs",
-          "line_start": 273,
-          "line_end": 314,
+          "line_start": 278,
+          "line_end": 321,
           "inventory_id": "E08",
           "summary": "RESIDUE: the org post-check counts every table that can name the person."
         },
         {
           "path": "backend/src/store/subject.rs",
-          "line_start": 723,
-          "line_end": 745,
+          "line_start": 730,
+          "line_end": 752,
           "inventory_id": "E08",
           "summary": "CONTROL_RESIDUE: the same for control tables."
         },
@@ -6943,24 +6957,45 @@
         },
         {
           "path": "backend/tests/subject_rights.rs",
-          "line_start": 1241,
-          "line_end": 1288,
+          "line_start": 1314,
+          "line_end": 1361,
           "inventory_id": "E08",
           "summary": "Real-database test: after an erasure the chain verifies on the server and offline; details naming the person are erased, ids stay."
         },
         {
           "path": "docs/privacy/subject-rights.md",
-          "line_start": 179,
-          "line_end": 185,
+          "line_start": 180,
+          "line_end": 186,
           "inventory_id": "E08",
           "summary": "A legal hold stops only the erasure, not the retention windows; retention and erasure do not fight."
         },
         {
           "path": "docs/privacy/subject-rights.md",
-          "line_start": 208,
-          "line_end": 223,
+          "line_start": 209,
+          "line_end": 224,
           "inventory_id": "E08",
           "summary": "Stated limits: ids stay on sealed audit events, completed access reviews keep the person, an org admin cannot erase a member, backups are not rewritten, a closed workspace restored alone is not re-erased, names are not searched."
+        },
+        {
+          "path": "backend/src/store/subject.rs",
+          "line_start": 210,
+          "line_end": 222,
+          "inventory_id": "E08",
+          "summary": "Erasing the person's own facts makes another person's fact that one of them had replaced (`superseded_by`) current again (#249)."
+        },
+        {
+          "path": "backend/tests/subject_rights.rs",
+          "line_start": 1226,
+          "line_end": 1259,
+          "inventory_id": "E08",
+          "summary": "Real-database test: an erasure leaves no fact-date ledger rows; the post-check reports `fact_dates_redated` otherwise."
+        },
+        {
+          "path": "backend/tests/subject_rights.rs",
+          "line_start": 1261,
+          "line_end": 1297,
+          "inventory_id": "E08",
+          "summary": "Real-database test: erasing a replacing fact makes the fact it replaced current again."
         }
       ],
       "limitations": [
@@ -7025,10 +7060,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Missing",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C23-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -7049,7 +7084,7 @@
         {
           "path": "backend/src/migrate.rs",
           "line_start": 13,
-          "line_end": 82,
+          "line_end": 83,
           "inventory_id": "E24",
           "summary": "No Compliance, AI register or governance incident page in Settings navigation. Subject export and erasure records exist (PR08), but no general rights-case register (correction, restriction, objection, response deadlines), AI-risk, AI-incident, org AI policy or generated-content marking schema was found. Existing People, Access reviews, Audit, Usage, Backups and AI provider tabs are integration points, not missing pages to rebuild."
         }
@@ -7226,10 +7261,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C24-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -7362,9 +7397,30 @@
         {
           "path": "backend/src/migrate.rs",
           "line_start": 13,
-          "line_end": 82,
+          "line_end": 83,
           "inventory_id": "E24",
           "summary": "No Compliance, AI register or governance incident page in Settings navigation. Subject export and erasure records exist (PR08), but no general rights-case register (correction, restriction, objection, response deadlines), AI-risk, AI-incident, org AI policy or generated-content marking schema was found. Existing People, Access reviews, Audit, Usage, Backups and AI provider tabs are integration points, not missing pages to rebuild."
+        },
+        {
+          "path": "docs/concepts.md",
+          "line_start": 77,
+          "line_end": 102,
+          "inventory_id": "E20",
+          "summary": "A fact's two dates (#249): when it happened and when Eunomia was last told it. The fact told most recently replaces the earlier one and records `superseded_by`; deleting it restores the fact it directly replaced."
+        },
+        {
+          "path": "backend/tests/fact_dates.rs",
+          "line_start": 291,
+          "line_end": 307,
+          "inventory_id": "E20",
+          "summary": "Real-database test: a correction written today beats the error it corrects, even when the error was dated later."
+        },
+        {
+          "path": "backend/tests/fact_dates.rs",
+          "line_start": 521,
+          "line_end": 541,
+          "inventory_id": "E20",
+          "summary": "Real-database test: deleting the replacing fact restores only the fact it directly replaced."
         }
       ],
       "limitations": [
@@ -7372,7 +7428,7 @@
         "Missing means no end-to-end workflow found in the inspected routes, schema, Settings navigation and docs.",
         "Re-inspection of source at the refreshed snapshot; the product tests named in references were read, not run, for this catalogue change."
       ],
-      "summary": "Partial. Entity and memory edits exist; verified request workflow, propagation and restricted processing absent. E20,E23,E24."
+      "summary": "Partial. Entity and memory edits exist, and a later telling replaces an earlier fact with `superseded_by` recorded; verified request workflow, propagation and restricted processing absent. E20,E23,E24."
     },
     {
       "schema_version": "1.0.0",
@@ -7469,10 +7525,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C25-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -7642,10 +7698,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C26-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -7836,10 +7892,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C27-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -8044,10 +8100,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Missing",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C28-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -8124,7 +8180,7 @@
         {
           "path": "backend/src/migrate.rs",
           "line_start": 13,
-          "line_end": 82,
+          "line_end": 83,
           "inventory_id": "E24",
           "summary": "No Compliance, AI register or governance incident page in Settings navigation. Subject export and erasure records exist (PR08), but no general rights-case register (correction, restriction, objection, response deadlines), AI-risk, AI-incident, org AI policy or generated-content marking schema was found. Existing People, Access reviews, Audit, Usage, Backups and AI provider tabs are integration points, not missing pages to rebuild."
         }
@@ -8245,10 +8301,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Missing",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C29-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -8325,7 +8381,7 @@
         {
           "path": "backend/src/migrate.rs",
           "line_start": 13,
-          "line_end": 82,
+          "line_end": 83,
           "inventory_id": "E24",
           "summary": "No Compliance, AI register or governance incident page in Settings navigation. Subject export and erasure records exist (PR08), but no general rights-case register (correction, restriction, objection, response deadlines), AI-risk, AI-incident, org AI policy or generated-content marking schema was found. Existing People, Access reviews, Audit, Usage, Backups and AI provider tabs are integration points, not missing pages to rebuild."
         }
@@ -8530,10 +8586,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C30-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -8738,10 +8794,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Missing",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C31-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -8762,7 +8818,7 @@
         {
           "path": "backend/src/migrate.rs",
           "line_start": 13,
-          "line_end": 82,
+          "line_end": 83,
           "inventory_id": "E24",
           "summary": "No Compliance, AI register or governance incident page in Settings navigation. Subject export and erasure records exist (PR08), but no general rights-case register (correction, restriction, objection, response deadlines), AI-risk, AI-incident, org AI policy or generated-content marking schema was found. Existing People, Access reviews, Audit, Usage, Backups and AI provider tabs are integration points, not missing pages to rebuild."
         }
@@ -8890,10 +8946,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Missing",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C32-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -9042,10 +9098,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Missing",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C33-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -9066,7 +9122,7 @@
         {
           "path": "backend/src/migrate.rs",
           "line_start": 13,
-          "line_end": 82,
+          "line_end": 83,
           "inventory_id": "E24",
           "summary": "No Compliance, AI register or governance incident page in Settings navigation. Subject export and erasure records exist (PR08), but no general rights-case register (correction, restriction, objection, response deadlines), AI-risk, AI-incident, org AI policy or generated-content marking schema was found. Existing People, Access reviews, Audit, Usage, Backups and AI provider tabs are integration points, not missing pages to rebuild."
         }
@@ -9159,10 +9215,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Missing",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C34-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -9211,7 +9267,7 @@
         {
           "path": "backend/src/migrate.rs",
           "line_start": 13,
-          "line_end": 82,
+          "line_end": 83,
           "inventory_id": "E24",
           "summary": "No Compliance, AI register or governance incident page in Settings navigation. Subject export and erasure records exist (PR08), but no general rights-case register (correction, restriction, objection, response deadlines), AI-risk, AI-incident, org AI policy or generated-content marking schema was found. Existing People, Access reviews, Audit, Usage, Backups and AI provider tabs are integration points, not missing pages to rebuild."
         }
@@ -9311,10 +9367,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Partial",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C35-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -9435,10 +9491,10 @@
       "source": "Eunomia",
       "operation": "unknown",
       "implementation": "Missing",
-      "captured_on": "2026-11-14",
+      "captured_on": "2026-11-15",
       "subject": {
         "repository": "Cashara-io/eunomia",
-        "release_sha": "1e89a25158119019a971110b2c1fe759c05484bc",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C36-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
       "references": [
@@ -9459,7 +9515,7 @@
         {
           "path": "backend/src/migrate.rs",
           "line_start": 13,
-          "line_end": 82,
+          "line_end": 83,
           "inventory_id": "E24",
           "summary": "No Compliance, AI register or governance incident page in Settings navigation. Subject export and erasure records exist (PR08), but no general rights-case register (correction, restriction, objection, response deadlines), AI-risk, AI-incident, org AI policy or generated-content marking schema was found. Existing People, Access reviews, Audit, Usage, Backups and AI provider tabs are integration points, not missing pages to rebuild."
         }
