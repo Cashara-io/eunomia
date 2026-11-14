@@ -335,13 +335,17 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         CREATE credential_ref SET reference = 'op://Ops/Item/field', provider = 'onepassword_connect', vault = $v, label = $c, created_by = $u;
         CREATE $sp SET kind = 'onepassword_connect', host = $c, token_enc = 'enc:v1:planted', created_by = $u, updated_by = $u;
         CREATE secret_request SET vault = $v, name = 'planted', label = $c, description = $c, target_hosts = ['api.example.com'], requested_by = $u, actor_id = $c, client_name = $c, expires_at = time::now() + 1d;
-        CREATE vault_secret SET vault = $v, name = 'planted', label = $c, value_enc = $senc, allowed_hosts = ['api.example.com'], allowed_actors = [$c], created_by = $u;";
+        CREATE vault_secret SET vault = $v, name = 'planted', label = $c, value_enc = $senc, allowed_hosts = ['api.example.com'], allowed_actors = [$c], created_by = $u;
+        LET $ar = (CREATE ONLY access_review SET org = $rorg, open_slot = $c, started_by = $u, started_by_email = $c, snapshot = {people: [{email: $c}]}, snapshot_hash = $c).id;
+        CREATE access_review_decision SET review = $ar, subject = $u, subject_email = $c, decision = 'keep', note = $c, reviewer = $u, reviewer_email = $c;
+        CREATE subject_export SET subject = $u, requested_by = $u, status = 'ready', manifest = {note: $c}, archive = <bytes>$c;";
     let uid = user.id.clone();
     db.test_raw()
         .query(sql)
         .bind(("u", uid.clone()))
         .bind(("thread", eunomia_backend::rid::parse(&ids.thread).unwrap()))
         .bind(("c", canary.clone()))
+        .bind(("rorg", user.org.key()))
         .bind(("enc", enc))
         // a held secret whose value is the canary, encrypted as the fill route stores it
         .bind(("senc", crypto::encrypt(&state.settings.encryption_key, &canary)))
@@ -396,10 +400,14 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         CREATE $mem SET user = $u, org = $org, role = 'owner';
         CREATE identity SET user = $u, issuer = 'https://idp.example', subject = $c, email = $c;
         CREATE audit_event SET user = $u, actor_kind = 'user', actor_id = 'plant', action = 'plant', target = $c, outcome = 'ok';
+        CREATE audit_head SET ledger = $c, seq = 0, hash = $c, genesis_at = time::now();
+        CREATE audit_checkpoint SET ledger = $c, seq = 0, hash = $c, kind = 'periodic', at = time::now();
         CREATE tool_usage SET org = $okey, bucket = time::now(), user = $u, actor_kind = 'user', actor_id = 'plant', channel = 'mcp', session = $c, tool = 'recall', calls = 1;
         LET $g = (CREATE oauth_grant SET owner = $u, client_id = 'client-x', client_name = $c, scope = ['memory:read'], resource = 'http://localhost:8001/mcp' RETURN VALUE id)[0];
         CREATE oauth_token SET kind = 'access', token_hash = $c, family = $g, expires_at = time::now() + 15m;
         CREATE oauth_code SET code_hash = $c, owner = $u, client_id = 'client-x', redirect_uri = 'http://localhost/cb', code_challenge = $c, scope = ['memory:read'], resource = 'http://x', expires_at = time::now() + 1m;
+        CREATE erasure SET org = $okey_bare, subject_ref = $c, requested_by = 'operator', status = 'done', open_slot = $c, counts = {note: $c};
+        CREATE type::record('erasure_lock', $c) SET erasure = type::record('erasure', $c);
         CREATE $inv SET org = $org, email = 'invitee@example.net', role = 'member', token_hash = $c, invited_by = $u, expires_at = time::now() + 7d, slot = string::concat(<string>$org, '/invitee@example.net');
         RETURN $g;";
     let mut res = state
@@ -408,6 +416,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         .query(control_sql)
         .bind(("org", user.org.record()))
         .bind(("okey", user.org.to_string()))
+        .bind(("okey_bare", user.org.key()))
         .bind(("u", uid.clone()))
         .bind(("c", canary.clone()))
         .bind(("mem", surrealdb::types::RecordId::new("membership", canary.clone())))
@@ -464,6 +473,9 @@ const NO_SECRET_ROWS: &[&str] = &[
     "change_seq",    // one counter per vault
     "peer_instance",  // one random identifier per database (peer vaults), no content
     "redact_backfill", // one progress row: a stage, a cursor id and counts, never content
+    "mfa_recovery_code", // a user id and a SHA-256 per recovery code, never content (tests/mfa.rs)
+    "mfa_challenge",     // a pending second sign-in step: a user id and a token hash, gone in minutes
+    "instance_setting",  // one instance-wide security row (require_mfa), not per org
 ];
 
 // ---- the attack -----------------------------------------------------------------------------

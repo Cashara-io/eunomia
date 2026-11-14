@@ -9,6 +9,382 @@
     "version": "1"
   },
   "paths": {
+    "/api/account/activity": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "What has been done about your data: exports an admin made of it, erasure requests, legal holds, admin actions on your account",
+        "operationId": "myDataActivity",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActivityRow"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/account/erasure": {
+      "post": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Delete your account and your data (browser session, confirmed with your password)",
+        "description": "An account with no password (single sign-on only) confirms with a sign-in from the last 10 minutes (`subject.reauthenticate` otherwise). With two-step verification on, it also needs a second factor from the last 10 minutes or `mfa_code` (`auth.step_up_required`). Checks the confirmation, then suspends the account and signs it out everywhere, and queues the erasure. Refused with `subject.legal_hold` while an admin holds the account, `subject.last_owner` when you own a workspace that has other members and no other owner, and `subject.workspace_closes` until you confirm closing a workspace you are the only member of. What is deleted and what is kept: docs/privacy/subject-rights.md.",
+        "operationId": "eraseMyAccount",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EraseMe"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureTicket"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/access-reviews": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Access reviews, newest first (admin only)",
+        "operationId": "listAccessReviews",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AccessReviewSummary"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Start an access review: snapshot who has access to what (admin only, browser session)",
+        "description": "One review can be open at a time. The snapshot lists every person, their role, admin rights and suspension, their spaces, and their API tokens, connected apps and live sessions by name and count. It never holds a secret.",
+        "operationId": "startAccessReview",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessReview"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/access-reviews/{review_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "One access review with its snapshot and decisions (admin only)",
+        "operationId": "getAccessReview",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessReview"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/access-reviews/{review_id}/complete": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Complete an access review; it can't be changed afterwards (admin only, browser session)",
+        "description": "Everyone must have a decision, except you: your own access is recorded as not reviewed when no other admin decided it. The completion, with the hash of the review, goes into the security log.",
+        "operationId": "completeAccessReview",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessReview"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/access-reviews/{review_id}/decisions/{user_id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Record a decision about one person in an open access review (admin only, browser session)",
+        "description": "Deciding again replaces the earlier decision while the review is open. You cannot decide about your own access. A decision is a record: suspending or removing the person is done from People.",
+        "operationId": "decideAccessReview",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessReviewDecisionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessReview"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/access-reviews/{review_id}/export": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Download a completed access review with the hashes that tie it to the security log (admin only)",
+        "operationId": "exportAccessReview",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessReviewExport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/admin/audit": {
       "get": {
         "tags": [
@@ -91,6 +467,245 @@
         ]
       }
     },
+    "/api/admin/audit/export": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Download the security log for a time range, with checkpoints to verify it offline (admin only)",
+        "description": "Metadata only: who, what, when, on which record and the outcome. Free-text detail is replaced by a keyed digest (HMAC-SHA256 under a server key), so the file holds no memory text, chat content, prompts or secrets and still verifies. At most 50,000 events per file: `truncated` and `next_seq` say where to continue.",
+        "operationId": "exportAuditChain",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Start of the range (inclusive): RFC 3339 or `YYYY-MM-DD` (UTC midnight). Omit for the oldest kept event.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "End of the range (exclusive): RFC 3339 or `YYYY-MM-DD`. Omit for the newest event.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ledger",
+            "in": "query",
+            "description": "`org` (default): this workspace's events. `instance`: events with no workspace (server\noperators only on a host with several workspaces).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditExport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/audit/verify": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Check that the security log was not altered (admin only)",
+        "description": "Seals anything still pending, then walks the workspace's hash chain and the instance chain from their starting checkpoints to their newest event and reports the first break: an edited, deleted or reordered event.",
+        "operationId": "verifyAuditChain",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditVerifyReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/erasures": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Erasure records for the workspace, newest first (admin only)",
+        "description": "Each record keeps only an opaque reference to the person, the counts per category, the post-check (every value 0 when it passed) and the mentions of their email left in other people's content, for review.",
+        "operationId": "listErasures",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ErasureRecord"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/erasures/reapply": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "After restoring a backup: erase again everyone erased after the backup was taken (server operators only, browser session)",
+        "description": "Also runs by itself when the server starts. Matches live accounts, and the owners of rows in every workspace, against the erasure records; queues an erasure for each match. It acts on the whole server, like a restore.",
+        "operationId": "reapplyErasures",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reapplied"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/erasures/{erasure_id}/cancel": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Cancel an erasure that has not started deleting (server operators only, browser session)",
+        "description": "Stops an erasure before its first irreversible step, clears its working record (the email, token ids and file paths it held) and leaves the account exactly as it was (unsuspended if the request suspended it). Refused with `db.conflict` once deletion has begun: from then on it completes, or waits while held or failed and retried.",
+        "operationId": "cancelErasure",
+        "parameters": [
+          {
+            "name": "erasure_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ErasureRecord"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/admin/people": {
       "get": {
         "tags": [
@@ -165,6 +780,167 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PeopleReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/erasure": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Erase someone's whole account and data (server operators only, browser session, confirmed with your own password)",
+        "description": "Only a server operator (an address in EUNOMIA_ADMIN_EMAILS, or the server's first account): the whole account in every workspace, as if the person had deleted it themselves. An admin of a workspace who is not an operator can't erase anyone in this release. With two-step verification on for your account, it also needs a second factor from the last 10 minutes or `mfa_code` (`auth.step_up_required`). Refused for your own account (use Settings > Data), for the first account and other operators' accounts, with `subject.legal_hold` while the account is held, with `subject.last_owner` when the person owns a workspace with other members, and with `subject.workspace_closes` until you confirm closing a workspace the person is the only member of.",
+        "operationId": "erasePerson",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErasePerson"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureTicket"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/export": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Prepare a full data export for someone in the workspace (admin only, browser session)",
+        "description": "This workspace's data about the person only: what they wrote in its shared spaces, their spaces here, their account record, tokens and connected apps by name, and audit events about them. Not their personal space, private chat, synced records or other workspaces. You download it from Settings > Data; the person's own activity records that it was made.",
+        "operationId": "startPersonExport",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportRow"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/legal-hold": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Place or lift a legal hold on someone's account (admin places, server operator lifts; browser session)",
+        "description": "Any admin places a hold; only a server operator lifts it, and never a hold on their own account. Who placed it and who lifted it are recorded. While held, erasing the account is refused with `subject.legal_hold`, and an erasure already queued parks as `held` before its next irreversible step and resumes when the hold is lifted. Placing and lifting are both in the activity log, with who did each. A hold does not stop the audit retention window (AUDIT_RETENTION_DAYS).",
+        "operationId": "setPersonLegalHold",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoldChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldState"
                 }
               }
             }
@@ -355,6 +1131,137 @@
         ]
       }
     },
+    "/api/admin/people/{user_id}/workspace-owner": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Hand the workspace over to another member (the current owner or a server operator, browser session)",
+        "description": "A workspace has one owner. Only the current owner or a server operator hands it over, to an active member who is not suspended, not under a legal hold and not being erased. The change promotes exactly one membership or changes nothing, so the workspace always keeps an owner.",
+        "operationId": "makeWorkspaceOwner",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/security": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Server security settings: whether two-step verification is required (server operators only)",
+        "operationId": "getServerSecurity",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecurityOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Require two-step verification for every password account on the server, or stop (server operators only, browser session)",
+        "description": "Server-wide: it affects every organisation on the host. Only the account that set up the server or an email in `EUNOMIA_ADMIN_EMAILS` may change it; admins granted in Settings > People may not. Turning it on needs your own account protected first (two-step verification on, or single sign-on only). While on, a password sign-in without two-step verification must set it up before it gets a session, and browser sessions that never passed a second factor are signed out. API tokens and app connections keep working.",
+        "operationId": "setServerSecurity",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SecurityChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecurityOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/audit": {
       "get": {
         "tags": [
@@ -515,6 +1422,7 @@
           "auth"
         ],
         "summary": "Log in and start a session",
+        "description": "For an account with two-step verification, or on a server that requires it, a correct password starts no session: the answer is `{\"mfa_required\": \"verify\"}` (or `\"enrol\"`) with a short-lived cookie that only `/api/auth/mfa/challenge/*` accepts.",
         "operationId": "login",
         "requestBody": {
           "content": {
@@ -532,7 +1440,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuthOut"
+                  "$ref": "#/components/schemas/SignInOut"
                 }
               }
             }
@@ -622,6 +1530,354 @@
           },
           {
             "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/auth/mfa": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Two-step verification for your account",
+        "operationId": "getMfa",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/auth/mfa/challenge/enrol": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Set up an authenticator during sign-in (when the server requires it)",
+        "description": "After `/api/auth/login` or `/api/auth/register` answered `mfa_required: enrol`. Returns the secret, `otpauth://` URI and QR code; confirm with `/api/auth/mfa/challenge/enrol/confirm`.",
+        "operationId": "startMfaChallengeEnrolment",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Enrolment"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/auth/mfa/challenge/enrol/confirm": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Confirm the new authenticator and finish signing in",
+        "description": "Turns two-step verification on, starts the session and returns the recovery codes (shown once).",
+        "operationId": "confirmMfaChallengeEnrolment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrolledOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/auth/mfa/challenge/verify": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Finish signing in with an authenticator or recovery code",
+        "description": "The second step after `/api/auth/login` answered `mfa_required: verify`. Reads the `eunomia_mfa` cookie that answer set. Each code counts against the sign-in (5 and it ends) and the account (10 in 15 minutes and every attempt is refused), reserved before it is checked.",
+        "operationId": "verifyMfaChallenge",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/auth/mfa/disable": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Turn off two-step verification",
+        "description": "Needs a current authenticator code or an unused recovery code, every time. Refused while an admin requires two-step verification, unless the stored authenticator can no longer be read (`auth.mfa_unreadable`, after an `ENCRYPTION_KEY` change): then a recovery code turns it off so it can be set up again.",
+        "operationId": "disableMfa",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaStatus"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/auth/mfa/enrol": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Start setting up an authenticator app",
+        "description": "Needs the account password (10 wrong passwords per account in 15 minutes and it is refused, like login). Returns a new secret, its `otpauth://` URI and a QR code. Nothing changes until a code from the app confirms it (`/api/auth/mfa/enrol/confirm`). The secret is never shown again. Accounts that sign in only through single sign-on cannot enrol here: their provider handles the second factor.",
+        "operationId": "startMfaEnrolment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrolIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Enrolment"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/auth/mfa/enrol/confirm": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Turn on two-step verification with a code from the new authenticator",
+        "operationId": "confirmMfaEnrolment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCodesOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/auth/mfa/recovery-codes": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Replace your recovery codes",
+        "description": "Needs a current authenticator code or an unused recovery code. Every old recovery code stops working.",
+        "operationId": "regenerateRecoveryCodes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCodesOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
           }
         ]
       }
@@ -730,7 +1986,7 @@
           "auth"
         ],
         "summary": "Link the provider sign-in to the existing account by its password, or start a new account",
-        "description": "Needs the cookie the provider sign-in left, which names one identity and one account and is spent by either choice. With `password`, the password is checked (throttled like login) and the account is linked; nothing is removed. With `start_fresh: true`, the existing account is set aside (suspended, its address replaced, its data kept for an operator) and a new, empty account is made under this server's sign-up rules. A suspended account can be neither linked nor replaced here. Starts a session.",
+        "description": "Needs the cookie the provider sign-in left, which names one identity and one account and is spent by either choice. With `password`, the password is checked (throttled like login) and the account is linked; nothing is removed. With `start_fresh: true`, the existing account is set aside (suspended, its address replaced, its data kept for an operator) and a new, empty account is made under this server's sign-up rules. A suspended account can be neither linked nor replaced here. Starts a session, except: for an account with its own authenticator, or while the server requires two-step verification, a right password answers `mfa: verify` (or `enrol`) with the second-step cookie, and the link is made only when that step passes; and an account with an authenticator cannot be set aside here. Neither applies when `OIDC_REQUIRE_MFA=true`.",
         "operationId": "oidcLink",
         "requestBody": {
           "content": {
@@ -850,6 +2106,7 @@
           "auth"
         ],
         "summary": "Create an account and start a session",
+        "description": "When the server requires two-step verification, the account is created but no session starts: the answer is `{\"mfa_required\": \"enrol\"}` with a short-lived cookie for `/api/auth/mfa/challenge/enrol`.",
         "operationId": "register",
         "requestBody": {
           "content": {
@@ -867,7 +2124,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuthOut"
+                  "$ref": "#/components/schemas/SignInOut"
                 }
               }
             }
@@ -1025,6 +2282,7 @@
           "auth"
         ],
         "summary": "Create an API token",
+        "description": "From a browser session of an account with two-step verification, the last second factor must be under 10 minutes old or `mfa_code` must carry a current code (`auth.step_up_required`). An API token cannot create another token for an account with two-step verification, or while the server requires it (`auth.step_up_required`): create it in Settings.",
         "operationId": "createToken",
         "requestBody": {
           "content": {
@@ -3886,6 +5144,127 @@
         ]
       }
     },
+    "/api/export/subject": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Your data exports (including ones an admin started for you) and the ones you asked for as an admin, newest first",
+        "operationId": "listSubjectExports",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExportRow"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Prepare a full export of your data (a zip archive with a manifest; browser session)",
+        "description": "Queues a job that collects everything in scope about you in every workspace you belong to (account, spaces, what you wrote in spaces you can still read, documents and their files, synced records, chat, sources, tokens and connected apps by name, your audit events) into a zip archive kept for seven days. List exports to see when it is ready. Not available to API tokens or apps.",
+        "operationId": "startSubjectExport",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportRow"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/export/subject/{export_id}": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Download a ready data export (zip; browser session)",
+        "description": "Your own export (assembled from its part in every workspace you belong to), or a workspace export you started as an admin (while you are still an admin). Nobody else's own export, ever.",
+        "operationId": "downloadSubjectExport",
+        "parameters": [
+          {
+            "name": "export_id",
+            "in": "path",
+            "description": "The export's id, as listed",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The zip archive",
+            "content": {
+              "application/zip": {}
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/extensions": {
       "get": {
         "tags": [
@@ -4714,6 +6093,7 @@
           "oauth"
         ],
         "summary": "Approve or deny an authorization request",
+        "description": "Approving connects a long-lived app credential, so for an account with two-step verification the session's last second factor must be under 10 minutes old or `mfa_code` must carry a current code (`auth.step_up_required`). Denying never asks.",
         "operationId": "decideOauthConsent",
         "requestBody": {
           "content": {
@@ -9333,6 +10713,255 @@
           }
         }
       },
+      "AccessReview": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AccessReviewSummary"
+          },
+          {
+            "type": "object",
+            "required": [
+              "snapshot",
+              "snapshot_hash",
+              "decisions",
+              "undecided",
+              "you"
+            ],
+            "properties": {
+              "decisions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AccessReviewDecision"
+                }
+              },
+              "snapshot": {
+                "type": "object",
+                "description": "Who had access to what when the review started: `people`, each with `spaces`, `tokens`,\n`apps` and `sessions`."
+              },
+              "snapshot_hash": {
+                "type": "string"
+              },
+              "undecided": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "People nobody has decided about yet."
+              },
+              "you": {
+                "type": "string",
+                "description": "The caller: they cannot decide about themselves."
+              }
+            }
+          }
+        ],
+        "description": "A review with its snapshot and decisions."
+      },
+      "AccessReviewAuditLink": {
+        "type": "object",
+        "required": [
+          "ledger",
+          "detail"
+        ],
+        "properties": {
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "description": "The event's detail as written (`result=<hash> keep=.. remove=.. suspend=.. not_reviewed=..`).\nIts SHA-256 is the event's `detail_digest` in the chain."
+          },
+          "hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ledger": {
+            "type": "string"
+          },
+          "seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "AccessReviewDecision": {
+        "type": "object",
+        "description": "A person's decision in a review.",
+        "required": [
+          "user_id",
+          "email",
+          "decision",
+          "note",
+          "reviewer_id",
+          "reviewer"
+        ],
+        "properties": {
+          "decided_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decision": {
+            "type": "string",
+            "description": "`keep`, `remove` or `suspend`."
+          },
+          "email": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "reviewer": {
+            "type": "string"
+          },
+          "reviewer_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        }
+      },
+      "AccessReviewDecisionBody": {
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "type": "string",
+            "description": "`keep`, `remove` or `suspend`."
+          },
+          "note": {
+            "type": "string",
+            "description": "Why, in a sentence (optional, at most 500 characters)."
+          }
+        }
+      },
+      "AccessReviewExport": {
+        "type": "object",
+        "description": "A completed review as a file: the snapshot, the decisions, both hashes and the security log\nevent that recorded the completion.",
+        "required": [
+          "result",
+          "result_hash",
+          "result_hash_matches",
+          "snapshot",
+          "snapshot_hash",
+          "snapshot_hash_matches",
+          "chain_matches",
+          "decisions"
+        ],
+        "properties": {
+          "audit_event": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AccessReviewAuditLink",
+                "description": "The completion's place in the hash-chained security log, once sealed."
+              }
+            ]
+          },
+          "chain_matches": {
+            "type": "boolean",
+            "description": "True when the chained completion event commits to this review as it is now: its detail\nnames this `result` document's hash and the chain holds that detail's plain SHA-256. False\nmeans the review was changed after it was completed (even if `result_hash` was recomputed).\nThe offline verifier checks the same: `verify-audit-export.py LOG.json --review THIS.json`."
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessReviewDecision"
+            }
+          },
+          "result": {
+            "type": "object",
+            "description": "The document `result_hash` is the SHA-256 of (canonical JSON: keys sorted, no spaces)."
+          },
+          "result_hash": {
+            "type": "string"
+          },
+          "result_hash_matches": {
+            "type": "boolean",
+            "description": "True when `result` still hashes to the `result_hash` recorded at completion."
+          },
+          "snapshot": {
+            "type": "object",
+            "description": "Who had access to what at the start; `snapshot_hash` is its SHA-256 (canonical JSON)."
+          },
+          "snapshot_hash": {
+            "type": "string"
+          },
+          "snapshot_hash_matches": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AccessReviewSummary": {
+        "type": "object",
+        "description": "One review in the list.",
+        "required": [
+          "id",
+          "status",
+          "started_by",
+          "people"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completed_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "people": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "result_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started_by": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "`open` or `completed`."
+          },
+          "summary": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Decisions per outcome once completed: `keep`, `remove`, `suspend`, `not_reviewed`."
+          }
+        }
+      },
       "AckOut": {
         "type": "object",
         "required": [
@@ -9509,6 +11138,31 @@
           }
         }
       },
+      "ActivityRow": {
+        "type": "object",
+        "description": "A row of the person's own activity about their data.",
+        "required": [
+          "action",
+          "outcome"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          }
+        }
+      },
       "AdminChange": {
         "type": "object",
         "required": [
@@ -9574,6 +11228,67 @@
           "server"
         ]
       },
+      "AuditChainBreak": {
+        "type": "object",
+        "description": "Where and how a chain stops verifying.",
+        "required": [
+          "kind",
+          "message"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`altered` (an event's content no longer matches its hash), `link` (an event does not\nfollow the one before it), `missing` (events are gone), `duplicate`, `head` (the newest\nevent is not the recorded head), `checkpoint` (a checkpoint disagrees with its event) or\n`genesis`."
+          },
+          "message": {
+            "type": "string",
+            "description": "The break in plain words."
+          },
+          "seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The sequence number where the chain stops verifying, when there is one."
+          }
+        }
+      },
+      "AuditCheckpoint": {
+        "type": "object",
+        "description": "A point a verifier can start from or compare against.",
+        "required": [
+          "seq",
+          "hash",
+          "at",
+          "kind"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "hash": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "description": "`genesis` (the chain's start, seq 0), `retention` (the last event the retention window\ndeleted), `periodic` (a copy of the head) or `export` (written into an export file)."
+          },
+          "pruned": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "For `retention`: how many events that cut deleted."
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "AuditEntry": {
         "type": "object",
         "required": [
@@ -9603,6 +11318,231 @@
           }
         }
       },
+      "AuditEventFields": {
+        "type": "object",
+        "description": "The fields one event's hash covers, in their canonical form.",
+        "required": [
+          "ledger",
+          "seq",
+          "prev_hash",
+          "id",
+          "created_at",
+          "actor_kind",
+          "actor_id",
+          "action",
+          "target",
+          "outcome",
+          "trace_id",
+          "detail_digest"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "actor_id": {
+            "type": "string"
+          },
+          "actor_kind": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "detail_digest": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "ledger": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "prev_hash": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "target": {
+            "type": "string"
+          },
+          "trace_id": {
+            "type": "string"
+          },
+          "user": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AuditExport": {
+        "type": "object",
+        "description": "An offline-verifiable slice of one ledger. Metadata only: no memory text, chat content,\nprompts, secrets or free-text detail (the detail is committed by its hash).",
+        "required": [
+          "format",
+          "version",
+          "generated_at",
+          "ledger",
+          "from",
+          "to",
+          "events",
+          "checkpoints",
+          "range",
+          "truncated",
+          "ok"
+        ],
+        "properties": {
+          "anchor": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AuditCheckpoint",
+                "description": "The point the first event hangs from: its sequence minus one and its `prev_hash`."
+              }
+            ]
+          },
+          "break": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AuditChainBreak"
+              }
+            ]
+          },
+          "checkpoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditCheckpoint"
+            },
+            "description": "Stored checkpoints inside the range, plus one every 1000 events and one at the last event."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditExportEvent"
+            }
+          },
+          "format": {
+            "type": "string",
+            "description": "`eunomia-audit-export`."
+          },
+          "from": {
+            "type": "string",
+            "description": "The requested range, RFC 3339; empty when open."
+          },
+          "generated_at": {
+            "type": "string"
+          },
+          "head": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AuditCheckpoint",
+                "description": "The ledger's head when the export was made."
+              }
+            ]
+          },
+          "ledger": {
+            "type": "string"
+          },
+          "next_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "The server's own check of the events in this file."
+          },
+          "range": {
+            "$ref": "#/components/schemas/AuditExportRange",
+            "description": "The file's own range: its first and last event, the ledger's head when it was made, and how\nmany events were still unsealed (written, not yet in the chain) and so are not in it. The\noffline verifier checks it against the events and the head."
+          },
+          "to": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True when the range held more than one export carries; `next_seq` is where to resume."
+          },
+          "version": {
+            "type": "string",
+            "description": "The canonical form the hashes use (`eunomia.audit.v1`)."
+          }
+        }
+      },
+      "AuditExportEvent": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AuditEventFields"
+          },
+          {
+            "type": "object",
+            "required": [
+              "hash"
+            ],
+            "properties": {
+              "hash": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "One event in an export: its canonical fields (the detail only as its hash) and stored hash."
+      },
+      "AuditExportRange": {
+        "type": "object",
+        "required": [
+          "unsealed"
+        ],
+        "properties": {
+          "first_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "head_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "head_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "last_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "unsealed": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "AuditPage": {
         "type": "object",
         "required": [
@@ -9623,6 +11563,118 @@
           "total": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "AuditVerification": {
+        "type": "object",
+        "description": "The result of walking one ledger.",
+        "required": [
+          "ledger",
+          "ok",
+          "checked",
+          "pending",
+          "before_chain",
+          "detail_unchecked",
+          "checked_at"
+        ],
+        "properties": {
+          "anchor": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AuditCheckpoint",
+                "description": "The checkpoint the walk started from (the genesis, or the last retention cut)."
+              }
+            ]
+          },
+          "before_chain": {
+            "type": "integer",
+            "format": "int64",
+            "description": "For the `instance` ledger: events written before the chain started, which have no hash."
+          },
+          "break": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AuditChainBreak",
+                "description": "The first break, if any."
+              }
+            ]
+          },
+          "checked": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Events whose hash and link were checked.",
+            "minimum": 0
+          },
+          "checked_at": {
+            "type": "string",
+            "description": "When the check ran, RFC 3339."
+          },
+          "detail_unchecked": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Events whose detail could not be checked against its digest because the encryption key\nchanged since they were written (their hash and link were still checked).",
+            "minimum": 0
+          },
+          "first_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "head_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "head_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "last_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "ledger": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "True when every stored event verified from the anchor to the head."
+          },
+          "pending": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Events written but not sealed yet (sealed by the next replay)."
+          }
+        }
+      },
+      "AuditVerifyReport": {
+        "type": "object",
+        "required": [
+          "ledgers"
+        ],
+        "properties": {
+          "ledgers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditVerification"
+            },
+            "description": "The workspace's own ledger first, then, for a server operator (or any admin while the\ninstall has one workspace), the `instance` ledger: events with no workspace, such as sign-ins\nwith an unknown email."
           }
         }
       },
@@ -10614,6 +12666,18 @@
           }
         }
       },
+      "CodeIn": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "A six-digit authenticator code, or (where a recovery code is accepted) a recovery code."
+          }
+        }
+      },
       "ColumnPlan": {
         "type": "object",
         "description": "How one column would be imported.",
@@ -10821,6 +12885,13 @@
             "properties": {
               "approve": {
                 "type": "boolean"
+              },
+              "mfa_code": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "A current authenticator or recovery code, when your account has two-step verification and its last\nsecond factor is older than 10 minutes (`auth.step_up_required`). Only needed to approve."
               }
             }
           }
@@ -11183,6 +13254,61 @@
           }
         }
       },
+      "EnrolIn": {
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Your account password: setting up an authenticator from Settings needs it, so a stolen session alone\ncannot put an attacker's authenticator on the account."
+          }
+        }
+      },
+      "EnrolledOut": {
+        "type": "object",
+        "required": [
+          "me",
+          "recovery_codes"
+        ],
+        "properties": {
+          "me": {
+            "$ref": "#/components/schemas/AuthOut",
+            "description": "The signed-in user (the session cookie is set with this answer)."
+          },
+          "recovery_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Shown once. Each works once, in place of an authenticator code."
+          }
+        }
+      },
+      "Enrolment": {
+        "type": "object",
+        "description": "What the enrolment screen shows, once.",
+        "required": [
+          "secret",
+          "otpauth_uri",
+          "qr_svg"
+        ],
+        "properties": {
+          "otpauth_uri": {
+            "type": "string",
+            "description": "`otpauth://totp/...` URI the QR code encodes."
+          },
+          "qr_svg": {
+            "type": "string",
+            "description": "The QR code as a standalone SVG document (no scripts), for an `<img>` tag."
+          },
+          "secret": {
+            "type": "string",
+            "description": "The secret in base32, for typing into an authenticator app by hand. Shown only now."
+          }
+        }
+      },
       "EntityCreate": {
         "type": "object",
         "required": [
@@ -11354,6 +13480,136 @@
           }
         }
       },
+      "EraseMe": {
+        "type": "object",
+        "properties": {
+          "close_workspace": {
+            "type": "boolean",
+            "description": "You confirm that a workspace whose only member you are is closed with your account (everything\nin it is deleted). Without it such a request is refused with `subject.workspace_closes`."
+          },
+          "mfa_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With two-step verification on: a code from your authenticator, unless you signed in with one in\nthe last 10 minutes (`auth.step_up_required` otherwise)."
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Your password, typed again. Required when the account has one."
+          }
+        }
+      },
+      "ErasePerson": {
+        "type": "object",
+        "properties": {
+          "close_workspace": {
+            "type": "boolean",
+            "description": "Confirms closing any workspace whose only member the person is."
+          },
+          "mfa_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With two-step verification on for your account: a code from your authenticator, unless you\nsigned in with one in the last 10 minutes (`auth.step_up_required` otherwise)."
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Your own password, typed again (an operator who signs in only with single sign-on confirms with a\nsign-in from the last 10 minutes instead)."
+          }
+        }
+      },
+      "ErasureRecord": {
+        "type": "object",
+        "description": "The record a completed erasure leaves, for the People page (no personal data: an opaque reference,\nper-category counts, the post-check result and the review counts).",
+        "required": [
+          "id",
+          "subject_ref",
+          "requested_by",
+          "status",
+          "counts",
+          "post_check",
+          "requested_at"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "counts": {
+            "type": "object",
+            "description": "Rows removed or anonymised per category."
+          },
+          "deleting_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When it took its first irreversible step; none while it can still be cancelled."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "post_check": {
+            "type": "object",
+            "description": "Rows still naming the person per table after the erasure: every value is 0 when it passed."
+          },
+          "requested_at": {
+            "type": "string"
+          },
+          "requested_by": {
+            "type": "string",
+            "description": "`self`, `operator` or `reapply` (a restore brought the person back and they were erased again)."
+          },
+          "review": {
+            "type": "object",
+            "description": "Mentions of the person's email left in content other people wrote, for review."
+          },
+          "status": {
+            "type": "string"
+          },
+          "subject_ref": {
+            "type": "string",
+            "description": "The keyed hash of the erased account's id (never the id or the email)."
+          }
+        }
+      },
+      "ErasureTicket": {
+        "type": "object",
+        "description": "An erasure as the routes report it.",
+        "required": [
+          "id",
+          "status",
+          "requested_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "requested_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "`pending`, `running`, `held`, `done`, `failed` or `cancelled`."
+          }
+        }
+      },
       "EventDetail": {
         "type": "object",
         "required": [
@@ -11429,6 +13685,61 @@
           },
           "received_at": {
             "type": "string"
+          }
+        }
+      },
+      "ExportRow": {
+        "type": "object",
+        "description": "What the exports list shows (never the archive).",
+        "required": [
+          "id",
+          "status",
+          "created_at",
+          "expires_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "manifest": {
+            "type": "object",
+            "description": "Categories and counts (empty until ready)."
+          },
+          "requested_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "description": "`self` (the person's own, every workspace) or `organisation` (an admin's, one workspace)."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "type": "string",
+            "description": "`pending`, `ready` or `failed`."
+          },
+          "subject": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -12066,6 +14377,37 @@
               "null"
             ],
             "description": "The helper's version when running."
+          }
+        }
+      },
+      "HoldChange": {
+        "type": "object",
+        "required": [
+          "hold"
+        ],
+        "properties": {
+          "hold": {
+            "type": "boolean",
+            "description": "`true` places a legal hold (the account cannot be erased), `false` lifts it."
+          }
+        }
+      },
+      "HoldState": {
+        "type": "object",
+        "required": [
+          "erasure_open"
+        ],
+        "properties": {
+          "erasure_open": {
+            "type": "boolean",
+            "description": "An erasure of this account is open. A hold placed now parks it (`held`) before its next\nirreversible step; lifting the hold resumes it."
+          },
+          "legal_hold_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the hold was placed, RFC 3339; none when there is no hold."
           }
         }
       },
@@ -13110,6 +15452,13 @@
           "next"
         ],
         "properties": {
+          "mfa": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Set when the password was right but the account's second step comes first: `verify` (enter the\naccount's authenticator code) or `enrol` (this server requires two-step verification: set it up).\nNo session and no link yet; the response sets the short-lived second-step cookie, and the link is\nmade when that step passes."
+          },
           "next": {
             "type": "string",
             "description": "Where to go next."
@@ -13869,6 +16218,58 @@
           }
         }
       },
+      "MfaPendingOut": {
+        "type": "object",
+        "description": "A correct password whose sign-in still needs its second step. No session yet: the response sets a\nshort-lived cookie that only the `/api/auth/mfa/challenge/*` routes accept.",
+        "required": [
+          "mfa_required"
+        ],
+        "properties": {
+          "mfa_required": {
+            "type": "string",
+            "description": "`verify`: enter an authenticator or recovery code. `enrol`: this server requires two-step\nverification and the account has none yet, so set up an authenticator first."
+          }
+        }
+      },
+      "MfaStatus": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "recovery_codes_left",
+          "required",
+          "available",
+          "unreadable"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "False for an account that signs in only through single sign-on: the provider handles its second factor."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Two-step verification is on for this account."
+          },
+          "enabled_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recovery_codes_left": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unused recovery codes left."
+          },
+          "required": {
+            "type": "boolean",
+            "description": "An admin requires two-step verification for every password account on this server."
+          },
+          "unreadable": {
+            "type": "boolean",
+            "description": "True when the stored authenticator can no longer be read (`ENCRYPTION_KEY` changed): sign in with a\nrecovery code, turn it off and set it up again."
+          }
+        }
+      },
       "ModelsOut": {
         "type": "object",
         "required": [
@@ -14385,7 +16786,9 @@
           "admin",
           "role",
           "is_you",
-          "tokens"
+          "tokens",
+          "workspace_owner",
+          "mfa"
         ],
         "properties": {
           "admin": {
@@ -14415,6 +16818,17 @@
             ],
             "description": "Latest browser session activity or API token use, RFC 3339; none if never seen."
           },
+          "legal_hold_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When an admin placed a legal hold on the account, RFC 3339; none when there is none. A held account cannot be erased."
+          },
+          "mfa": {
+            "type": "string",
+            "description": "Two-step verification: `on`, `off`, or `provider` for an account that signs in only through single\nsign-on (its identity provider handles the second factor)."
+          },
           "role": {
             "type": "string",
             "description": "`admin` or `member`."
@@ -14435,6 +16849,10 @@
             "type": "integer",
             "format": "int64",
             "description": "How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`)."
+          },
+          "workspace_owner": {
+            "type": "boolean",
+            "description": "The workspace's owner (one per workspace). An owner whose workspace has other members hands it\nover (`/api/admin/people/{user_id}/workspace-owner`) before their account can be erased."
           }
         }
       },
@@ -15049,6 +17467,19 @@
           }
         }
       },
+      "Reapplied": {
+        "type": "object",
+        "required": [
+          "queued"
+        ],
+        "properties": {
+          "queued": {
+            "type": "integer",
+            "description": "Erasures queued again: accounts a restore brought back, and restored rows whose owner was erased.",
+            "minimum": 0
+          }
+        }
+      },
       "RecentRecording": {
         "type": "object",
         "required": [
@@ -15109,6 +17540,21 @@
           },
           "source": {
             "type": "string"
+          }
+        }
+      },
+      "RecoveryCodesOut": {
+        "type": "object",
+        "required": [
+          "recovery_codes"
+        ],
+        "properties": {
+          "recovery_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Shown once. Each works once, in place of an authenticator code."
           }
         }
       },
@@ -15738,6 +18184,55 @@
           }
         }
       },
+      "SecurityChange": {
+        "type": "object",
+        "required": [
+          "require_mfa"
+        ],
+        "properties": {
+          "mfa_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A current authenticator or recovery code, when your own account has two-step verification and its\nlast second factor is older than 10 minutes (`auth.step_up_required`)."
+          },
+          "require_mfa": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SecurityOut": {
+        "type": "object",
+        "required": [
+          "require_mfa",
+          "without_mfa"
+        ],
+        "properties": {
+          "require_mfa": {
+            "type": "boolean",
+            "description": "Every password account on this server, in every organisation, must pass two-step verification before\nit gets a session. Accounts that sign in through single sign-on are left to the identity provider\nunless they set up their own authenticator."
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Email of the operator who last changed it."
+          },
+          "without_mfa": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Active password accounts on the whole server (every organisation) without two-step verification yet:\nwhile it is required they are signed out and must set it up at their next sign-in."
+          }
+        }
+      },
       "Selection": {
         "type": "object",
         "required": [
@@ -15967,6 +18462,17 @@
           }
         }
       },
+      "SignInOut": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AuthOut"
+          },
+          {
+            "$ref": "#/components/schemas/MfaPendingOut"
+          }
+        ],
+        "description": "What login and register answer: the signed-in user, or the second step still to do."
+      },
       "SignupPolicy": {
         "type": "object",
         "required": [
@@ -15981,7 +18487,7 @@
             "items": {
               "type": "string"
             },
-            "description": "The emails that may sign up when `mode` is `invite`."
+            "description": "The emails that may sign up when `mode` is `invite`. Empty unless you are the server's operator."
           },
           "mode": {
             "type": "string",
@@ -15992,7 +18498,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`)."
+            "description": "Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`). Empty unless you are the server's operator."
           },
           "summary": {
             "type": "string",
@@ -16274,6 +18780,25 @@
             "minimum": 0
           }
         }
+      },
+      "StatusOut": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MfaStatus"
+          },
+          {
+            "type": "object",
+            "required": [
+              "can_require"
+            ],
+            "properties": {
+              "can_require": {
+                "type": "boolean",
+                "description": "You may require two-step verification for the whole server (`/api/admin/security`): the server's operator."
+              }
+            }
+          }
+        ]
       },
       "StrictBody": {
         "type": "object",
@@ -16638,6 +19163,13 @@
               "null"
             ],
             "description": "RFC 3339 timestamp in the future. Omit for 90 days. Explicit null never expires."
+          },
+          "mfa_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A current authenticator or recovery code. Needed from a browser session of an account with\ntwo-step verification when its last second factor is older than 10 minutes (`auth.step_up_required`)."
           },
           "name": {
             "type": "string"

@@ -74,6 +74,8 @@ VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usag
 # every org database, holding only what the backfill writes (new_rows below). Their counts are checked
 # on their own, so they are left out of the before/after diff.
 NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill peer_instance peer_share peer_link peer_item credential_ref secret_provider secret_request vault_secret ontology_kind ontology_link ontology_property entity_property ontology_metric ontology_event composio_file}"
+# Control tables added by control migrations (0009: two-step verification; 0012: organisation invitations). Empty after an update: nothing backfills them.
+NEW_CONTROL_TABLES="${UPDATE_PATH_NEW_CONTROL_TABLES:-mfa_recovery_code mfa_challenge instance_setting org_invitation}"
 BUILT_FROM=0
 # A fake GitHub token shape (built here, never a real one) in one fact: the backfill must redact it.
 FAKE_GH="ghp_$(printf 'Ab1Cd2Ef3G%.0s' 1 2 3 4)"
@@ -145,11 +147,14 @@ new_rows() {
     *) echo 0 ;;
   esac
 }
-expected_new() { # expected_new COUNTS-BEFORE : "<db>.<table> <new_rows>" for each NEW_TABLES table an org database lacked
+expected_new() { # expected_new COUNTS-BEFORE : "<db>.<table> <new_rows>" for each NEW_TABLES table an org database lacked, and each NEW_CONTROL_TABLES table control lacked (empty)
   local db t
-  for db in $(tables "$1" | cut -d. -f1 | grep '^org_' | sort -u); do
-    for t in $NEW_TABLES; do grep -q "^$db\.$t " "$1" || echo "$db.$t $(new_rows "$db" "$t")"; done
-  done | sort
+  {
+    for db in $(tables "$1" | cut -d. -f1 | grep '^org_' | sort -u); do
+      for t in $NEW_TABLES; do grep -q "^$db\.$t " "$1" || echo "$db.$t $(new_rows "$db" "$t")"; done
+    done
+    for t in $NEW_CONTROL_TABLES; do grep -q "^control\.$t " "$1" || echo "control.$t 0"; done
+  } | sort
 }
 added() { awk 'NR == FNR { seen[$1] = 1; next } !($1 in seen)' "$1" "$2" | sort; }   # added BEFORE AFTER : lines of AFTER whose table BEFORE lacks
 others_empty() { # others_empty COUNTS ORG : the change log (change, change_seq) outside ORG holds no row

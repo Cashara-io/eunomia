@@ -446,6 +446,13 @@ async fn every_dynamic_builder_runs_in_every_combination() {
         sync_relation_queries(&app).await;
         export_and_replay(&app).await;
 
+        // closing a workspace with its only member (subject erasure): every table counted, then emptied
+        let solo = common::register_personal(&app.state, "closing@example.com").await;
+        let solo_db = common::org_db(&app.state, &solo).await;
+        assert!(eunomia_backend::subject::erase::count_all_rows(&solo_db).await.unwrap() > 0, "a new workspace has its personal space");
+        eunomia_backend::subject::erase::empty_all_tables(&solo_db).await.unwrap();
+        assert_eq!(eunomia_backend::subject::erase::count_all_rows(&solo_db).await.unwrap(), 0);
+
         // the control-database dynamic statement (the legacy move) runs on every boot
         eunomia_backend::provisioning::legacy::move_if_needed(app.state.provisioner.as_ref().unwrap(), &app.state.control, &app.state.settings).await.unwrap();
 

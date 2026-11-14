@@ -14,6 +14,7 @@ import { useAcceptInvitation, useInvitationLookup } from "@/lib/queries/org";
 import { ApiError } from "@/lib/api";
 import AuthShell, { LABEL, RevealToggle } from "../login/AuthShell";
 import { OrDivider, useSignIn } from "../login/Sso";
+import SecondStep from "../login/SecondStep";
 
 const KEY = "eunomia_invite";
 const noSubscribe = () => () => {};
@@ -70,6 +71,8 @@ export default function InvitePage() {
   const [joined, setJoined] = useState<string | null>(null);
   // nothing is created or joined until the person has seen the organisation and the role and said yes
   const [confirmed, setConfirmed] = useState(false);
+  // the account was made and joined, but the server requires two-step verification before any session
+  const [enrolEmail, setEnrolEmail] = useState<string | null>(null);
 
   // the token is kept in this tab only: take it out of the address bar (and so out of history and bookmarks)
   useEffect(() => {
@@ -82,6 +85,16 @@ export default function InvitePage() {
   }, [joined]);
 
   if (!hydrated) return <AuthShell><div className="h-40" aria-hidden /></AuthShell>;
+  if (enrolEmail !== null)
+    return (
+      <AuthShell>
+        <SecondStep
+          step="enrol"
+          onDone={() => router.replace("/onboarding")}
+          onRestart={() => router.replace(`/login?email=${encodeURIComponent(enrolEmail)}`)}
+        />
+      </AuthShell>
+    );
   if (!token)
     return (
       <Message title="No invitation here">
@@ -196,8 +209,13 @@ export default function InvitePage() {
     setBusy(true);
     setError(null);
     try {
-      await register.mutateAsync({ email: inv!.email, password, invitation: token! });
+      const r = await register.mutateAsync({ email: inv!.email, password, invitation: token! });
       sessionStorage.removeItem(KEY);
+      if (r.kind === "mfa") {
+        // the invitation is used and the account is in the organisation; it sets up an authenticator first
+        setEnrolEmail(inv!.email);
+        return;
+      }
       router.replace("/onboarding");
     } catch (err) {
       const f = failure(err, "Could not create the account. Try again.");

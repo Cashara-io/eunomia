@@ -52,6 +52,40 @@ expression: first
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "audit_checkpoint",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "ledger",
+            "at"
+          ],
+          "index": "",
+          "name": "audit_checkpoint_at_idx",
+          "table": "audit_checkpoint"
+        },
+        {
+          "cols": [
+            "ledger",
+            "seq"
+          ],
+          "index": "",
+          "name": "audit_checkpoint_seq_idx",
+          "table": "audit_checkpoint"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "audit_event",
       "permissions": {
         "create": true,
@@ -60,6 +94,32 @@ expression: first
         "update": false
       },
       "indexes": [
+        {
+          "cols": [
+            "ledger",
+            "seq"
+          ],
+          "index": "",
+          "name": "audit_event_chain_idx",
+          "table": "audit_event"
+        },
+        {
+          "cols": [
+            "ledger",
+            "created_at"
+          ],
+          "index": "",
+          "name": "audit_event_ledger_time_idx",
+          "table": "audit_event"
+        },
+        {
+          "cols": [
+            "pending"
+          ],
+          "index": "",
+          "name": "audit_event_pending_idx",
+          "table": "audit_event"
+        },
         {
           "cols": [
             "action",
@@ -86,6 +146,86 @@ expression: first
           "index": "",
           "name": "audit_event_user_idx",
           "table": "audit_event"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "audit_head",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": []
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "erasure",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "open_slot"
+          ],
+          "index": "UNIQUE",
+          "name": "erasure_open_slot",
+          "table": "erasure"
+        },
+        {
+          "cols": [
+            "org",
+            "requested_at"
+          ],
+          "index": "",
+          "name": "erasure_org",
+          "table": "erasure"
+        },
+        {
+          "cols": [
+            "subject_ref"
+          ],
+          "index": "",
+          "name": "erasure_subject_ref",
+          "table": "erasure"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "erasure_lock",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "erasure"
+          ],
+          "index": "",
+          "name": "erasure_lock_erasure",
+          "table": "erasure_lock"
         }
       ]
     },
@@ -145,6 +285,21 @@ expression: first
           "table": "identity"
         }
       ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "instance_setting",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": []
     },
     {
       "drop": false,
@@ -250,6 +405,63 @@ expression: first
           "index": "",
           "name": "membership_user_idx",
           "table": "membership"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "mfa_challenge",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "token_hash"
+          ],
+          "index": "UNIQUE",
+          "name": "mfa_challenge_hash_unique",
+          "table": "mfa_challenge"
+        },
+        {
+          "cols": [
+            "user"
+          ],
+          "index": "",
+          "name": "mfa_challenge_user_idx",
+          "table": "mfa_challenge"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "mfa_recovery_code",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "user",
+            "code_hash"
+          ],
+          "index": "",
+          "name": "mfa_recovery_code_user_idx",
+          "table": "mfa_recovery_code"
         }
       ]
     },

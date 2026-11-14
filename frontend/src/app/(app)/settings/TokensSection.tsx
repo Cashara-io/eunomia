@@ -57,6 +57,9 @@ export function TokensSection() {
   const [minted, setMinted] = useState<{ name: string; token: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
+  // Two-step verification: a new token needs a recent second factor; the server asks (auth.step_up_required) and we show a code field.
+  const [stepUp, setStepUp] = useState(false);
+  const [mfaCode, setMfaCode] = useState("");
   // Inline rename: the token being renamed and its draft. The ref is the source of truth for
   // "still editing", so Enter followed by the blur it causes (or Esc) saves at most once.
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -75,11 +78,21 @@ export function TokensSection() {
         scopes,
         vault_id: vaultId === "" ? null : vaultId,
         expires_at: expiryDays ? new Date(Date.now() + Number(expiryDays) * 86_400_000).toISOString() : null,
+        ...(stepUp && mfaCode.trim() ? { mfa_code: mfaCode.trim() } : {}),
       });
       setMinted({ name: res.name, token: res.token });
       setName("");
+      setStepUp(false);
+      setMfaCode("");
     } catch (e) {
-      setError(failure(e, "Could not create a token. Check that you're still signed in, then try again."));
+      const f = failure(e, "Could not create a token. Check that you're still signed in, then try again.");
+      if (f.code === "auth.step_up_required") {
+        // not an error the person made: ask for the code in place
+        setStepUp(true);
+      } else {
+        setError(f);
+      }
+      setMfaCode("");
     } finally {
       setBusy(false);
     }
@@ -218,7 +231,24 @@ export function TokensSection() {
               className="h-10 text-[14px] w-full"
             />
           </div>
-          <button type="submit" disabled={busy || !destinationReady || scopes.length === 0 || !name.trim()} className="btn btn-primary">
+          {stepUp && (
+            <div className="flex flex-col gap-1.5 w-full sm:w-[200px]">
+              <label htmlFor="token-mfa-code" className="label">
+                Authenticator code
+              </label>
+              <input
+                id="token-mfa-code"
+                className="field h-10 px-3 text-[14px] w-full font-mono"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                placeholder="123456"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+              />
+            </div>
+          )}
+          <button type="submit" disabled={busy || !destinationReady || scopes.length === 0 || !name.trim() || (stepUp && !mfaCode.trim())} className="btn btn-primary">
             <KeyIcon {...ICON} />
             {busy ? "Creating…" : "Create token"}
           </button>
@@ -228,6 +258,11 @@ export function TokensSection() {
             {vaultsQuery.isError ? "Could not load your memory spaces. Reload to try again."
               : vaultsQuery.isPending ? "Loading your Personal memory space…"
               : "Your Personal memory space is unavailable. Choose a destination before creating a token."}
+          </p>
+        )}
+        {stepUp && (
+          <p role="status" className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+            Confirm it&apos;s you: enter the code from your authenticator app (or a recovery code) to create this token.
           </p>
         )}
         {vaultId && (

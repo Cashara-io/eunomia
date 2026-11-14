@@ -257,9 +257,45 @@ pub async fn is_operator(db: &ControlDb, user: &User) -> AppResult<bool> {
     Ok(stored_email_is_operator(email_lc.as_deref()))
 }
 
+/// A **server operator**, for the data-subject rights (erase any account, cancel an erasure that has
+/// not started deleting, lift legal holds, hand a workspace over). The same set as
+/// [`is_instance_operator`], which is the one definition: an account whose stored address is in
+/// `EUNOMIA_ADMIN_EMAILS`, or the install's first account. The in-app admin flag is not enough. On a
+/// default self-hosted install the person who set it up is the operator with no extra configuration.
+pub async fn is_server_operator(db: &ControlDb, user: &User) -> AppResult<bool> {
+    is_instance_operator(db, user).await
+}
+
 /// Admin = the instance's first user, an operator, or an account an admin made one (Settings > People).
 pub async fn is_admin(db: &ControlDb, user: &User) -> AppResult<bool> {
     Ok(is_operator(db, user).await? || granted_admin(db, &user.id).await? || crate::capsules::first_user(db).await?.as_ref() == Some(&user.id))
+}
+
+/// An operator of the whole server: the instance's first account or an email in `EUNOMIA_ADMIN_EMAILS`.
+/// Admin rights granted in the app (Settings > People) are not enough: they are given within one
+/// organisation, while an instance setting reaches every organisation on the host.
+pub async fn is_instance_operator(db: &ControlDb, user: &User) -> AppResult<bool> {
+    Ok(is_operator(db, user).await? || crate::capsules::first_user(db).await?.as_ref() == Some(&user.id))
+}
+
+/// May see what belongs to no organisation, such as the `instance` audit ledger (every tenant's
+/// sign-in attempts with unknown emails): a server operator (`EUNOMIA_ADMIN_EMAILS`), the install's
+/// first account, or, while the install has a single organisation, any admin of it (there is no
+/// other tenant to see). An admin granted in the app on a host with several organisations is not.
+pub async fn sees_instance(db: &ControlDb, user: &User) -> AppResult<bool> {
+    if is_instance_operator(db, user).await? {
+        return Ok(true);
+    }
+    if !is_admin(db, user).await? {
+        return Ok(false);
+    }
+    #[derive(Deserialize, SurrealValue)]
+    struct T {
+        #[allow(dead_code)]
+        org: RecordId,
+    }
+    let orgs: Vec<T> = store::tenant::LIST.on(db).await?.take(0)?;
+    Ok(orgs.len() <= 1)
 }
 
 /// True when an admin granted `user` admin rights in the app (the `admin` flag on the account).

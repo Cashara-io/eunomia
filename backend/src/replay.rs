@@ -190,7 +190,11 @@ async fn run(state: &AppState, capsule: &Capsule, user: Option<&User>) -> AppRes
         }
     };
     let req = req.body(body).map_err(|e| AppError::internal(e.to_string()))?;
-    let resp = crate::app(state.clone()).oneshot(req).await.map_err(|e| AppError::internal(e.to_string()))?;
+    // the router's error type is `Infallible`: there is no error to map
+    let resp = match crate::app(state.clone()).oneshot(req).await {
+        Ok(r) => r,
+        Err(e) => match e {},
+    };
     let status = resp.status();
     let bytes = resp.into_body().collect().await.map_err(|e| AppError::internal(e.to_string()))?.to_bytes();
     let body: Value = serde_json::from_slice(&bytes).unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into_owned()));

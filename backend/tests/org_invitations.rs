@@ -165,6 +165,8 @@ async fn an_invited_person_signs_up_into_the_inviting_org_even_on_a_closed_perso
     assert_eq!(accepted[0]["user"], json!(pat.id.to_string()));
     let dump = control_dump(&h.app.state).await;
     assert!(!dump.contains(&token), "the invitation token is stored somewhere");
+    // through audit::record: in the hash-chained log, sealed
+    common::assert_chained(&h.app.state.control, &["org.invite", "org.invite_accept"]).await;
 }
 
 #[tokio::test]
@@ -545,4 +547,29 @@ async fn every_refusal_at_acceptance_reads_the_same_to_the_inviter() {
         assert_eq!(r["user"], json!(h.alpha.id.to_string()));
         assert!(r["detail"].as_str().unwrap().starts_with("email=") && !r["detail"].as_str().unwrap().contains(' '), "only the invited address: {r}");
     }
+}
+
+/// An invitation is the permission to sign up, never a way past two-step verification: while the server
+/// requires it, signing up through an invitation makes the account in the inviting org (the invitation is
+/// used) but starts no session; the new account sets up an authenticator first, as any new account does.
+#[tokio::test]
+async fn signing_up_through_an_invitation_while_mfa_is_required_starts_no_session() {
+    let h = host().await;
+    let token = invite(&h, "quinn@example.com", "member").await["token"].as_str().unwrap().to_string();
+    eunomia_backend::mfa::set_require_mfa(&h.app.state.control, true, &h.alpha.id).await.unwrap();
+    h.app.state.credentials.clear();
+
+    let ((status, body), cookie) = register(&h.app, "quinn@example.com", Some(&token)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["mfa_required"], "enrol", "{body}");
+    let cookie = cookie.unwrap_or_default();
+    assert!(!cookie.starts_with("eunomia_session="), "no session from the invitation alone: {cookie}");
+    assert!(cookie.starts_with("eunomia_mfa="), "the enrolment challenge: {cookie}");
+    let quinn = models_user::user_by_email(&h.app.state.control, "quinn@example.com").await.unwrap().unwrap();
+    assert_eq!(quinn.org, h.alpha.org);
+    assert_eq!(lookup(&h.app, &token).await.0, StatusCode::NOT_FOUND, "the invitation is used");
+
+    // and the inviter's own session from before the switch no longer works either (#244's gate)
+    let (status, _) = as_cookie(&h.app, &h.alpha_cookie, "GET", "/api/auth/me", None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 }

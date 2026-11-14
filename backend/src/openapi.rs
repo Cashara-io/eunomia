@@ -84,7 +84,10 @@ pub fn spec() -> utoipa::openapi::OpenApi {
     let mut doc = Root::openapi();
     for part in [
         routers::auth::Doc::openapi(),
+        routers::mfa::Doc::openapi(),
         routers::admin::Doc::openapi(),
+        routers::audit_chain::Doc::openapi(),
+        routers::access_reviews::Doc::openapi(),
         routers::org::Doc::openapi(),
         routers::audit::Doc::openapi(),
         routers::changes::Doc::openapi(),
@@ -105,6 +108,7 @@ pub fn spec() -> utoipa::openapi::OpenApi {
         routers::peers::Doc::openapi(),
         routers::settings::Doc::openapi(),
         routers::sources::Doc::openapi(),
+        routers::subject::Doc::openapi(),
         routers::tools::Doc::openapi(),
         routers::update::Doc::openapi(),
         crate::diagnostics::Doc::openapi(),

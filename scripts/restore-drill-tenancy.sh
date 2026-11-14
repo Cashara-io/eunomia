@@ -51,6 +51,7 @@ sql control "REMOVE DATABASE control;" >/dev/null; sql "$ORG" "REMOVE DATABASE \
 wiped="$(snapshot)"; echo "after wipe:"; echo "$wiped"
 echo "$wiped" | grep -qv '=0$' && { echo "FAIL: wipe did not empty the databases" >&2; exit 1; }
 
-bk "$IMG" restore "$name"
+# the drill removed control itself, so there are no live erasure records to carry over: say so explicitly
+bk "$IMG" restore "$name" --without-erasures
 after="$(snapshot)"; echo "restored:"; echo "$after"
 if [ "$before" = "$after" ]; then echo "PASS: tenancy restore drill matched"; else echo "FAIL: counts differ after restore" >&2; exit 1; fi

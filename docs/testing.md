@@ -97,3 +97,7 @@ Fuzz crashes are saved under `backend/fuzz/artifacts/<target>/`; replay with `ca
 `cd backend && S1_N=200 cargo test --test spike_s1 -- --ignored --nocapture` (add `--release` for numbers closer to a server). Provisions N org databases on the in-memory engine, each migrated (HNSW 1536 and two FULLTEXT indexes) and loaded with 100 records, then prints provisioning time per org, resident memory, cold `pool.for_org` and first-query latency, vector-search latency on a cold handle, and how long a one-field migration takes to fan out over every org. A script, not a gate.
 
 Composio migration 0041 adds `composio_file`, expected empty in each upgraded tenant. All update-path matrix rows include this table in the new-table comparison. The consumer OAuth and app ingest fixture runs in `composio_flow`; its mock is local and never signs in to a real account.
+
+Control migration 0009 (two-step verification) adds `mfa_recovery_code`, `mfa_challenge` and `instance_setting` to the control database. The update path expects them empty after an update (`UPDATE_PATH_NEW_CONTROL_TABLES`). The MFA flows run in `backend/tests/mfa.rs` (enrolment, replay refusal, recovery codes, lockout, the admin switch, step-up) and the single sign-on cases in `backend/tests/oidc.rs`; the browser walk-through is `frontend/tests/mfa.spec.ts`. See [security/mfa.md](security/mfa.md).
+
+Control migration 0012 (organisation invitations) adds `org_invitation`, also expected empty after an update (`UPDATE_PATH_NEW_CONTROL_TABLES`).

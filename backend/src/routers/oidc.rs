@@ -294,6 +294,8 @@ enum Fail {
     SignupClosed,
     /// The invitation the sign-in started from cannot be used: (the `oidc_error` code, why).
     Invitation(&'static str, String),
+    /// `OIDC_REQUIRE_MFA` is on and the ID token does not say a second factor was used.
+    NoMfa,
     /// Not a failure: the verified email belongs to an account with a password, so the person is asked
     /// before linking ([`ask_before_linking`]).
     AskToLink(Box<AskToLink>),
@@ -313,6 +315,7 @@ impl Fail {
             Fail::EmailUnverified => "email_unverified",
             Fail::SignupClosed => "signup_closed",
             Fail::Invitation(code, _) => code,
+            Fail::NoMfa => "mfa",
             Fail::AskToLink(_) => "link",
             Fail::IdentityTaken => "identity_taken",
             Fail::Internal(_) => "unavailable",
@@ -323,6 +326,7 @@ impl Fail {
         match self {
             Fail::State(_) | Fail::Denied(_) | Fail::Token(_) => ErrorCode::AuthUnauthorized,
             Fail::NoEmail | Fail::EmailUnverified | Fail::SignupClosed | Fail::Invitation(..) | Fail::AskToLink(_) | Fail::IdentityTaken => ErrorCode::AuthForbidden,
+            Fail::NoMfa => ErrorCode::AuthMfaRequired,
             Fail::Provider(_) | Fail::Internal(_) => ErrorCode::Internal,
         }
     }
@@ -335,6 +339,7 @@ impl Fail {
             Fail::EmailUnverified => "an account has this email but the provider did not verify it".into(),
             Fail::SignupClosed => "signup is not open to this email".into(),
             Fail::Invitation(_, why) => why.clone(),
+            Fail::NoMfa => "the provider did not report a second factor (amr/acr) and OIDC_REQUIRE_MFA is on".into(),
             Fail::AskToLink(_) => "an account with a password has this email: asking before linking".into(),
             Fail::IdentityTaken => "the account with this email is linked to a different identity at this provider".into(),
             Fail::Internal(e) => e.source.clone().unwrap_or_else(|| e.message.clone()),
@@ -359,6 +364,9 @@ enum Mapped {
     Existing,
     Linked,
     Created,
+    /// The verified email names an account with its own authenticator: the identity is linked only after
+    /// that account's second step passes (`routers/mfa.rs`), so an abandoned step changes nothing.
+    LinkPending,
 }
 
 #[utoipa::path(
@@ -384,9 +392,25 @@ async fn callback(State(state): State<AppState>, https: Option<Extension<Forward
     let next = flow.as_ref().map_or_else(|| "/".to_string(), |f| f.next.clone());
     let from_invitation = flow.as_ref().is_some_and(|f| f.invite.is_some());
     match finish(&state, cfg, flow, &q, &headers).await {
-        Ok((user, mapped)) => {
-            let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref()).await?;
+        Ok((user, mapped, pending)) => {
             let actor = Actor { kind: "user", id: user.id.to_string() };
+            // an account with its own authenticator always passes it, unless the operator made the provider the
+            // judge of MFA (`OIDC_REQUIRE_MFA=true`, whose claim check this token already passed): the same
+            // pending second step as a password sign-in, no session and no link yet
+            let provider_owns_mfa = cfg.require_mfa_claim;
+            if !provider_owns_mfa && crate::mfa::enabled(&state.control, &user.id).await? {
+                let token = crate::mfa::create_challenge(&state.control, &user.id, crate::mfa::AfterPassword::Verify, auth::Via::Oidc.as_str(), user_agent_from(&headers).as_deref(), pending).await?;
+                let detail = if mapped == Mapped::LinkPending { "link waits for the second step; second step pending" } else { "second step pending" };
+                audit::record(&state.control, Event { user: Some(&user.id), actor: &actor, action: "auth.oidc_login", target: "", outcome: "ok", detail }).await;
+                let mut q = vec![("mfa", "verify")];
+                if next != "/" {
+                    q.push(("next", next.as_str()));
+                }
+                let target = format!("/login?{}", serde_urlencoded::to_string(&q).unwrap_or_default());
+                let cookie = crate::mfa::challenge_cookie(&token, &state.settings.public_url, https);
+                return Ok(no_store((AppendHeaders([(header::SET_COOKIE, cookie), (header::SET_COOKIE, clear)]), Redirect::to(&target)).into_response()));
+            }
+            let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref(), auth::Via::Oidc, provider_owns_mfa).await?;
             let rec = |action: &'static str, target: &'static str, detail: &'static str| {
                 audit::record(&state.control, Event { user: Some(&user.id), actor: &actor, action, target, outcome: "ok", detail })
             };
@@ -400,7 +424,7 @@ async fn callback(State(state): State<AppState>, https: Option<Extension<Forward
                     rec("auth.oidc_link", "", "linked to the existing account with this email").await;
                     rec("auth.oidc_login", "", "").await;
                 }
-                Mapped::Existing => rec("auth.oidc_login", "", "").await,
+                Mapped::Existing | Mapped::LinkPending => rec("auth.oidc_login", "", "").await,
             }
             // a new account made through the invitation has joined: onboarding, not back to the used link
             let target = if mapped == Mapped::Created && from_invitation {
@@ -434,7 +458,8 @@ async fn callback(State(state): State<AppState>, https: Option<Extension<Forward
     }
 }
 
-async fn finish(state: &AppState, cfg: &OidcConfig, flow: Option<Flow>, q: &CallbackQuery, _headers: &HeaderMap) -> Result<(User, Mapped), Fail> {
+/// The signed-in account, how it was mapped, and the identity to link after the second step (if deferred).
+async fn finish(state: &AppState, cfg: &OidcConfig, flow: Option<Flow>, q: &CallbackQuery, _headers: &HeaderMap) -> Result<(User, Mapped, Option<crate::mfa::PendingLink>), Fail> {
     let flow = flow.ok_or(Fail::State("no valid flow cookie (expired, missing, or started in another browser)"))?;
     if let Some(e) = &q.error {
         return Err(Fail::Denied(format!("the provider returned error {:?}", e.chars().take(64).collect::<String>())));
@@ -457,6 +482,10 @@ async fn finish(state: &AppState, cfg: &OidcConfig, flow: Option<Flow>, q: &Call
         oidc::OidcError::Token(m) => Fail::Token(m),
         oidc::OidcError::Provider(m) => Fail::Provider(m),
     })?;
+    // checked before any account is found or made: a sign-in without a second factor changes nothing
+    if cfg.require_mfa_claim && !ident.asserts_mfa(&cfg.mfa_acr) {
+        return Err(Fail::NoMfa);
+    }
     // some providers keep the email out of the ID token; the userinfo endpoint (same subject, same access token) has it
     if ident.email.is_none()
         && let Some(at) = access_token
@@ -469,7 +498,11 @@ async fn finish(state: &AppState, cfg: &OidcConfig, flow: Option<Flow>, q: &Call
             ident.email_verified_absent = verified.is_none();
         }
     }
-    map_identity(state, cfg, &ident, flow.invite.as_deref()).await
+    // the provider's word on a second factor counts only when the operator said so (`OIDC_REQUIRE_MFA`, checked
+    // above): otherwise an account's own authenticator is always asked, and linking waits for it
+    let (user, mapped) = map_identity(state, cfg, &ident, flow.invite.as_deref(), !cfg.require_mfa_claim).await?;
+    let pending = (mapped == Mapped::LinkPending).then(|| (ident.issuer.clone(), ident.subject.clone(), ident.email.as_deref().map(models_user::normalize_email).unwrap_or_default()));
+    Ok((user, mapped, pending))
 }
 
 /// `EUNOMIA_ADMIN_EMAILS` lists at least one address.
@@ -495,11 +528,10 @@ fn signup_decision(has_users: bool, verified: bool, listed: bool, operators_conf
 
 /// Maps a verified identity to an account. `invite` is the hash of the invitation token this sign-in
 /// started from (the signed flow cookie): only that invitation can place a new account, never one found by
-/// email.
-async fn map_identity(state: &AppState, cfg: &OidcConfig, id: &Identity, invite: Option<&str>) -> Result<(User, Mapped), Fail> {
+/// email. `defer_mfa_link`: an existing account with its own authenticator is not linked here
+/// ([`Mapped::LinkPending`]).
+async fn map_identity(state: &AppState, cfg: &OidcConfig, id: &Identity, invite: Option<&str>, defer_mfa_link: bool) -> Result<(User, Mapped), Fail> {
     let db = &state.control;
-    // linking, take-over, operator addresses and the allowlist: only the provider's explicit claim counts
-    let verified = id.email_verified;
     // two attempts: a concurrent first sign-in of the same person loses the unique index, then finds the winner
     for attempt in 0..2 {
         if let Some(user) = models_user::user_by_identity(db, &id.issuer, &id.subject).await? {
@@ -514,18 +546,22 @@ async fn map_identity(state: &AppState, cfg: &OidcConfig, id: &Identity, invite:
         let email = id.email.as_deref().and_then(|e| models_user::normalize_new_email(e).ok()).ok_or(Fail::NoEmail)?;
         let raced = |e: &AppError| matches!(e.code, ErrorCode::DbDuplicate | ErrorCode::AuthEmailTaken) && attempt == 0;
 
-        // an existing account: linked (verified email only) and signed in; an invitation is accepted, if at
-        // all, on the invitation page afterwards, as a separate confirmed step
         if let Some(user) = models_user::user_by_email(db, &email).await? {
-            if !verified {
+            if !id.email_verified {
                 return Err(Fail::EmailUnverified);
             }
             // one account, one identity per provider: a second one is not added, whatever the account holds
             if linked_at_issuer(db, &user.id, &id.issuer).await? {
                 return Err(Fail::IdentityTaken);
             }
+            // password first: an account with a password is asked before linking (no link, no session, no challenge yet)
             if ask_before_linking(db, &user.id).await? {
                 return Err(Fail::AskToLink(Box::new(AskToLink { user: user.id, email, issuer: id.issuer.clone(), subject: id.subject.clone(), invite: invite.map(str::to_string) })));
+            }
+            // an authenticator without a password (not reachable today: only password accounts enrol): the code
+            // first, the link after it
+            if defer_mfa_link && crate::mfa::enabled(db, &user.id).await? {
+                return Ok((user, Mapped::LinkPending));
             }
             match models_user::link_identity(db, &user.id, &id.issuer, &id.subject, &email).await {
                 Ok(()) => {
@@ -557,7 +593,7 @@ async fn map_identity(state: &AppState, cfg: &OidcConfig, id: &Identity, invite:
         let has_users = crate::capsules::first_user(db).await?.is_some();
         let allowed = signup_decision(
             has_users,
-            verified,
+            id.email_verified,
             authz::operator_email_listed(&email),
             operators_configured(),
             &std::env::var("SIGNUP").unwrap_or_default(),
@@ -770,6 +806,12 @@ struct LinkDone {
     started_fresh: bool,
     /// Where to go next.
     next: String,
+    /// Set when the password was right but the account's second step comes first: `verify` (enter the
+    /// account's authenticator code) or `enrol` (this server requires two-step verification: set it up).
+    /// No session and no link yet; the response sets the short-lived second-step cookie, and the link is
+    /// made when that step passes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mfa: Option<String>,
 }
 
 #[utoipa::path(
@@ -778,7 +820,7 @@ struct LinkDone {
     path = "/api/auth/oidc/link",
     tag = "auth",
     summary = "Link the provider sign-in to the existing account by its password, or start a new account",
-    description = "Needs the cookie the provider sign-in left, which names one identity and one account and is spent by either choice. With `password`, the password is checked (throttled like login) and the account is linked; nothing is removed. With `start_fresh: true`, the existing account is set aside (suspended, its address replaced, its data kept for an operator) and a new, empty account is made under this server's sign-up rules. A suspended account can be neither linked nor replaced here. Starts a session.",
+    description = "Needs the cookie the provider sign-in left, which names one identity and one account and is spent by either choice. With `password`, the password is checked (throttled like login) and the account is linked; nothing is removed. With `start_fresh: true`, the existing account is set aside (suspended, its address replaced, its data kept for an operator) and a new, empty account is made under this server's sign-up rules. A suspended account can be neither linked nor replaced here. Starts a session, except: for an account with its own authenticator, or while the server requires two-step verification, a right password answers `mfa: verify` (or `enrol`) with the second-step cookie, and the link is made only when that step passes; and an account with an authenticator cannot be set aside here. Neither applies when `OIDC_REQUIRE_MFA=true`.",
     request_body = LinkChoice,
     responses((status = 200, body = LinkDone), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(()),
@@ -790,7 +832,9 @@ async fn link(
     headers: HeaderMap,
     Json(body): Json<LinkChoice>,
 ) -> AppResult<Response> {
-    configured(&state)?;
+    let cfg = configured(&state)?;
+    // the operator made the provider the judge of second factors (`OIDC_REQUIRE_MFA=true`)
+    let provider_owns_mfa = cfg.require_mfa_claim;
     let p = read_pending_link(&state, https, &headers).ok_or_else(link_expired)?;
     let user_id: surrealdb::types::RecordId = crate::rid::parse(&p.user).map_err(|_| link_expired())?;
     // bound to the identity and the account it was issued for, and spent by either choice: the identity
@@ -807,27 +851,39 @@ async fn link(
     }
     let (user, started_fresh) = if body.start_fresh {
         // a sign-in that came from an invitation link starts fresh as that invitation's acceptance (it is the
-        // permission, and the account joins the inviting organisation); checked before anything is set aside
-        if let Some(hash) = p.invite.as_deref() {
-            let inv = invited(&state, hash, &models_user::normalize_email(&p.email), true).await.map_err(|f| AppError::coded(ErrorCode::InvitationNotFound, format!("The invitation can't be used: {}.", f.detail())))?;
-            let user = start_fresh(&state, &user_id, &target, &p.email, &p.issuer, &p.subject, Some(&inv)).await?;
-            (user, true)
-        } else {
-        // the same rules a first sign-in with this verified address meets on this server
-        let allowed = signup_decision(
-            true,
-            true,
-            authz::operator_email_listed(&p.email),
-            operators_configured(),
-            &std::env::var("SIGNUP").unwrap_or_default(),
-            &std::env::var("SIGNUP_ALLOWLIST").unwrap_or_default(),
-            &p.email,
-        );
-        if !allowed {
-            return Err(AppError::coded(ErrorCode::AuthForbidden, "This server isn't taking new accounts for this address. Ask a server operator for help."));
+        // permission, and the account joins the inviting organisation); otherwise the same rules a first
+        // sign-in with this verified address meets on this server. Both checked before anything is set aside.
+        let invitation = match p.invite.as_deref() {
+            Some(hash) => Some(
+                invited(&state, hash, &models_user::normalize_email(&p.email), true)
+                    .await
+                    .map_err(|f| AppError::coded(ErrorCode::InvitationNotFound, format!("The invitation can't be used: {}.", f.detail())))?,
+            ),
+            None => {
+                let allowed = signup_decision(
+                    true,
+                    true,
+                    authz::operator_email_listed(&p.email),
+                    operators_configured(),
+                    &std::env::var("SIGNUP").unwrap_or_default(),
+                    &std::env::var("SIGNUP_ALLOWLIST").unwrap_or_default(),
+                    &p.email,
+                );
+                if !allowed {
+                    return Err(AppError::coded(ErrorCode::AuthForbidden, "This server isn't taking new accounts for this address. Ask a server operator for help."));
+                }
+                None
+            }
+        };
+        // an account with its own authenticator is not set aside from here: its owner signs in with the
+        // password and the code, or an operator resets two-step verification (unless the provider owns MFA)
+        if !provider_owns_mfa && crate::mfa::enabled(&state.control, &user_id).await? {
+            return Err(AppError::coded(
+                ErrorCode::AuthForbidden,
+                "This account uses two-step verification, so it can't be replaced from here. Use its password and authenticator code, or ask a server operator to reset two-step verification.",
+            ));
         }
-        (start_fresh(&state, &user_id, &target, &p.email, &p.issuer, &p.subject, None).await?, true)
-        }
+        (start_fresh(&state, &user_id, &target, &p.email, &p.issuer, &p.subject, invitation.as_ref()).await?, true)
     } else {
         let password = body.password.as_deref().filter(|p| !p.is_empty()).ok_or_else(|| AppError::bad_request("Enter the account's password, or choose to start a new account."))?;
         // the same throttle as login, on the same keys: guesses here and there add up
@@ -847,10 +903,29 @@ async fn link(
         }
         state.fail_throttle.clear(&fail_key);
         state.fail_throttle.clear(&account_key);
+        // the password is only the first step for an account with its own authenticator, or while the server
+        // requires one: the link waits on the second-step challenge (as for a password sign-in), so this path
+        // is never weaker than password plus code, and never yields a session that skips the requirement
+        if !provider_owns_mfa {
+            let next_step = if crate::mfa::enabled(&state.control, &user_id).await? {
+                Some(crate::mfa::AfterPassword::Verify)
+            } else if crate::mfa::require_mfa(&state.control).await? {
+                Some(crate::mfa::AfterPassword::Enrol)
+            } else {
+                None
+            };
+            if let Some(step) = next_step {
+                let pending = Some((p.issuer.clone(), p.subject.clone(), models_user::normalize_email(&p.email)));
+                let token = crate::mfa::create_challenge(&state.control, &user_id, step, auth::Via::Oidc.as_str(), user_agent_from(&headers).as_deref(), pending).await?;
+                let cookie = crate::mfa::challenge_cookie(&token, &state.settings.public_url, https);
+                let body = LinkDone { started_fresh: false, next: p.next, mfa: Some(step.purpose().to_string()) };
+                return Ok(no_store((AppendHeaders([(header::SET_COOKIE, cookie), (header::SET_COOKIE, clear_link_cookie(&state, https))]), Json(body)).into_response()));
+            }
+        }
         models_user::link_identity(&state.control, &user_id, &p.issuer, &p.subject, &p.email).await.map_err(|e| if e.code == ErrorCode::DbDuplicate { link_spent() } else { e })?;
         (models_user::load_user(&state.control, user_id.clone(), target.email.clone()).await?, false)
     };
-    let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref()).await?;
+    let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref(), auth::Via::Oidc, provider_owns_mfa).await?;
     let actor = Actor { kind: "user", id: user.id.to_string() };
     if started_fresh {
         audit::record(&state.control, Event { user: Some(&user.id), actor: &actor, action: "auth.register", target: "", outcome: "ok", detail: "oidc, a new account instead of the one set aside" }).await;
@@ -859,7 +934,7 @@ async fn link(
     }
     let session = session_cookie_header(&token, &state.settings.public_url, https);
     let next = if started_fresh { "/onboarding".to_string() } else { p.next };
-    let body = LinkDone { started_fresh, next };
+    let body = LinkDone { started_fresh, next, mfa: None };
     Ok(no_store((AppendHeaders([(header::SET_COOKIE, session), (header::SET_COOKIE, clear_link_cookie(&state, https))]), Json(body)).into_response()))
 }
 

@@ -23,6 +23,126 @@ export type AccessOut = {
     vaults: Array<VaultRef>;
 };
 
+/**
+ * A review with its snapshot and decisions.
+ */
+export type AccessReview = AccessReviewSummary & {
+    decisions: Array<AccessReviewDecision>;
+    /**
+     * Who had access to what when the review started: `people`, each with `spaces`, `tokens`,
+     * `apps` and `sessions`.
+     */
+    snapshot: {
+        [key: string]: unknown;
+    };
+    snapshot_hash: string;
+    /**
+     * People nobody has decided about yet.
+     */
+    undecided: Array<string>;
+    /**
+     * The caller: they cannot decide about themselves.
+     */
+    you: string;
+};
+
+export type AccessReviewAuditLink = {
+    created_at?: string | null;
+    /**
+     * The event's detail as written (`result=<hash> keep=.. remove=.. suspend=.. not_reviewed=..`).
+     * Its SHA-256 is the event's `detail_digest` in the chain.
+     */
+    detail: string;
+    hash?: string | null;
+    ledger: string;
+    seq?: number | null;
+};
+
+/**
+ * A person's decision in a review.
+ */
+export type AccessReviewDecision = {
+    decided_at?: string | null;
+    /**
+     * `keep`, `remove` or `suspend`.
+     */
+    decision: string;
+    email: string;
+    note: string;
+    reviewer: string;
+    reviewer_id: string;
+    user_id: string;
+};
+
+export type AccessReviewDecisionBody = {
+    /**
+     * `keep`, `remove` or `suspend`.
+     */
+    decision: string;
+    /**
+     * Why, in a sentence (optional, at most 500 characters).
+     */
+    note?: string;
+};
+
+/**
+ * A completed review as a file: the snapshot, the decisions, both hashes and the security log
+ * event that recorded the completion.
+ */
+export type AccessReviewExport = {
+    audit_event?: null | AccessReviewAuditLink;
+    /**
+     * True when the chained completion event commits to this review as it is now: its detail
+     * names this `result` document's hash and the chain holds that detail's plain SHA-256. False
+     * means the review was changed after it was completed (even if `result_hash` was recomputed).
+     * The offline verifier checks the same: `verify-audit-export.py LOG.json --review THIS.json`.
+     */
+    chain_matches: boolean;
+    decisions: Array<AccessReviewDecision>;
+    /**
+     * The document `result_hash` is the SHA-256 of (canonical JSON: keys sorted, no spaces).
+     */
+    result: {
+        [key: string]: unknown;
+    };
+    result_hash: string;
+    /**
+     * True when `result` still hashes to the `result_hash` recorded at completion.
+     */
+    result_hash_matches: boolean;
+    /**
+     * Who had access to what at the start; `snapshot_hash` is its SHA-256 (canonical JSON).
+     */
+    snapshot: {
+        [key: string]: unknown;
+    };
+    snapshot_hash: string;
+    snapshot_hash_matches: boolean;
+};
+
+/**
+ * One review in the list.
+ */
+export type AccessReviewSummary = {
+    completed_at?: string | null;
+    completed_by?: string | null;
+    id: string;
+    people: number;
+    result_hash?: string | null;
+    started_at?: string | null;
+    started_by: string;
+    /**
+     * `open` or `completed`.
+     */
+    status: string;
+    /**
+     * Decisions per outcome once completed: `keep`, `remove`, `suspend`, `not_reviewed`.
+     */
+    summary?: {
+        [key: string]: unknown;
+    } | null;
+};
+
 export type AckOut = {
     /**
      * Ids that were leased and are now done. Ids that are unknown, already done or not leased are skipped.
@@ -85,6 +205,16 @@ export type ActivityPage = {
     next_before?: string | null;
 };
 
+/**
+ * A row of the person's own activity about their data.
+ */
+export type ActivityRow = {
+    action: string;
+    created_at?: string | null;
+    detail?: string;
+    outcome: string;
+};
+
 export type AdminChange = {
     /**
      * `true` makes the person an admin, `false` takes admin rights away.
@@ -115,6 +245,48 @@ export type AmbiguousTarget = {
  */
 export type AuditCategory = 'all' | 'changes' | 'spaces' | 'signins' | 'tokens' | 'apps' | 'admin' | 'sharing' | 'server';
 
+/**
+ * Where and how a chain stops verifying.
+ */
+export type AuditChainBreak = {
+    /**
+     * `altered` (an event's content no longer matches its hash), `link` (an event does not
+     * follow the one before it), `missing` (events are gone), `duplicate`, `head` (the newest
+     * event is not the recorded head), `checkpoint` (a checkpoint disagrees with its event) or
+     * `genesis`.
+     */
+    kind: string;
+    /**
+     * The break in plain words.
+     */
+    message: string;
+    /**
+     * The sequence number where the chain stops verifying, when there is one.
+     */
+    seq?: number | null;
+};
+
+/**
+ * A point a verifier can start from or compare against.
+ */
+export type AuditCheckpoint = {
+    /**
+     * RFC 3339.
+     */
+    at: string;
+    hash: string;
+    /**
+     * `genesis` (the chain's start, seq 0), `retention` (the last event the retention window
+     * deleted), `periodic` (a copy of the head) or `export` (written into an export file).
+     */
+    kind: string;
+    /**
+     * For `retention`: how many events that cut deleted.
+     */
+    pruned?: number | null;
+    seq: number;
+};
+
 export type AuditEntry = {
     args_summary: string;
     created_at?: string | null;
@@ -123,10 +295,136 @@ export type AuditEntry = {
     tool_name: string;
 };
 
+/**
+ * The fields one event's hash covers, in their canonical form.
+ */
+export type AuditEventFields = {
+    action: string;
+    actor_id: string;
+    actor_kind: string;
+    created_at: string;
+    detail_digest: string;
+    id: string;
+    ledger: string;
+    outcome: string;
+    prev_hash: string;
+    seq: number;
+    target: string;
+    trace_id: string;
+    user?: string | null;
+};
+
+/**
+ * An offline-verifiable slice of one ledger. Metadata only: no memory text, chat content,
+ * prompts, secrets or free-text detail (the detail is committed by its hash).
+ */
+export type AuditExport = {
+    anchor?: null | AuditCheckpoint;
+    break?: null | AuditChainBreak;
+    /**
+     * Stored checkpoints inside the range, plus one every 1000 events and one at the last event.
+     */
+    checkpoints: Array<AuditCheckpoint>;
+    events: Array<AuditExportEvent>;
+    /**
+     * `eunomia-audit-export`.
+     */
+    format: string;
+    /**
+     * The requested range, RFC 3339; empty when open.
+     */
+    from: string;
+    generated_at: string;
+    head?: null | AuditCheckpoint;
+    ledger: string;
+    next_seq?: number | null;
+    /**
+     * The server's own check of the events in this file.
+     */
+    ok: boolean;
+    /**
+     * The file's own range: its first and last event, the ledger's head when it was made, and how
+     * many events were still unsealed (written, not yet in the chain) and so are not in it. The
+     * offline verifier checks it against the events and the head.
+     */
+    range: AuditExportRange;
+    to: string;
+    /**
+     * True when the range held more than one export carries; `next_seq` is where to resume.
+     */
+    truncated: boolean;
+    /**
+     * The canonical form the hashes use (`eunomia.audit.v1`).
+     */
+    version: string;
+};
+
+/**
+ * One event in an export: its canonical fields (the detail only as its hash) and stored hash.
+ */
+export type AuditExportEvent = AuditEventFields & {
+    hash: string;
+};
+
+export type AuditExportRange = {
+    first_seq?: number | null;
+    head_hash?: string | null;
+    head_seq?: number | null;
+    last_seq?: number | null;
+    unsealed: number;
+};
+
 export type AuditPage = {
     has_more: boolean;
     results: Array<AuditEntry>;
     total: number;
+};
+
+/**
+ * The result of walking one ledger.
+ */
+export type AuditVerification = {
+    anchor?: null | AuditCheckpoint;
+    /**
+     * For the `instance` ledger: events written before the chain started, which have no hash.
+     */
+    before_chain: number;
+    break?: null | AuditChainBreak;
+    /**
+     * Events whose hash and link were checked.
+     */
+    checked: number;
+    /**
+     * When the check ran, RFC 3339.
+     */
+    checked_at: string;
+    /**
+     * Events whose detail could not be checked against its digest because the encryption key
+     * changed since they were written (their hash and link were still checked).
+     */
+    detail_unchecked: number;
+    first_seq?: number | null;
+    head_hash?: string | null;
+    head_seq?: number | null;
+    last_seq?: number | null;
+    ledger: string;
+    /**
+     * True when every stored event verified from the anchor to the head.
+     */
+    ok: boolean;
+    /**
+     * Events written but not sealed yet (sealed by the next replay).
+     */
+    pending: number;
+};
+
+export type AuditVerifyReport = {
+    /**
+     * The workspace's own ledger first, then, for a server operator (or any admin while the
+     * install has one workspace), the `instance` ledger: events with no workspace, such as sign-ins
+     * with an unknown email.
+     */
+    ledgers: Array<AuditVerification>;
 };
 
 export type AuthModeOut = 'password' | 'both' | 'oidc';
@@ -452,6 +750,13 @@ export type CloudSimilarityBody = {
     vault_ids?: Array<string>;
 };
 
+export type CodeIn = {
+    /**
+     * A six-digit authenticator code, or (where a recovery code is accepted) a recovery code.
+     */
+    code: string;
+};
+
 /**
  * How one column would be imported.
  */
@@ -546,6 +851,11 @@ export type ConsentClient = {
 
 export type ConsentDecision = AuthzParams & {
     approve: boolean;
+    /**
+     * A current authenticator or recovery code, when your account has two-step verification and its last
+     * second factor is older than 10 minutes (`auth.step_up_required`). Only needed to approve.
+     */
+    mfa_code?: string | null;
 };
 
 export type ConsentInfo = {
@@ -705,6 +1015,43 @@ export type DocumentOut = {
     vault: string;
 };
 
+export type EnrolIn = {
+    /**
+     * Your account password: setting up an authenticator from Settings needs it, so a stolen session alone
+     * cannot put an attacker's authenticator on the account.
+     */
+    password?: string | null;
+};
+
+export type EnrolledOut = {
+    /**
+     * The signed-in user (the session cookie is set with this answer).
+     */
+    me: AuthOut;
+    /**
+     * Shown once. Each works once, in place of an authenticator code.
+     */
+    recovery_codes: Array<string>;
+};
+
+/**
+ * What the enrolment screen shows, once.
+ */
+export type Enrolment = {
+    /**
+     * `otpauth://totp/...` URI the QR code encodes.
+     */
+    otpauth_uri: string;
+    /**
+     * The QR code as a standalone SVG document (no scripts), for an `<img>` tag.
+     */
+    qr_svg: string;
+    /**
+     * The secret in base32, for typing into an authenticator app by hand. Shown only now.
+     */
+    secret: string;
+};
+
 export type EntityCreate = {
     aliases?: Array<string> | null;
     kind: string;
@@ -750,6 +1097,94 @@ export type EntityUpdate = {
     summary?: string | null;
 };
 
+export type EraseMe = {
+    /**
+     * You confirm that a workspace whose only member you are is closed with your account (everything
+     * in it is deleted). Without it such a request is refused with `subject.workspace_closes`.
+     */
+    close_workspace?: boolean;
+    /**
+     * With two-step verification on: a code from your authenticator, unless you signed in with one in
+     * the last 10 minutes (`auth.step_up_required` otherwise).
+     */
+    mfa_code?: string | null;
+    /**
+     * Your password, typed again. Required when the account has one.
+     */
+    password?: string | null;
+};
+
+export type ErasePerson = {
+    /**
+     * Confirms closing any workspace whose only member the person is.
+     */
+    close_workspace?: boolean;
+    /**
+     * With two-step verification on for your account: a code from your authenticator, unless you
+     * signed in with one in the last 10 minutes (`auth.step_up_required` otherwise).
+     */
+    mfa_code?: string | null;
+    /**
+     * Your own password, typed again (an operator who signs in only with single sign-on confirms with a
+     * sign-in from the last 10 minutes instead).
+     */
+    password?: string | null;
+};
+
+/**
+ * The record a completed erasure leaves, for the People page (no personal data: an opaque reference,
+ * per-category counts, the post-check result and the review counts).
+ */
+export type ErasureRecord = {
+    completed_at?: string | null;
+    /**
+     * Rows removed or anonymised per category.
+     */
+    counts: {
+        [key: string]: unknown;
+    };
+    /**
+     * When it took its first irreversible step; none while it can still be cancelled.
+     */
+    deleting_at?: string | null;
+    error?: string | null;
+    id: string;
+    /**
+     * Rows still naming the person per table after the erasure: every value is 0 when it passed.
+     */
+    post_check: {
+        [key: string]: unknown;
+    };
+    requested_at: string;
+    /**
+     * `self`, `operator` or `reapply` (a restore brought the person back and they were erased again).
+     */
+    requested_by: string;
+    /**
+     * Mentions of the person's email left in content other people wrote, for review.
+     */
+    review?: {
+        [key: string]: unknown;
+    };
+    status: string;
+    /**
+     * The keyed hash of the erased account's id (never the id or the email).
+     */
+    subject_ref: string;
+};
+
+/**
+ * An erasure as the routes report it.
+ */
+export type ErasureTicket = {
+    id: string;
+    requested_at: string;
+    /**
+     * `pending`, `running`, `held`, `done`, `failed` or `cancelled`.
+     */
+    status: string;
+};
+
 export type EventDetail = {
     attempts: number;
     body: {
@@ -789,6 +1224,33 @@ export type EventOut = {
      */
     id: string;
     received_at: string;
+};
+
+/**
+ * What the exports list shows (never the archive).
+ */
+export type ExportRow = {
+    created_at: string;
+    error?: string | null;
+    expires_at: string;
+    id: string;
+    /**
+     * Categories and counts (empty until ready).
+     */
+    manifest?: {
+        [key: string]: unknown;
+    };
+    requested_by?: string | null;
+    /**
+     * `self` (the person's own, every workspace) or `organisation` (an admin's, one workspace).
+     */
+    scope?: string;
+    size_bytes?: number;
+    /**
+     * `pending`, `ready` or `failed`.
+     */
+    status: string;
+    subject?: string | null;
 };
 
 export type ExtensionOut = {
@@ -1058,6 +1520,25 @@ export type HelperStatus = {
      * The helper's version when running.
      */
     version?: string | null;
+};
+
+export type HoldChange = {
+    /**
+     * `true` places a legal hold (the account cannot be erased), `false` lifts it.
+     */
+    hold: boolean;
+};
+
+export type HoldState = {
+    /**
+     * An erasure of this account is open. A hold placed now parks it (`held`) before its next
+     * irreversible step; lifting the hold resumes it.
+     */
+    erasure_open: boolean;
+    /**
+     * When the hold was placed, RFC 3339; none when there is no hold.
+     */
+    legal_hold_at?: string | null;
 };
 
 export type HookOut = {
@@ -1509,6 +1990,13 @@ export type LinkDecision = {
 
 export type LinkDone = {
     /**
+     * Set when the password was right but the account's second step comes first: `verify` (enter the
+     * account's authenticator code) or `enrol` (this server requires two-step verification: set it up).
+     * No session and no link yet; the response sets the short-lived second-step cookie, and the link is
+     * made when that step passes.
+     */
+    mfa?: string | null;
+    /**
      * Where to go next.
      */
     next: string;
@@ -1770,6 +2258,43 @@ export type Metrics = {
      * is also logged at error level.
      */
     queries_without_org_context: number;
+};
+
+/**
+ * A correct password whose sign-in still needs its second step. No session yet: the response sets a
+ * short-lived cookie that only the `/api/auth/mfa/challenge*` routes accept.
+ */
+export type MfaPendingOut = {
+    /**
+     * `verify`: enter an authenticator or recovery code. `enrol`: this server requires two-step
+     * verification and the account has none yet, so set up an authenticator first.
+     */
+    mfa_required: string;
+};
+
+export type MfaStatus = {
+    /**
+     * False for an account that signs in only through single sign-on: the provider handles its second factor.
+     */
+    available: boolean;
+    /**
+     * Two-step verification is on for this account.
+     */
+    enabled: boolean;
+    enabled_at?: string | null;
+    /**
+     * Unused recovery codes left.
+     */
+    recovery_codes_left: number;
+    /**
+     * An admin requires two-step verification for every password account on this server.
+     */
+    required: boolean;
+    /**
+     * True when the stored authenticator can no longer be read (`ENCRYPTION_KEY` changed): sign in with a
+     * recovery code, turn it off and set it up again.
+     */
+    unreadable: boolean;
 };
 
 export type ModelsOut = {
@@ -2036,6 +2561,15 @@ export type Person = {
      */
     last_active?: string | null;
     /**
+     * When an admin placed a legal hold on the account, RFC 3339; none when there is none. A held account cannot be erased.
+     */
+    legal_hold_at?: string | null;
+    /**
+     * Two-step verification: `on`, `off`, or `provider` for an account that signs in only through single
+     * sign-on (its identity provider handles the second factor).
+     */
+    mfa: string;
+    /**
      * `admin` or `member`.
      */
     role: string;
@@ -2051,6 +2585,11 @@ export type Person = {
      * How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`).
      */
     tokens: number;
+    /**
+     * The workspace's owner (one per workspace). An owner whose workspace has other members hands it
+     * over (`/api/admin/people/{user_id}/workspace-owner`) before their account can be erased.
+     */
+    workspace_owner: boolean;
 };
 
 export type PersonToken = {
@@ -2291,6 +2830,13 @@ export type ReadinessOut = {
     vault: string;
 };
 
+export type Reapplied = {
+    /**
+     * Erasures queued again: accounts a restore brought back, and restored rows whose owner was erased.
+     */
+    queued: number;
+};
+
 export type RecentRecording = {
     duration_minutes: number;
     recorded_at?: string | null;
@@ -2313,6 +2859,13 @@ export type RecordTypeProfile = {
      */
     records: number;
     source: string;
+};
+
+export type RecoveryCodesOut = {
+    /**
+     * Shown once. Each works once, in place of an authenticator code.
+     */
+    recovery_codes: Array<string>;
 };
 
 /**
@@ -2576,6 +3129,34 @@ export type Rule = {
     vault: string;
 };
 
+export type SecurityChange = {
+    /**
+     * A current authenticator or recovery code, when your own account has two-step verification and its
+     * last second factor is older than 10 minutes (`auth.step_up_required`).
+     */
+    mfa_code?: string | null;
+    require_mfa: boolean;
+};
+
+export type SecurityOut = {
+    /**
+     * Every password account on this server, in every organisation, must pass two-step verification before
+     * it gets a session. Accounts that sign in through single sign-on are left to the identity provider
+     * unless they set up their own authenticator.
+     */
+    require_mfa: boolean;
+    updated_at?: string | null;
+    /**
+     * Email of the operator who last changed it.
+     */
+    updated_by?: string | null;
+    /**
+     * Active password accounts on the whole server (every organisation) without two-step verification yet:
+     * while it is required they are signed out and must set it up at their next sign-in.
+     */
+    without_mfa: number;
+};
+
 export type Selection = {
     account: string;
     folder?: string;
@@ -2682,9 +3263,14 @@ export type ShareCodeRequest = {
     role?: string;
 };
 
+/**
+ * What login and register answer: the signed-in user, or the second step still to do.
+ */
+export type SignInOut = AuthOut | MfaPendingOut;
+
 export type SignupPolicy = {
     /**
-     * The emails that may sign up when `mode` is `invite`.
+     * The emails that may sign up when `mode` is `invite`. Empty unless you are the server's operator.
      */
     allowlist: Array<string>;
     /**
@@ -2692,7 +3278,7 @@ export type SignupPolicy = {
      */
     mode: string;
     /**
-     * Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`).
+     * Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`). Empty unless you are the server's operator.
      */
     operators: Array<string>;
     /**
@@ -2821,6 +3407,13 @@ export type StatusCounts = {
     rejected: number;
 };
 
+export type StatusOut = MfaStatus & {
+    /**
+     * You may require two-step verification for the whole server (`/api/admin/security`): the server's operator.
+     */
+    can_require: boolean;
+};
+
 export type StrictBody = {
     /**
      * Only approved kinds and links.
@@ -2931,6 +3524,11 @@ export type TokenCreate = {
      * RFC 3339 timestamp in the future. Omit for 90 days. Explicit null never expires.
      */
     expires_at?: string | null;
+    /**
+     * A current authenticator or recovery code. Needed from a browser session of an account with
+     * two-step verification when its last second factor is older than 10 minutes (`auth.step_up_required`).
+     */
+    mfa_code?: string | null;
     name: string;
     /**
      * Any of `memory:read`, `memory:write`, `vaults:admin`, `connectors`. Defaults
@@ -3232,6 +3830,191 @@ export type WorkspaceAuditPage = {
     results: Array<WorkspaceAuditEntry>;
 };
 
+export type MyDataActivityData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/account/activity';
+};
+
+export type MyDataActivityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type MyDataActivityError = MyDataActivityErrors[keyof MyDataActivityErrors];
+
+export type MyDataActivityResponses = {
+    200: Array<ActivityRow>;
+};
+
+export type MyDataActivityResponse = MyDataActivityResponses[keyof MyDataActivityResponses];
+
+export type EraseMyAccountData = {
+    body: EraseMe;
+    path?: never;
+    query?: never;
+    url: '/api/account/erasure';
+};
+
+export type EraseMyAccountErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type EraseMyAccountError = EraseMyAccountErrors[keyof EraseMyAccountErrors];
+
+export type EraseMyAccountResponses = {
+    200: ErasureTicket;
+};
+
+export type EraseMyAccountResponse = EraseMyAccountResponses[keyof EraseMyAccountResponses];
+
+export type ListAccessReviewsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/access-reviews';
+};
+
+export type ListAccessReviewsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListAccessReviewsError = ListAccessReviewsErrors[keyof ListAccessReviewsErrors];
+
+export type ListAccessReviewsResponses = {
+    200: Array<AccessReviewSummary>;
+};
+
+export type ListAccessReviewsResponse = ListAccessReviewsResponses[keyof ListAccessReviewsResponses];
+
+export type StartAccessReviewData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/access-reviews';
+};
+
+export type StartAccessReviewErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type StartAccessReviewError = StartAccessReviewErrors[keyof StartAccessReviewErrors];
+
+export type StartAccessReviewResponses = {
+    200: AccessReview;
+};
+
+export type StartAccessReviewResponse = StartAccessReviewResponses[keyof StartAccessReviewResponses];
+
+export type GetAccessReviewData = {
+    body?: never;
+    path: {
+        review_id: string;
+    };
+    query?: never;
+    url: '/api/admin/access-reviews/{review_id}';
+};
+
+export type GetAccessReviewErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetAccessReviewError = GetAccessReviewErrors[keyof GetAccessReviewErrors];
+
+export type GetAccessReviewResponses = {
+    200: AccessReview;
+};
+
+export type GetAccessReviewResponse = GetAccessReviewResponses[keyof GetAccessReviewResponses];
+
+export type CompleteAccessReviewData = {
+    body?: never;
+    path: {
+        review_id: string;
+    };
+    query?: never;
+    url: '/api/admin/access-reviews/{review_id}/complete';
+};
+
+export type CompleteAccessReviewErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type CompleteAccessReviewError = CompleteAccessReviewErrors[keyof CompleteAccessReviewErrors];
+
+export type CompleteAccessReviewResponses = {
+    200: AccessReview;
+};
+
+export type CompleteAccessReviewResponse = CompleteAccessReviewResponses[keyof CompleteAccessReviewResponses];
+
+export type DecideAccessReviewData = {
+    body: AccessReviewDecisionBody;
+    path: {
+        review_id: string;
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/access-reviews/{review_id}/decisions/{user_id}';
+};
+
+export type DecideAccessReviewErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DecideAccessReviewError = DecideAccessReviewErrors[keyof DecideAccessReviewErrors];
+
+export type DecideAccessReviewResponses = {
+    200: AccessReview;
+};
+
+export type DecideAccessReviewResponse = DecideAccessReviewResponses[keyof DecideAccessReviewResponses];
+
+export type ExportAccessReviewData = {
+    body?: never;
+    path: {
+        review_id: string;
+    };
+    query?: never;
+    url: '/api/admin/access-reviews/{review_id}/export';
+};
+
+export type ExportAccessReviewErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ExportAccessReviewError = ExportAccessReviewErrors[keyof ExportAccessReviewErrors];
+
+export type ExportAccessReviewResponses = {
+    200: AccessReviewExport;
+};
+
+export type ExportAccessReviewResponse = ExportAccessReviewResponses[keyof ExportAccessReviewResponses];
+
 export type ListWorkspaceAuditData = {
     body?: never;
     path?: never;
@@ -3263,6 +4046,132 @@ export type ListWorkspaceAuditResponses = {
 };
 
 export type ListWorkspaceAuditResponse = ListWorkspaceAuditResponses[keyof ListWorkspaceAuditResponses];
+
+export type ExportAuditChainData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Start of the range (inclusive): RFC 3339 or `YYYY-MM-DD` (UTC midnight). Omit for the oldest kept event.
+         */
+        from?: string;
+        /**
+         * End of the range (exclusive): RFC 3339 or `YYYY-MM-DD`. Omit for the newest event.
+         */
+        to?: string;
+        /**
+         * `org` (default): this workspace's events. `instance`: events with no workspace (server
+         * operators only on a host with several workspaces).
+         */
+        ledger?: string;
+    };
+    url: '/api/admin/audit/export';
+};
+
+export type ExportAuditChainErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ExportAuditChainError = ExportAuditChainErrors[keyof ExportAuditChainErrors];
+
+export type ExportAuditChainResponses = {
+    200: AuditExport;
+};
+
+export type ExportAuditChainResponse = ExportAuditChainResponses[keyof ExportAuditChainResponses];
+
+export type VerifyAuditChainData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/audit/verify';
+};
+
+export type VerifyAuditChainErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type VerifyAuditChainError = VerifyAuditChainErrors[keyof VerifyAuditChainErrors];
+
+export type VerifyAuditChainResponses = {
+    200: AuditVerifyReport;
+};
+
+export type VerifyAuditChainResponse = VerifyAuditChainResponses[keyof VerifyAuditChainResponses];
+
+export type ListErasuresData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/erasures';
+};
+
+export type ListErasuresErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListErasuresError = ListErasuresErrors[keyof ListErasuresErrors];
+
+export type ListErasuresResponses = {
+    200: Array<ErasureRecord>;
+};
+
+export type ListErasuresResponse = ListErasuresResponses[keyof ListErasuresResponses];
+
+export type ReapplyErasuresData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/erasures/reapply';
+};
+
+export type ReapplyErasuresErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ReapplyErasuresError = ReapplyErasuresErrors[keyof ReapplyErasuresErrors];
+
+export type ReapplyErasuresResponses = {
+    200: Reapplied;
+};
+
+export type ReapplyErasuresResponse = ReapplyErasuresResponses[keyof ReapplyErasuresResponses];
+
+export type CancelErasureData = {
+    body?: never;
+    path: {
+        erasure_id: string;
+    };
+    query?: never;
+    url: '/api/admin/erasures/{erasure_id}/cancel';
+};
+
+export type CancelErasureErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type CancelErasureError = CancelErasureErrors[keyof CancelErasureErrors];
+
+export type CancelErasureResponses = {
+    200: Array<ErasureRecord>;
+};
+
+export type CancelErasureResponse = CancelErasureResponses[keyof CancelErasureResponses];
 
 export type ListPeopleData = {
     body?: never;
@@ -3309,6 +4218,78 @@ export type SetPersonAdminResponses = {
 };
 
 export type SetPersonAdminResponse = SetPersonAdminResponses[keyof SetPersonAdminResponses];
+
+export type ErasePersonData = {
+    body: ErasePerson;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/erasure';
+};
+
+export type ErasePersonErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ErasePersonError = ErasePersonErrors[keyof ErasePersonErrors];
+
+export type ErasePersonResponses = {
+    200: ErasureTicket;
+};
+
+export type ErasePersonResponse = ErasePersonResponses[keyof ErasePersonResponses];
+
+export type StartPersonExportData = {
+    body?: never;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/export';
+};
+
+export type StartPersonExportErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type StartPersonExportError = StartPersonExportErrors[keyof StartPersonExportErrors];
+
+export type StartPersonExportResponses = {
+    200: ExportRow;
+};
+
+export type StartPersonExportResponse = StartPersonExportResponses[keyof StartPersonExportResponses];
+
+export type SetPersonLegalHoldData = {
+    body: HoldChange;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/legal-hold';
+};
+
+export type SetPersonLegalHoldErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetPersonLegalHoldError = SetPersonLegalHoldErrors[keyof SetPersonLegalHoldErrors];
+
+export type SetPersonLegalHoldResponses = {
+    200: HoldState;
+};
+
+export type SetPersonLegalHoldResponse = SetPersonLegalHoldResponses[keyof SetPersonLegalHoldResponses];
 
 export type SetPersonSuspendedData = {
     body: SuspendChange;
@@ -3382,6 +4363,74 @@ export type RevokePersonTokenResponses = {
 };
 
 export type RevokePersonTokenResponse = RevokePersonTokenResponses[keyof RevokePersonTokenResponses];
+
+export type MakeWorkspaceOwnerData = {
+    body?: never;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/workspace-owner';
+};
+
+export type MakeWorkspaceOwnerErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type MakeWorkspaceOwnerError = MakeWorkspaceOwnerErrors[keyof MakeWorkspaceOwnerErrors];
+
+export type MakeWorkspaceOwnerResponses = {
+    200: PeopleReport;
+};
+
+export type MakeWorkspaceOwnerResponse = MakeWorkspaceOwnerResponses[keyof MakeWorkspaceOwnerResponses];
+
+export type GetServerSecurityData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/security';
+};
+
+export type GetServerSecurityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetServerSecurityError = GetServerSecurityErrors[keyof GetServerSecurityErrors];
+
+export type GetServerSecurityResponses = {
+    200: SecurityOut;
+};
+
+export type GetServerSecurityResponse = GetServerSecurityResponses[keyof GetServerSecurityResponses];
+
+export type SetServerSecurityData = {
+    body: SecurityChange;
+    path?: never;
+    query?: never;
+    url: '/api/admin/security';
+};
+
+export type SetServerSecurityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetServerSecurityError = SetServerSecurityErrors[keyof SetServerSecurityErrors];
+
+export type SetServerSecurityResponses = {
+    200: SecurityOut;
+};
+
+export type SetServerSecurityResponse = SetServerSecurityResponses[keyof SetServerSecurityResponses];
 
 export type ListAuditData = {
     body?: never;
@@ -3478,7 +4527,7 @@ export type LoginErrors = {
 export type LoginError = LoginErrors[keyof LoginErrors];
 
 export type LoginResponses = {
-    200: AuthOut;
+    200: SignInOut;
 };
 
 export type LoginResponse = LoginResponses[keyof LoginResponses];
@@ -3526,6 +4575,182 @@ export type GetMeResponses = {
 };
 
 export type GetMeResponse = GetMeResponses[keyof GetMeResponses];
+
+export type GetMfaData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa';
+};
+
+export type GetMfaErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetMfaError = GetMfaErrors[keyof GetMfaErrors];
+
+export type GetMfaResponses = {
+    200: StatusOut;
+};
+
+export type GetMfaResponse = GetMfaResponses[keyof GetMfaResponses];
+
+export type StartMfaChallengeEnrolmentData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa/challenge/enrol';
+};
+
+export type StartMfaChallengeEnrolmentErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type StartMfaChallengeEnrolmentError = StartMfaChallengeEnrolmentErrors[keyof StartMfaChallengeEnrolmentErrors];
+
+export type StartMfaChallengeEnrolmentResponses = {
+    200: Enrolment;
+};
+
+export type StartMfaChallengeEnrolmentResponse = StartMfaChallengeEnrolmentResponses[keyof StartMfaChallengeEnrolmentResponses];
+
+export type ConfirmMfaChallengeEnrolmentData = {
+    body: CodeIn;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa/challenge/enrol/confirm';
+};
+
+export type ConfirmMfaChallengeEnrolmentErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ConfirmMfaChallengeEnrolmentError = ConfirmMfaChallengeEnrolmentErrors[keyof ConfirmMfaChallengeEnrolmentErrors];
+
+export type ConfirmMfaChallengeEnrolmentResponses = {
+    200: EnrolledOut;
+};
+
+export type ConfirmMfaChallengeEnrolmentResponse = ConfirmMfaChallengeEnrolmentResponses[keyof ConfirmMfaChallengeEnrolmentResponses];
+
+export type VerifyMfaChallengeData = {
+    body: CodeIn;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa/challenge/verify';
+};
+
+export type VerifyMfaChallengeErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type VerifyMfaChallengeError = VerifyMfaChallengeErrors[keyof VerifyMfaChallengeErrors];
+
+export type VerifyMfaChallengeResponses = {
+    200: AuthOut;
+};
+
+export type VerifyMfaChallengeResponse = VerifyMfaChallengeResponses[keyof VerifyMfaChallengeResponses];
+
+export type DisableMfaData = {
+    body: CodeIn;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa/disable';
+};
+
+export type DisableMfaErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DisableMfaError = DisableMfaErrors[keyof DisableMfaErrors];
+
+export type DisableMfaResponses = {
+    200: MfaStatus;
+};
+
+export type DisableMfaResponse = DisableMfaResponses[keyof DisableMfaResponses];
+
+export type StartMfaEnrolmentData = {
+    body: EnrolIn;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa/enrol';
+};
+
+export type StartMfaEnrolmentErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type StartMfaEnrolmentError = StartMfaEnrolmentErrors[keyof StartMfaEnrolmentErrors];
+
+export type StartMfaEnrolmentResponses = {
+    200: Enrolment;
+};
+
+export type StartMfaEnrolmentResponse = StartMfaEnrolmentResponses[keyof StartMfaEnrolmentResponses];
+
+export type ConfirmMfaEnrolmentData = {
+    body: CodeIn;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa/enrol/confirm';
+};
+
+export type ConfirmMfaEnrolmentErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ConfirmMfaEnrolmentError = ConfirmMfaEnrolmentErrors[keyof ConfirmMfaEnrolmentErrors];
+
+export type ConfirmMfaEnrolmentResponses = {
+    200: RecoveryCodesOut;
+};
+
+export type ConfirmMfaEnrolmentResponse = ConfirmMfaEnrolmentResponses[keyof ConfirmMfaEnrolmentResponses];
+
+export type RegenerateRecoveryCodesData = {
+    body: CodeIn;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa/recovery-codes';
+};
+
+export type RegenerateRecoveryCodesErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RegenerateRecoveryCodesError = RegenerateRecoveryCodesErrors[keyof RegenerateRecoveryCodesErrors];
+
+export type RegenerateRecoveryCodesResponses = {
+    200: RecoveryCodesOut;
+};
+
+export type RegenerateRecoveryCodesResponse = RegenerateRecoveryCodesResponses[keyof RegenerateRecoveryCodesResponses];
 
 export type OidcCallbackData = {
     body?: never;
@@ -3685,7 +4910,7 @@ export type RegisterErrors = {
 export type RegisterError = RegisterErrors[keyof RegisterErrors];
 
 export type RegisterResponses = {
-    200: AuthOut;
+    200: SignInOut;
 };
 
 export type RegisterResponse = RegisterResponses[keyof RegisterResponses];
@@ -5171,6 +6396,80 @@ export type ExportDataResponses = {
 };
 
 export type ExportDataResponse = ExportDataResponses[keyof ExportDataResponses];
+
+export type ListSubjectExportsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/export/subject';
+};
+
+export type ListSubjectExportsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListSubjectExportsError = ListSubjectExportsErrors[keyof ListSubjectExportsErrors];
+
+export type ListSubjectExportsResponses = {
+    200: Array<ExportRow>;
+};
+
+export type ListSubjectExportsResponse = ListSubjectExportsResponses[keyof ListSubjectExportsResponses];
+
+export type StartSubjectExportData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/export/subject';
+};
+
+export type StartSubjectExportErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type StartSubjectExportError = StartSubjectExportErrors[keyof StartSubjectExportErrors];
+
+export type StartSubjectExportResponses = {
+    200: ExportRow;
+};
+
+export type StartSubjectExportResponse = StartSubjectExportResponses[keyof StartSubjectExportResponses];
+
+export type DownloadSubjectExportData = {
+    body?: never;
+    path: {
+        /**
+         * The export's id, as listed
+         */
+        export_id: string;
+    };
+    query?: never;
+    url: '/api/export/subject/{export_id}';
+};
+
+export type DownloadSubjectExportErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DownloadSubjectExportError = DownloadSubjectExportErrors[keyof DownloadSubjectExportErrors];
+
+export type DownloadSubjectExportResponses = {
+    /**
+     * The zip archive
+     */
+    200: Blob | File;
+};
+
+export type DownloadSubjectExportResponse = DownloadSubjectExportResponses[keyof DownloadSubjectExportResponses];
 
 export type ListExtensionsData = {
     body?: never;

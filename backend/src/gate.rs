@@ -81,6 +81,10 @@ pub fn explicit_class(method: &Method, path: &str) -> Option<Class> {
         ["api", "auth", "oidc", "link"] => AuthAttempt,
         ["api", "auth", "logout" | "bootstrap"] => Public,
         ["api", "auth", "me"] => Any,
+        // the second step of a password sign-in: no session yet (the short-lived MFA cookie), limited per client address like login
+        ["api", "auth", "mfa", "challenge", ..] => AuthAttempt,
+        // your own two-step verification: browser sessions only (the handlers refuse tokens)
+        ["api", "auth", "mfa", ..] => Account(scopes::VAULTS_ADMIN),
         ["api", "auth", "tokens" | "sessions", ..] => Account(scopes::VAULTS_ADMIN),
         ["api", "tools"] if read => Public,
         ["api", "tools", _] => Any,
@@ -100,6 +104,8 @@ pub fn explicit_class(method: &Method, path: &str) -> Option<Class> {
         ["api", "extensions", ..] => Account(scopes::CONNECTORS),
         ["api", "secrets", ..] => Account(scopes::VAULTS_ADMIN),
         ["api", "sources", ..] => Account(scopes::CONNECTORS),
+        // the account itself (deleting it: the handler also requires a browser session)
+        ["api", "account", ..] => Account(scopes::VAULTS_ADMIN),
         ["api", "settings" | "debug" | "export" | "diagnostics" | "update" | "https" | "audit" | "admin" | "chat" | "oauth", ..] => Account(scopes::VAULTS_ADMIN),
         // OAuth endpoints for MCP clients: public, so limited per client address like login
         ["oauth", "token" | "register" | "revoke"] => AuthAttempt,
@@ -393,6 +399,10 @@ mod tests {
         assert_eq!(class(Method::GET, "/readyz"), Public);
         assert_eq!(class(Method::POST, "/api/auth/login"), AuthAttempt);
         assert_eq!(class(Method::POST, "/api/auth/tokens"), Account(scopes::VAULTS_ADMIN));
+        assert_eq!(class(Method::POST, "/api/auth/mfa/challenge/verify"), AuthAttempt);
+        assert_eq!(class(Method::POST, "/api/auth/mfa/challenge/enrol/confirm"), AuthAttempt);
+        assert_eq!(class(Method::GET, "/api/auth/mfa"), Account(scopes::VAULTS_ADMIN));
+        assert_eq!(class(Method::POST, "/api/auth/mfa/disable"), Account(scopes::VAULTS_ADMIN));
         assert_eq!(class(Method::GET, "/api/entities/graph"), Vault(scopes::MEMORY_READ));
         assert_eq!(class(Method::PATCH, "/api/entities/memory/memory:x"), Vault(scopes::MEMORY_WRITE));
         assert_eq!(class(Method::GET, "/api/vaults/vault:x/members"), Vault(scopes::MEMORY_READ));

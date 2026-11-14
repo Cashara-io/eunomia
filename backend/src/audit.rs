@@ -1,16 +1,24 @@
 //! Append-only security ledger (`audit_event`). One row per auth event and per
 //! mutating tool call: who (user, token or OAuth client), what, on which target,
 //! the outcome code and the request's trace id. Nothing in the app updates or
-//! deletes these rows except [`prune`], which applies the retention window.
-//! Writes are best effort: a failure is logged, never surfaced to the caller.
+//! deletes these rows except sealing them into their ledger's hash chain and the
+//! retention cut ([`prune`]), which leaves a checkpoint behind (see [`chain`] and
+//! docs/audit-chain.md).
+//!
+//! Delivery is durable within the process, and never silently dropped: the write runs in a task of
+//! its own, so a caller that is cancelled mid-write (a client that disconnects) does not lose it; a
+//! route can run its action and its event together with [`detached`]; a failed write is retried,
+//! then queued in this process and drained by its own timer (`chain::spawn_drain`) and at shutdown;
+//! a row written but not yet sealed (a crash between the two) is sealed by the scheduler's replay
+//! (`chain::replay`). A failure is logged, never surfaced to the caller.
 
 use surrealdb::types::RecordId;
-use crate::rid::RecordIdExt;
 
 use crate::authz::Actor;
-use crate::pool::ControlDb;
-use crate::store;
+use crate::rid::RecordIdExt;
+use crate::pool::{ControlDb, OrgId};
 
+pub mod chain;
 pub(crate) mod scope_refusals;
 
 pub struct Event<'a> {
@@ -35,23 +43,48 @@ pub async fn record(db: &ControlDb, e: Event<'_>) {
 /// Structured callers bound each field before JSON serialisation. Cutting the
 /// resulting JSON string would corrupt it and could erase suppression counts.
 pub(crate) async fn record_structured(db: &ControlDb, e: Event<'_>) {
-    let res = store::control::AUDIT_EVENT_CREATE
-        .on(db)
-        .bind(("user", e.user.cloned()))
-        .bind(("actor_kind", e.actor.kind.to_string()))
-        .bind(("actor_id", e.actor.id.clone()))
-        .bind(("action", e.action.to_string()))
-        .bind(("target", e.target.to_string()))
-        .bind(("outcome", e.outcome.to_string()))
-        .bind(("trace_id", crate::telemetry::current_trace_id()))
-        .bind(("detail", e.detail.to_string()))
-        .await;
-    let failure = match res {
-        Ok(r) => r.check().err(),
-        Err(err) => Some(err),
-    };
-    if let Some(err) = failure {
-        tracing::warn!(action = e.action, error = %err, "audit_event write failed");
+    deliver(db, chain::Pending::new(e, None)).await;
+}
+
+/// [`record`] for an event about one org that has no user behind it (a job, the self-host move):
+/// it goes to that org's ledger instead of the instance ledger.
+pub async fn record_in_org(db: &ControlDb, org: &OrgId, e: Event<'_>) {
+    let detail: String = e.detail.chars().take(500).collect();
+    deliver(db, chain::Pending::new(Event { detail: &detail, ..e }, Some(chain::org_ledger(org)))).await;
+}
+
+/// Writes in a task of its own and waits for the write (the seal follows in the background).
+/// Dropping the caller's future (a cancelled request) leaves the task running, so the event still
+/// lands. A panic inside the task is logged: the event is then lost, and the log says which.
+async fn deliver(db: &ControlDb, pending: chain::Pending) {
+    let db = db.clone();
+    let action = pending.action().to_string();
+    if let Err(e) = tokio::spawn(chain::append(db, pending)).await {
+        tracing::error!(action = %action, panicked = e.is_panic(), error = %e, "audit delivery task failed: event lost");
+    }
+}
+
+/// Runs an audited action and the audit events it records in a task of their own, with the
+/// caller's credential and trace id, and waits for it. A client that disconnects drops only the
+/// wait: the action and its event finish together, so a committed action is never left without
+/// its event (issue #219). A panic in the task is raised again here, as it would have been inline.
+pub async fn detached<F, T>(fut: F) -> T
+where
+    F: std::future::Future<Output = T> + Send + 'static,
+    T: Send + 'static,
+{
+    let caller = crate::authz::current();
+    let trace = crate::telemetry::current_trace_id();
+    let task = tokio::spawn(crate::telemetry::with_trace_id(trace, async move {
+        match caller {
+            Some(c) => crate::authz::with_caller(c, fut).await,
+            None => fut.await,
+        }
+    }));
+    match task.await {
+        Ok(v) => v,
+        Err(e) if e.is_panic() => std::panic::resume_unwind(e.into_panic()),
+        Err(e) => panic!("audited action task was cancelled: {e}"),
     }
 }
 
@@ -77,10 +110,14 @@ pub async fn prune_default(db: &ControlDb) -> crate::error::AppResult<()> {
     prune(db, days_from_env("AUDIT_RETENTION_DAYS", 365), days_from_env("SESSION_RETENTION_DAYS", 7)).await
 }
 
+/// Chained ledgers are cut with a retention checkpoint, so what is left still verifies; rows from
+/// before the chain started are deleted by age as before.
 pub async fn prune(db: &ControlDb, audit_days: u32, session_days: u32) -> crate::error::AppResult<()> {
     if audit_days > 0 {
-        store::control::AUDIT_PRUNE.on(db).bind(("age", format!("{audit_days}d"))).await?.check()?;
+        chain::prune(db, chrono::Utc::now() - chrono::TimeDelta::days(audit_days as i64)).await?;
+        crate::store::control::AUDIT_PRUNE.on(db).bind(("age", format!("{audit_days}d"))).await?.check()?;
     }
-    store::control::SESSION_PRUNE.on(db).bind(("age", format!("{session_days}d"))).await?.check()?;
+    crate::store::control::SESSION_PRUNE.on(db).bind(("age", format!("{session_days}d"))).await?.check()?;
+    crate::mfa::prune(db).await?;
     Ok(())
 }

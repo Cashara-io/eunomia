@@ -41,6 +41,8 @@ function oidcMessage(code: string, provider: string): string | null {
       return `${provider} has not verified your email address, so the invitation can't be used with it. Create an account with a password from the invitation link instead.`;
     case "signup_closed":
       return "This server is not open to new accounts from this email. Ask the admin for access.";
+    case "mfa":
+      return `${provider} did not confirm a second factor for this sign-in, and this server requires one. Sign in to ${provider} with two-step verification, or ask the admin.`;
     case "unavailable":
       return "Could not finish signing in. Try again.";
     default:

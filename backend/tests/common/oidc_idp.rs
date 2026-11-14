@@ -51,6 +51,8 @@ pub struct Behavior {
     pub kid: Option<String>,
     /// "ES256", or "HS256" / "none" for the algorithm-confusion attempts
     pub alg: &'static str,
+    /// the `amr` claim, when set
+    pub amr: Option<Value>,
 }
 
 impl Default for Behavior {
@@ -67,6 +69,7 @@ impl Default for Behavior {
             key: "a",
             kid: Some("key-a".into()),
             alg: "ES256",
+            amr: None,
         }
     }
 }
@@ -200,6 +203,9 @@ pub async fn token(State(idp): State<Idp>, headers: HeaderMap, Form(f): Form<Has
     if let Some(a) = &b.azp {
         claims["azp"] = json!(a);
     }
+    if let Some(a) = &b.amr {
+        claims["amr"] = a.clone();
+    }
     let id_token = sign(&b, &claims);
     (StatusCode::OK, Json(json!({"access_token": "at-1", "token_type": "Bearer", "id_token": id_token})))
 }
@@ -255,6 +261,8 @@ pub fn settings(mode: AuthMode, issuer: &str) -> Settings {
                 scopes: "openid email profile".into(),
                 provider_name: "Mock IdP".into(),
                 invite_accept_unverified_email: false,
+                require_mfa_claim: false,
+                mfa_acr: Vec::new(),
             }),
         },
         ..test_settings()
@@ -285,6 +293,8 @@ pub struct Landed {
     pub session: Option<String>,
     /// `name=value` of the cookie a sign-in leaves when it must ask before linking to a password account
     pub link: Option<String>,
+    /// `name=value` of the pending two-step verification cookie when one was set
+    pub mfa: Option<String>,
 }
 
 impl Landed {
@@ -371,7 +381,8 @@ impl App {
         let location = headers.get(header::LOCATION).map(|v| v.to_str().unwrap().to_string()).unwrap_or_default();
         let session = cookie_pairs(&headers).into_iter().find(|c| c.starts_with("eunomia_session=") && c.len() > "eunomia_session=".len());
         let link = cookie_pairs(&headers).into_iter().find(|c| c.starts_with("eunomia_oidc_link=") && c.len() > "eunomia_oidc_link=".len());
-        Landed { status, location, session, link }
+        let mfa = cookie_pairs(&headers).into_iter().find(|c| c.starts_with("eunomia_mfa=") && c.len() > "eunomia_mfa=".len());
+        Landed { status, location, session, link, mfa }
     }
 
     pub async fn sign_in(&self) -> Landed {

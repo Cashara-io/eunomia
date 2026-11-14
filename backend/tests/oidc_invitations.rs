@@ -331,3 +331,31 @@ async fn on_https_the_sign_in_cookie_is_host_locked() {
     assert!(headers[axum::http::header::LOCATION].to_str().unwrap().contains("oidc_error=state"));
     set_env("COOKIE_SECURE", "auto");
 }
+
+/// An invitation is the permission to sign up, never a way past two-step verification. With
+/// `OIDC_REQUIRE_MFA` on, an invited sign-in whose ID token reports no second factor is refused before
+/// anything is made, and the invitation stays open; with the claim it joins the inviting org.
+#[tokio::test]
+async fn an_invitation_is_never_a_way_past_oidc_require_mfa() {
+    let _g = SERIAL.lock().await;
+    host("closed", "personal");
+    let (idp, issuer) = Idp::start().await;
+    let mut cfg = settings(AuthMode::Both, &issuer);
+    cfg.auth.oidc.as_mut().unwrap().require_mfa_claim = true;
+    let state = AppState::build(&cfg, engine_config()).await.expect("state");
+    let app = App { router: eunomia_backend::app(state.clone()), state, idp };
+    models_user::register_user_with(&app.state, "first@example.test", PASSWORD, true).await.unwrap();
+    let a = models_user::register_user_with(&app.state, "owner-a@example.test", PASSWORD, true).await.unwrap();
+    let inv = invitations::create(&app.state, &a, "pat@example.test", OrgInviteRole::Member).await.unwrap();
+
+    as_pat(&app);
+    expect_refused(&app.sign_in_invited(&inv.token).await, "mfa");
+    assert!(org_of(&app, "pat@example.test").await.is_none(), "no account without the second factor");
+    assert!(open(&app, &inv.token).await, "the invitation stays open");
+
+    app.idp.behave(Behavior { sub: "pat-sub".into(), email: Some("pat@example.test".into()), amr: Some(json!(["pwd", "otp"])), ..Default::default() });
+    let session = expect_signed_in(&app.sign_in_invited(&inv.token).await);
+    assert_eq!(app.get_as(&session, "/api/auth/me").await.0, StatusCode::OK);
+    assert_eq!(org_of(&app, "pat@example.test").await, Some(a.org));
+    assert!(!open(&app, &inv.token).await, "used");
+}

@@ -48,7 +48,7 @@ async fn hash_password(password: &str) -> AppResult<String> {
 
 /// `false` for a wrong password and for a hash that cannot be checked. `None` checks against a
 /// dummy hash (unknown email): the same work as a wrong password, so timing does not reveal accounts.
-async fn verify_password(password: &str, hash: Option<&str>) -> bool {
+pub(crate) async fn verify_password(password: &str, hash: Option<&str>) -> bool {
     let (password, hash) = (password.to_string(), hash.map(String::from));
     blocking_hash(move || bcrypt::verify(password, hash.as_deref().unwrap_or_else(|| dummy_hash())).unwrap_or(false) && hash.is_some())
         .await
@@ -212,6 +212,9 @@ async fn assign_org(state: &AppState, user: &RecordId, email: &str, personal: bo
     let _one_at_a_time = crate::tx::lock("org.signup").await;
     let mut res = store::tenant::LIST.on(&state.control).await?;
     let rows: Vec<TenantListRow> = res.take(0)?;
+    // a closed workspace (its only member was erased) is never joined, but it still counts as an org the
+    // install had, so its fixed first-org id is not provisioned again over it
+    let had_orgs = rows.iter().any(|r| r.status == "closed");
     let existing = rows
         .into_iter()
         .filter(|r| r.status == "ready")
@@ -224,11 +227,12 @@ async fn assign_org(state: &AppState, user: &RecordId, email: &str, personal: bo
             };
             // The install's first org has a fixed id: two replicas that both see an empty install
             // converge on one org (provisioning is idempotent) instead of making two "Default"s.
-            let org = if found.is_none() { OrgId::from_label(&format!("default:{}", state.settings.surreal_ns)) } else { OrgId::new() };
-            match p.provision_org(&state.control, org, if found.is_none() { "Default" } else { email }).await {
+            let first = found.is_none() && !had_orgs;
+            let org = if first { OrgId::from_label(&format!("default:{}", state.settings.surreal_ns)) } else { OrgId::new() };
+            match p.provision_org(&state.control, org, if first { "Default" } else { email }).await {
                 Ok(()) => {}
                 // another replica is provisioning the same first org and got there first: wait for it, then join
-                Err(e) if found.is_none() && wait_ready(state, &org).await => {
+                Err(e) if first && wait_ready(state, &org).await => {
                     tracing::info!(error = %e.message, "first org provisioned by another process, joining it");
                 }
                 Err(e) => return Err(e),
@@ -412,6 +416,12 @@ pub async fn user_by_identity(db: &ControlDb, issuer: &str, subject: &str) -> Ap
 }
 
 /// The user with this (any-case) email, if there is one.
+/// An account's email, if it exists.
+pub async fn email_of(db: &ControlDb, id: &RecordId) -> AppResult<String> {
+    let mut res = store::control::AUTH_USER_BY_ID.on(db).bind(("id", id.clone())).await?;
+    Ok(res.take::<Vec<UserRow>>(0)?.into_iter().next().map(|r| r.email).unwrap_or_default())
+}
+
 pub async fn user_by_email(db: &ControlDb, email: &str) -> AppResult<Option<User>> {
     let mut res = store::control::AUTH_USER_BY_EMAIL.on(db).bind(("email", normalize_email(email))).await?;
     let Some(row) = res.take::<Vec<UserRow>>(0)?.into_iter().next() else { return Ok(None) };
@@ -435,6 +445,14 @@ pub async fn authenticate(db: &ControlDb, email: &str, password: &str) -> AppRes
         return Ok(None);
     }
     Ok(Some(load_user(db, row.id, row.email).await?))
+}
+
+/// Re-checks the signed-in account's own password (enrolling an authenticator). `false` for a wrong
+/// password and for an account without one. Same bcrypt work either way.
+pub async fn password_matches(db: &ControlDb, user: &RecordId, password: &str) -> AppResult<bool> {
+    let rows: Vec<UserRow> = store::control::AUTH_USER_BY_ID.on(db).bind(("id", user.clone())).await?.take(0)?;
+    let hash = rows.into_iter().next().and_then(|r| r.password_hash);
+    Ok(verify_password(password, hash.as_deref()).await)
 }
 
 #[derive(Debug, Serialize)]

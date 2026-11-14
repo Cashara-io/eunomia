@@ -308,6 +308,23 @@ impl FailThrottle {
         self.fail_capped(key, FAIL_MAX_KEYS);
     }
 
+    /// Counts one attempt before it is checked, atomically: `Err(seconds)` (and nothing counted) once `key`
+    /// has used `max` in the current window, so parallel requests cannot all pass a [`check`](Self::check).
+    /// [`clear`](Self::clear) it when the attempt succeeds.
+    pub fn reserve(&self, key: &str, max: u32) -> Result<(), u64> {
+        let now = Instant::now();
+        let mut map = self.map.lock().unwrap_or_else(|e| e.into_inner());
+        let e = map.entry(Self::key(key)).or_insert((0, now));
+        if now.duration_since(e.1) >= FAIL_WINDOW {
+            *e = (0, now);
+        }
+        if e.0 >= max {
+            return Err((FAIL_WINDOW - now.duration_since(e.1)).as_secs().max(1));
+        }
+        e.0 += 1;
+        Ok(())
+    }
+
     fn fail_capped(&self, key: &str, cap: usize) {
         let now = Instant::now();
         let mut map = self.map.lock().unwrap_or_else(|e| e.into_inner());
@@ -345,6 +362,17 @@ mod tests {
         assert!(l.check_n("k", 15, 5).is_ok());
         assert!(l.check("k", 15).is_err());
         assert!(l.check_n("free", 0, 1000).is_ok(), "0 turns the limit off");
+    }
+
+    #[test]
+    fn reserve_counts_before_the_check_and_stops_at_max() {
+        let t = FailThrottle::default();
+        for _ in 0..3 {
+            assert!(t.reserve("k", 3).is_ok());
+        }
+        assert!(t.reserve("k", 3).is_err(), "the fourth attempt is refused, not merely counted");
+        t.clear("k");
+        assert!(t.reserve("k", 3).is_ok());
     }
 
     #[test]

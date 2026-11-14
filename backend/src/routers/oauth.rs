@@ -96,6 +96,10 @@ struct ConsentDecision {
     #[serde(flatten)]
     request: AuthzParams,
     approve: bool,
+    /// A current authenticator or recovery code, when your account has two-step verification and its last
+    /// second factor is older than 10 minutes (`auth.step_up_required`). Only needed to approve.
+    #[serde(default)]
+    mfa_code: Option<String>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -110,14 +114,19 @@ struct ConsentResult {
     path = "/api/oauth/consent",
     tag = "oauth",
     summary = "Approve or deny an authorization request",
+    description = "Approving connects a long-lived app credential, so for an account with two-step verification the session's last second factor must be under 10 minutes old or `mfa_code` must carry a current code (`auth.step_up_required`). Denying never asks.",
     request_body = ConsentDecision,
     responses((status = 200, body = ConsentResult), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = [])),
 )]
-async fn consent_decide(State(state): State<AppState>, user: User, Json(d): Json<ConsentDecision>) -> AppResult<Json<ConsentResult>> {
+async fn consent_decide(State(state): State<AppState>, user: User, headers: axum::http::HeaderMap, Json(d): Json<ConsentDecision>) -> AppResult<Json<ConsentResult>> {
     // a token must not mint a longer-lived, differently scoped credential for an OAuth client
     crate::authz::require_session()?;
     let v = server::validate_authz(&state, &d.request).await.map_err(invalid)?;
+    if d.approve {
+        // connecting an app is as sensitive as creating an API token: a fresh second factor first
+        crate::mfa::step_up(&state, &user, &headers, d.mfa_code.as_deref()).await?;
+    }
     let redirect_to = if d.approve {
         let code = server::create_code(&state, &v, &user.id).await?;
         server::redirect_url(&state, &v.redirect_uri, v.state.as_deref(), &[("code", &code)])

@@ -26,6 +26,11 @@ pub enum ErrorCode {
     AuthSessionExpired,
     AuthPasswordDisabled,
     AuthSuspended,
+    AuthMfaRequired,
+    AuthMfaInvalid,
+    AuthMfaChallengeExpired,
+    AuthStepUpRequired,
+    AuthMfaUnreadable,
     InvitationNotFound,
     InvitationExpired,
     InvitationEmailMismatch,
@@ -63,8 +68,19 @@ pub enum ErrorCode {
     ValidationInvalid,
     OntologyRejected,
     OntologyStaleRevision,
+    AccessReviewNotFound,
+    AccessReviewOpen,
+    AccessReviewCompleted,
+    AccessReviewSelf,
+    AccessReviewIncomplete,
     DbConflict,
     DbDuplicate,
+    SubjectLegalHold,
+    SubjectLastOwner,
+    SubjectWorkspaceCloses,
+    SubjectConfirmationFailed,
+    SubjectReauthenticate,
+    SubjectExportNotReady,
     JobNoHandler,
     JobLeaseExpired,
     JobPanicked,
@@ -82,6 +98,11 @@ impl ErrorCode {
         ErrorCode::AuthSessionExpired,
         ErrorCode::AuthPasswordDisabled,
         ErrorCode::AuthSuspended,
+        ErrorCode::AuthMfaRequired,
+        ErrorCode::AuthMfaInvalid,
+        ErrorCode::AuthMfaChallengeExpired,
+        ErrorCode::AuthStepUpRequired,
+        ErrorCode::AuthMfaUnreadable,
         ErrorCode::InvitationNotFound,
         ErrorCode::InvitationExpired,
         ErrorCode::InvitationEmailMismatch,
@@ -119,8 +140,19 @@ impl ErrorCode {
         ErrorCode::ValidationInvalid,
         ErrorCode::OntologyRejected,
         ErrorCode::OntologyStaleRevision,
+        ErrorCode::AccessReviewNotFound,
+        ErrorCode::AccessReviewOpen,
+        ErrorCode::AccessReviewCompleted,
+        ErrorCode::AccessReviewSelf,
+        ErrorCode::AccessReviewIncomplete,
         ErrorCode::DbConflict,
         ErrorCode::DbDuplicate,
+        ErrorCode::SubjectLegalHold,
+        ErrorCode::SubjectLastOwner,
+        ErrorCode::SubjectWorkspaceCloses,
+        ErrorCode::SubjectConfirmationFailed,
+        ErrorCode::SubjectReauthenticate,
+        ErrorCode::SubjectExportNotReady,
         ErrorCode::JobNoHandler,
         ErrorCode::JobLeaseExpired,
         ErrorCode::JobPanicked,
@@ -138,6 +170,11 @@ impl ErrorCode {
             ErrorCode::AuthSessionExpired => "auth.session_expired",
             ErrorCode::AuthPasswordDisabled => "auth.password_disabled",
             ErrorCode::AuthSuspended => "auth.suspended",
+            ErrorCode::AuthMfaRequired => "auth.mfa_required",
+            ErrorCode::AuthMfaInvalid => "auth.mfa_invalid",
+            ErrorCode::AuthMfaChallengeExpired => "auth.mfa_challenge_expired",
+            ErrorCode::AuthStepUpRequired => "auth.step_up_required",
+            ErrorCode::AuthMfaUnreadable => "auth.mfa_unreadable",
             ErrorCode::InvitationNotFound => "invitation.not_found",
             ErrorCode::InvitationExpired => "invitation.expired",
             ErrorCode::InvitationEmailMismatch => "invitation.email_mismatch",
@@ -175,8 +212,19 @@ impl ErrorCode {
             ErrorCode::ValidationInvalid => "validation.invalid",
             ErrorCode::OntologyRejected => "ontology.rejected",
             ErrorCode::OntologyStaleRevision => "ontology.stale_revision",
+            ErrorCode::AccessReviewNotFound => "access_review.not_found",
+            ErrorCode::AccessReviewOpen => "access_review.open_exists",
+            ErrorCode::AccessReviewCompleted => "access_review.completed",
+            ErrorCode::AccessReviewSelf => "access_review.self_review",
+            ErrorCode::AccessReviewIncomplete => "access_review.incomplete",
             ErrorCode::DbConflict => "db.conflict",
             ErrorCode::DbDuplicate => "db.duplicate",
+            ErrorCode::SubjectLegalHold => "subject.legal_hold",
+            ErrorCode::SubjectLastOwner => "subject.last_owner",
+            ErrorCode::SubjectWorkspaceCloses => "subject.workspace_closes",
+            ErrorCode::SubjectConfirmationFailed => "subject.confirmation_failed",
+            ErrorCode::SubjectReauthenticate => "subject.reauthenticate",
+            ErrorCode::SubjectExportNotReady => "subject.export_not_ready",
             ErrorCode::JobNoHandler => "job.no_handler",
             ErrorCode::JobLeaseExpired => "job.lease_expired",
             ErrorCode::JobPanicked => "job.panicked",
@@ -186,10 +234,11 @@ impl ErrorCode {
 
     pub fn default_status(self) -> StatusCode {
         match self {
-            ErrorCode::AuthUnauthorized | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired => StatusCode::UNAUTHORIZED,
-            ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled
+            ErrorCode::AuthUnauthorized | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthMfaRequired | ErrorCode::AuthMfaInvalid | ErrorCode::AuthMfaChallengeExpired => StatusCode::UNAUTHORIZED,
+            ErrorCode::AuthStepUpRequired | ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled
             | ErrorCode::SecretHostDenied
-            | ErrorCode::SecretOutboundBlocked => StatusCode::FORBIDDEN,
+            | ErrorCode::SecretOutboundBlocked
+            | ErrorCode::AccessReviewSelf => StatusCode::FORBIDDEN,
             ErrorCode::SecretOutboundFailed => StatusCode::BAD_GATEWAY,
             ErrorCode::SecretRequestClosed => StatusCode::CONFLICT,
             ErrorCode::RateLimited | ErrorCode::ExtensionBufferFull => StatusCode::TOO_MANY_REQUESTS,
@@ -201,7 +250,10 @@ impl ErrorCode {
             ErrorCode::InvitationEmailMismatch => StatusCode::FORBIDDEN,
             ErrorCode::InvitationOtherOrg | ErrorCode::InvitationExists => StatusCode::CONFLICT,
             ErrorCode::TenantProvisioningDisabled => StatusCode::NOT_IMPLEMENTED,
-            ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision => StatusCode::CONFLICT,
+            ErrorCode::AuthMfaUnreadable | ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision
+            | ErrorCode::AccessReviewOpen | ErrorCode::AccessReviewCompleted | ErrorCode::AccessReviewIncomplete
+            | ErrorCode::SubjectLegalHold | ErrorCode::SubjectLastOwner | ErrorCode::SubjectWorkspaceCloses | ErrorCode::SubjectExportNotReady => StatusCode::CONFLICT,
+            ErrorCode::SubjectConfirmationFailed | ErrorCode::SubjectReauthenticate => StatusCode::FORBIDDEN,
             ErrorCode::AuthNotFound
             | ErrorCode::VaultNotFound
             | ErrorCode::EntityNotFound
@@ -213,7 +265,8 @@ impl ErrorCode {
             | ErrorCode::ToolNotFound
             | ErrorCode::TenantNotFound
             | ErrorCode::ResourceNotFound
-            | ErrorCode::DocumentNotFound => StatusCode::NOT_FOUND,
+            | ErrorCode::DocumentNotFound
+            | ErrorCode::AccessReviewNotFound => StatusCode::NOT_FOUND,
             ErrorCode::ConnectorNotConnected | ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected => StatusCode::BAD_REQUEST,
             ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked | ErrorCode::Internal => {
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -393,6 +446,7 @@ mod tests {
             match c {
                 ErrorCode::AuthUnauthorized | ErrorCode::AuthForbidden | ErrorCode::AuthEmailTaken | ErrorCode::AuthNotFound
                 | ErrorCode::AuthScope | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::RateLimited
+                | ErrorCode::AuthMfaRequired | ErrorCode::AuthMfaInvalid | ErrorCode::AuthMfaChallengeExpired | ErrorCode::AuthStepUpRequired | ErrorCode::AuthMfaUnreadable
                 | ErrorCode::InvitationNotFound | ErrorCode::InvitationExpired | ErrorCode::InvitationEmailMismatch | ErrorCode::InvitationOtherOrg | ErrorCode::InvitationExists
                 | ErrorCode::TenantDenied | ErrorCode::TenantNotFound | ErrorCode::TenantSchemaBehind
                 | ErrorCode::TenantProvisioningDisabled | ErrorCode::VaultNotFound | ErrorCode::VaultForbidden | ErrorCode::VaultNameTaken | ErrorCode::EntityNotFound
@@ -401,7 +455,9 @@ mod tests {
                 | ErrorCode::ResourceNotFound | ErrorCode::DocumentNotFound | ErrorCode::DocumentTooLarge
                 | ErrorCode::DocumentUnsupportedType | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable | ErrorCode::SecretRequestClosed | ErrorCode::SecretHostDenied
                 | ErrorCode::SecretOutboundBlocked | ErrorCode::SecretOutboundFailed | ErrorCode::ChangesResync | ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected | ErrorCode::OntologyStaleRevision | ErrorCode::DbConflict
-                | ErrorCode::DbDuplicate | ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked
+                | ErrorCode::AccessReviewNotFound | ErrorCode::AccessReviewOpen | ErrorCode::AccessReviewCompleted | ErrorCode::AccessReviewSelf | ErrorCode::AccessReviewIncomplete
+                | ErrorCode::DbDuplicate | ErrorCode::SubjectLegalHold | ErrorCode::SubjectLastOwner | ErrorCode::SubjectWorkspaceCloses | ErrorCode::SubjectConfirmationFailed | ErrorCode::SubjectReauthenticate
+                | ErrorCode::SubjectExportNotReady | ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked
                 | ErrorCode::Internal => {}
             }
         }

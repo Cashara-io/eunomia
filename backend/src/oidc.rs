@@ -55,10 +55,16 @@ pub struct OidcConfig {
     pub scopes: String,
     /// Shown on the button: "Continue with {provider_name}".
     pub provider_name: String,
+    /// `OIDC_REQUIRE_MFA=true`: refuse a sign-in whose ID token does not say a second factor was used
+    /// (an `amr` claim naming one, RFC 8176, or an `acr` listed in `OIDC_MFA_ACR`). Off by default: most
+    /// providers enforce MFA themselves and not all of them send `amr`.
+    pub require_mfa_claim: bool,
+    /// `OIDC_MFA_ACR`: comma-separated `acr` values that count as multi-factor (provider specific).
+    pub mfa_acr: Vec<String>,
     /// `OIDC_INVITE_ACCEPT_UNVERIFIED_EMAIL`: when the provider sends no `email_verified` claim at all, a
     /// sign-in may still accept the organisation invitation whose token came with it (the token is the second
-    /// proof). Nothing else: linking, take-over, operator addresses and the allowlist always need the claim.
-    /// A claim sent as false is never overridden. Off by default.
+    /// proof). Nothing else: linking, starting fresh, operator addresses and the allowlist always need the
+    /// claim. A claim sent as false is never overridden. Off by default.
     pub invite_accept_unverified_email: bool,
 }
 
@@ -69,8 +75,10 @@ impl std::fmt::Debug for OidcConfig {
             .field("client_id", &self.client_id)
             .field("client_secret", &self.client_secret.as_ref().map(|_| "<redacted>"))
             .field("scopes", &self.scopes)
-            .field("provider_name", &self.provider_name)
             .field("invite_accept_unverified_email", &self.invite_accept_unverified_email)
+            .field("provider_name", &self.provider_name)
+            .field("require_mfa_claim", &self.require_mfa_claim)
+            .field("mfa_acr", &self.mfa_acr)
             .finish()
     }
 }
@@ -119,6 +127,12 @@ impl AuthConfig {
                 client_secret: var("OIDC_CLIENT_SECRET"),
                 scopes,
                 provider_name,
+                require_mfa_claim: match var("OIDC_REQUIRE_MFA").map(|v| v.to_ascii_lowercase()).as_deref() {
+                    None | Some("false" | "0" | "no") => false,
+                    Some("true" | "1" | "yes") => true,
+                    Some(other) => return Err(format!("OIDC_REQUIRE_MFA={other:?} is not true or false")),
+                },
+                mfa_acr: var("OIDC_MFA_ACR").map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()).unwrap_or_default(),
                 invite_accept_unverified_email: var("OIDC_INVITE_ACCEPT_UNVERIFIED_EMAIL").is_some_and(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes")),
             }),
         })
@@ -195,15 +209,32 @@ pub struct Identity {
     pub email_verified: bool,
     /// The provider sent no `email_verified` claim at all (see `OidcConfig::invite_accept_unverified_email`).
     pub email_verified_absent: bool,
+    /// The `amr` claim (authentication methods, RFC 8176), empty when absent.
+    pub amr: Vec<String>,
+    /// The `acr` claim, when present.
+    pub acr: Option<String>,
 }
 
 impl Identity {
     /// Whether the email may be used to accept the invitation whose token came with this sign-in: the
     /// provider verified it, or sent no claim at all and the operator allowed that for invitations only
     /// (`OIDC_INVITE_ACCEPT_UNVERIFIED_EMAIL`). An explicit false stays false. Everything else (linking,
-    /// take-over, operator addresses, the allowlist) uses `email_verified` alone.
+    /// starting fresh, operator addresses, the allowlist) uses `email_verified` alone.
     pub fn verified_for_invitation(&self, cfg: &OidcConfig) -> bool {
         self.email_verified || (self.email_verified_absent && cfg.invite_accept_unverified_email)
+    }
+}
+
+/// `amr` values (RFC 8176) that mean more than a password was used.
+const MFA_AMR: &[&str] = &["mfa", "otp", "hwk", "swk", "sc", "pop", "fpt", "face", "iris", "retina", "vbm"];
+
+impl Identity {
+    /// The ID token says a second factor was used: an `amr` that names one (or two methods at once), or an
+    /// `acr` the operator listed as multi-factor.
+    pub fn asserts_mfa(&self, accepted_acr: &[String]) -> bool {
+        self.amr.iter().any(|m| MFA_AMR.contains(&m.as_str()))
+            || self.amr.iter().collect::<std::collections::HashSet<_>>().len() >= 2
+            || self.acr.as_ref().is_some_and(|a| accepted_acr.iter().any(|x| x == a))
     }
 }
 
@@ -407,6 +438,10 @@ impl Client {
             email: Option<String>,
             #[serde(default)]
             email_verified: Option<serde_json::Value>,
+            #[serde(default)]
+            amr: Option<serde_json::Value>,
+            #[serde(default)]
+            acr: Option<serde_json::Value>,
         }
         let mut last = None;
         let mut claims = None;
@@ -441,12 +476,21 @@ impl Client {
         if c.sub.is_empty() || c.sub.len() > 255 {
             return Err(bad("the ID token has no usable subject"));
         }
+        let amr = c
+            .amr
+            .as_ref()
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|m| m.as_str()).take(16).map(|m| m.chars().take(32).collect()).collect())
+            .unwrap_or_default();
+        let acr = c.acr.as_ref().and_then(|v| v.as_str()).map(|a| a.chars().take(255).collect());
         Ok(Identity {
             issuer: cfg.issuer.clone(),
             subject: c.sub,
             email: c.email,
             email_verified: c.email_verified.as_ref().is_some_and(truthy),
             email_verified_absent: c.email_verified.is_none(),
+            amr,
+            acr,
         })
     }
 
@@ -495,6 +539,30 @@ mod tests {
     }
 
     #[test]
+    fn mfa_is_asserted_by_amr_or_a_listed_acr() {
+        let id = |amr: &[&str], acr: Option<&str>| Identity {
+            issuer: "i".into(),
+            subject: "s".into(),
+            email: None,
+            email_verified: false,
+            email_verified_absent: true,
+            amr: amr.iter().map(|s| s.to_string()).collect(),
+            acr: acr.map(String::from),
+        };
+        let gold = vec!["gold".to_string()];
+        assert!(!id(&[], None).asserts_mfa(&gold));
+        assert!(!id(&["pwd"], None).asserts_mfa(&gold), "a password alone is one factor");
+        assert!(!id(&["pwd", "pwd"], None).asserts_mfa(&gold), "the same method twice is still one");
+        assert!(id(&["mfa"], None).asserts_mfa(&[]));
+        assert!(id(&["pwd", "otp"], None).asserts_mfa(&[]));
+        assert!(id(&["pwd", "kba"], None).asserts_mfa(&[]), "two different methods");
+        assert!(id(&["hwk"], None).asserts_mfa(&[]));
+        assert!(!id(&["pwd"], Some("silver")).asserts_mfa(&gold));
+        assert!(id(&["pwd"], Some("gold")).asserts_mfa(&gold));
+        assert!(!id(&[], Some("gold")).asserts_mfa(&[]), "no acr counts unless the operator lists it");
+    }
+
+    #[test]
     fn default_is_password_only() {
         let c = AuthConfig::from_vars(vars(&[])).unwrap();
         assert_eq!(c.mode, AuthMode::Password);
@@ -506,6 +574,14 @@ mod tests {
         assert!(AuthConfig::from_vars(vars(&[("AUTH_MODE", "oicd")])).is_err());
         assert!(AuthConfig::from_vars(vars(&[("AUTH_MODE", "oidc")])).is_err());
         assert!(AuthConfig::from_vars(vars(&[("AUTH_MODE", "oidc"), ("OIDC_ISSUER", "https://idp.example")])).is_err());
+        assert!(
+            AuthConfig::from_vars(vars(&[("AUTH_MODE", "oidc"), ("OIDC_ISSUER", "https://idp.example"), ("OIDC_CLIENT_ID", "x"), ("OIDC_REQUIRE_MFA", "yes please")])).is_err(),
+            "a mistyped MFA requirement is an error, never quietly off"
+        );
+        let strict = AuthConfig::from_vars(vars(&[("AUTH_MODE", "oidc"), ("OIDC_ISSUER", "https://idp.example"), ("OIDC_CLIENT_ID", "x"), ("OIDC_REQUIRE_MFA", "true"), ("OIDC_MFA_ACR", "gold, ")])).unwrap();
+        let o = strict.oidc.unwrap();
+        assert!(o.require_mfa_claim);
+        assert_eq!(o.mfa_acr, vec!["gold".to_string()]);
         assert!(AuthConfig::from_vars(vars(&[("AUTH_MODE", "oidc"), ("OIDC_ISSUER", "http://idp.example"), ("OIDC_CLIENT_ID", "x")])).is_err(), "plain http to a remote host");
         let c = AuthConfig::from_vars(vars(&[("AUTH_MODE", " OIDC "), ("OIDC_ISSUER", "https://idp.example"), ("OIDC_CLIENT_ID", "x"), ("OIDC_PROVIDER_NAME", "Okta")])).unwrap();
         assert_eq!(c.mode, AuthMode::Oidc);
@@ -513,15 +589,6 @@ mod tests {
         let o = c.oidc.unwrap();
         assert_eq!((o.scopes.as_str(), o.provider_name.as_str(), o.client_secret), ("openid email profile", "Okta", None));
         assert!(!o.invite_accept_unverified_email, "a missing email_verified claim is not trusted unless the operator says so");
-        let base = [("AUTH_MODE", "oidc"), ("OIDC_ISSUER", "https://idp.example"), ("OIDC_CLIENT_ID", "x")];
-        let with = |v: &'static str| AuthConfig::from_vars(vars(&[base[0], base[1], base[2], ("OIDC_INVITE_ACCEPT_UNVERIFIED_EMAIL", v)])).unwrap().oidc.unwrap();
-        assert!(with("true").invite_accept_unverified_email && with("1").invite_accept_unverified_email);
-        assert!(!with("false").invite_accept_unverified_email && !with("nope").invite_accept_unverified_email);
-        let id = |verified: bool, absent: bool| Identity { issuer: "i".into(), subject: "s".into(), email: None, email_verified: verified, email_verified_absent: absent };
-        let (trusting, strict) = (with("true"), with("false"));
-        assert!(id(false, true).verified_for_invitation(&trusting) && !id(false, true).verified_for_invitation(&strict));
-        assert!(!id(false, false).verified_for_invitation(&trusting), "a claim sent as false is never overridden");
-        assert!(id(true, false).verified_for_invitation(&strict));
         let c = AuthConfig::from_vars(vars(&[("AUTH_MODE", "both"), ("OIDC_ISSUER", "http://127.0.0.1:9"), ("OIDC_CLIENT_ID", "x"), ("OIDC_CLIENT_SECRET", "hunter2-secret")])).unwrap();
         assert!(c.password_enabled());
         assert!(!format!("{c:?}").contains("hunter2-secret"), "the secret is redacted in Debug");

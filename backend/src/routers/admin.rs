@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use axum::{extract::{Path, Query, State}, routing::{delete, get, put}, Json, Router};
+use axum::{extract::{Path, Query, State}, http::HeaderMap, routing::{delete, get, put}, Json, Router};
 use serde::{Deserialize, Serialize};
 use surrealdb::types::SurrealValue;
 use surrealdb::types::{Datetime, RecordId};
@@ -24,9 +24,10 @@ pub fn router() -> Router<AppState> {
         .route("/admin/people/{user_id}/suspended", put(set_suspended))
         .route("/admin/people/{user_id}/tokens", get(get_person_tokens))
         .route("/admin/people/{user_id}/tokens/{token_id}", delete(revoke_person_token))
+        .route("/admin/security", get(get_security).put(put_security))
 }
 
-async fn require_admin(state: &AppState, user: &User) -> AppResult<()> {
+pub(crate) async fn require_admin(state: &AppState, user: &User) -> AppResult<()> {
     if authz::is_admin(&state.control, user).await? {
         Ok(())
     } else {
@@ -57,18 +58,13 @@ pub enum AuditCategory {
     Server,
 }
 
-const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.oidc_set_aside", "auth.failed"];
+const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.oidc_set_aside", "auth.failed", "auth.mfa_failed", "auth.mfa_recovery_used", "auth.reauth", "auth.mfa_secret_unreadable"];
 const ADMIN_ACTIONS: &[&str] = &[
-    "admin.grant",
-    "admin.revoke",
-    "user.suspend",
-    "user.restore",
-    "admin.token_revoke",
-    "org.invite",
-    "org.invite_resend",
-    "org.invite_revoke",
-    "org.invite_accept",
-    "org.invite_expired",
+    "admin.grant", "admin.revoke", "user.suspend", "user.restore", "admin.token_revoke", "admin.require_mfa",
+    "access_review.start", "access_review.decide", "access_review.complete", "audit.export",
+    "subject.legal_hold", "subject.legal_hold_lift", "subject.erase_request", "subject.erase", "subject.export_request_admin",
+    "subject.export_download_admin", "org.owner_transfer", "subject.erase_cancel",
+    "org.invite", "org.invite_resend", "org.invite_revoke", "org.invite_accept", "org.invite_expired",
 ];
 
 impl AuditCategory {
@@ -330,12 +326,39 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "admin.revoke" => format!("Took admin rights away from {email}"),
         "user.suspend" => format!("Suspended {email}"),
         "user.restore" => format!("Restored access for {email}"),
+        "subject.legal_hold" => format!("Placed a legal hold on {email}"),
+        "subject.legal_hold_lift" => format!("Lifted the legal hold on {email}"),
+        "subject.erase_request" => match detail.split_whitespace().find_map(|kv| kv.strip_prefix("by=")) {
+            Some("self") => "Someone asked for their own account and data to be deleted".into(),
+            Some("reapply") => "A restore brought back an erased account; it is being erased again".into(),
+            _ => "Asked for an account and its data to be deleted".into(),
+        },
+        "subject.export_download_admin" => "Downloaded an export of this workspace's data about someone".into(),
+        "org.owner_transfer" => format!("Made {email} the workspace owner"),
+        "subject.erase_cancel" => "Cancelled an erasure before it deleted anything (the account is as it was)".into(),
+        "subject.erase" => return "Deleted an account and its data (the erasure record keeps the counts)".into(),
+        "subject.export_request" => "Exported their data".into(),
+        "subject.export_request_admin" => "Exported someone's data for them".into(),
         "admin.token_revoke" => match rest_of(detail, "token") {
             Some(t) => format!("Revoked {email}\u{2019}s API token \u{201c}{t}\u{201d}"),
             None => format!("Revoked an API token of {email}"),
         },
+        "admin.require_mfa" if detail == "on" => "Required two-step verification for every password account".into(),
+        "admin.require_mfa" => "Stopped requiring two-step verification".into(),
+        "auth.mfa_enrol" => "Turned on two-step verification".into(),
+        "auth.mfa_disable" => "Turned off two-step verification".into(),
+        "auth.mfa_recovery_regenerate" => "Made new recovery codes".into(),
+        "auth.mfa_recovery_used" => match kv(detail, "left") {
+            Some(n) => format!("Used a recovery code ({n} left)"),
+            None => "Used a recovery code".into(),
+        },
+        "auth.mfa_failed" => return "Two-step verification failed (wrong or reused code)".into(),
+        "auth.reauth" => return "Typed the wrong password while setting up two-step verification".into(),
+        "auth.mfa_secret_unreadable" => return "The authenticator could not be checked (the server's encryption key changed)".into(),
+        "auth.login" if ok && detail.contains("second step") => return "Signed in with two-step verification".into(),
         "auth.login" if ok => return "Signed in".into(),
         "auth.login" => return "Sign-in failed (wrong email or password)".into(),
+        "auth.oidc_login" if ok && detail.contains("second step pending") => return "Single sign-on checked; asked for the account's authenticator code".into(),
         "auth.oidc_login" if ok => return "Signed in with single sign-on".into(),
         "auth.oidc_login" => return "Single sign-on sign-in failed".into(),
         "auth.oidc_link" if ok => "Linked a single sign-on account".into(),
@@ -368,13 +391,22 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "source.reextract" => "Re-read a source".into(),
         "redact.backfill" => "Removed secrets from stored history".into(),
         "legacy.move" => "Moved data over from the previous version".into(),
+        "access_review.start" => format!("Started an access review of {} people", kv(detail, "people").unwrap_or("the")),
+        "access_review.decide" => match kv(detail, "decision") {
+            Some("keep") => format!("Decided in an access review to keep {email}'s access"),
+            Some("remove") => format!("Decided in an access review to remove {email}'s access"),
+            Some("suspend") => format!("Decided in an access review to suspend {email}"),
+            _ => "Recorded an access review decision".into(),
+        },
+        "access_review.complete" => "Completed an access review".into(),
+        "audit.export" => format!("Exported the security log ({} events)", kv(detail, "events").unwrap_or("0")),
         other => other.to_string(),
     };
     if ok { s } else { couldnt(&s) }
 }
 
 /// Actions whose failed sentence already says why ([`describe`] returns early for them).
-const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.oidc_link", "auth.failed", "oauth.consent", "authz.denied", "org.invite_accept", "org.invite_expired"];
+const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.oidc_link", "auth.failed", "auth.mfa_failed", "auth.reauth", "auth.mfa_secret_unreadable", "oauth.consent", "authz.denied", "org.invite_accept", "org.invite_expired"];
 
 /// Why an action failed, from the error code it ended with, in words; empty when it worked.
 /// The exact cause a failed attempt recorded in its detail (`why=...`), when it recorded one.
@@ -471,6 +503,7 @@ async fn get_workspace_audit(State(state): State<AppState>, user: User, Query(q)
     let mut rows: Vec<LedgerRow> = store::control::ADMIN_AUDIT_PAGE
         .on(&state.control)
         .bind(("org", user.org.record()))
+        .bind(("instance", authz::sees_instance(&state.control, &user).await?))
         .bind(("prefix", prefix.to_string()))
         .bind(("actions", actions.iter().map(|a| a.to_string()).collect::<Vec<_>>()))
         .bind(("exclude", exclude.iter().map(|a| a.to_string()).collect::<Vec<_>>()))
@@ -547,22 +580,31 @@ async fn get_workspace_audit(State(state): State<AppState>, user: User, Query(q)
 // ---------------------------------------------------------------- people
 
 #[derive(Debug, Deserialize, SurrealValue)]
-struct PersonRow {
-    id: RecordId,
+pub(crate) struct PersonRow {
+    pub(crate) id: RecordId,
     #[serde(default)]
     #[surreal(default)]
-    email: String,
+    pub(crate) email: String,
     /// The stored, normalized address (`duplicate:` for a legacy duplicate): what operator status is read from.
     #[serde(default)]
     #[surreal(default)]
-    email_lc: Option<String>,
-    created_at: Option<Datetime>,
+    pub(crate) email_lc: Option<String>,
+    pub(crate) created_at: Option<Datetime>,
     #[serde(default)]
     #[surreal(default)]
-    admin: Option<bool>,
+    pub(crate) admin: Option<bool>,
     #[serde(default)]
     #[surreal(default)]
-    suspended_at: Option<Datetime>,
+    pub(crate) suspended_at: Option<Datetime>,
+    #[serde(default)]
+    #[surreal(default)]
+    pub(crate) mfa: bool,
+    #[serde(default)]
+    #[surreal(default)]
+    pub(crate) has_password: bool,
+    #[serde(default)]
+    #[surreal(default)]
+    pub(crate) legal_hold_at: Option<Datetime>,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -599,10 +641,19 @@ struct Person {
     /// When an admin suspended the account, RFC 3339; none while it is active.
     #[schema(value_type = Option<String>)]
     suspended_at: Option<Datetime>,
+    /// When an admin placed a legal hold on the account, RFC 3339; none when there is none. A held account cannot be erased.
+    #[schema(value_type = Option<String>)]
+    legal_hold_at: Option<Datetime>,
     /// The admin looking at the list.
     is_you: bool,
     /// How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`).
     tokens: i64,
+    /// The workspace's owner (one per workspace). An owner whose workspace has other members hands it
+    /// over (`/api/admin/people/{user_id}/workspace-owner`) before their account can be erased.
+    workspace_owner: bool,
+    /// Two-step verification: `on`, `off`, or `provider` for an account that signs in only through single
+    /// sign-on (its identity provider handles the second factor).
+    mfa: String,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -619,14 +670,14 @@ struct SignupPolicy {
     mode: String,
     /// The policy in words.
     summary: String,
-    /// The emails that may sign up when `mode` is `invite`.
+    /// The emails that may sign up when `mode` is `invite`. Empty unless you are the server's operator.
     allowlist: Vec<String>,
-    /// Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`).
+    /// Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`). Empty unless you are the server's operator.
     operators: Vec<String>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
-struct PeopleReport {
+pub(crate) struct PeopleReport {
     people: Vec<Person>,
     signup: SignupPolicy,
 }
@@ -651,7 +702,7 @@ fn signup_policy(mode: &str, allowlist: &str, operators: &str) -> SignupPolicy {
 }
 
 /// Why `row` is an admin, as [`Person::admin`] spells it.
-fn admin_source(row: &PersonRow, creator: Option<&RecordId>) -> &'static str {
+pub(crate) fn admin_source(row: &PersonRow, creator: Option<&RecordId>) -> &'static str {
     if creator == Some(&row.id) {
         "creator"
     } else if authz::stored_email_is_operator(row.email_lc.as_deref()) {
@@ -669,7 +720,7 @@ fn another_admin_left(rows: &[PersonRow], creator: Option<&RecordId>, target: &R
     rows.iter().any(|r| &r.id != target && r.suspended_at.is_none() && !admin_source(r, creator).is_empty())
 }
 
-async fn people_rows(state: &AppState, user: &User) -> AppResult<Vec<PersonRow>> {
+pub(crate) async fn people_rows(state: &AppState, user: &User) -> AppResult<Vec<PersonRow>> {
     Ok(store::control::ADMIN_PEOPLE.on(&state.control).bind(("org", user.org.record())).await?.take(0)?)
 }
 
@@ -708,6 +759,18 @@ async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport>
         .collect();
 
     let creator = crate::capsules::first_user(&state.control).await?;
+    #[derive(Deserialize, SurrealValue)]
+    struct OwnerRow {
+        user: RecordId,
+    }
+    let owner: Option<RecordId> = store::control::ORG_FIRST_OWNER
+        .on(&state.control)
+        .bind(("org", user.org.record()))
+        .await?
+        .take::<Vec<OwnerRow>>(0)?
+        .into_iter()
+        .next()
+        .map(|r| r.user);
     let people = rows
         .into_iter()
         .map(|r| {
@@ -720,16 +783,27 @@ async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport>
                 role: if admin.is_empty() { "member" } else { "admin" }.into(),
                 is_you: r.id == user.id,
                 tokens: token_counts.get(&key).copied().unwrap_or(0),
+                workspace_owner: owner.as_ref() == Some(&r.id),
+                mfa: if r.mfa { "on" } else if r.has_password { "off" } else { "provider" }.into(),
                 id: key,
                 email: r.email,
                 created_at: r.created_at,
                 suspended_at: r.suspended_at,
+                legal_hold_at: r.legal_hold_at,
             }
         })
         .collect();
 
     let env = |k: &str| std::env::var(k).unwrap_or_default();
-    Ok(PeopleReport { people, signup: signup_policy(&env("SIGNUP"), &env("SIGNUP_ALLOWLIST"), &env("EUNOMIA_ADMIN_EMAILS")) })
+    let mut signup = signup_policy(&env("SIGNUP"), &env("SIGNUP_ALLOWLIST"), &env("EUNOMIA_ADMIN_EMAILS"));
+    // the operator list and the instance-wide allowlist (other organisations' invitees) are the server
+    // operator's: an admin granted in the app sees the policy in words only
+    let operator = authz::is_operator(&state.control, user).await? || creator.as_ref() == Some(&user.id);
+    if !operator {
+        signup.allowlist.clear();
+        signup.operators.clear();
+    }
+    Ok(PeopleReport { people, signup })
 }
 
 #[utoipa::path(
@@ -756,6 +830,23 @@ struct AdminChange {
 struct SuspendChange {
     /// `true` suspends the account, `false` restores it.
     suspended: bool,
+}
+
+/// The people list as a response (`routers/subject.rs` answers with it after a handover).
+pub(crate) async fn people_response(state: &AppState, user: &User) -> AppResult<axum::response::Response> {
+    use axum::response::IntoResponse;
+    Ok(Json(people_report(state, user).await?).into_response())
+}
+
+/// The schema the handover route answers with.
+pub(crate) type PeopleReportRef = PeopleReport;
+
+/// For the data-subject routes (`routers/subject.rs`): the admin acting (browser session only), the
+/// account they act on (in their workspace) and its email.
+pub(crate) async fn person_in_workspace(state: &AppState, user: &User, user_id: &str) -> AppResult<(Option<RecordId>, RecordId, String)> {
+    let (rows, creator, target) = target_of(state, user, user_id).await?;
+    let email = rows.iter().find(|r| r.id == target).map(|r| r.email.clone()).unwrap_or_default();
+    Ok((creator, target, email))
 }
 
 /// The admin acting (browser session only) and the account they act on, which must be in their workspace.
@@ -842,6 +933,13 @@ async fn set_suspended(
     if body.suspended == row.suspended_at.is_some() {
         return Ok(Json(people_report(&state, &user).await?));
     }
+    if !body.suspended && crate::subject::account_erasure_open(&state.control, &target).await? {
+        // an erasure of the whole account keeps it suspended until it finishes or an operator cancels it
+        return Err(AppError::coded(
+            ErrorCode::AuthForbidden,
+            "This account is being erased (or the erasure is waiting on a legal hold), so it can't be restored. A server operator can cancel the erasure, until it starts deleting.",
+        ));
+    }
     if body.suspended {
         if target == user.id {
             return Err(AppError::bad_request("You can't suspend your own account."));
@@ -867,6 +965,98 @@ async fn set_suspended(
     let action = if body.suspended { "user.suspend" } else { "user.restore" };
     crate::audit::record_as_caller_detail(&state.control, &user.id, action, &target.to_string(), "ok", &format!("email={email}")).await;
     Ok(Json(people_report(&state, &user).await?))
+}
+
+// ---------------------------------------------------------------- server security settings
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct SecurityOut {
+    /// Every password account on this server, in every organisation, must pass two-step verification before
+    /// it gets a session. Accounts that sign in through single sign-on are left to the identity provider
+    /// unless they set up their own authenticator.
+    require_mfa: bool,
+    #[schema(value_type = Option<String>)]
+    updated_at: Option<Datetime>,
+    /// Email of the operator who last changed it.
+    updated_by: Option<String>,
+    /// Active password accounts on the whole server (every organisation) without two-step verification yet:
+    /// while it is required they are signed out and must set it up at their next sign-in.
+    without_mfa: i64,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+struct SecurityChange {
+    require_mfa: bool,
+    /// A current authenticator or recovery code, when your own account has two-step verification and its
+    /// last second factor is older than 10 minutes (`auth.step_up_required`).
+    #[serde(default)]
+    mfa_code: Option<String>,
+}
+
+/// Instance settings reach every organisation on the host: only its operators read or change them.
+async fn require_operator(state: &AppState, user: &User) -> AppResult<()> {
+    if authz::is_instance_operator(&state.control, user).await? {
+        Ok(())
+    } else {
+        Err(AppError::coded(ErrorCode::AuthForbidden, "Only the server's operator can change this: the account that set up the server, or an email in EUNOMIA_ADMIN_EMAILS."))
+    }
+}
+
+async fn security_out(state: &AppState) -> AppResult<SecurityOut> {
+    #[derive(Deserialize, SurrealValue)]
+    struct Count {
+        count: i64,
+    }
+    let s = crate::mfa::security(&state.control).await?;
+    let rows: Vec<Count> = store::control::ADMIN_WITHOUT_MFA_ALL.on(&state.control).await?.take(0)?;
+    Ok(SecurityOut { require_mfa: s.require_mfa, updated_at: s.updated_at, updated_by: s.updated_by, without_mfa: rows.first().map_or(0, |c| c.count) })
+}
+
+#[utoipa::path(
+    operation_id = "getServerSecurity",
+    get,
+    path = "/api/admin/security",
+    tag = "admin",
+    summary = "Server security settings: whether two-step verification is required (server operators only)",
+    responses((status = 200, body = SecurityOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn get_security(State(state): State<AppState>, user: User) -> AppResult<Json<SecurityOut>> {
+    require_operator(&state, &user).await?;
+    Ok(Json(security_out(&state).await?))
+}
+
+#[utoipa::path(
+    operation_id = "setServerSecurity",
+    put,
+    path = "/api/admin/security",
+    tag = "admin",
+    summary = "Require two-step verification for every password account on the server, or stop (server operators only, browser session)",
+    description = "Server-wide: it affects every organisation on the host. Only the account that set up the server or an email in `EUNOMIA_ADMIN_EMAILS` may change it; admins granted in Settings > People may not. Turning it on needs your own account protected first (two-step verification on, or single sign-on only). While on, a password sign-in without two-step verification must set it up before it gets a session, and browser sessions that never passed a second factor are signed out. API tokens and app connections keep working.",
+    request_body = SecurityChange,
+    responses((status = 200, body = SecurityOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = [])),
+)]
+async fn put_security(State(state): State<AppState>, user: User, headers: HeaderMap, Json(body): Json<SecurityChange>) -> AppResult<Json<SecurityOut>> {
+    authz::require_session()?;
+    require_operator(&state, &user).await?;
+    let current = crate::mfa::security(&state.control).await?;
+    if current.require_mfa == body.require_mfa {
+        return Ok(Json(security_out(&state).await?));
+    }
+    crate::mfa::step_up(&state, &user, &headers, body.mfa_code.as_deref()).await?;
+    if body.require_mfa {
+        let me = crate::mfa::status(&state.control, &user.id).await?;
+        if me.available && !me.enabled {
+            return Err(AppError::bad_request("Turn on two-step verification for your own account first (Settings > Two-step verification), so you are not locked out."));
+        }
+    }
+    crate::mfa::set_require_mfa(&state.control, body.require_mfa, &user.id).await?;
+    // sessions verified in the last few seconds are re-checked against the new rule on their next request
+    // (on this replica at once; other replicas within the credential cache's 20 seconds)
+    state.credentials.clear();
+    crate::audit::record_as_caller_detail(&state.control, &user.id, "admin.require_mfa", "", "ok", if body.require_mfa { "on" } else { "off" }).await;
+    Ok(Json(security_out(&state).await?))
 }
 
 // ---------------------------------------------------------------- other people's API tokens
@@ -938,7 +1128,7 @@ async fn revoke_person_token(
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(get_workspace_audit, get_people, set_admin, set_suspended, get_person_tokens, revoke_person_token))]
+#[openapi(paths(get_workspace_audit, get_people, set_admin, set_suspended, get_person_tokens, revoke_person_token, get_security, put_security))]
 pub struct Doc;
 
 #[cfg(test)]
@@ -1057,6 +1247,9 @@ mod tests {
             created_at: None,
             admin: admin.then_some(true),
             suspended_at: suspended.then(Datetime::now),
+            legal_hold_at: None,
+            mfa: false,
+            has_password: true,
         };
         let a: RecordId = crate::rid::parse("user:a").unwrap();
         let b: RecordId = crate::rid::parse("user:b").unwrap();

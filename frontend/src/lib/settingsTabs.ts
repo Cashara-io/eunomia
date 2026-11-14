@@ -9,6 +9,7 @@ export const SETTINGS_GROUPS = [
       { id: "apps", label: "Connected apps", keywords: "oauth sign-in claude chatgpt" },
       { id: "tokens", label: "API tokens", keywords: "key token mcp" },
       { id: "sessions", label: "Sessions", keywords: "devices sign out" },
+      { id: "security", label: "Two-step verification", keywords: "mfa 2fa totp authenticator recovery codes security" },
       { id: "accessibility", label: "Accessibility", keywords: "haptic feedback vibration motion" },
       { id: "support", label: "Support", keywords: "diagnostics logs download help zip" },
       { id: "data", label: "Your data", keywords: "export download delete" },
@@ -19,7 +20,8 @@ export const SETTINGS_GROUPS = [
     admin: true,
     tabs: [
       { id: "people", label: "People", keywords: "users accounts admin suspend sign up" },
-      { id: "audit", label: "Audit log", keywords: "history events activity" },
+      { id: "reviews", label: "Access reviews", keywords: "access review recertify who has access compliance" },
+      { id: "audit", label: "Audit log", keywords: "history events activity integrity verify export" },
       { id: "usage", label: "Usage", keywords: "tool calls stats" },
     ],
   },

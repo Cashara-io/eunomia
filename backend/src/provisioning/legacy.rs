@@ -37,7 +37,7 @@ const TENANT_COPY: &[&str] = &[
     "app_settings", "vault", "vault_member", "connector", "sync_status", "cache_record", "person", "organisation", "location", "repository", "file",
     "symbol", "entity", "memory", "chat_thread", "chat_message", "audit_log", "embed_cache", "pocket_recording", "document", "extension", "extension_event", "skill", "change", "change_seq",
     "redact_backfill", "peer_instance", "peer_share", "peer_link", "peer_item", "credential_ref", "secret_provider", "secret_request", "vault_secret",
-    "ontology_kind", "ontology_link", "ontology_property", "entity_property", "ontology_metric", "ontology_event", "composio_file",
+    "ontology_kind", "ontology_link", "ontology_property", "entity_property", "ontology_metric", "ontology_event", "composio_file", "access_review", "access_review_decision", "subject_export",
 ];
 const TENANT_EDGES: &[&str] = &["linked_to", "relates_to"];
 
@@ -198,7 +198,7 @@ async fn run(p: &Provisioner, control: &ControlDb, settings: &Settings, org: Org
     // Best effort, like every audit write; the log line below says the same.
     let actor = crate::authz::Actor { kind: "system", id: "legacy-move".into() };
     let target = format!("org:{}", org.key());
-    crate::audit::record(control, crate::audit::Event { user: None, actor: &actor, action: "legacy.move", target: &target, outcome: "ok", detail: &summary }).await;
+    crate::audit::record_in_org(control, &org, crate::audit::Event { user: None, actor: &actor, action: "legacy.move", target: &target, outcome: "ok", detail: &summary }).await;
     tracing::warn!(
         %org, users, memberships = mems, db = %db, skipped_rows = report.skipped.len(), skipped = %summary,
         "data move verified and complete. The old database `{old}` was kept: no row in it was copied back or deleted, but it was \
