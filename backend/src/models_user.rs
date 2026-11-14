@@ -48,7 +48,7 @@ async fn hash_password(password: &str) -> AppResult<String> {
 
 /// `false` for a wrong password and for a hash that cannot be checked. `None` checks against a
 /// dummy hash (unknown email): the same work as a wrong password, so timing does not reveal accounts.
-async fn verify_password(password: &str, hash: Option<&str>) -> bool {
+pub(crate) async fn verify_password(password: &str, hash: Option<&str>) -> bool {
     let (password, hash) = (password.to_string(), hash.map(String::from));
     blocking_hash(move || bcrypt::verify(password, hash.as_deref().unwrap_or_else(|| dummy_hash())).unwrap_or(false) && hash.is_some())
         .await
@@ -69,6 +69,41 @@ pub fn hash_token(token: &str) -> String {
 
 pub fn normalize_email(email: &str) -> String {
     email.trim().to_lowercase()
+}
+
+/// True when lowercasing `email` cannot turn one address into another. Some characters lowercase into
+/// plain ASCII (U+212A KELVIN SIGN into `k`), into the lowercase of a different capital (U+212B ANGSTROM
+/// SIGN into `\u{e5}`, whose capital is U+00C5), or into several characters (U+0130 into `i` and a dot),
+/// so an address written with them would compare as different text but be stored, after
+/// [`normalize_email`], as another address. New addresses must not do that.
+///
+/// An ordinary capital letter is fine, ASCII or not (`\u{d8}lsen` lowercases to `\u{f8}lsen`, whose capital
+/// is the same `\u{d8}`): a character passes when it is already lowercase or uncased, or when it lowercases
+/// to one non-ASCII character whose capital is exactly itself.
+pub fn case_folds_cleanly(email: &str) -> bool {
+    email.chars().all(|c| {
+        if c.is_ascii() {
+            return true;
+        }
+        let mut lower = c.to_lowercase();
+        let (Some(l), None) = (lower.next(), lower.next()) else { return false };
+        l == c || (!l.is_ascii() && { let mut up = l.to_uppercase(); up.next() == Some(c) && up.next().is_none() })
+    })
+}
+
+/// The form a new address is stored and compared in: trimmed, checked with [`case_folds_cleanly`],
+/// lowercased and validated. Every signup path goes through it. An internationalised domain is
+/// accepted in its ASCII (`xn--`) form.
+pub fn normalize_new_email(raw: &str) -> AppResult<String> {
+    let trimmed = raw.trim();
+    if !case_folds_cleanly(trimmed) {
+        return Err(AppError::bad_request(
+            "This email has a character that can't be used here. Type it in plain letters, and use the xn-- form for an internationalised domain.",
+        ));
+    }
+    let email = normalize_email(trimmed);
+    validate_email(&email)?;
+    Ok(email)
 }
 
 /// Expects an already-normalized email.
@@ -121,6 +156,14 @@ async fn home_of(control: &ControlDb, user: &RecordId) -> AppResult<(OrgId, bool
         .ok_or_else(|| AppError::coded(ErrorCode::TenantNotFound, "This account does not belong to an organisation."))
 }
 
+/// Whether `user` is a suspended account. A record that is not an account (or no longer exists) is not.
+/// The ways in that do not pass through [`load_user`] check this themselves: peer links and share codes,
+/// extension and source webhooks, and the job worker (connector syncs and every other queued job).
+pub async fn is_suspended(control: &ControlDb, user: &RecordId) -> AppResult<bool> {
+    let mut res = store::control::USER_SUSPENDED.on(control).bind(("id", user.clone())).await?;
+    Ok(res.take::<Vec<Option<Datetime>>>(0)?.into_iter().next().flatten().is_some())
+}
+
 /// The refusal for a suspended account, wherever it tries to get in.
 pub fn suspended_error() -> AppError {
     AppError::coded(ErrorCode::AuthSuspended, "This account is suspended. Ask your workspace admin to restore it.")
@@ -169,6 +212,9 @@ async fn assign_org(state: &AppState, user: &RecordId, email: &str, personal: bo
     let _one_at_a_time = crate::tx::lock("org.signup").await;
     let mut res = store::tenant::LIST.on(&state.control).await?;
     let rows: Vec<TenantListRow> = res.take(0)?;
+    // a closed workspace (its only member was erased) is never joined, but it still counts as an org the
+    // install had, so its fixed first-org id is not provisioned again over it
+    let had_orgs = rows.iter().any(|r| r.status == "closed");
     let existing = rows
         .into_iter()
         .filter(|r| r.status == "ready")
@@ -181,11 +227,12 @@ async fn assign_org(state: &AppState, user: &RecordId, email: &str, personal: bo
             };
             // The install's first org has a fixed id: two replicas that both see an empty install
             // converge on one org (provisioning is idempotent) instead of making two "Default"s.
-            let org = if found.is_none() { OrgId::from_label(&format!("default:{}", state.settings.surreal_ns)) } else { OrgId::new() };
-            match p.provision_org(&state.control, org, if found.is_none() { "Default" } else { email }).await {
+            let first = found.is_none() && !had_orgs;
+            let org = if first { OrgId::from_label(&format!("default:{}", state.settings.surreal_ns)) } else { OrgId::new() };
+            match p.provision_org(&state.control, org, if first { "Default" } else { email }).await {
                 Ok(()) => {}
                 // another replica is provisioning the same first org and got there first: wait for it, then join
-                Err(e) if found.is_none() && wait_ready(state, &org).await => {
+                Err(e) if first && wait_ready(state, &org).await => {
                     tracing::info!(error = %e.message, "first org provisioned by another process, joining it");
                 }
                 Err(e) => return Err(e),
@@ -214,22 +261,46 @@ pub async fn register_user(state: &AppState, email: &str, password: &str) -> App
 /// [`register_user`] with the org choice explicit: `personal` gives the user an org of their own,
 /// otherwise they join the install's org.
 pub async fn register_user_with(state: &AppState, email: &str, password: &str, personal: bool) -> AppResult<User> {
-    let email = normalize_email(email);
+    let email = normalize_new_email(email)?;
     validate_credentials(&email, password)?;
-    Box::pin(create_account(state, &email, Some(password), None, personal)).await
+    Box::pin(create_account(state, &email, Some(password), None, Placement::Instance { personal })).await
+}
+
+/// An account made through an organisation invitation: it joins the inviting org with the invited role
+/// (whatever `EUNOMIA_SIGNUP_ORG` says), and the invitation is used up in the same step. The caller has
+/// checked that `email` is the invited one (`invitations::email_matches`).
+pub async fn register_invited(state: &AppState, email: &str, password: &str, invitation: &crate::invitations::Pending) -> AppResult<User> {
+    let email = normalize_new_email(email)?;
+    validate_credentials(&email, password)?;
+    Box::pin(create_account(state, &email, Some(password), None, Placement::Invitation(invitation))).await
 }
 
 /// An account made by a verified OpenID Connect sign-in: no password, linked to `(issuer, subject)`.
 /// The caller has already decided the signup is allowed and that no account owns `email`.
 pub async fn register_oidc_user(state: &AppState, email: &str, issuer: &str, subject: &str) -> AppResult<User> {
-    let email = normalize_email(email);
-    validate_email(&email)?;
-    Box::pin(create_account(state, &email, None, Some((issuer, subject)), signup_personal())).await
+    let email = normalize_new_email(email)?;
+    Box::pin(create_account(state, &email, None, Some((issuer, subject)), Placement::Instance { personal: signup_personal() })).await
+}
+
+/// [`register_oidc_user`] for a sign-in that started from an organisation invitation link and may use it
+/// (`routers/oidc.rs` checked the token, the email and its verification): the account joins that org and
+/// the invitation is used up.
+pub async fn register_oidc_user_invited(state: &AppState, email: &str, issuer: &str, subject: &str, invitation: &crate::invitations::Pending) -> AppResult<User> {
+    let email = normalize_new_email(email)?;
+    Box::pin(create_account(state, &email, None, Some((issuer, subject)), Placement::Invitation(invitation))).await
+}
+
+/// Where a new account's membership comes from.
+enum Placement<'a> {
+    /// The install's org, or (`personal`) an org of its own: see [`assign_org`].
+    Instance { personal: bool },
+    /// The org an invitation names, with the invited role.
+    Invitation(&'a crate::invitations::Pending),
 }
 
 /// The shared signup: the user row (with a bcrypt hash of `password`, or none), the identity link if any,
 /// the org membership and the personal vault. Anything that fails leaves nothing behind.
-async fn create_account(state: &AppState, email: &str, password: Option<&str>, identity: Option<(&str, &str)>, personal: bool) -> AppResult<User> {
+async fn create_account(state: &AppState, email: &str, password: Option<&str>, identity: Option<(&str, &str)>, placement: Placement<'_>) -> AppResult<User> {
     let db = &state.control;
 
     let mut res = store::control::AUTH_USER_ID_BY_EMAIL
@@ -269,8 +340,17 @@ async fn create_account(state: &AppState, email: &str, password: Option<&str>, i
     let row = rows.into_iter().next().ok_or_else(|| AppError::internal("insert returned no row"))?;
 
     let mut joined = None;
+    let mut claimed = None;
     let setup = async {
-        let org = assign_org(state, &row.id, email, personal).await?;
+        let org = match placement {
+            Placement::Instance { personal } => assign_org(state, &row.id, email, personal).await?,
+            Placement::Invitation(inv) => {
+                let org = inv.org_id().ok_or_else(|| AppError::internal("invitation names no org"))?;
+                crate::invitations::claim(&state.control, &row.id, inv, true).await?;
+                claimed = Some(inv);
+                org
+            }
+        };
         joined = Some(org);
         if let Some((issuer, subject)) = identity {
             link_identity(&state.control, &row.id, issuer, subject, email).await?;
@@ -293,6 +373,9 @@ async fn create_account(state: &AppState, email: &str, password: Option<&str>, i
             {
                 let vault = crate::vaults::service::personal_vault_record_id(&row.id);
                 let _ = store::vaults::DELETE_VAULT.on(&orgdb).bind(("vault", vault)).await;
+            }
+            if let Some(inv) = claimed {
+                crate::invitations::reopen(db, &row.id, inv).await;
             }
             let _ = store::control::IDENTITY_DELETE_USER.on(db).bind(("user", row.id.clone())).await;
             let _ = store::control::MEMBERSHIP_DELETE_USER.on(db).bind(("user", row.id.clone())).await;
@@ -333,6 +416,12 @@ pub async fn user_by_identity(db: &ControlDb, issuer: &str, subject: &str) -> Ap
 }
 
 /// The user with this (any-case) email, if there is one.
+/// An account's email, if it exists.
+pub async fn email_of(db: &ControlDb, id: &RecordId) -> AppResult<String> {
+    let mut res = store::control::AUTH_USER_BY_ID.on(db).bind(("id", id.clone())).await?;
+    Ok(res.take::<Vec<UserRow>>(0)?.into_iter().next().map(|r| r.email).unwrap_or_default())
+}
+
 pub async fn user_by_email(db: &ControlDb, email: &str) -> AppResult<Option<User>> {
     let mut res = store::control::AUTH_USER_BY_EMAIL.on(db).bind(("email", normalize_email(email))).await?;
     let Some(row) = res.take::<Vec<UserRow>>(0)?.into_iter().next() else { return Ok(None) };
@@ -356,6 +445,14 @@ pub async fn authenticate(db: &ControlDb, email: &str, password: &str) -> AppRes
         return Ok(None);
     }
     Ok(Some(load_user(db, row.id, row.email).await?))
+}
+
+/// Re-checks the signed-in account's own password (enrolling an authenticator). `false` for a wrong
+/// password and for an account without one. Same bcrypt work either way.
+pub async fn password_matches(db: &ControlDb, user: &RecordId, password: &str) -> AppResult<bool> {
+    let rows: Vec<UserRow> = store::control::AUTH_USER_BY_ID.on(db).bind(("id", user.clone())).await?.take(0)?;
+    let hash = rows.into_iter().next().and_then(|r| r.password_hash);
+    Ok(verify_password(password, hash.as_deref()).await)
 }
 
 #[derive(Debug, Serialize)]
@@ -539,6 +636,26 @@ pub fn generate_token() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn look_alikes_that_fold_into_other_letters_are_refused() {
+        // U+212A KELVIN SIGN lowercases to an ASCII `k`; U+212B ANGSTROM SIGN to `\u{e5}`
+        // U+2126 OHM SIGN lowercases to a Greek omega whose capital is U+03A9; U+1E9E to `\u{df}`, capital "SS"
+        for raw in ["\u{212A}ate@corp.com", "kate@\u{212A}orp.com", "\u{212B}sa@corp.com", "\u{0130}nci@corp.com", "\u{2126}@corp.com", "gro\u{1E9E}@corp.com"] {
+            assert!(!case_folds_cleanly(raw), "{raw:?}");
+            assert!(normalize_new_email(raw).is_err(), "{raw:?}");
+        }
+        assert_eq!(normalize_email("\u{212A}ate@corp.com"), "kate@corp.com", "what the check exists for");
+        // ASCII in any case, and a punycode domain, are fine
+        assert_eq!(normalize_new_email("  Kate@Corp.COM ").unwrap(), "kate@corp.com");
+        assert_eq!(normalize_new_email("anna@xn--bcher-kva.example").unwrap(), "anna@xn--bcher-kva.example");
+        assert!(normalize_new_email("not-an-email").is_err());
+        // an ordinary capital letter outside ASCII is a real address, not a look-alike
+        assert_eq!(normalize_new_email("\u{d8}lsen@firma.no").unwrap(), "\u{f8}lsen@firma.no");
+        assert_eq!(normalize_new_email("\u{c5}sa@corp.com").unwrap(), "\u{e5}sa@corp.com");
+        assert_eq!(normalize_new_email("\u{c9}lodie@exemple.fr").unwrap(), "\u{e9}lodie@exemple.fr");
+        assert!(normalize_new_email("\u{e9}lodie@exemple.fr").is_ok());
+    }
 
     #[test]
     fn normalize_email_trims_and_lowercases() {

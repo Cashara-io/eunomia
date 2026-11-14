@@ -228,7 +228,7 @@ export default function Sidebar() {
         ) : newVersion ? (
           <span className="sidebar-muted">
             {versionLabel()} ·{" "}
-            <Link href="/settings?tab=updates" className="underline underline-offset-2 rounded-[3px]" style={{ color: "var(--bauhaus-app-yellow)" }}>
+            <Link href="/settings?tab=updates" className="underline underline-offset-2 rounded-[3px]" style={{ color: "var(--bauhaus-app-sidebar-text)" }}>
               Update available · {newVersion}
             </Link>
           </span>

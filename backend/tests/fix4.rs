@@ -131,7 +131,7 @@ async fn a_listed_operator_address_cannot_be_claimed_by_signup() {
     // an account made before the address was listed is the operator
     unsafe { std::env::set_var("EUNOMIA_ADMIN_EMAILS", "ordinary@example.com") };
     let ordinary = models_user::authenticate(app.control(), "ordinary@example.com", PASSWORD).await.unwrap().unwrap();
-    assert!(eunomia_backend::authz::is_operator(&ordinary));
+    assert!(eunomia_backend::authz::is_operator(app.control(), &ordinary).await.unwrap());
     unsafe { std::env::remove_var("EUNOMIA_ADMIN_EMAILS") };
 }
 

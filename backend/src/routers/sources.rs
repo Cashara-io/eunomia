@@ -406,6 +406,10 @@ async fn source_webhook(
     }
     let Ok(owner) = crate::rid::parse(&owner_id) else { return ignored() };
     let Ok(org) = crate::models_user::org_of(&state.control, &owner).await else { return ignored() };
+    // a suspended owner's sources take nothing in
+    if crate::models_user::is_suspended(&state.control, &owner).await.unwrap_or(true) {
+        return ignored();
+    }
     let state = state.org(&org).await?;
 
     // One URL serves every connection of the kind: the delivery belongs to the connection whose own

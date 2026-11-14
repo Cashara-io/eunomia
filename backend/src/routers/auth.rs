@@ -38,7 +38,7 @@ pub fn router() -> Router<AppState> {
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
-struct AuthOut {
+pub(crate) struct AuthOut {
     id: String,
     email: String,
     onboarded: bool,
@@ -48,6 +48,27 @@ struct AuthOut {
     oidc_provider: Option<String>,
     /// True for an instance admin: the first user, or an email in `EUNOMIA_ADMIN_EMAILS`.
     is_admin: bool,
+    /// The account's role in its organisation: `owner`, `admin` or `member`.
+    org_role: String,
+    /// May invite people to the organisation and see its seats (an owner or admin of it, or an instance admin).
+    can_manage_org: bool,
+}
+
+/// A correct password whose sign-in still needs its second step. No session yet: the response sets a
+/// short-lived cookie that only the `/api/auth/mfa/challenge/*` routes accept.
+#[derive(Serialize, utoipa::ToSchema)]
+pub(crate) struct MfaPendingOut {
+    /// `verify`: enter an authenticator or recovery code. `enrol`: this server requires two-step
+    /// verification and the account has none yet, so set up an authenticator first.
+    pub mfa_required: String,
+}
+
+/// What login and register answer: the signed-in user, or the second step still to do.
+#[derive(Serialize, utoipa::ToSchema)]
+#[serde(untagged)]
+pub(crate) enum SignInOut {
+    Session(AuthOut),
+    Mfa(MfaPendingOut),
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -86,6 +107,16 @@ struct Credentials {
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
+struct RegisterBody {
+    email: String,
+    password: String,
+    /// The token from an organisation invitation link. The account joins that organisation, and a valid
+    /// invitation is the permission to sign up even when `SIGNUP` is `invite` or `closed`. The email must be the invited one.
+    #[serde(default)]
+    invitation: Option<String>,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
 struct TokenCreate {
     name: String,
     /// Any of `memory:read`, `memory:write`, `vaults:admin`, `connectors`. Defaults
@@ -101,6 +132,10 @@ struct TokenCreate {
     #[serde(default, deserialize_with = "explicit_null")]
     #[schema(value_type = Option<String>, required = false)]
     expires_at: Option<Option<String>>,
+    /// A current authenticator or recovery code. Needed from a browser session of an account with
+    /// two-step verification when its last second factor is older than 10 minutes (`auth.step_up_required`).
+    #[serde(default)]
+    mfa_code: Option<String>,
 }
 
 // Serde normally collapses missing and null. Keep deliberate opt-ins separate from defaults.
@@ -133,7 +168,7 @@ pub(crate) fn user_agent_from(headers: &HeaderMap) -> Option<String> {
 }
 
 /// The `AuthOut` for a user: onboarding state, whether a password exists, and the linked provider.
-async fn auth_out(state: &AppState, user: User) -> AppResult<AuthOut> {
+pub(crate) async fn auth_out(state: &AppState, user: User) -> AppResult<AuthOut> {
     #[derive(Deserialize, SurrealValue)]
     struct Row {
         onboarded_at: Option<Datetime>,
@@ -155,6 +190,7 @@ async fn auth_out(state: &AppState, user: User) -> AppResult<AuthOut> {
         None => None,
     };
     let is_admin = crate::authz::is_admin(&state.control, &user).await?;
+    let (org_role, can_manage_org) = org_standing(state, &user, is_admin).await?;
     Ok(AuthOut {
         id: user.id.to_string(),
         email: user.email,
@@ -162,7 +198,53 @@ async fn auth_out(state: &AppState, user: User) -> AppResult<AuthOut> {
         has_password: row.is_some_and(|r| r.password_hash.is_some()),
         oidc_provider,
         is_admin,
+        org_role,
+        can_manage_org,
     })
+}
+
+/// The account's role in its org, and whether it may manage the org's invitations.
+async fn org_standing(state: &AppState, user: &User, is_admin: bool) -> AppResult<(String, bool)> {
+    let role = crate::invitations::org_role(&state.control, user).await?.unwrap_or_else(|| "member".into());
+    let manager = is_admin || role == "owner" || role == "admin";
+    Ok((role, manager))
+}
+
+/// Starts the browser session and answers with the signed-in user. `mfa`: a second factor was just passed.
+pub(crate) async fn session_response(
+    state: &AppState,
+    user: User,
+    headers: &HeaderMap,
+    https: Option<Extension<ForwardedHttps>>,
+    via: auth::Via,
+    mfa: bool,
+    extra_cookie: Option<String>,
+) -> AppResult<Response> {
+    let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(headers).as_deref(), via, mfa).await?;
+    let body = auth_out(state, user).await?;
+    let mut resp = (StatusCode::OK, Json(SignInOut::Session(body))).into_response();
+    let mut cookies = vec![session_cookie_header(&token, &state.settings.public_url, https)];
+    cookies.extend(extra_cookie);
+    for c in cookies {
+        if let Ok(v) = header::HeaderValue::from_str(&c) {
+            resp.headers_mut().append(header::SET_COOKIE, v);
+        }
+    }
+    Ok(resp)
+}
+
+/// A correct password that still owes its second step: the challenge cookie, no session.
+async fn challenge_response(
+    state: &AppState,
+    user: &User,
+    headers: &HeaderMap,
+    https: Option<Extension<ForwardedHttps>>,
+    next: crate::mfa::AfterPassword,
+) -> AppResult<Response> {
+    let token = crate::mfa::create_challenge(&state.control, &user.id, next, auth::Via::Password.as_str(), user_agent_from(headers).as_deref(), None).await?;
+    let cookie = crate::mfa::challenge_cookie(&token, &state.settings.public_url, https);
+    let body = SignInOut::Mfa(MfaPendingOut { mfa_required: next.purpose().to_string() });
+    Ok((StatusCode::OK, [(header::SET_COOKIE, cookie)], Json(body)).into_response())
 }
 
 /// Password sign-in and signup are off when `AUTH_MODE=oidc`.
@@ -196,17 +278,15 @@ pub(crate) fn session_cookie_header(token: &str, public_url: &str, https: Option
 /// `SIGNUP`: who may create an account once the install has a first user.
 /// `open` lets anyone who can reach the server sign up; `invite` only emails the operator listed in
 /// `SIGNUP_ALLOWLIST` or `EUNOMIA_ADMIN_EMAILS` (a vault invitation needs an existing account, so it
-/// cannot be the invitation); `closed` nobody. The first user can always sign up. Unknown values close.
+/// cannot be the invitation); `closed` nobody. Under any mode, a valid organisation invitation for the
+/// email is the permission on its own (checked by `register` and the OIDC callback, not here). The first user can always sign up. Unknown values close.
 pub(crate) fn signup_allowed(mode: &str, has_users: bool, email: &str, allowlist: &str) -> bool {
     if !has_users {
         return true;
     }
     match mode.trim().to_ascii_lowercase().as_str() {
         "" | "open" => true,
-        "invite" => {
-            let email = models_user::normalize_email(email);
-            allowlist.split(',').map(models_user::normalize_email).any(|e| !e.is_empty() && e == email)
-        }
+        "invite" => models_user::case_folds_cleanly(email.trim()) && authz::email_listed_in(allowlist, email),
         _ => false,
     }
 }
@@ -233,48 +313,62 @@ fn signup_refusal_reason(mode: &str, reserved: bool) -> &'static str {
     path = "/api/auth/register",
     tag = "auth",
     summary = "Create an account and start a session",
-    request_body = Credentials,
-    responses((status = 200, body = AuthOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    description = "When the server requires two-step verification, the account is created but no session starts: the answer is `{\"mfa_required\": \"enrol\"}` with a short-lived cookie for `/api/auth/mfa/challenge/enrol`.",
+    request_body = RegisterBody,
+    responses((status = 200, body = SignInOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(()),
 )]
 async fn register(
     State(state): State<AppState>,
     https: Option<Extension<ForwardedHttps>>,
+    ip: Option<Extension<crate::gate::ClientIp>>,
     headers: HeaderMap,
-    Json(body): Json<Credentials>,
+    Json(body): Json<RegisterBody>,
 ) -> AppResult<Response> {
     require_password_enabled(&state)?;
     let has_users = crate::capsules::first_user(&state.control).await?.is_some();
     // an operator address is not verified, so whoever signed up with it first would become operator:
-    // it must already have an account before it is listed (same refusal text, nothing to probe)
+    // it must already have an account before it is listed (same refusal text, nothing to probe).
+    // An invitation does not change that: the link proves who holds it, not who owns the address.
     let reserved = has_users && authz::operator_email_listed(&body.email);
+    // a valid organisation invitation for this email is itself the permission to sign up
+    let invitation = match body.invitation.as_deref().filter(|t| !t.trim().is_empty()) {
+        Some(token) if !reserved => {
+            // the same refusal a look-alike address gets without a link, before the link is looked at
+            models_user::normalize_new_email(&body.email)?;
+            let ip = ip.as_ref().map_or("", |i| i.0 .0.as_str());
+            let p = crate::invitations::usable(&state, token, crate::invitations::Who::Address(ip)).await?;
+            crate::invitations::require_email(&state.control, &p, &body.email).await?;
+            Some(p)
+        }
+        _ => None,
+    };
     let mode = std::env::var("SIGNUP").unwrap_or_default();
-    if reserved || !signup_allowed(&mode, has_users, &body.email, &std::env::var("SIGNUP_ALLOWLIST").unwrap_or_default()) {
+    if invitation.is_none() && (reserved || !signup_allowed(&mode, has_users, &body.email, &std::env::var("SIGNUP_ALLOWLIST").unwrap_or_default())) {
         tracing::info!(signup = %mode, reserved, reason = signup_refusal_reason(&mode, reserved), "signup refused by the SIGNUP policy");
         return Err(AppError::coded(ErrorCode::AuthForbidden, SIGNUP_REFUSED));
     }
-    let user = models_user::register_user(&state, &body.email, &body.password)
-        .await
-        .map_err(|e| {
-            if e.code == ErrorCode::DbDuplicate {
-                AppError::coded(ErrorCode::AuthEmailTaken, "A user with that email already exists.")
-            } else {
-                e
-            }
-        })?;
+    let created = match &invitation {
+        Some(p) => models_user::register_invited(&state, &body.email, &body.password, p).await,
+        None => models_user::register_user(&state, &body.email, &body.password).await,
+    };
+    let user = created.map_err(|e| {
+        if e.code == ErrorCode::DbDuplicate {
+            AppError::coded(ErrorCode::AuthEmailTaken, "A user with that email already exists.")
+        } else {
+            e
+        }
+    })?;
+    if let Some(p) = &invitation {
+        crate::invitations::record_accepted(&state.control, &user.id, p, &p.role, "signup").await;
+    }
 
-    let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref())
-        .await?;
     audit::record_as_caller(&state.control, &user.id, "auth.register", "", "ok").await;
-
-    let is_admin = crate::authz::is_admin(&state.control, &user).await?;
-    let body = AuthOut { id: user.id.to_string(), email: user.email, onboarded: false, has_password: true, oidc_provider: None, is_admin };
-    Ok((
-        StatusCode::OK,
-        [(header::SET_COOKIE, session_cookie_header(&token, &state.settings.public_url, https))],
-        Json(body),
-    )
-        .into_response())
+    // the server requires two-step verification: the new account sets it up before any session
+    if crate::mfa::require_mfa(&state.control).await? {
+        return challenge_response(&state, &user, &headers, https, crate::mfa::AfterPassword::Enrol).await;
+    }
+    session_response(&state, user, &headers, https, auth::Via::Password, false, None).await
 }
 
 #[utoipa::path(
@@ -283,8 +377,9 @@ async fn register(
     path = "/api/auth/login",
     tag = "auth",
     summary = "Log in and start a session",
+    description = "For an account with two-step verification, or on a server that requires it, a correct password starts no session: the answer is `{\"mfa_required\": \"verify\"}` (or `\"enrol\"`) with a short-lived cookie that only `/api/auth/mfa/challenge/*` accepts.",
     request_body = Credentials,
-    responses((status = 200, body = AuthOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    responses((status = 200, body = SignInOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(()),
 )]
 async fn login(
@@ -321,16 +416,13 @@ async fn login(
 
     state.fail_throttle.clear(&fail_key);
     state.fail_throttle.clear(&account_key);
-    let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref())
-        .await?;
+    // the password is only the first step for an account with MFA, or when the server requires it
+    let next = crate::mfa::after_password(&state.control, &user.id).await?;
+    if next != crate::mfa::AfterPassword::Session {
+        return challenge_response(&state, &user, &headers, https, next).await;
+    }
     audit::record_as_caller(&state.control, &user.id, "auth.login", "", "ok").await;
-    let body = auth_out(&state, user).await?;
-    Ok((
-        StatusCode::OK,
-        [(header::SET_COOKIE, session_cookie_header(&token, &state.settings.public_url, https))],
-        Json(body),
-    )
-        .into_response())
+    session_response(&state, user, &headers, https, auth::Via::Password, false, None).await
 }
 
 #[utoipa::path(
@@ -373,6 +465,7 @@ async fn me(State(state): State<AppState>, user: User) -> AppResult<Json<AuthOut
     path = "/api/auth/tokens",
     tag = "auth",
     summary = "Create an API token",
+    description = "From a browser session of an account with two-step verification, the last second factor must be under 10 minutes old or `mfa_code` must carry a current code (`auth.step_up_required`). An API token cannot create another token for an account with two-step verification, or while the server requires it (`auth.step_up_required`): create it in Settings.",
     request_body = TokenCreate,
     responses((status = 200, body = TokenCreated), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
@@ -380,6 +473,7 @@ async fn me(State(state): State<AppState>, user: User) -> AppResult<Json<AuthOut
 async fn create_token(
     State(state): State<AppState>,
     user: User,
+    headers: HeaderMap,
     Json(body): Json<TokenCreate>,
 ) -> AppResult<Json<TokenCreated>> {
     let name = {
@@ -437,6 +531,15 @@ async fn create_token(
     {
         return Err(AppError::coded(ErrorCode::AuthScope, "this token expires, so it can only mint tokens that expire no later than it does"));
     }
+    // a new long-lived credential is a sensitive action. For an account with MFA (or while MFA is required) only
+    // a browser session that passed a second factor may mint one: a token from before enrolment cannot breed
+    if me.actor.kind == "token" && (crate::mfa::enabled(&state.control, &user.id).await? || crate::mfa::require_mfa(&state.control).await?) {
+        return Err(AppError::coded(
+            ErrorCode::AuthStepUpRequired,
+            "This account uses two-step verification, so new API tokens are created in Settings > API tokens, where you confirm with a code. This token can't create another one.",
+        ));
+    }
+    crate::mfa::step_up(&state, &user, &headers, body.mfa_code.as_deref()).await?;
     let expires_at = expires.map(Datetime::from);
     let result = models_user::create_api_token_with(&state.control, &user.id, &name, &scopes, vault.as_ref(), expires_at).await?;
     audit::record_as_caller(&state.control, &user.id, "auth.token_create", &result.id.to_string(), "ok").await;
@@ -659,7 +762,7 @@ async fn bootstrap(State(state): State<AppState>) -> AppResult<Json<BootstrapOut
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(
+#[openapi(components(schemas(AuthOut, MfaPendingOut)), paths(
     register,
     login,
     logout,
@@ -717,6 +820,9 @@ mod tests {
         assert!(!signup_allowed("junk", true, "a@x.com", "a@x.com"), "a typo closes");
         assert!(signup_allowed("invite", true, "A@x.com", "b@x.com, a@X.com"));
         assert!(!signup_allowed("invite", true, "c@x.com", "b@x.com,"));
+        // compared in the stored form, and a look-alike of an allowed address is not allowed
+        assert!(signup_allowed("invite", true, "  KATE@x.com", "kate@x.com"));
+        assert!(!signup_allowed("invite", true, "\u{212A}ate@x.com", "kate@x.com"));
     }
 
     #[test]

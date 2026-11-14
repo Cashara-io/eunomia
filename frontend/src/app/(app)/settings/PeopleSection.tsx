@@ -8,7 +8,10 @@ import Tooltip from "@/components/bits/Tooltip";
 import CopyButton from "@/components/bits/CopyButton";
 import { usePeople, usePersonTokens, useRevokePersonToken, useSetAdmin, useSetSuspended } from "@/lib/queries/admin";
 import type { Person } from "@/lib/gen";
+import { useCancelErasure, useErasePerson, useErasures, useMakeWorkspaceOwner, useReapplyErasures, useSetLegalHold, useStartPersonExport } from "@/lib/queries/subject";
+import { useMe } from "@/lib/queries/auth";
 import { ICON, PanelHead, QUIET_DANGER, RevokeButton, TableSkeleton, expiryLabel, relativeTime } from "./shared";
+import { InvitationsSection } from "./InvitationsSection";
 
 /* Why an admin can't be changed here, for the tooltip on the disabled button. */
 const LOCKED: Record<string, string> = {
@@ -38,7 +41,7 @@ function Locked({ label, reason }: { label: string; reason: string }) {
   );
 }
 
-function RowActions({ p, onError }: { p: Person; onError: (f: Failure | null) => void }) {
+function RowActions({ p, onError, onData }: { p: Person; onError: (f: Failure | null) => void; onData: () => void }) {
   const setAdmin = useSetAdmin();
   const setSuspended = useSetSuspended();
   const [confirming, setConfirming] = useState<keyof typeof CONFIRM | null>(null);
@@ -95,6 +98,9 @@ function RowActions({ p, onError }: { p: Person; onError: (f: Failure | null) =>
 
   return (
     <span className="inline-flex flex-wrap items-center justify-start sm:justify-end gap-1">
+      <button type="button" className="btn btn-ghost btn-sm" aria-label={`Data of ${p.email}`} onClick={onData}>
+        Data
+      </button>
       {locked ? (
         <Locked label="Remove admin" reason={locked} />
       ) : p.is_you && p.role === "admin" ? (
@@ -122,6 +128,261 @@ function RowActions({ p, onError }: { p: Person; onError: (f: Failure | null) =>
         </button>
       )}
     </span>
+  );
+}
+
+/* Someone's data, opened from "Data": any admin exports this workspace's data about them and places a legal hold;
+ * only a server operator lifts a hold or deletes the account (with their own password). */
+function PersonData({ p, onError, iOwn, iOperate }: { p: Person; onError: (f: Failure | null) => void; iOwn: boolean; iOperate: boolean }) {
+  const exp = useStartPersonExport();
+  const hold = useSetLegalHold();
+  const erase = useErasePerson();
+  const owner = useMakeWorkspaceOwner();
+  // the operator confirms with their own password; one with single sign-on only needs a recent sign-in
+  const adminHasPassword = useMe().data?.has_password ?? true;
+  const [confirming, setConfirming] = useState(false);
+  const [typed, setTyped] = useState("");
+  // the operator's own two-step verification: a second factor from the last 10 minutes, or a code now
+  const [stepUp, setStepUp] = useState(false);
+  const [mfaCode, setMfaCode] = useState("");
+  const [done, setDone] = useState<string | null>(null);
+  const held = !!p.legal_hold_at;
+
+  async function run(action: () => Promise<unknown>, fallback: string, ok: string) {
+    onError(null);
+    setDone(null);
+    try {
+      await action();
+      setDone(ok);
+    } catch (e) {
+      onError(failure(e, fallback));
+    }
+  }
+
+  return (
+    <div className="py-2 flex flex-col gap-2 text-[13px]" data-testid={`person-data-${p.email}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={exp.isPending}
+          onClick={() =>
+            run(
+              () => exp.mutateAsync(p.id),
+              `Could not start an export for ${p.email}.`,
+              "Export started: this workspace's data about them (not their personal space or other workspaces). Download it from your Settings > Data when it is ready; their activity shows you made it."
+            )
+          }
+        >
+          Export their data
+        </button>
+        {(!held || (iOperate && !p.is_you)) && (
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={hold.isPending}
+          onClick={async () => {
+            onError(null);
+            setDone(null);
+            try {
+              const r = await hold.mutateAsync({ user_id: p.id, hold: !held });
+              setDone(
+                held
+                  ? r.erasure_open
+                    ? "Legal hold lifted. The deletion that was waiting carries on."
+                    : "Legal hold lifted."
+                  : r.erasure_open
+                    ? "Legal hold placed. A deletion was already queued: it stops before its next step and waits until the server operator lifts the hold."
+                    : "Legal hold placed. The account can't be erased until the server operator lifts it."
+              );
+            } catch (e) {
+              onError(failure(e, held ? `Could not lift the hold on ${p.email}.` : `Could not place a hold on ${p.email}.`));
+            }
+          }}
+        >
+          {held ? "Lift legal hold" : "Place legal hold"}
+        </button>
+        )}
+        {iOwn && !p.workspace_owner && !p.is_you && (
+          <button
+            type="button"
+            className="btn btn-sm"
+            disabled={owner.isPending}
+            title="A workspace has one owner. Hand it over before deleting the current owner's account."
+            onClick={() => run(() => owner.mutateAsync(p.id), `Could not make ${p.email} the workspace owner.`, `${p.email} owns the workspace now.`)}
+          >
+            Make workspace owner
+          </button>
+        )}
+        {iOperate && !confirming && !p.is_you && (
+          <button type="button" className={QUIET_DANGER} disabled={held} title={held ? "Lift the legal hold first." : undefined} onClick={() => setConfirming(true)}>
+            Delete account and data
+          </button>
+        )}
+      </div>
+      {confirming && (
+        <form
+          className="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const mfa_code = stepUp && mfaCode.trim() ? mfaCode.trim() : undefined;
+            void (async () => {
+              onError(null);
+              setDone(null);
+              try {
+                await erase.mutateAsync(adminHasPassword ? { user_id: p.id, password: typed, mfa_code } : { user_id: p.id, mfa_code });
+                setDone("Deletion started. They are signed out, and their data is removed in the next few minutes.");
+                setConfirming(false);
+              } catch (err) {
+                if ((err as { code?: string }).code === "auth.step_up_required") {
+                  setStepUp(true);
+                  return;
+                }
+                onError(failure(err, `${p.email} was not deleted.`));
+              }
+            })();
+          }}
+        >
+          <span style={{ color: "var(--ink-dim)" }}>
+            Deletes their whole account and everything that is theirs alone, in every workspace: their personal space, chats,
+            sources and files. What they wrote in spaces others read stays, with them removed as its author. It can be cancelled
+            only until it starts deleting.{" "}
+            {adminHasPassword ? "Type your own password to confirm." : "You sign in with single sign-on: this needs a sign-in from the last 10 minutes."}
+          </span>
+          <span className="flex flex-wrap items-center gap-2">
+            {adminHasPassword && (
+              <input
+                className="field h-8 px-3 min-w-[16rem]"
+                type="password"
+                autoComplete="current-password"
+                aria-label="Your password"
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+              />
+            )}
+            {stepUp && (
+              <input
+                className="field h-8 px-3 w-[9rem] font-mono"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                placeholder="123456"
+                aria-label="Authenticator code"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+              />
+            )}
+            <button type="submit" className="btn btn-danger-solid btn-sm" disabled={(adminHasPassword && !typed) || erase.isPending || (stepUp && !mfaCode.trim())}>
+              {erase.isPending ? "Deleting…" : "Delete"}
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label="Cancel" onClick={() => setConfirming(false)}>
+              <XIcon {...ICON} />
+            </button>
+          </span>
+        </form>
+      )}
+      {done && (
+        <span role="status" style={{ color: "var(--ink-dim)" }}>
+          {done}
+        </span>
+      )}
+    </div>
+  );
+}
+
+const mentions = (r: { review?: unknown }) =>
+  Object.values(((r.review as { mentions_left_in_others_content?: Record<string, number> } | undefined)?.mentions_left_in_others_content ?? {}) as Record<string, number>).reduce(
+    (a, n) => a + (typeof n === "number" ? n : 0),
+    0
+  );
+
+/* The proof each erasure leaves: when, how, whether the post-check found nothing. Never who it was. */
+function Erasures({ iOperate }: { iOperate: boolean }) {
+  const query = useErasures();
+  const reapply = useReapplyErasures();
+  const cancel = useCancelErasure();
+  const [error, setError] = useState<Failure | null>(null);
+  const rows = query.data ?? [];
+  return (
+    <div className="flex flex-col gap-2" data-testid="erasure-records">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-reading font-semibold">Erasure records</h3>
+        {iOperate && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          disabled={reapply.isPending}
+          title="After restoring a backup: erase again anyone erased after the backup was taken. This also runs when the server starts."
+          onClick={async () => {
+            setError(null);
+            try {
+              await reapply.mutateAsync();
+            } catch (e) {
+              setError(failure(e, "Could not re-apply the erasures."));
+            }
+          }}
+        >
+          Re-apply after a restore
+        </button>
+        )}
+      </div>
+      {error && <ErrorLine error={error} />}
+      {rows.length === 0 ? (
+        <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+          No accounts have been erased.
+        </p>
+      ) : (
+        <ul className="hairline-rows text-[13px]">
+          {rows.map((r) => {
+            const left = Object.entries((r.post_check ?? {}) as Record<string, number>).filter(([, n]) => n > 0);
+            return (
+              <li key={r.id} className="py-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                <span className="tabular-nums" style={{ color: "var(--ink-dim)" }}>
+                  {new Date(r.completed_at ?? r.requested_at).toLocaleString()}
+                </span>
+                <span className="font-mono truncate max-w-[10rem]" title={`Reference ${r.subject_ref}`}>
+                  {r.subject_ref.slice(0, 12)}
+                </span>
+                <span>{r.requested_by === "self" ? "by the person" : r.requested_by === "operator" ? "by the server operator" : "re-applied after a restore"}</span>
+                <span style={{ color: r.status === "done" ? "var(--good)" : r.status === "failed" ? "var(--critical)" : "var(--ink-dim)" }}>
+                  {r.status === "done"
+                    ? "Done, nothing left"
+                    : r.status === "failed"
+                      ? `Failed, retrying: still in ${left.map(([t]) => t).join(", ") || "unknown"}`
+                      : r.status === "held"
+                        ? "Waiting: a legal hold stopped it"
+                        : r.status === "cancelled"
+                          ? "Cancelled by an operator"
+                          : "In progress"}
+                </span>
+                {iOperate && !r.deleting_at && ["pending", "held", "failed"].includes(r.status) && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    title="Stops it before it deletes anything: the account is left as it was before the request."
+                    onClick={async () => {
+                      setError(null);
+                      try {
+                        await cancel.mutateAsync(r.id);
+                      } catch (e) {
+                        setError(failure(e, "Could not cancel the erasure."));
+                      }
+                    }}
+                  >
+                    Cancel
+                  </button>
+                )}
+                {mentions(r) > 0 && (
+                  <span style={{ color: "var(--ink-dim)" }} title="Mentions of their email in content other people wrote. That content is theirs, so it was kept: review it.">
+                    {mentions(r)} {mentions(r) === 1 ? "mention" : "mentions"} left in others&apos; content, for review
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -206,6 +467,12 @@ function Email({ p }: { p: Person }) {
           </span>
         )}
       </span>
+      {p.legal_hold_at && (
+        <span className="text-[12px] inline-flex items-center gap-1.5" style={{ color: "var(--warning)" }} title={`Held since ${new Date(p.legal_hold_at).toLocaleString()}`}>
+          <span className="dot" style={{ background: "var(--warning)" }} aria-hidden />
+          Legal hold
+        </span>
+      )}
       {suspended && (
         <span
           className="text-[12px] inline-flex items-center gap-1.5"
@@ -220,7 +487,23 @@ function Email({ p }: { p: Person }) {
   );
 }
 
-export function PeopleSection() {
+/** An owner or admin of the organisation who is not an instance admin: invitations and seats only. */
+function OrgPeopleSection() {
+  return (
+    <div className="flex flex-col gap-5">
+      <PanelHead title="People">Invite colleagues to this organisation.</PanelHead>
+      <InvitationsSection />
+    </div>
+  );
+}
+
+/** `full` for an instance admin (everyone's account, suspend, admin rights); else invitations only. */
+export function PeopleSection({ full = true }: { full?: boolean }) {
+  if (!full) return <OrgPeopleSection />;
+  return <FullPeopleSection />;
+}
+
+function FullPeopleSection() {
   const query = usePeople();
   const data = query.data;
   const people = data?.people ?? null;
@@ -229,6 +512,13 @@ export function PeopleSection() {
   // whose API tokens are open under their row
   const [tokensOf, setTokensOf] = useState<string | null>(null);
   const toggleTokens = (id: string) => setTokensOf((cur) => (cur === id ? null : id));
+  // whose data panel is open under their row
+  const [dataOf, setDataOf] = useState<string | null>(null);
+  const toggleData = (id: string) => setDataOf((cur) => (cur === id ? null : id));
+  // only the workspace owner (or a server operator, which the server checks) hands the workspace over
+  const iOwn = !!people?.find((x) => x.is_you)?.workspace_owner;
+  // a server operator: the account that set up the server, or one the server's settings list (the server checks)
+  const iOperate = ["creator", "operator"].includes(people?.find((x) => x.is_you)?.admin ?? "");
 
   return (
     <div className="flex flex-col gap-5">
@@ -270,6 +560,8 @@ export function PeopleSection() {
         </div>
       )}
 
+      <InvitationsSection />
+
       {actionError && <ErrorLine error={actionError} />}
 
       {/* Phones: one stacked entry per person (email, then the facts, then the actions), no sideways scroll. */}
@@ -305,8 +597,9 @@ export function PeopleSection() {
               )}
               {/* pulled left by the buttons' own padding, so the actions line up with the email above */}
               <div className={`pt-1 ${p.is_you ? "" : "-ml-2.5"}`}>
-                <RowActions p={p} onError={setActionError} />
+                <RowActions p={p} onError={setActionError} onData={() => toggleData(p.id)} />
               </div>
+              {dataOf === p.id && <PersonData p={p} onError={setActionError} iOwn={iOwn} iOperate={iOperate} />}
             </li>
           ))
         )}
@@ -358,13 +651,20 @@ export function PeopleSection() {
                       <TokenCount p={p} open={tokensOf === p.id} onToggle={() => toggleTokens(p.id)} />
                     </td>
                     <td className="text-right whitespace-nowrap">
-                      <RowActions p={p} onError={setActionError} />
+                      <RowActions p={p} onError={setActionError} onData={() => toggleData(p.id)} />
                     </td>
                   </tr>,
                   tokensOf === p.id ? (
                     <tr key={`${p.id}-tokens`} data-testid={`person-tokens-${p.email}`}>
                       <td colSpan={7} className="h-auto! pl-8!">
                         <PersonTokens p={p} onError={setActionError} />
+                      </td>
+                    </tr>
+                  ) : null,
+                  dataOf === p.id ? (
+                    <tr key={`${p.id}-data`}>
+                      <td colSpan={7} className="h-auto! pl-8!">
+                        <PersonData p={p} onError={setActionError} iOwn={iOwn} iOperate={iOperate} />
                       </td>
                     </tr>
                   ) : null,
@@ -375,8 +675,11 @@ export function PeopleSection() {
       </div>
       <p className="text-[12px] max-w-[68ch]" style={{ color: "var(--ink-faint)" }}>
         Admins can see this page, the audit log and the server settings. A suspended account can&apos;t sign in, and its API tokens
-        and connected apps stop working until you restore it.
+        and connected apps stop working until you restore it. Deleting an account removes everything that is theirs alone; a
+        legal hold stops that until the server operator lifts it. Only the server operator deletes someone&apos;s account; anyone
+        can delete their own in Settings &gt; Data.
       </p>
+      <Erasures iOperate={iOperate} />
     </div>
   );
 }

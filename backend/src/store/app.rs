@@ -11,8 +11,10 @@ pub const ALL: &[&Stmt] = &[
     &CHAT_THREAD_TOUCH,
     &CHAT_MESSAGES_FOR_THREAD,
     &CHAT_MESSAGES_FOR_OWNER,
-    &CHAT_MESSAGE_CREATE,
-    &CHAT_TOOL_BATCH_CREATE,
+    &CHAT_TURN_CLAIM,
+    &CHAT_TURN_RENEW,
+    &CHAT_TURN_RELEASE,
+    &CHAT_TURN_APPEND,
     &CHAT_MESSAGES_CLEAR,
     &CONNECTORS_OF_KIND,
     &CONNECTORS_OF_OWNER,
@@ -68,20 +70,39 @@ pub const CHAT_MESSAGES_FOR_THREAD: Stmt = Stmt::new(
 pub const CHAT_MESSAGES_FOR_OWNER: Stmt =
     Stmt::new("app.chat_messages_for_owner", "SELECT * FROM chat_message WHERE owner = $owner ORDER BY created_at");
 
-pub const CHAT_MESSAGE_CREATE: Stmt = Stmt::new(
-    "app.chat_message_create",
-    "CREATE chat_message SET owner = $owner, thread_id = $thread_id, role = $role, content = $content, \
-     tool_calls = $tool_calls, tool_call_id = $tool_call_id RETURN AFTER",
+/// Claim one thread before reading history. The token is unique per send, not per process.
+pub const CHAT_TURN_CLAIM: Stmt = Stmt::new(
+    "app.chat_turn_claim",
+    "UPDATE $thread_id SET turn_token = $turn_key, turn_until = time::now() + <duration>$lease, \
+     history_at = history_at ?? array::max((SELECT VALUE created_at FROM chat_message WHERE thread_id = $thread_id)) \
+     WHERE owner = $owner AND (turn_token = NONE OR turn_until <= time::now()) RETURN VALUE id",
 );
 
-/// A completed assistant/tool exchange is committed as one history unit.
-pub const CHAT_TOOL_BATCH_CREATE: Stmt = Stmt::new(
-    "app.chat_tool_batch_create",
+pub const CHAT_TURN_RENEW: Stmt = Stmt::new(
+    "app.chat_turn_renew",
+    "UPDATE $thread_id SET turn_until = time::now() + <duration>$lease \
+     WHERE owner = $owner AND turn_token = $turn_key AND turn_until > time::now() RETURN VALUE id",
+);
+
+pub const CHAT_TURN_RELEASE: Stmt = Stmt::new(
+    "app.chat_turn_release",
+    "UPDATE $thread_id SET turn_token = NONE, turn_until = NONE WHERE owner = $owner AND turn_token = $turn_key",
+);
+
+/// Writing the lease row in the same transaction as history fences both a takeover and release.
+/// The persisted clock makes order independent of application clocks and tool execution times.
+pub const CHAT_TURN_APPEND: Stmt = Stmt::new(
+    "app.chat_turn_append",
     "BEGIN TRANSACTION; \
      FOR $message IN $messages { \
+         LET $clock = (UPDATE $thread_id SET \
+             history_at = IF history_at != NONE AND history_at >= time::now() THEN history_at + 1ns ELSE time::now() END, \
+             turn_until = time::now() + <duration>$lease \
+             WHERE owner = $owner AND turn_token = $turn_key AND turn_until > time::now() RETURN VALUE history_at); \
+         IF array::len($clock) != 1 { THROW 'Chat turn lease lost'; }; \
          CREATE chat_message SET owner = $owner, thread_id = $thread_id, \
-         role = $message.role, content = $message.content, tool_calls = $message.tool_calls, \
-         tool_call_id = $message.tool_call_id, created_at = <datetime>$message.created_at; \
+             role = $message.role, content = $message.content, tool_calls = $message.tool_calls, \
+             tool_call_id = $message.tool_call_id, created_at = $clock[0]; \
      }; \
      COMMIT TRANSACTION;",
 );

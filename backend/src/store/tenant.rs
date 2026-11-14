@@ -29,7 +29,11 @@ pub const UPSERT: ControlStmt = ControlStmt::new(
 );
 
 pub const SET_STATE: ControlStmt =
-    ControlStmt::new("tenant.set_state", "UPDATE $id SET status = $status, schema_version = $version, updated_at = time::now()");
+    // a closed workspace (its only member was erased) stays closed: a migration never reopens it
+    ControlStmt::new(
+        "tenant.set_state",
+        "UPDATE $id SET status = IF status = 'closed' THEN status ELSE $status END, schema_version = $version, updated_at = time::now()",
+    );
 
 pub const ORG_COUNT: ControlStmt = ControlStmt::new("tenant.org_count", "SELECT count() FROM org GROUP ALL");
 

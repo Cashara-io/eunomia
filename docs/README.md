@@ -17,6 +17,7 @@ operators and contributors.
 | [Connectors](connectors.md) | Credentials, source options and sync setup |
 | [Extensions](extensions.md) | Your own scripts feeding Eunomia: a webhook inbox that buffers events, batch claim/ack, the security model, and the plan for hosted runtimes |
 | [Password managers](password-managers.md) | Let tools use secrets kept in your own 1Password or Bitwarden Secrets Manager (Bitwarden in preview): switching it on, set-up, references (vault owners for their own vaults), the resolution log, what it protects against |
+| [Two-step verification](security/mfa.md) | Authenticator codes and recovery codes for password accounts, requiring them for everyone, single sign-on and `OIDC_REQUIRE_MFA`, upgrade notes |
 | [Secret requests](secret-requests.md) | Agents ask for a key in a pop-up instead of the chat, then use and transform it by handle without seeing it: the pop-up, approved hosts, transforms, `http_request`, what it protects against |
 | [Deployment](deployment.md) | TLS, production env vars, updates, org databases, backups |
 
@@ -30,6 +31,7 @@ operators and contributors.
 | [Background jobs](architecture/jobs.md) | The job queue, leases, workers, the scheduler leader and reconcilers |
 | [SurrealQL functions](architecture/surreal-functions.md) | The SurrealQL functions the backend uses, behind the hardened server's allow-list |
 | [Foundation plan](architecture/foundation-plan.md) | The 2.0 design, its implementation status and open questions |
+| [Data-subject export and erasure](privacy/subject-rights.md) | Where a person's data lives, the full export, verified erasure with its proof, legal holds, resync and restore suppression |
 | [Errors](errors.md) | Stable error codes and the problem+json format |
 | [Debugging](debugging.md) | Trace ids, failure capsules and `replay` |
 | [Observability](observability.md) | Optional OpenTelemetry export and the SigNoz profile |

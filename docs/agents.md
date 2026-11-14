@@ -48,6 +48,13 @@ before it expires. Personal-only tokens cannot access team spaces, create
 spaces or change account settings. Minimal scopes cannot manage spaces or
 connected sources.
 
+With two-step verification on for your account (or required on the server),
+signing in with an email and password needs a code, so scripts that log in
+with a password cannot finish. Create a token in Settings > API tokens and pass
+it with `--token`. An API token also cannot create another token for such an
+account, so `create-eunomia --token` uses the token you gave as it is. See
+[security/mfa.md](security/mfa.md).
+
 For a new token, omitted `vault_id` means Personal; explicit `vault_id: null`
 means all your memory spaces. Omitted `expires_at` means 90 days; explicit
 `expires_at: null` means no expiry. A future RFC 3339 timestamp sets the expiry

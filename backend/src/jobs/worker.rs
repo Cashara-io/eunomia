@@ -108,6 +108,11 @@ async fn run_one(state: AppState, registry: Registry, cfg: WorkerConfig, job: Jo
 }
 
 async fn attempt(state: &AppState, registry: &Registry, cfg: &WorkerConfig, job: &Job) {
+    // nothing runs for a suspended account (its connector syncs included) until it is restored
+    if crate::models_user::is_suspended(&state.control, &job.owner).await.unwrap_or(false) {
+        let err = JobError::permanent(ErrorCode::AuthSuspended, "the account this job runs for is suspended");
+        return finish(state, cfg, job, Err(err)).await;
+    }
     let Some(handler) = registry.0.get(&job.kind).cloned() else {
         let err = JobError::permanent(ErrorCode::JobNoHandler, format!("no handler for job kind {:?}", job.kind));
         return finish(state, cfg, job, Err(err)).await;

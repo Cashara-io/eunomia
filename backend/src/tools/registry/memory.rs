@@ -117,7 +117,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     "items": {"type": "string"},
                     "minItems": 2,
                     "maxItems": 2,
-                    "description": "[since, until] ISO 8601, since <= until",
+                    "description": "[since, until] ISO 8601, since <= until, both ends inclusive; a bare date is the whole day in UTC ([\"2026-03-01\", \"2026-03-31\"] is all of March). A filter: only items dated inside it are returned, ranked by relevance to the query; a query that matches nothing in it returns nothing; an empty query returns the newest items in it. Dates: a memory by its occurred_at, else its last write; a synced record by its own date; a relation by when it held if known, else when it was written; observations (summaries, not events) only when types includes \"observation\", dated by their last update",
                 },
                 "limit": {"type": "integer", "description": "1-100, default 20"},
                 "max_tokens": {"type": "integer", "description": "1-100000"},
@@ -434,7 +434,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Err(e) => return Ok(e),
                 };
                 let result =
-                    entities_tools::memory_update(&state.db, owner, &rid, a.text.as_deref(), a.mem_type.as_deref()).await;
+                    entities_tools::memory_update(state, owner, &rid, a.text.as_deref(), a.mem_type.as_deref()).await;
                 Ok(to_tool_value(result.and_then(|m| m.ok_or_else(|| crate::error::AppError::coded(crate::error::ErrorCode::MemoryNotFound, "memory not found")))))
             })
         }),
@@ -459,7 +459,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(v) => v,
                     Err(e) => return Ok(e),
                 };
-                let result = entities_tools::memory_delete(&state.db, owner, &rid).await;
+                let result = entities_tools::memory_delete(state, owner, &rid).await;
                 Ok(to_tool_value(result.map(|deleted| json!({ "deleted": deleted }))))
             })
         }),

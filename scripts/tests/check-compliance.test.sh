@@ -24,7 +24,10 @@ original = {name: check.load(root / 'docs/compliance' / name) for name in
 with tempfile.TemporaryDirectory(prefix='eunomia-readiness-') as temporary:
     fixture = Path(temporary)
     shutil.copytree(root / 'docs/compliance', fixture / 'docs/compliance')
+    snapshot = original['controls.json']['snapshot']['commit']
     for record in original['controls.json']['evidence_records']:
+        if record['subject']['release_sha'] != snapshot:
+            continue
         for ref in record['references']:
             if 'path' in ref:
                 target = fixture / ref['path']
@@ -51,6 +54,27 @@ with tempfile.TemporaryDirectory(prefix='eunomia-readiness-') as temporary:
     def catalogue(fn):
         return lambda data: fn(data['controls.json'])
 
+    def newest(c, control):
+        return next(r for r in c['evidence_records'] if r['id'] == max(control['evidence'], key=lambda e: int(e.rsplit('-', 1)[1])))
+
+    def other(status):
+        return 'Missing' if status != 'Missing' else 'Done'
+
+    def recapture(c, change_row):
+        # a later capture of the first row with another status, the earlier ones kept as history
+        control = c['controls'][0]
+        record = copy.deepcopy(newest(c, control))
+        record['id'] = f"EV-{control['id']}-{max(int(e.rsplit('-', 1)[1]) for e in control['evidence']) + 1}"
+        record['implementation'] = other(control['status'])
+        c['evidence_records'].append(record)
+        control['evidence'].append(record['id'])
+        if change_row:
+            control['status'] = record['implementation']
+
+    def newest_at_earlier_commit(c):
+        c['snapshot']['previous_commits'] = c['snapshot'].get('previous_commits', []) + ['0' * 40]
+        newest(c, c['controls'][0])['subject']['release_sha'] = '0' * 40
+
     run('valid catalogue', accepted=True)
     run('duplicate capability', catalogue(lambda c: c['controls'].append(c['controls'][0])))
     run('dangling standard', catalogue(lambda c: c['controls'][0]['mappings'][0].update(standard='absent')))
@@ -64,6 +88,11 @@ with tempfile.TemporaryDirectory(prefix='eunomia-readiness-') as temporary:
     run('unreviewed normative mapping', catalogue(lambda c: c['standards'][1].update(mapping_review='reviewed')))
     run('source inspection cannot pass operation', catalogue(lambda c: c['evidence_records'][0].update(operation='passes measured check')))
     run('evidence id must match capability', catalogue(lambda c: c['evidence_records'][0].update(id='EV-C02-1')))
+    run('newest evidence must state the row status', catalogue(lambda c: c['controls'][0].update(status=other(c['controls'][0]['status']))))
+    run('earlier evidence keeps its own status', catalogue(lambda c: recapture(c, True)), accepted=True)
+    run('an earlier status cannot outlive a newer capture', catalogue(lambda c: recapture(c, False)))
+    run('newest evidence must be at the snapshot', catalogue(newest_at_earlier_commit))
+    run('evidence at an unlisted commit', catalogue(lambda c: c['evidence_records'][0]['subject'].update(release_sha='f' * 40)))
     run('invalid example', lambda d: d['evidence-schema.json']['examples'][0].update(implementation='verified'))
     run('unexplained example exclusion', lambda d: d['evidence-schema.json']['examples'][0].update(operation='not applicable'))
     run('invalid schema', lambda d: d['evidence-schema.json']['properties']['owner'].update(type='nonexistent'))
@@ -79,5 +108,5 @@ with tempfile.TemporaryDirectory(prefix='eunomia-readiness-') as temporary:
         print('pass: duplicate JSON keys')
     else:
         raise AssertionError('duplicate JSON keys accepted')
-print('readiness rejection fixtures: 21 passed')
+print('readiness rejection fixtures: 26 passed')
 PY

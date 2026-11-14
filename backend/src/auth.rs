@@ -64,11 +64,34 @@ pub fn create_session_jwt(user: &User, sid: &str, secret: &str) -> Result<String
         .map_err(|e| AppError::internal(e.to_string()))
 }
 
+/// How a browser signed in, recorded on its session: MFA enforcement leaves single sign-on to the provider.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Via {
+    Password,
+    Oidc,
+}
+
+impl Via {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Via::Password => "password",
+            Via::Oidc => "oidc",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        if s == "oidc" { Via::Oidc } else { Via::Password }
+    }
+}
+
+/// Starts a browser session. `mfa`: the sign-in passed a second factor just now.
 pub async fn start_session(
     db: &ControlDb,
     secret: &str,
     user: &User,
     user_agent: Option<&str>,
+    via: Via,
+    mfa: bool,
 ) -> Result<String, AppError> {
     let sid = models_user::generate_token();
     let ua: String = user_agent.unwrap_or("").chars().take(300).collect();
@@ -77,7 +100,10 @@ pub async fn start_session(
         .bind(("sid", sid.clone()))
         .bind(("user_agent", ua))
         .bind(("expires_at", Datetime::from(Utc::now() + session_ttl())))
-        .await?;
+        .bind(("via", via.as_str().to_string()))
+        .bind(("mfa", mfa))
+        .await?
+        .check()?;
     create_session_jwt(user, &sid, secret)
 }
 
@@ -185,6 +211,12 @@ async fn session_authn(state: &AppState, token: &str) -> AppResult<Option<Authn>
         #[serde(default)]
         #[surreal(default)]
         expires_at: Option<Datetime>,
+        #[serde(default)]
+        #[surreal(default)]
+        mfa_at: Option<Datetime>,
+        #[serde(default)]
+        #[surreal(default)]
+        via: Option<String>,
     }
     let mut res = store::control::AUTH_SESSION_FIND
         .on(db)
@@ -198,6 +230,8 @@ async fn session_authn(state: &AppState, token: &str) -> AppResult<Option<Authn>
     if row.expired {
         return Err(AppError::coded(ErrorCode::AuthSessionExpired, "Your session has expired. Log in again."));
     }
+    // while an admin requires MFA, a password session that never passed a second factor is refused
+    crate::mfa::session_allowed(db, &rid, row.mfa_at.as_ref(), row.via.as_deref()).await?;
 
     let ttl = session_ttl();
     let _ = store::control::AUTH_SESSION_TOUCH

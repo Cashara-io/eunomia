@@ -12,6 +12,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import { TokensSection } from "./TokensSection";
 import { ConnectedAppsSection } from "./ConnectedAppsSection";
 import { SessionsSection } from "./SessionsSection";
+import { MfaSection } from "./MfaSection";
 import { DiagnosticsSection } from "./DiagnosticsSection";
 import { UpdateSection } from "./UpdateSection";
 import { BackupsSection } from "./BackupsSection";
@@ -21,6 +22,7 @@ import { DataSection } from "./DataSection";
 import { UsageSection } from "./UsageSection";
 import { AuditSection } from "./AuditSection";
 import { PeopleSection } from "./PeopleSection";
+import { AccessReviewsSection } from "./AccessReviewsSection";
 import { SETTINGS_GROUPS } from "@/lib/settingsTabs";
 
 const GROUPS = SETTINGS_GROUPS;
@@ -44,7 +46,12 @@ function Settings() {
   const requested = useSearchParams().get("tab");
   const me = useMe();
   const isAdmin = me.data?.is_admin ?? false;
-  const groups = GROUPS.filter((g) => isAdmin || !g.admin);
+  // an owner or admin of the organisation who is not an instance admin sees People (invitations) only
+  const canManageOrg = me.data?.can_manage_org ?? false;
+  type Group = { label: string; admin: boolean; tabs: readonly { id: TabId; label: string }[] };
+  const groups: Group[] = (GROUPS as readonly Group[]).flatMap((g) =>
+    isAdmin || !g.admin ? [g] : canManageOrg && g.label === "Workspace" ? [{ ...g, tabs: g.tabs.filter((t) => t.id === "people") }] : []
+  );
   const tabs = groups.flatMap((g) => g.tabs as readonly { id: TabId; label: string }[]);
   // an unknown tab, or an admin tab for a member, falls back to the first one
   const tab: TabId = tabs.find((t) => t.id === requested)?.id ?? DEFAULT_TAB;
@@ -163,9 +170,11 @@ function Settings() {
             {tab === "accessibility" && <AccessibilitySection />}
             {tab === "tokens" && <TokensSection />}
             {tab === "sessions" && <SessionsSection />}
+            {tab === "security" && <MfaSection />}
             {tab === "support" && <DiagnosticsSection />}
             {tab === "data" && <DataSection />}
-            {tab === "people" && <PeopleSection />}
+            {tab === "people" && <PeopleSection full={isAdmin} />}
+            {tab === "reviews" && <AccessReviewsSection />}
             {tab === "audit" && <AuditSection />}
             {tab === "usage" && <UsageSection />}
             {tab === "https" && <HttpsSection />}

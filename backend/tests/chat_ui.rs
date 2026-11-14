@@ -577,14 +577,14 @@ async fn legacy_export_and_reopened_chat_share_checked_content_and_turn_evidence
         ("user", "A new turn"),
         ("assistant", "Fake 12 and 34."),
     ] {
-        common::sys(async { eunomia_backend::store::app::CHAT_MESSAGE_CREATE.on(&db)
+        common::sys(async { db.test_raw().query("CREATE chat_message SET owner = $owner, thread_id = $thread_id, role = $role, content = $content, tool_calls = $tool_calls, tool_call_id = $tool_call_id")
             .bind(("owner", app.user.id.clone())).bind(("thread_id", rid.clone()))
             .bind(("role", role.to_string())).bind(("content", content.to_string()))
             .bind(("tool_calls", (role == "assistant" && content.is_empty()).then(|| vec![json!({"id":"legacy_count","function":{"name":"entities_search","arguments":"{}"}})])))
             .bind(("tool_call_id", (role == "tool").then(|| "legacy_count".to_string()))).await })
             .await.unwrap().check().unwrap();
         if role == "tool" {
-            common::sys(async { eunomia_backend::store::app::CHAT_MESSAGE_CREATE.on(&db)
+            common::sys(async { db.test_raw().query("CREATE chat_message SET owner = $owner, thread_id = $thread_id, role = $role, content = $content, tool_calls = $tool_calls, tool_call_id = $tool_call_id")
                 .bind(("owner", app.user.id.clone())).bind(("thread_id", other.clone()))
                 .bind(("role", "user")).bind(("content", "999"))
                 .bind(("tool_calls", Option::<Vec<Value>>::None)).bind(("tool_call_id", Option::<String>::None)).await })
@@ -887,7 +887,6 @@ async fn cancellation_after_complete_answer_saves_none_or_whole() {
 }
 
 #[tokio::test]
-#[ignore = "Existing history ordering defect: https://github.com/Cashara-io/eunomia/issues/220"]
 async fn cancellation_immediate_reconnect_receives_valid_history() {
     use eunomia_backend::{chat::service::ChatEvent, sources::mock::{route, serve}};
     let mock = serve(vec![route("POST", "/chat/completions", Value::Null).raw(&cancellation_tool_reply()).times(10),
@@ -949,4 +948,96 @@ async fn merged_group_spellings_are_visible_in_tool_and_views() {
     assert_eq!(result["groups"][0]["value"],31.0);
     let mut view = args; view["view"] = json!("metric");
     assert!(ok(app.tool("show_view",view).await)["text"].as_str().unwrap().contains("ABC (also: abc)"));
+}
+
+#[tokio::test]
+async fn next_send_waits_for_pending_history_write() {
+    use eunomia_backend::sources::mock::{route, serve, gate_chat_write};
+    for (point, cancel) in [("answer_write", false), ("answer_write", true), ("tool_batch_write", false), ("tool_batch_write", true)] {
+        let entered = std::sync::Arc::new(tokio::sync::Notify::new());
+        let release = std::sync::Arc::new(tokio::sync::Notify::new());
+        let first = if point == "tool_batch_write" { cancellation_tool_reply() }
+            else { model_reply(json!({"content":"A complete answer."})) };
+        let mut routes = vec![route("POST", "/chat/completions", Value::Null).raw(&first).times(1)];
+        if point == "tool_batch_write" && !cancel {
+            routes.push(route("POST", "/chat/completions", Value::Null).raw(&model_reply(json!({"content":"A complete answer."}))).times(1));
+        }
+        routes.push(route("POST", "/chat/completions", Value::Null).raw(&model_reply(json!({"content":"Ready to continue."})))
+            .gated(entered.clone(), release.clone()));
+        let mock = serve(routes).await;
+        let (app, id) = cancellation_app(&mock).await;
+        let gate = gate_chat_write(&id, point);
+        let (a, rx_a) = cancellation_send(&app, &id).await;
+        cancellation_wait(&gate.entered).await;
+        let waiting = gate_chat_write(&id, "turn_waiting");
+        let (b, mut rx_b) = cancellation_send(&app, &id).await;
+        cancellation_wait(&waiting.entered).await;
+        drop(waiting);
+        assert!(tokio::time::timeout(std::time::Duration::from_millis(250), entered.notified()).await.is_err(),
+            "B must not read history or call the provider while A can still write at {point}");
+        assert_eq!(cancellation_history(&app, &id).await.len(), 1);
+        // Exercise both a live turn's late write and cancellation with B already waiting.
+        let rx_a = if cancel { drop(rx_a); None } else { Some(rx_a) };
+        drop(gate);
+        cancellation_join(a).await;
+        drop(rx_a);
+        cancellation_wait(&entered).await;
+        release.notify_one();
+        cancellation_join(b).await;
+        while let Some(event) = rx_b.recv().await {
+            assert!(!matches!(event, eunomia_backend::chat::service::ChatEvent::Error { .. }), "{event:?}");
+        }
+        let requests = mock.requests();
+        let replay: Value = serde_json::from_str(&requests.last().unwrap().body).unwrap();
+        assert_complete_tool_replay(replay["messages"].as_array().unwrap());
+        let history = cancellation_history(&app, &id).await;
+        if !cancel {
+            let prefix: Vec<_> = history.iter().map(|m| m.role.as_str()).collect();
+            assert_eq!(prefix, if point == "tool_batch_write" { vec!["user", "assistant", "tool", "assistant", "user", "assistant"] }
+                else { vec!["user", "assistant", "user", "assistant"] });
+        }
+        cancellation_resume(&app, &id, &mock).await;
+        let history = cancellation_history(&app, &id).await;
+        assert!(history.windows(2).all(|pair| pair[0].created_at < pair[1].created_at), "{history:?}");
+    }
+}
+
+#[tokio::test]
+async fn queued_send_can_cancel_and_busy_wait_is_bounded() {
+    use eunomia_backend::{chat::service::ChatEvent, sources::mock::{route, serve, gate_chat_write}};
+    let mock = serve(vec![route("POST", "/chat/completions", Value::Null).raw(&model_reply(json!({"content":"A complete answer."})))]).await;
+    let (app, id) = cancellation_app(&mock).await;
+    let gate = gate_chat_write(&id, "answer_write");
+    let (a, rx_a) = cancellation_send(&app, &id).await;
+    cancellation_wait(&gate.entered).await;
+    let waiting = gate_chat_write(&id, "turn_waiting");
+    let (b, rx_b) = cancellation_send(&app, &id).await;
+    cancellation_wait(&waiting.entered).await;
+    drop(rx_b);
+    cancellation_join(b).await;
+    drop(waiting);
+    let (c, mut rx_c) = cancellation_send(&app, &id).await;
+    tokio::time::timeout(std::time::Duration::from_secs(7), c).await.expect("busy wait is bounded").unwrap();
+    assert!(matches!(rx_c.recv().await, Some(ChatEvent::Error { code, .. }) if code == "db.conflict"));
+    assert_eq!(cancellation_history(&app, &id).await.len(), 1, "queued and rejected sends must not append users");
+    assert_eq!(mock.requests().len(), 1, "waiting sends must not contact a model");
+    drop(gate);
+    cancellation_join(a).await;
+    drop(rx_a);
+    cancellation_resume(&app, &id, &mock).await;
+}
+
+fn assert_complete_tool_replay(messages: &[Value]) {
+    let mut pending = std::collections::BTreeSet::new();
+    for message in messages {
+        if message["role"] == "tool" {
+            assert!(pending.remove(message["tool_call_id"].as_str().unwrap()), "orphan result: {messages:?}");
+        } else {
+            assert!(pending.is_empty(), "unanswered calls: {messages:?}");
+            for call in message["tool_calls"].as_array().into_iter().flatten() {
+                assert!(pending.insert(call["id"].as_str().unwrap()));
+            }
+        }
+    }
+    assert!(pending.is_empty());
 }

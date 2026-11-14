@@ -966,6 +966,10 @@ pub async fn sync_link(state: &OrgState, key: &str) -> AppResult<Report> {
     if row.direction != GUEST || row.status == status::REVOKED {
         return Ok(Report::default());
     }
+    // a suspended account's links neither send nor fetch
+    if crate::models_user::is_suspended(&state.control, &row.user).await? {
+        return Ok(Report::default());
+    }
     let ctx = Ctx { state, link: &row, key: key.to_string(), me: super::instance_id(&state.db).await? };
     let (mut out_cursor, mut in_cursor) = (row.out_cursor, row.in_cursor);
     let (mut mine, mut theirs, mut documents) = (Report::default(), Report::default(), 0usize);
@@ -1069,6 +1073,10 @@ pub type Refusal = (u16, &'static str);
 pub async fn host_rpc(state: &OrgState, org: &str, key: &str, env: &Value) -> Result<Value, Refusal> {
     const NOPE: Refusal = (401, "not authenticated");
     let row = load_link(&state.db, key).await.map_err(|_| (503, "try again"))?.filter(|r| r.direction == HOST).ok_or(NOPE)?;
+    // the local account that shared the space is suspended: the link answers nothing until it is restored
+    if crate::models_user::is_suspended(&state.control, &row.user).await.map_err(|_| (503, "try again"))? {
+        return Err((403, "this shared space is not available"));
+    }
     let secret = link_secret(&state.settings, &row).map_err(|_| (500, "link key unreadable"))?;
     let (ts, nonce, data) = (env["ts"].as_i64().unwrap_or_default(), s(env, "nonce"), s(env, "data"));
     if s(env, "link") != key || nonce.is_empty() || nonce.len() > 64 {

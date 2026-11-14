@@ -618,3 +618,30 @@ async fn job_claims_across_processes_child() {
     let ids: String = execs.lock().unwrap().iter().map(|(id, _)| format!("{id}\n")).collect();
     std::fs::write(dir.join(format!("{n}.txt")), ids).unwrap();
 }
+
+/// Nothing runs for a suspended account (connector syncs are jobs like any other); other accounts' jobs do.
+#[tokio::test]
+async fn a_suspended_accounts_jobs_do_not_run() {
+    let state = bare_state().await;
+    let (held, active) = (common::register(&state, "held@example.com").await, common::register(&state, "active@example.com").await);
+    state.control.test_raw().query("UPDATE $u SET suspended_at = time::now()").bind(("u", held.id.clone())).await.unwrap().check().unwrap();
+    jobs::enqueue(&state.control, NewJob::new("t", held.id.clone(), "held-1")).await.unwrap();
+    jobs::enqueue(&state.control, NewJob::new("t", active.id.clone(), "active-1")).await.unwrap();
+    let ran: Arc<Mutex<Vec<String>>> = Default::default();
+    let reg = {
+        let ran = ran.clone();
+        Registry::new().register("t", move |_s, job: Job| {
+            let ran = ran.clone();
+            async move {
+                ran.lock().unwrap().push(job.owner.to_string());
+                Ok(())
+            }
+        })
+    };
+    let (_w, stop) = spawn_worker(&state, reg, cfg("w"));
+    wait_for("both jobs finished", 30, || async { count(&state, "SELECT count() AS n FROM job WHERE status IN ['ready', 'running'] GROUP ALL").await == 0 }).await;
+    let _ = stop.send(true);
+    assert_eq!(*ran.lock().unwrap(), vec![active.id.to_string()]);
+    let held_rows: Vec<Value> = state.control.test_raw().query("SELECT last_error_code FROM job WHERE owner = $u").bind(("u", held.id.clone())).await.unwrap().take(0).unwrap();
+    assert_eq!(held_rows, vec![json!({"last_error_code": "auth.suspended"})]);
+}

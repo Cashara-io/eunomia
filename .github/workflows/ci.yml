@@ -21,6 +21,12 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+      # A cold build plus the test binaries needs more disk than a hosted runner has free
+      # (private repositories get the smaller runner): drop toolchains this job never uses.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
 
       # Tests run against an in-memory SurrealDB, so no service container is
       # needed.
@@ -49,6 +55,13 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+      # A cold build plus the test binaries needs more disk than a hosted runner has free
+      # (private repositories get the smaller runner): drop toolchains this job never uses.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -71,6 +84,7 @@ jobs:
             --allow-funcs=time,string,search,count,array,vector,math,file,type::file --allow-experimental=files rocksdb:/data/db
           for _ in $(seq 30); do curl -fsS http://127.0.0.1:8231/health >/dev/null && break; sleep 1; done
           TEST_SURREAL_URL=ws://127.0.0.1:8231/rpc cargo test --test jobs job_claims_across_processes -- --nocapture
+          TEST_SURREAL_URL=ws://127.0.0.1:8231/rpc cargo test --test chat_turn_order chat_turns_across_processes -- --exact --nocapture
 
   frontend:
     runs-on: ubuntu-latest

@@ -350,3 +350,21 @@ pub async fn register_personal(state: &AppState, email: &str) -> User {
         .await
         .expect("register")
 }
+
+/// Every event with one of `actions` is in the hash chain: written to a ledger, sealed with a
+/// sequence number, and that ledger verifies (docs/audit-chain.md). `verify` seals what is pending
+/// first, so this does not depend on the background sealer's timing.
+pub async fn assert_chained(control: &ControlDb, actions: &[&str]) {
+    use eunomia_backend::audit::chain;
+    for action in actions {
+        let rows: Vec<Value> = control.test_raw().query("SELECT ledger FROM audit_event WHERE action = $a").bind(("a", action.to_string())).await.unwrap().take(0).unwrap();
+        assert!(!rows.is_empty(), "no {action} event");
+        for row in &rows {
+            let ledger = row["ledger"].as_str().unwrap_or_else(|| panic!("{action} was written outside the chain: {row}"));
+            let v = chain::verify(control, ledger).await.unwrap();
+            assert!(v.ok, "{action}: ledger {ledger} does not verify: {v:?}");
+        }
+        let sealed: Vec<Value> = control.test_raw().query("SELECT seq, pending FROM audit_event WHERE action = $a").bind(("a", action.to_string())).await.unwrap().take(0).unwrap();
+        assert!(sealed.iter().all(|r| r["seq"].is_number() && r["pending"].is_null()), "{action} not sealed: {sealed:?}");
+    }
+}

@@ -182,7 +182,7 @@ async fn a_fact_dated_last_year_is_found_by_last_years_range_not_by_when_it_was_
     let hits = recall(&app, json!({"query": "Acme", "time_range": ["2025-01-01", "2025-12-31T23:59:59Z"]})).await;
     let pilot = hits.iter().find(|h| h["text"] == "Acme signed the pilot").unwrap_or_else(|| panic!("{hits:?}"));
     assert!(pilot["occurred_at"].as_str().unwrap().starts_with("2025-03-14"), "{pilot}");
-    // the temporal arm only dates last year's fact into the range
+    // only last year's fact is in the range (a filter); it is found by more than one arm
     let in_range = |h: &Value| h["arms_hit"].as_u64().unwrap() >= 2;
     assert!(in_range(pilot), "{pilot}");
     let sso = hits.iter().find(|h| h["text"] == "Acme asked for SSO");

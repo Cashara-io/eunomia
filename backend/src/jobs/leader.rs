@@ -30,6 +30,8 @@ pub async fn run(state: AppState, cfg: WorkerConfig, mut shutdown: watch::Receiv
                 if !leading {
                     tracing::info!(worker = %cfg.id, "became scheduler leader");
                     revive_dead_migrations(&state.control).await;
+                    // after a backup restore: erase again whoever was erased after the backup was taken
+                    crate::subject::reapply_on_start(&state).await;
                 }
                 leading = true;
                 tick(&state, ticks).await;
@@ -51,6 +53,10 @@ pub async fn run(state: AppState, cfg: WorkerConfig, mut shutdown: watch::Receiv
 /// One scheduler pass. `n` counts the passes this leader has made.
 pub async fn tick(state: &AppState, n: u64) {
     reconcile_tenant_migrations(state).await;
+    // the audit chain's durable replay: queued writes, then anything written but not sealed
+    if let Err(e) = crate::audit::chain::replay(&state.control).await {
+        tracing::warn!(error = %e.message, "audit replay failed");
+    }
     for org in ready_orgs(state).await {
         let Ok(org_state) = state.org(&org).await else { continue }; // not ready or behind: the migration job handles it
         reconcile_syncs(&org_state).await;
@@ -60,6 +66,7 @@ pub async fn tick(state: &AppState, n: u64) {
         if n.is_multiple_of(SLOW_EVERY) {
             reconcile_embeddings(&org_state).await;
             reconcile_redact_backfill(&org_state, super::window(3600)).await;
+            reconcile_fact_dates_backfill(&org_state, super::window(3600)).await;
             if let Err(e) = crate::vaults::service::discard_stale_copies(&org_state.db).await {
                 tracing::warn!(error = %e.message, "deleting stale vault copies failed");
             }
@@ -67,12 +74,20 @@ pub async fn tick(state: &AppState, n: u64) {
                 tracing::warn!(error = %e.message, "pruning extension events failed");
             }
             crate::changes::prune_due(&org_state.db).await;
+            if org_state.db.schema_version() >= crate::subject::export::SCHEMA_VERSION
+                && let Err(e) = crate::store::subject::EXPORT_PRUNE.on(&org_state.db).await
+            {
+                tracing::warn!(error = %e, "pruning expired data exports failed");
+            }
         }
     }
-    if n.is_multiple_of(SLOW_EVERY)
-        && let Err(e) = housekeeping(&state.control).await
-    {
-        tracing::warn!(error = %e.message, "job housekeeping failed");
+    if n.is_multiple_of(SLOW_EVERY) {
+        if let Err(e) = housekeeping(&state.control).await {
+            tracing::warn!(error = %e.message, "job housekeeping failed");
+        }
+        if let Err(e) = crate::audit::chain::checkpoint_due(&state.control, chrono::TimeDelta::hours(1)).await {
+            tracing::warn!(error = %e.message, "audit checkpoint failed");
+        }
     }
 }
 
@@ -168,6 +183,19 @@ pub async fn reconcile_redact_backfill(state: &OrgState, window: u64) {
     let Some(owner) = owners.into_iter().next() else { return };
     let key = format!("{}:{}:{}:{window}", kind::REDACT_BACKFILL, state.db.org().key(), crate::redact::DETECTOR_VERSION);
     super::enqueue_lossy(&state.control, NewJob::new(kind::REDACT_BACKFILL, owner, key).in_org(state.db.org())).await;
+}
+
+/// The fact-date backfill, until this org's marker says it is done; queued like the secret backfill
+/// (an hourly `window` in the key, the marker keeps it to one finished run).
+pub async fn reconcile_fact_dates_backfill(state: &OrgState, window: u64) {
+    // an error: the org is still at the schema before the marker table; the tick after its migration queues it
+    if super::fact_dates::done(state).await.unwrap_or(true) {
+        return;
+    }
+    let Ok(owners) = owners(state).await else { return };
+    let Some(owner) = owners.into_iter().next() else { return };
+    let key = format!("{}:{}:{}:{window}", kind::FACT_DATES_BACKFILL, state.db.org().key(), super::fact_dates::VERSION);
+    super::enqueue_lossy(&state.control, NewJob::new(kind::FACT_DATES_BACKFILL, owner, key).in_org(state.db.org())).await;
 }
 
 /// Cache records still missing an embedding, for owners that can embed.

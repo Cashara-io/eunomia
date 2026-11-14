@@ -33,6 +33,6 @@ export const useConsent = (query: NonNullable<GetOauthConsentData["query"]> | nu
 
 export const useDecideConsent = () =>
   useMutation({
-    mutationFn: ({ params, approve }: { params: AuthzParams; approve: boolean }) =>
-      call(decideOauthConsent({ body: { ...params, approve } })),
+    mutationFn: ({ params, approve, mfa_code }: { params: AuthzParams; approve: boolean; mfa_code?: string }) =>
+      call(decideOauthConsent({ body: { ...params, approve, ...(mfa_code ? { mfa_code } : {}) } })),
   });

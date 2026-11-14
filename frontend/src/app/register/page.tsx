@@ -11,6 +11,7 @@ import CopyButton from "@/components/bits/CopyButton";
 import { keepNext, nextPath } from "@/lib/nextPath";
 import AuthShell, { LABEL, RevealToggle } from "../login/AuthShell";
 import { OrDivider, SsoButton, useOidcError, useSignIn } from "../login/Sso";
+import SecondStep from "../login/SecondStep";
 
 const MISMATCH = "Passwords don't match.";
 const EMAIL_TAKEN = "auth.email_taken";
@@ -82,6 +83,7 @@ export default function RegisterPage() {
   const [show, setShow] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
   const [busy, setBusy] = useState(false);
+  const [enrol, setEnrol] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -92,7 +94,13 @@ export default function RegisterPage() {
     setBusy(true);
     setError(null);
     try {
-      await register.mutateAsync({ email, password });
+      const r = await register.mutateAsync({ email, password });
+      if (r.kind === "mfa") {
+        // the server requires two-step verification: set it up before the first session
+        setEnrol(true);
+        setBusy(false);
+        return;
+      }
       router.replace(keepNext("/onboarding"));
     } catch (err) {
       setError(failure(err, "Could not create the account. Try again."));
@@ -101,6 +109,18 @@ export default function RegisterPage() {
   }
 
   const mismatch = error?.message === MISMATCH;
+
+  if (enrol) {
+    return (
+      <AuthShell>
+        <SecondStep
+          step="enrol"
+          onDone={() => router.replace(keepNext("/onboarding"))}
+          onRestart={() => router.replace(`/login?email=${encodeURIComponent(email.trim())}`)}
+        />
+      </AuthShell>
+    );
+  }
 
   return (
     <AuthShell>

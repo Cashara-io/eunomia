@@ -1,11 +1,20 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  completeAccessReview,
+  decideAccessReview,
+  exportAccessReview,
+  exportAuditChain,
+  getAccessReview,
+  listAccessReviews,
   listPeople,
   listPersonTokens,
   listWorkspaceAudit,
   revokePersonToken,
   setPersonAdmin,
   setPersonSuspended,
+  startAccessReview,
+  verifyAuditChain,
+  type AccessReview,
   type AuditCategory,
   type PeopleReport,
 } from "@/lib/gen";
@@ -16,6 +25,9 @@ export const adminKeys = {
   audit: (category: AuditCategory, limit: number, offset: number) => [...adminKeys.all, "audit", category, limit, offset] as const,
   people: () => [...adminKeys.all, "people"] as const,
   tokens: (user_id: string) => [...adminKeys.all, "tokens", user_id] as const,
+  verify: () => [...adminKeys.all, "verify"] as const,
+  reviews: () => [...adminKeys.all, "reviews"] as const,
+  review: (id: string) => [...adminKeys.all, "reviews", id] as const,
 };
 
 /** The workspace activity log (admins only): sign-ins, tokens, app connections, space and admin changes, newest first. */
@@ -75,4 +87,65 @@ export function useRevokePersonToken() {
       void qc.invalidateQueries({ queryKey: ["auth", "tokens"] });
     },
   });
+}
+
+/** Walks the security log's hash chain (admins only). Runs when asked (`refetch`), never on its own. */
+export const useVerifyAudit = () =>
+  useQuery({ queryKey: adminKeys.verify(), queryFn: () => call(verifyAuditChain()), enabled: false, retry: false });
+
+/** Saves `data` as a JSON file named `name`. */
+export function saveJson(data: unknown, name: string) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2) + "\n"], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** The security log for a range of days, with its checkpoints, as a file anyone can verify offline. */
+export async function downloadAuditExport(from: string, to: string) {
+  // "until" a day includes that day: the server's end is exclusive
+  const end = to ? new Date(Date.parse(`${to}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10) : undefined;
+  const data = await call(exportAuditChain({ query: { from: from || undefined, to: end } }));
+  saveJson(data, `eunomia-security-log-${from || "start"}-to-${to || "now"}.json`);
+  return data;
+}
+
+/** Access reviews, newest first (admins only). */
+export const useAccessReviews = () => useQuery({ queryKey: adminKeys.reviews(), queryFn: () => call(listAccessReviews()) });
+
+/** One access review with its snapshot and decisions. */
+export const useAccessReview = (id: string | null) =>
+  useQuery({ queryKey: adminKeys.review(id ?? ""), queryFn: () => call(getAccessReview({ path: { review_id: id! } })), enabled: !!id });
+
+function useReviewMutation<V>(fn: (v: V) => Promise<AccessReview>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: (review) => {
+      qc.setQueryData(adminKeys.review(review.id), review);
+      void qc.invalidateQueries({ queryKey: adminKeys.reviews(), exact: true });
+      void qc.invalidateQueries({ queryKey: [...adminKeys.all, "audit"] });
+    },
+  });
+}
+
+/** Start a review: the server snapshots who has access to what. */
+export const useStartAccessReview = () => useReviewMutation(() => call(startAccessReview()));
+
+/** Record keep, remove or suspend for one person. */
+export const useDecideAccessReview = () =>
+  useReviewMutation(({ review_id, user_id, decision, note }: { review_id: string; user_id: string; decision: string; note?: string }) =>
+    call(decideAccessReview({ path: { review_id, user_id }, body: { decision, note: note ?? "" } }))
+  );
+
+/** Complete a review; it can't change afterwards. */
+export const useCompleteAccessReview = () => useReviewMutation((review_id: string) => call(completeAccessReview({ path: { review_id } })));
+
+/** A completed review with its hashes, as a file. */
+export async function downloadAccessReview(review_id: string) {
+  const data = await call(exportAccessReview({ path: { review_id } }));
+  saveJson(data, `eunomia-access-review-${review_id.replace(/[^a-z0-9]+/gi, "-")}.json`);
+  return data;
 }

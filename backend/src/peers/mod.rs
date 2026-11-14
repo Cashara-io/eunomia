@@ -462,7 +462,10 @@ async fn accept_join_checked(state: &OrgState, mut req: JoinRequest, mut malform
     let now = chrono::Utc::now();
     let unexpired = share.as_ref().map(|s| s.expires_at.into_inner() > now);
     let unused = share.as_ref().map(|s| s.used_at.is_none());
-    let live = share.as_ref().filter(|_| (unused == Some(true)) & (unexpired == Some(true)));
+    // a code made by an account that is now suspended is not live (read for every code, so no state skips it)
+    let creator = share.as_ref().map_or_else(|| share_rid(DUMMY_SHARE_KEY), |s| s.created_by.clone());
+    let creator_active = !crate::models_user::is_suspended(&state.control, &creator).await?;
+    let live = share.as_ref().filter(|_| (unused == Some(true)) & (unexpired == Some(true)) & creator_active);
     // Encrypt the same dummy on EVERY request, then decrypt exactly one equal-length envelope.
     // Unavailable codes never decrypt a stored secret, including expired codes that retain it.
     let dummy = crate::connectors::crypto::encrypt(&state.settings.encryption_key, DUMMY_SECRET_HEX);
