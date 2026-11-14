@@ -22,7 +22,7 @@ In `controls.json`, `Eunomia` means the product-maker action owner, `customer` m
 
 The excluded model path includes provider retention, training, residency, subprocessors, provider contracts, provider certification and provider data handling. This wave adds no provider assessment. Eunomia's own storage, chat history, connector secrets, ordinary application transport, tools and exports remain in scope. Maker duties for AI features remain in scope too.
 
-`audit_event` is a best-effort security ledger. Tenant `audit_log` contains tool summaries. `tool_usage` holds mutable hourly aggregates. The content-free `changes` feed is sync machinery. They are different records and none currently establishes a complete, durable evidence pack. Chat history already stores content; a future metadata-only activity log must not hide that fact.
+`audit_event` is the security ledger: delivered durably within each process and sealed into a hash chain per organisation, with verification and a metadata-only export (C07). Its checkpoints share the database with the events, so nothing outside the host anchors it. Tenant `audit_log` contains tool summaries. `tool_usage` holds mutable hourly aggregates. The content-free `changes` feed is sync machinery. They are different records and none currently establishes a complete evidence pack. Chat history already stores content; a future metadata-only activity log must not hide that fact.
 
 A narrowly Done implementation still needs deployment and operating evidence. For example, AES-GCM secret storage does not prove disk encryption. OIDC validation does not prove enforced MFA. A running backup service does not prove an isolated copy or a successful restore within the customer's recovery objective.
 
@@ -40,5 +40,5 @@ Select a maturity target and record actual host and endpoint evidence against th
 | User application hardening | Customer browser and endpoint policy. C10 supports only Eunomia's application settings. |
 | Restrict administrative privileges | C04/C08 support application access. Customer controls privileged host accounts and reviews. |
 | Patch operating systems | Customer host and endpoint inventory, support status and patch deadlines. |
-| Multi-factor authentication | C02 is Missing; C03 validates OIDC but does not enforce authentication strength. Customer IdP configuration alone is unproved application assurance. |
+| Multi-factor authentication | C02 is Partial: password accounts can use an authenticator app with recovery codes, and an operator can require it for every password account; passkeys are not built. Single sign-on accounts are left to the IdP unless `OIDC_REQUIRE_MFA` is set, which trusts the IdP's `amr`/`acr` claim. Customer IdP configuration alone is unproved application assurance. |
 | Regular backups | C15 supplies partial backup/restore tools. Customer owns isolation, retention, key protection and measured drills. |
