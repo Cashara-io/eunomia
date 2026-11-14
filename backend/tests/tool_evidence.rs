@@ -88,13 +88,11 @@ fn echo_field_names_are_allowed_in_computed_rows_and_stored_payloads() {
     assert!(computed.get("query").is_none());
 }
 
-// These need a second instance, a filled secret, or a model. The malformed-argument walk above
+// These need a second instance, a filled secret, or an outbound grant. The malformed-argument walk above
 // still covers their failure shapes. Keep exclusions named so adding a tool cannot silently skip it.
 const SUCCESS_EXCLUSIONS: &[(&str, &str)] = &[
     ("vault_join_shared", "requires a second listening Eunomia instance and a signed share code"),
     ("vault_peer_sync", "requires an established peer link to a second instance"),
-    ("secret_request", "requires an interactive tool invocation context and user consent"),
-    ("secret_request_status", "requires an interactive secret request"),
     ("secret_transform", "requires user-filled held secrets and invocation grants"),
     ("http_request", "requires an outbound grant and a permitted external host"),
 ];
@@ -237,6 +235,11 @@ async fn seeded_success_contract_covers_every_registered_tool() {
         receipt(&app, name, args, pointer, expected).await;
         covered.insert(name);
     }
+    // A pending synthetic request exercises both receipts without filling or sending a secret.
+    let request = receipt(&app, "secret_request", json!({"name":"fixture_key","label":"sample999777","description":"sample999777"}), "/status", json!("pending")).await;
+    covered.insert("secret_request");
+    receipt(&app, "secret_request_status", json!({"request_id":request["request_id"]}), "/status", json!("pending")).await;
+    covered.insert("secret_request_status");
     // Membership tools require an actual invited user. They stay local to this fresh control DB.
     let guest = common::register(&app.state, "guest@example.com").await;
     receipt(&app, "vault_invite", json!({"vault_id":space,"email":guest.email,"role":"member"}), "/role", json!("<echo-only>")).await;
