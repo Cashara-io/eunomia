@@ -9,24 +9,6 @@ export type Scene = {
   edges: ConnectionEdge[];
   hops: Record<string, number>;
 };
-export type PlacedNode = ConnectionNode & {
-  x: number;
-  y: number;
-  hop: number;
-  group: string;
-};
-export type Layout = {
-  nodes: PlacedNode[];
-  groups: {
-    id: string;
-    kind: string;
-    hop: number;
-    count: number;
-    x: number;
-    y: number;
-  }[];
-  ms: number;
-};
 export function edgeSentence(
   edge: ConnectionEdge,
   nodes: ReadonlyMap<string, ConnectionNode>,
@@ -86,74 +68,6 @@ export function filterScene(
     ),
   };
 }
-export function connectionsLayout(scene: Scene, focus: string): Layout {
-  const start = performance.now();
-  const buckets = new Map<string, ConnectionNode[]>();
-  for (const node of scene.nodes)
-    if (node.id !== focus) {
-      const key = JSON.stringify([scene.hops[node.id], node.kind]);
-      const group = buckets.get(key) ?? [];
-      group.push(node);
-      buckets.set(key, group);
-    }
-  const nodes: PlacedNode[] = scene.nodes
-    .filter((n) => n.id === focus)
-    .map((n) => ({ ...n, x: 600, y: 470, hop: 0, group: "" }));
-  const groups: Layout["groups"] = [];
-  const byHop = new Map<number, string[]>();
-  for (const [id, items] of buckets) {
-    const hop = scene.hops[items[0].id];
-    byHop.set(hop, [...(byHop.get(hop) ?? []), id]);
-  }
-  for (const [hop, keys] of byHop) {
-    keys.sort();
-    const slots = keys.flatMap((id) => {
-      const members = (buckets.get(id) ?? []).sort(
-        (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
-      );
-      return members.length >= 8
-        ? [{ id, members }]
-        : members.map((n) => ({ id, members: [n] }));
-    });
-    const rx = (slots.length <= 5 ? 300 : 450) + (hop - 1) * 350;
-    const ry = (slots.length <= 5 ? 220 : 350) + (hop - 1) * 290;
-    slots.forEach(({ id, members }, i) => {
-      const angle = -Math.PI / 2 + (i * Math.PI * 2) / slots.length;
-      const x = 600 + Math.cos(angle) * rx;
-      const y = 470 + Math.sin(angle) * ry;
-      if (members.length >= 8)
-        groups.push({
-          id,
-          kind: members[0].kind,
-          hop,
-          count: members.length,
-          x,
-          y,
-        });
-      members.forEach((n, j) =>
-        nodes.push({
-          ...n,
-          hop,
-          group: members.length >= 8 ? id : "",
-          x: members.length === 1 ? x : x + ((j % 5) - 2) * 225,
-          y: members.length === 1 ? y : y + 180 + Math.floor(j / 5) * 155,
-        }),
-      );
-    });
-  }
-  return { nodes, groups, ms: performance.now() - start };
-}
-
-export function loadedDegrees(scene: Scene) {
-  const degrees = new Map(scene.nodes.map((n) => [n.id, 0]));
-  for (const edge of scene.edges) {
-    degrees.set(edge.from, (degrees.get(edge.from) ?? 0) + 1);
-    if (edge.to !== edge.from)
-      degrees.set(edge.to, (degrees.get(edge.to) ?? 0) + 1);
-  }
-  return degrees;
-}
-export const formHeight = (degree: number) => 12 + Math.sqrt(degree) * 9;
 export type FormAnchor = {
   id: string;
   x: number;

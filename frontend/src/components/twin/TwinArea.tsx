@@ -6,7 +6,8 @@ import {
   TreeStructureIcon,
 } from "@phosphor-icons/react";
 import styles from "./overview.module.css";
-import OverviewSkeleton from "./OverviewSkeleton";
+import stage from "./strata/strata.module.css";
+import Strata from "./strata/Strata";
 import MorphText from "@/components/ui/MorphText";
 import ReadState from "./ReadState";
 import { returnKey } from "./overview-model";
@@ -22,14 +23,11 @@ import VaultChip, { vaultTone } from "@/components/VaultChip";
 import AutomapBar from "@/components/vaults/AutomapBar";
 import { definitions, twinHref } from "./model";
 import Activity from "./Activity";
-import Overview from "./Overview";
-import { OverviewHighlight } from "./OverviewHighlight";
 import Structure from "./Structure";
 import KindDetail from "./KindDetail";
 import Review from "./Review";
 import ReviewSkeleton from "./ReviewSkeleton";
 import Objects from "./Objects";
-import Connections from "./Connections";
 import { ProtectedSpaceContent, useConfirmedSpaceAccess } from "./SpaceAccess";
 import ObjectProfile from "./ObjectProfile";
 
@@ -78,7 +76,7 @@ export default function TwinArea({
     cache.removeQueries(scoped);
   }, [cache, connectionSpace, view]);
   return (
-    <div className={styles.area}>
+    <div className={`${styles.area} ${view === "overview" || view === "connections" ? stage.areaStage : ""}`}>
       {query.isError ? (
         <ReadState
           error={query.error}
@@ -305,14 +303,17 @@ function SelectedSpace({
         </section>
       )}
       </ProtectedSpaceContent>
-      {view !== "overview" && (
-        <h1 className="sr-only">
-          Ontology:{" "}
-          {view === "kind" ? "Kind" : view === "object" ? "Object" : view}
-        </h1>
-      )}
-      {view === "connections" ? (
-        <Connections space={vault.id} />
+      <h1 className="sr-only">
+        Ontology:{" "}
+        {view === "kind" ? "Kind" : view === "object" ? "Object" : view}
+      </h1>
+      {view === "connections" || view === "overview" ? (
+        <Strata
+          vault={vault}
+          ontology={query}
+          defaultLevel={view === "overview" ? "kinds" : "objects"}
+          onAdd={() => setAdding(true)}
+        />
       ) : view === "activity" ? (
         <Activity space={vault.id} />
       ) : view === "objects" ? (
@@ -328,9 +329,7 @@ function SelectedSpace({
           subject="the ontology"
         />
       ) : !data ? (
-        view === "overview" ? (
-          <OverviewSkeleton />
-        ) : view === "review" ? <ReviewSkeleton /> : (
+        view === "review" ? <ReviewSkeleton /> : (
           <LoadingSkeleton
             label="Loading the ontology"
             layout="table"
@@ -339,16 +338,6 @@ function SelectedSpace({
         )
       ) : (
         <>
-          {view === "overview" && (
-            <OverviewHighlight>
-              <Overview
-                vault={vault}
-                data={data}
-                onAdd={() => setAdding(true)}
-              />
-              <Activity space={vault.id} compact />
-            </OverviewHighlight>
-          )}
           {view === "structure" && <Structure vault={vault} data={data} />}
           {view === "kind" && (
             <KindDetail vault={vault} data={data} kind={kind ?? ""} />
