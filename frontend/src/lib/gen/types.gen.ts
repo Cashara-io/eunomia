@@ -2732,7 +2732,7 @@ export type OrgList = {
     offset: number;
     organisations: Array<OrgSummary>;
     /**
-     * Every organisation on this server.
+     * Every organisation that matches the filters (every organisation on this server when there are none).
      */
     total: number;
 };
@@ -2869,6 +2869,23 @@ export type OrgSummary = {
  * Who proposed a row: the server's model, an agent over MCP, or a person in the app.
  */
 export type Origin = 'suggested' | 'agent' | 'human';
+
+/**
+ * The answer of the owner-availability route.
+ */
+export type OwnerAvailability = {
+    /**
+     * Creating an organisation for this owner email would be accepted now.
+     */
+    available: boolean;
+    reason?: null | OwnerBlock;
+};
+
+/**
+ * Why an address cannot be given a new organisation. One value per reason, the same for the availability route (as
+ * `reason`) and for the error creating or resending a claim answers with.
+ */
+export type OwnerBlock = 'reserved' | 'has_account' | 'pending_claim';
 
 export type PatchBody = {
     description?: string | null;
@@ -7904,6 +7921,15 @@ export type OperatorListOrgsData = {
          * Organisations to skip, oldest first.
          */
         offset?: number;
+        /**
+         * Only the organisation made for this `external_ref` (an exact match; at most one).
+         */
+        external_ref?: string;
+        /**
+         * Only organisations whose owner has this email: the account that claimed the organisation, or the address its
+         * open owner claim was sent to. Normalised like sign-up normalises it, then an exact match.
+         */
+        owner_email?: string;
     };
     url: '/api/operator/v1/orgs';
 };
@@ -8079,6 +8105,33 @@ export type OperatorSuspendOrgResponses = {
 };
 
 export type OperatorSuspendOrgResponse = OperatorSuspendOrgResponses[keyof OperatorSuspendOrgResponses];
+
+export type OperatorGetOwnerAvailabilityData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * The owner's email address, as the buyer typed it.
+         */
+        email: string;
+    };
+    url: '/api/operator/v1/owner-availability';
+};
+
+export type OperatorGetOwnerAvailabilityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorGetOwnerAvailabilityError = OperatorGetOwnerAvailabilityErrors[keyof OperatorGetOwnerAvailabilityErrors];
+
+export type OperatorGetOwnerAvailabilityResponses = {
+    200: OwnerAvailability;
+};
+
+export type OperatorGetOwnerAvailabilityResponse = OperatorGetOwnerAvailabilityResponses[keyof OperatorGetOwnerAvailabilityResponses];
 
 export type GetOrgAiData = {
     body?: never;

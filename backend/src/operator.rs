@@ -2,17 +2,18 @@
 //! buyer, size it, pause it when payment fails and resume it when they pay (`routers/operator.rs`,
 //! docs/deployment.md "Running a hosted service").
 //!
-//! * **One caller, one credential.** The routes answer only to `EUNOMIA_OPERATOR_TOKEN` (`gate::operator_gate`)
-//!   and exist only while it is set. Nothing here is reachable with a session, an API token or an OAuth token,
-//!   and the token opens nothing else.
+//! * **One caller, one credential.** The routes answer only to `EUNOMIA_OPERATOR_TOKEN` (or, while it is being
+//!   rotated, `EUNOMIA_OPERATOR_TOKEN_NEXT`: `gate::operator_gate`) and exist only while one is set. Nothing here is
+//!   reachable with a session, an API token or an OAuth token, and the token opens nothing else.
 //! * **The organisation comes from the path**, validated: an id that is not a well-formed organisation, or
 //!   names none, is `operator.org_not_found`. No function reads a member's request context.
 //! * **Control database only.** Everything here reads and writes the `control` database: organisation
 //!   records, membership and invitation counts. Nothing opens an organisation's own database
 //!   (`Pool::for_org` is called once, to learn whether provisioning finished, and reads nothing from it), so
 //!   a memory, a document or a chat can never come out of this API. A test pins it.
-//! * **Every call is on the instance ledger** as actor `operator` / `operator-api`, with its outcome. The
-//!   token is in no row, no log line and no error.
+//! * **Every call is on the instance ledger** as actor `operator` / `operator-api`, with its outcome and which of the
+//!   two tokens it used (`token=current` or `token=next` at the end of the row's detail). The token is in no row, no
+//!   log line and no error.
 //! * **Creating is idempotent.** The organisation's id is derived from the external reference, so a retried
 //!   webhook finds the same organisation. The records are made first, the database is provisioned next and
 //!   the owner claim last, and a call that finds a half-made organisation finishes the missing steps.
@@ -20,6 +21,9 @@
 //!   expiring token whose hash is stored, claimed through the ordinary invitation page. The account that
 //!   claims it signs up as for any invitation (password or single sign-on, two-step verification rules
 //!   applying) and becomes the organisation's one owner.
+//! * **Who can own a new organisation** is decided in one place, [`owner_availability`]: the owner-availability route,
+//!   creating and resending a claim all ask it, so the billing service learns before it takes money what creating
+//!   would do after.
 
 use std::future::Future;
 
@@ -32,7 +36,7 @@ use crate::authz::Actor;
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::invitations::TTL_DAYS;
 use crate::models_user;
-use crate::plan::{self, PlanState};
+use crate::plan::{self, PlanState, TokenSlot};
 use crate::pool::OrgId;
 use crate::rid::RecordIdExt;
 use crate::state::AppState;
@@ -51,6 +55,8 @@ tokio::task_local! {
     /// Set by the gate around an operator call: whether a handler wrote its own ledger row, so the gate writes
     /// one for a call that never reached a handler (a body that does not parse, an unknown path or method).
     pub static AUDITED: std::sync::Arc<std::sync::atomic::AtomicBool>;
+    /// Set by the gate around an operator call: which of the two operator tokens it presented.
+    pub static TOKEN_SLOT: TokenSlot;
 }
 
 /// Runs `fut` and writes one instance-ledger row for it, whatever it returns.
@@ -60,6 +66,12 @@ async fn audited<T>(state: &AppState, action: &str, target: &str, detail: String
     let outcome = match &result {
         Ok(_) => "ok",
         Err(e) => e.code.as_str(),
+    };
+    // which token made the call, last: `token=current` or `token=next` (never the token)
+    let detail = match TOKEN_SLOT.try_with(|t| t.as_str()) {
+        Ok(slot) if detail.is_empty() => format!("token={slot}"),
+        Ok(slot) => format!("{detail} token={slot}"),
+        Err(_) => detail,
     };
     audit::record(&state.control, Event { user: None, actor: &actor(), action, target, outcome, detail: &detail }).await;
     result
@@ -422,21 +434,60 @@ async fn summary_of(state: &AppState, org: &OrgId) -> AppResult<OrgSummary> {
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct OrgList {
     pub organisations: Vec<OrgSummary>,
-    /// Every organisation on this server.
+    /// Every organisation that matches the filters (every organisation on this server when there are none).
     pub total: i64,
     pub limit: i64,
     pub offset: i64,
 }
 
-pub async fn list(state: &AppState, limit: Option<i64>, offset: Option<i64>) -> AppResult<OrgList> {
-    audited(state, "operator.org_list", "", String::new(), async {
+/// What the list can be narrowed to. Both are exact matches; with both, an organisation must match both.
+#[derive(Debug, Default)]
+pub struct ListFilter {
+    /// The reference the billing service gave when it created the organisation.
+    pub external_ref: Option<String>,
+    /// The owner's email (the account that claimed the organisation, or the address its open claim was sent to),
+    /// normalised the way sign-up normalises it.
+    pub owner_email: Option<String>,
+}
+
+pub async fn list(state: &AppState, limit: Option<i64>, offset: Option<i64>, filter: ListFilter) -> AppResult<OrgList> {
+    let detail = format!("external_ref={} owner_email={}", filter.external_ref.is_some(), filter.owner_email.is_some());
+    audited(state, "operator.org_list", "", detail, async {
         let limit = limit.unwrap_or(100).clamp(1, 500);
         let offset = offset.unwrap_or(0).max(0);
-        let rows: Vec<OrgRow> = q::LIST.on(&state.control).bind(("limit", limit)).bind(("start", offset)).await?.take(0)?;
-        let total = org_count(state).await?;
+        // a filter that is not a usable value is refused, not read as "no filter" (which would list everything)
+        let external_ref = filter.external_ref.as_deref().map(valid_ref).transpose()?;
+        let owner_email = filter.owner_email.as_deref().map(models_user::normalize_new_email).transpose()?;
+        let orgs: Vec<RecordId> = match &owner_email {
+            Some(email) => owned_by(state, email).await?,
+            None => Vec::new(),
+        };
+        let by_owner = owner_email.is_some();
+        let rows: Vec<OrgRow> = filtered(q::LIST.on(&state.control), &external_ref, by_owner, &orgs).bind(("limit", limit)).bind(("start", offset)).await?.take(0)?;
+        let total = {
+            #[derive(Deserialize, SurrealValue)]
+            struct C {
+                count: i64,
+            }
+            let counted: Vec<C> = filtered(q::LIST_COUNT.on(&state.control), &external_ref, by_owner, &orgs).await?.take(0)?;
+            counted.first().map_or(0, |c| c.count)
+        };
         Ok(OrgList { organisations: summarise(state, rows).await?, total, limit, offset })
     })
     .await
+}
+
+/// The filter parameters of `plan.list` and `plan.list_count`.
+fn filtered<'a>(q: store::Q<'a>, external_ref: &Option<String>, by_owner: bool, orgs: &[RecordId]) -> store::Q<'a> {
+    q.bind(("ref", external_ref.clone())).bind(("by_owner", by_owner)).bind(("orgs", orgs.to_vec()))
+}
+
+/// The organisations `email` (normalised) owns or holds an open owner claim for.
+async fn owned_by(state: &AppState, email: &str) -> AppResult<Vec<RecordId>> {
+    let mut res = q::OWNED_BY_EMAIL.on(&state.control).bind(("email", email.to_string())).await?;
+    let mut orgs: Vec<RecordId> = res.take(0)?;
+    orgs.extend(res.take::<Vec<RecordId>>(1)?);
+    Ok(orgs)
 }
 
 pub async fn get(state: &AppState, id: &str) -> AppResult<OrgSummary> {
@@ -547,32 +598,117 @@ pub struct CreateOrgResult {
     pub organisation: OrgSummary,
 }
 
-/// A mail address already has an account, whichever organisation it is in.
-async fn account_exists(state: &AppState, email: &str) -> AppResult<bool> {
+/// Why an address cannot be given a new organisation. One value per reason, the same for the availability route (as
+/// `reason`) and for the error creating or resending a claim answers with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum OwnerBlock {
+    /// The address is listed in `EUNOMIA_ADMIN_EMAILS` (an operator of this server), or only differs from a listed one by
+    /// a look-alike character. Sign-up refuses it the same way.
+    Reserved,
+    /// The address already has an account, in whichever organisation. An account belongs to exactly one organisation.
+    HasAccount,
+    /// Another organisation holds an owner claim for the address that nobody has accepted or withdrawn (expired or not:
+    /// a resend revives it). The first claim to be accepted makes the account, so a second could never be accepted.
+    PendingClaim,
+}
+
+impl OwnerBlock {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            OwnerBlock::Reserved => "reserved",
+            OwnerBlock::HasAccount => "has_account",
+            OwnerBlock::PendingClaim => "pending_claim",
+        }
+    }
+
+    pub fn into_error(self) -> AppError {
+        match self {
+            OwnerBlock::Reserved => AppError::coded(
+                ErrorCode::OperatorOwnerReserved,
+                "That address is listed in EUNOMIA_ADMIN_EMAILS (an operator of this server) and can't be made an organisation's owner this way.",
+            ),
+            OwnerBlock::HasAccount => AppError::coded(
+                ErrorCode::OperatorOwnerInOtherOrg,
+                "That email already has an account, and an account belongs to exactly one organisation. Use a different email for the owner.",
+            ),
+            OwnerBlock::PendingClaim => AppError::coded(
+                ErrorCode::OperatorOwnerClaimPending,
+                "Another organisation already has an unclaimed owner claim for that email. Only one of them could ever be accepted: use a different email for the owner, or finish that claim first.",
+            ),
+        }
+    }
+}
+
+/// The first half of [`owner_availability`]: what `raw` is as an address. `Ok(Err(block))`: reserved, judged on the
+/// address as typed, so a look-alike of a listed address (a character that lowercases into another letter) is
+/// reserved too, exactly as sign-up judges it (`routers/auth.rs`). `Ok(Ok(email))`: the form a new address is stored and
+/// compared in (`models_user::normalize_new_email`). An address that is not one, or has a look-alike character that
+/// does not make it a listed one, is a `400` as for any sign-up.
+pub fn owner_address(raw: &str) -> AppResult<Result<String, OwnerBlock>> {
+    if crate::authz::operator_email_listed(raw) {
+        return Ok(Err(OwnerBlock::Reserved));
+    }
+    Ok(Ok(models_user::normalize_new_email(raw)?))
+}
+
+/// The second half: what the control database says about a normalised address. An account anywhere, or an open owner
+/// claim in an organisation other than `except` (the one the claim is being made or resent for).
+pub async fn owner_standing(state: &AppState, email: &str, except: Option<&OrgId>) -> AppResult<Option<OwnerBlock>> {
     #[derive(Deserialize, SurrealValue)]
-    struct IdRow {
+    struct Row {
         #[allow(dead_code)]
-        id: RecordId,
+        #[serde(default)]
+        #[surreal(default)]
+        id: Option<RecordId>,
     }
-    let rows: Vec<IdRow> = store::control::AUTH_USER_ID_BY_EMAIL.on(&state.control).bind(("email", email.to_string())).await?.take(0)?;
-    Ok(!rows.is_empty())
+    let rows: Vec<Row> = store::control::AUTH_USER_ID_BY_EMAIL.on(&state.control).bind(("email", email.to_string())).await?.take(0)?;
+    if !rows.is_empty() {
+        return Ok(Some(OwnerBlock::HasAccount));
+    }
+    #[derive(Deserialize, SurrealValue)]
+    struct Claim {
+        #[allow(dead_code)]
+        org: RecordId,
+    }
+    let claims: Vec<Claim> = q::OPEN_OWNER_CLAIM_FOR.on(&state.control).bind(("email", email.to_string())).bind(("org", except.map(OrgId::record))).await?.take(0)?;
+    Ok(claims.first().map(|_| OwnerBlock::PendingClaim))
 }
 
-fn owner_not_allowed(email: &str) -> AppResult<()> {
-    if crate::authz::operator_email_listed(email) {
-        return Err(AppError::coded(
-            ErrorCode::OperatorOwnerReserved,
-            "That address is listed in EUNOMIA_ADMIN_EMAILS (an operator of this server) and can't be made an organisation's owner this way.",
-        ));
-    }
-    Ok(())
+/// Whether `raw` can be the owner of a new organisation: `Ok(Ok(normalised address))`, or why not. The one rule behind
+/// the owner-availability route, creating an organisation, and resending a claim.
+pub async fn owner_availability(state: &AppState, raw: &str, except: Option<&OrgId>) -> AppResult<Result<String, OwnerBlock>> {
+    let email = match owner_address(raw)? {
+        Ok(e) => e,
+        Err(block) => return Ok(Err(block)),
+    };
+    Ok(match owner_standing(state, &email, except).await? {
+        Some(block) => Err(block),
+        None => Ok(email),
+    })
 }
 
-fn in_other_org() -> AppError {
-    AppError::coded(
-        ErrorCode::OperatorOwnerInOtherOrg,
-        "That email already has an account, and an account belongs to exactly one organisation. Use a different email for the owner.",
-    )
+/// The answer of the owner-availability route.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct OwnerAvailability {
+    /// Creating an organisation for this owner email would be accepted now.
+    pub available: bool,
+    /// Why not: `has_account`, `reserved` or `pending_claim`. Absent when `available`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<OwnerBlock>,
+}
+
+/// Asks, before the buyer's card is charged, whether `email` can own a new organisation. The ledger row has neither
+/// the address nor the answer: the addresses asked about are mostly people who never buy, and the instance ledger is
+/// no place to keep a list of who has an account.
+pub async fn owner_availability_for(state: &AppState, email: &str) -> AppResult<OwnerAvailability> {
+    audited(state, "operator.owner_availability", "", String::new(), async {
+        Ok(match owner_availability(state, email, None).await? {
+            Ok(_) => OwnerAvailability { available: true, reason: None },
+            Err(block) => OwnerAvailability { available: false, reason: Some(block) },
+        })
+    })
+    .await
 }
 
 /// Makes (or finds) the organisation `external_ref` names, provisions its database and makes the owner claim.
@@ -586,8 +722,9 @@ async fn create_inner(state: &AppState, req: CreateOrg) -> AppResult<CreateOrgRe
     let name = valid_name(&req.name)?;
     let seat_limit = valid_seats(req.seat_limit)?;
     let external_ref = valid_ref(&req.external_ref)?;
-    let owner = models_user::normalize_new_email(&req.owner_email)?;
-    owner_not_allowed(&owner)?;
+    // the address first, as the availability route reads it (reserved, look-alikes, form); an account or an open claim
+    // elsewhere is asked below, for a new organisation only
+    let owner = owner_address(&req.owner_email)?.map_err(OwnerBlock::into_error)?;
     let allowance = req.ai_allowance_usd.map(valid_allowance).transpose()?;
     let org = org_for_ref(&external_ref);
     // deciding and inserting the record: one create per reference at a time in this process (not while the database
@@ -605,8 +742,8 @@ async fn create_inner(state: &AppState, req: CreateOrg) -> AppResult<CreateOrgRe
             }
         }
         None => {
-            if account_exists(state, &owner).await? {
-                return Err(in_other_org());
+            if let Some(block) = owner_standing(state, &owner, None).await? {
+                return Err(block.into_error());
             }
             let max = state.settings.hosted.max_orgs.map_or(-1, i64::from);
             let made = crate::tx::with_retry_dup(|| async {
@@ -698,6 +835,13 @@ async fn make_claim(state: &AppState, org: &OrgId, org_name: &str, owner: &str, 
     let ttl = format!("{TTL_DAYS}d");
     let mut res = match mode {
         ClaimMode::Create => {
+            // one claim for an address at a time in this process, asked again under the lock: two organisations made
+            // together for one address (different references) cannot both get a claim. Across processes the early check
+            // in `create_inner` is the guard, and a race there is possible (see docs/deployment.md).
+            let _one = crate::tx::lock(&format!("operator.owner:{owner}")).await;
+            if let Some(block) = owner_standing(state, owner, Some(org)).await? {
+                return Err(block.into_error());
+            }
             let made = crate::tx::with_retry(|| async {
                 q::CREATE_OWNER_CLAIM
                     .on(&state.control)
@@ -880,9 +1024,10 @@ pub async fn resend_claim(state: &AppState, id: &str) -> AppResult<ClaimResent> 
         let Some(owner) = summary.owner_email.clone() else {
             return Err(AppError::coded(ErrorCode::OperatorOwnerClaimed, "This organisation has no owner claim to resend."));
         };
-        // the address may have got an account elsewhere since: the claim could never be used
-        if account_exists(state, &owner).await? {
-            return Err(in_other_org());
+        // the address may have got an account or another organisation's claim since, or been listed as an operator's:
+        // the claim could never be used. The same rule as for a new organisation, apart from this organisation's own claim.
+        if let Err(block) = owner_availability(state, &owner, Some(&org)).await? {
+            return Err(block.into_error());
         }
         let (claim_link, claim_expires_at, emailed) = make_claim(state, &org, &summary.name, &owner, ClaimMode::Resend).await?;
         Ok(ClaimResent { claim_link, claim_expires_at, email_enabled: state.mailer.enabled(), emailed })

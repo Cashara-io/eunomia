@@ -172,6 +172,7 @@ their local-dev defaults in production:
 | `CAPSULE_ARGS` | `off` | `off`: failure capsules keep only a hash and the JSON shape of a failed call's arguments. `redacted`: keep the arguments with secrets masked, so `eunomia replay` can re-run them. See [debugging](debugging.md). |
 | `AUDIT_RETENTION_DAYS` | `365` | The `prune_auth` job deletes audit events older than this. `0` keeps them forever. |
 | `TOOL_USAGE_RETENTION_DAYS` | `90` | The same job deletes the hourly tool-call counters (Settings, Usage) older than this. `0` keeps them forever. |
+| `AI_USAGE_RETENTION_MONTHS` | `24` | The same job deletes the model-use counters (`ai_usage`, [Model spend](#model-spend-and-the-ai-switch)) of months older than this many months before the current one. **The current and the previous month are never deleted, whatever is set** (the allowance reads the first, and the billing service reads the second after the month turns): `1` is the narrowest window, and `0` keeps them forever. |
 | `EUNOMIA_EXPORT_MAX_MB` | `64` | The largest data export archive (Settings > Data, Export my data) the server keeps; a bigger one fails with a message saying so. Archives are kept for seven days. Erasure records are never pruned. See [subject-rights.md](privacy/subject-rights.md). |
 | `SESSION_RETENTION_DAYS` | `7` | The same job deletes browser sessions that expired (or were revoked) this many days ago. |
 | `CHANGE_LOG_RETENTION_DAYS` | `90` | The scheduler trims each vault's change log ([projects](projects.md#retention)) to rows newer than this, about hourly. `0` keeps rows whatever their age. |
@@ -296,11 +297,22 @@ SMTP_HOST=...                    # optional, see Email above: the owner's claim 
 | Var | Default | Meaning |
 |---|---|---|
 | `EUNOMIA_OPERATOR_TOKEN` | unset (no operator API) | The bearer token of the operator API, at least 32 characters; a shorter one stops the backend at boot. It is not a user credential: it opens nothing but `/api/operator/v1/...`, and no session, API token or OAuth token opens those. Compared in constant time. Never logged, never in an audit row or an error. |
+| `EUNOMIA_OPERATOR_TOKEN_NEXT` | unset | A second operator token, valid beside `EUNOMIA_OPERATOR_TOKEN` while you rotate it ([below](#rotating-the-operator-token)). The same rules: at least 32 characters, compared in constant time, never logged. Either token opens the API when set; the two must differ, or the backend stops at boot. Set alone it also enables the API. |
 | `EUNOMIA_MAX_ORGS` | unset (no limit) | The most organisations this server holds, the server's own included. Creating another is refused with `operator.at_capacity`. A whole number. |
 | `EUNOMIA_BILLING_URL` | unset | Where an organisation's owner goes to add seats or pay: `manage_url` in the plan status and the button on the suspended page. An `http(s)` address. |
 | `RATE_LIMIT_OPERATOR_PER_MIN` | `300` | Operator API calls a minute, in all (the billing service is the one caller). A wrong token is throttled per client address like any failed credential. |
 
-The server warns at boot when `EUNOMIA_OPERATOR_TOKEN` is set while `SIGNUP=open` (a hosted server should not let the public sign up). Putting the operator routes behind a network allow-list of the billing service's addresses is a sensible second layer; the token is the first.
+The server warns at boot when an operator token is set while `SIGNUP=open` (a hosted server should not let the public sign up). Putting the operator routes behind a network allow-list of the billing service's addresses is a sensible second layer; the token is the first.
+
+#### Rotating the operator token
+
+The billing service holds the token, so changing it at one end first would lock the other out. The second variable lets both ends overlap, with no downtime and no moment when a call is refused:
+
+1. **Add the new token.** Generate one (`openssl rand -base64 48`) and set it as `EUNOMIA_OPERATOR_TOKEN_NEXT`, leaving `EUNOMIA_OPERATOR_TOKEN` as it is. Restart or redeploy every backend replica. From now on either token opens the API; the new one must differ from the old one, or the backend refuses to boot.
+2. **Switch the billing service** to the new token and deploy it. Check the instance ledger (Settings > Audit log, or `GET /api/admin/audit`): every operator row ends its detail with `token=current` or `token=next`, so you can see the calls arrive on `next` and that none still use `current`. The token itself is never in a row.
+3. **Retire the old token.** Once nothing has used `current` for as long as you care to watch (the billing service's slowest scheduled job, say), set `EUNOMIA_OPERATOR_TOKEN` to the new value and remove `EUNOMIA_OPERATOR_TOKEN_NEXT`. Restart every replica. The old token now answers 401 `auth.unauthorized`.
+
+Replicas restart one after another, so in step 1 and step 3 some replicas briefly have the old configuration: that is why both tokens must be valid at the overlap, and why step 3 waits until the billing service no longer sends the old one. If the new token leaks before step 3, remove it from `EUNOMIA_OPERATOR_TOKEN_NEXT` and start again.
 
 ### Plans, seats and the unmanaged organisation
 
@@ -337,7 +349,7 @@ A suspended organisation's members get `org.suspended` (403) for every request t
 
 **How fast.** The server that handles the operator call applies a suspension or a resume at once; any other replica within 3 seconds (the plan state is cached for that long per process). Nothing is deleted; there is no per-organisation switch for sign-in, and a member's sessions and tokens stay valid (they just reach nothing).
 
-The web app shows a suspended workspace as one full-page state instead of a wall of failed requests: what happened, and for the owner a button to `manage_url` when there is one. Settings > People shows seats in use against the limit, with a link to `manage_url`, and the seat-limit refusal in words.
+The web app shows a suspended workspace as one full-page state instead of a wall of failed requests: what happened, and for the owner a button to `manage_url` when there is one. The page links to **Change your password** and **Export or delete your data**, and shows those two screens in place (`#password`, `#data` on the same address), because Settings belongs to the workspace and is refused. They call only the routes in the table above; the one thing Settings > Your data offers that is not on it, downloading just your personal space as JSON (`GET /api/export`), is left out of the suspended page. `backend/tests/hosted.rs` and `frontend/scripts/workspace-suspended.test.jsx` pin both ends. Settings > People shows seats in use against the limit, with a link to `manage_url`, and the seat-limit refusal in words.
 
 ### Model spend and the AI switch
 
@@ -348,6 +360,8 @@ On a hosted server the model calls (extracting facts from what people save, embe
 **Metering.** A call on the server's key adds its input and output tokens and its cost to a counter per organisation, day, purpose (`extraction`, `embedding`, `chat`, `reflect`, `consolidation`, `supersede`, `ontology`) and model (`ai_usage`, control migration 0016; counters, not a row per call, and no prompt text). Calls on a person's or the organisation's own key are counted as calls and tokens with cost 0, and never count against the allowance. Tokens are what the provider reports. Where it reports none (a stream from a server that ignores `stream_options`, an embeddings response without `usage`) they are **counted here, conservatively**: one token per three bytes of what was sent and of what came back (English averages four bytes a token, so typical text is overcounted by about a third), and the counter's `estimated_calls` says how many calls were counted this way. A call cancelled or timed out after the request left is counted at that estimate, since the provider may have billed it; a request the provider refused (an error status) is not counted.
 
 **Prices** are per million input and output tokens in US dollars and are data: `GET` and `PUT /api/operator/v1/ai/prices` (the operator token) set them with no deploy, applying on every replica within 30 seconds. Defaults ship for `gpt-4o-mini` ($0.15 / $0.60), `gpt-4o`, `gpt-4.1` and its mini and nano, and the three embedding models; a dated snapshot (`gpt-4o-mini-2024-07-18`) uses its family's price. **A model in neither table is counted at a deliberately high fallback ($30 / $60) and logged once as a warning**, so an unknown model can never be free. Costs already counted keep the price they were counted at.
+
+**The table does not grow without limit.** A person chooses the model name (Settings > Organisation, the organisation's own provider), so it is bounded: **an organisation's counters for one day name at most 20 distinct models; a model that has no counter that day when 20 already do is counted in one row named `other`**, with its calls, tokens and cost, so every total is unchanged (`other` is the 21st name at most). The bound is checked in the transaction that writes the counter and, within one process, counters of one organisation and day are written one after another so it is exact; two processes writing for one organisation and day at the same moment can each admit one more name, never an unbounded number. And rows of months older than `AI_USAGE_RETENTION_MONTHS` (default 24) are deleted by the daily `prune_auth` job; the current and previous month never are, so neither the allowance nor the billing service's last-month figures are touched.
 
 **Recording does not add a database round trip to a call.** Finished calls add to an in-memory counter; a background task writes the counters every 5 seconds (and at once when an organisation is within 5% of its allowance, and on an orderly shutdown), one upsert per counter. **What a crash can lose is the calls that finished in the last 5 seconds on that process**, plus anything that accumulated while the control database refused writes (kept in memory and retried, lost only if the process dies meanwhile); a call still running when the process died is not counted. The loss makes the organisation look slightly cheaper than it was for the rest of the month. Test: `usage_is_written_in_batches_and_a_crash_loses_at_most_one_interval`.
 
@@ -361,7 +375,7 @@ On a hosted server the model calls (extracting facts from what people save, embe
 | Recall, search | The semantic arm is skipped; keyword, graph and temporal retrieval answer as when no key is set. |
 | `reflect`, ontology suggest, auto-map, coverage | They return what they return without a model (the recalled memories, the profile, a words-only match) with a note saying why. |
 | Saving, reading, keyword search | Unchanged. |
-| Extraction, embedding, consolidation, supersede (jobs) | **Pause without loss.** The same mechanism as a suspension: the claim leaves the organisation's model jobs alone, a job already claimed is handed back without using an attempt (also when a call is refused part-way), and nothing is dropped. They resume by themselves when the month rolls over, the allowance is raised, a key is added, or AI is switched on, within a minute (a worker marks the organisation `hold_until` for 60 seconds at a time; raising the allowance, adding a key or switching AI on clears it at once on that replica). Sync and the rest of the queue keep running; synced records are stored without vectors and embedded when work resumes. |
+| Extraction, embedding, consolidation, supersede (jobs) | **Pause without loss.** The same mechanism as a suspension: the claim leaves the organisation's model jobs alone, a job already claimed is handed back without using an attempt (also when a call is refused part-way: extraction, consolidation and the supersede check, which consolidation also runs, all return the refusal instead of finishing without their work), and nothing is dropped. They resume by themselves when the month rolls over, the allowance is raised, a key is added, or AI is switched on, within a minute (a worker marks the organisation `hold_until` for 60 seconds at a time; raising the allowance, adding a key or switching AI on clears it at once on that replica). Sync and the rest of the queue keep running; synced records are stored without vectors and embedded when work resumes. |
 
 **The organisation's own key.** An owner or admin sets one provider for the whole organisation in Settings > Organisation (`PUT /api/org/ai/provider`: base URL, API key, chat model, embedding model; `DELETE` removes it). The key is stored encrypted like a person's own key, never returned by any API (only `key_set`), and logged nowhere; the base URL is checked exactly as a person's is (`ALLOW_PRIVATE_LLM_URL`, link-local and stack-internal hosts refused, redirects not followed). **Changing the embedding model or endpoint follows the per-person behaviour, not a refusal:** vectors carry the provider and model they were made with, a query only meets vectors made with its own, and the embed job re-embeds what is stale in the background on the organisation's key; the one refusal is a model whose vectors the index cannot hold (on api.openai.com only the 1536-dimension models). A person's own key still comes before the organisation's. With a key of its own the organisation never uses the allowance, and a used-up allowance no longer stops it. We suggest `ALLOW_PRIVATE_LLM_URL=0` on a hosted server.
 
@@ -371,9 +385,9 @@ On a hosted server the model calls (extracting facts from what people save, embe
 
 ### The operator API
 
-Base path `/api/operator/v1`, JSON, `Authorization: Bearer <EUNOMIA_OPERATOR_TOKEN>`. The document is in the OpenAPI description under the tag `operator`. A wrong or missing token, and any other kind of credential, is 401 `auth.unauthorized`; **the routes do not exist (404) while the token is unset**. Errors are the usual problem+json with a stable `code` ([errors.md](errors.md)). It reads and writes the control database only: organisation records, membership and invitation counts. It never reads anything from an organisation's own database (memories, documents, chat), which a test checks by planting a canary there.
+Base path `/api/operator/v1`, JSON, `Authorization: Bearer <EUNOMIA_OPERATOR_TOKEN>` (or `EUNOMIA_OPERATOR_TOKEN_NEXT` while it is being rotated). The document is in the OpenAPI description under the tag `operator`. A wrong or missing token, and any other kind of credential, is 401 `auth.unauthorized`; **the routes do not exist (404) while no operator token is set**. Errors are the usual problem+json with a stable `code` ([errors.md](errors.md)). It reads and writes the control database only: organisation records, membership and invitation counts. It never reads anything from an organisation's own database (memories, documents, chat), which a test checks by planting a canary there.
 
-**Every call is on the instance ledger** (Settings > Audit log for the server's operators, and `GET /api/admin/audit`), as actor `operator` with id `operator-api`, with the action (`operator.org_create`, `operator.org_list`, `operator.org_get`, `operator.org_update`, `operator.org_suspend`, `operator.org_resume`, `operator.owner_claim_resend`, `operator.capacity`, `operator.ai_prices_get`, `operator.ai_prices_set`), its target (`ref:<external_ref>` for a create, `org:<id>` otherwise), its outcome (`ok` or the error code) and the request's parameters (plan, seats, the owner's email, the suspension reason). A call refused by the gate (a wrong token) leaves an `auth.failed` row holding a hash of what was presented; a call refused by the rate limit is not recorded.
+**Every call is on the instance ledger** (Settings > Audit log for the server's operators, and `GET /api/admin/audit`), as actor `operator` with id `operator-api`, with the action (`operator.org_create`, `operator.org_list`, `operator.org_get`, `operator.org_update`, `operator.org_suspend`, `operator.org_resume`, `operator.owner_claim_resend`, `operator.owner_availability`, `operator.capacity`, `operator.ai_prices_get`, `operator.ai_prices_set`), its target (`ref:<external_ref>` for a create, `org:<id>` otherwise), its outcome (`ok` or the error code) and the request's parameters (plan, seats, the owner's email, the suspension reason), ending with which token made the call, `token=current` or `token=next` ([rotation](#rotating-the-operator-token)). The owner-availability check records neither the address nor the answer: the addresses asked about are mostly people who never buy. A call refused by the gate (a wrong token) leaves an `auth.failed` row holding a hash of what was presented; a call refused by the rate limit is not recorded.
 
 An organisation as the API shows it (`OrgSummary`), in every response below:
 
@@ -400,6 +414,34 @@ An organisation as the API shows it (`OrgSummary`), in every response below:
 
 `ai` is this month's model spend on the server's key and the allowance (see [Model spend and the AI switch](#model-spend-and-the-ai-switch)); `usage` (the month's counters by purpose, model and whose key paid) is filled on a single organisation only.
 
+#### Ask whether an email can own a new workspace: `GET /owner-availability`
+
+Ask this **before the buyer's card is charged**. Creating an organisation refuses an owner email that has an account, is reserved, or that another organisation already holds an unclaimed claim for; without this route the buyer finds out only after paying, and someone has to refund them.
+
+```http
+GET /api/operator/v1/owner-availability?email=Owner%40Acme.example
+```
+```json
+{ "available": true }
+```
+```json
+{ "available": false, "reason": "has_account" }
+```
+
+`reason` is one of:
+
+| `reason` | Meaning | What creating answers |
+|---|---|---|
+| `has_account` | The address already has an account, in whichever organisation. An account belongs to exactly one organisation, so it cannot become another one's owner. | `operator.owner_in_other_org` (409) |
+| `reserved` | The address is listed in `EUNOMIA_ADMIN_EMAILS` (an operator of this server), **or differs from a listed one only by a look-alike character** (for example U+212A KELVIN SIGN for `k`, which lowercases to an ASCII `k`): sign-up judges it the same way. | `operator.owner_email_reserved` (400) |
+| `pending_claim` | Another organisation holds an owner claim for the address that nobody has accepted or withdrawn. | `operator.owner_claim_pending` (409) |
+
+The answer is the rule creating an organisation applies, **derived from one function** (`owner_availability` in `operator.rs`) that creating a new organisation and resending a claim also use, so the two cannot disagree; `backend/tests/hosted.rs` checks them case by case. The address is normalised as sign-up normalises it (trimmed, lowercased); one that is not an address, or has a look-alike character that does not make it a listed one, is a `400 validation.invalid`, as creating would answer. The order is `reserved`, then `has_account`, then `pending_claim`.
+
+Why `pending_claim` is unavailable: nothing stops two claims for one address (a claim is only an invitation), but accepting one creates the account, and the other could then never be accepted (`auth.email_taken`), leaving a paid organisation with no way in. So a second organisation is refused while one claim is open. **An expired claim still counts**: resending it revives it, and the slot is held until the claim is accepted. If the first buyer never claims, resend their claim (or use another address for the second): there is no route that withdraws a claim. A retry of the organisation that holds the claim (same `external_ref`) is still a retry, and resending its claim is still allowed.
+
+> **This route tells its caller whether an address has an account.** That is acceptable only because the caller holds the operator token. The billing service **must rate limit and bot-protect** whatever public form sits in front of it (a sign-up or checkout page that shows "this email is taken"), so it cannot be used to ask the question about addresses the asker does not own. The server also limits operator calls (`RATE_LIMIT_OPERATOR_PER_MIN`), but that limit is for the billing service as a whole, not for its visitors. Two creates for one address racing in different server processes can both pass the check; one process serialises them. Ask again with `GET /orgs?owner_email=` if in doubt.
+
 #### Create an organisation: `POST /orgs`
 
 Provisions the organisation's database and makes a **single-use, expiring (7 days) owner claim** for the owner's email. `external_ref` makes the call idempotent: the organisation's id is derived from it, so a retried webhook returns the same organisation and never a second one.
@@ -425,7 +467,7 @@ POST /api/operator/v1/orgs
 - `email_enabled` says whether this server sends email; `emailed` says whether the mail server accepted the owner's copy. When `emailed` is false, deliver `claim_link` yourself.
 - **A retry** with the same `external_ref` and owner returns the same organisation with `created: false`; it has no `claim_link` (the link is shown once, when it is made: after a lost reply, call the resend route). A retry that finds a half-made organisation (a crash between steps) finishes it.
 - `name`: 1 to 80 characters, no `@`. `seat_limit`: 1 to 1,000,000. `trial_ends_at` is optional. `ai_allowance_usd` is optional (0 to 1,000,000 US dollars a month; absent: unlimited).
-- Refused: `operator.owner_in_other_org` (409: the email already has an account; an account belongs to exactly one organisation, so use another email), `operator.owner_email_reserved` (400: an address in `EUNOMIA_ADMIN_EMAILS` can never be made an owner this way), `operator.reference_reused` (409: that reference belongs to an organisation with another owner), `operator.at_capacity` (409: `EUNOMIA_MAX_ORGS` reached; a retry of an existing organisation is not refused), `validation.invalid` (400).
+- Refused: `operator.owner_in_other_org` (409: the email already has an account; an account belongs to exactly one organisation, so use another email), `operator.owner_email_reserved` (400: an address in `EUNOMIA_ADMIN_EMAILS`, or a look-alike of one, can never be made an owner this way), `operator.owner_claim_pending` (409: another organisation holds an unclaimed claim for the address; see [`GET /owner-availability`](#ask-whether-an-email-can-own-a-new-workspace-get-owner-availability), which says the same before the buyer pays), `operator.reference_reused` (409: that reference belongs to an organisation with another owner), `operator.at_capacity` (409: `EUNOMIA_MAX_ORGS` reached; a retry of an existing organisation is not refused), `validation.invalid` (400).
 
 #### List and get: `GET /orgs`, `GET /orgs/{org_id}`
 
@@ -435,6 +477,16 @@ GET /api/operator/v1/orgs?limit=50&offset=0
 ```json
 { "organisations": [ { "...": "OrgSummary" } ], "total": 12, "limit": 50, "offset": 0 }
 ```
+
+Two filters narrow the list, so a reconciliation job can ask "does an organisation exist for this order?" without paging through every organisation:
+
+```http
+GET /api/operator/v1/orgs?external_ref=sub_1Nxyz
+GET /api/operator/v1/orgs?owner_email=Owner%40Acme.example
+GET /api/operator/v1/orgs?external_ref=sub_1Nxyz&owner_email=owner%40acme.example
+```
+
+`external_ref` is an exact match on the reference given at create (trimmed as there; case matters). `owner_email` is normalised as sign-up normalises it, then an exact match on the owner: the account that claimed the organisation, **or the address of its claim while unclaimed** (the `owner_email` the summary shows). Both together must both match. `total` counts the matches, and `limit` and `offset` page them. No match is `200` with an empty list. A filter that is empty, or an `owner_email` that is not an address, is `400 validation.invalid`: it is never read as "no filter", which would list every organisation. Like the rest of the list, the filters read the control database only.
 
 `GET /orgs/6f1c2f0a3b9d4c5e8a7b1d2e3f4a5b6c` answers one `OrgSummary` (above). An id that is malformed or names no organisation is `operator.org_not_found` (404). The list includes the server's own organisation, with no plan. Seat usage uses the same counts as `GET /api/org/seats`.
 
@@ -470,7 +522,7 @@ While the organisation is unclaimed: a new token and a new 7-day expiry, and **t
 { "claim_link": "https://eunomia.example.com/invite#Zk3r...", "claim_expires_at": "2026-11-28T09:40:02Z", "email_enabled": true, "emailed": true }
 ```
 
-Refused: `operator.owner_claimed` (409: the owner has already claimed it), `operator.owner_in_other_org` (409: the owner's email has got an account since, so the claim could never be used).
+Refused: `operator.owner_claimed` (409: the owner has already claimed it), `operator.owner_in_other_org` (409: the owner's email has got an account since, so the claim could never be used), `operator.owner_claim_pending` (409: another organisation has since got a claim for it), `operator.owner_email_reserved` (400: it has since been listed in `EUNOMIA_ADMIN_EMAILS`).
 
 #### Capacity: `GET /capacity`
 
