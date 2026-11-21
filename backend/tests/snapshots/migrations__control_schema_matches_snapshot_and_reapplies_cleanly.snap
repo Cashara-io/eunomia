@@ -20,6 +20,63 @@ expression: first
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "ai_price",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "model"
+          ],
+          "index": "UNIQUE",
+          "name": "ai_price_model_idx",
+          "table": "ai_price"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "ai_usage",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "month"
+          ],
+          "index": "",
+          "name": "ai_usage_month_idx",
+          "table": "ai_usage"
+        },
+        {
+          "cols": [
+            "org",
+            "month"
+          ],
+          "index": "",
+          "name": "ai_usage_org_month_idx",
+          "table": "ai_usage"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "api_token",
       "permissions": {
         "create": false,
@@ -598,6 +655,38 @@ expression: first
           "index": "",
           "name": "org_status_idx",
           "table": "org"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "org_ai",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "hold_until"
+          ],
+          "index": "",
+          "name": "org_ai_hold_idx",
+          "table": "org_ai"
+        },
+        {
+          "cols": [
+            "org"
+          ],
+          "index": "UNIQUE",
+          "name": "org_ai_org_idx",
+          "table": "org_ai"
         }
       ]
     },
