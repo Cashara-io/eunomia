@@ -1,6 +1,10 @@
-//! Workspace administration (instance admin only): the security ledger (`audit_event`) as a
-//! readable activity log, and the people directory with the sign-up policy, where an admin can make
-//! another account an admin, take that back, and suspend or restore an account.
+//! Workspace administration: the security ledger (`audit_event`) as a readable activity log, and the
+//! people directory with the sign-up policy, where an admin can make another account an admin, take that
+//! back, and suspend or restore an account. The log, the directory, suspension and other people's tokens
+//! are an organisation's own to run: its owner and admins (and the instance's admins) reach them, for
+//! their own organisation only, through the capability functions in `org_admin.rs`. Making an account an
+//! instance admin (`user.admin`), the instance-wide MFA switch and the rest of the server stay with
+//! `require_admin` / `require_operator` below.
 
 use std::collections::HashMap;
 
@@ -61,10 +65,13 @@ pub enum AuditCategory {
 const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.oidc_set_aside", "auth.failed", "auth.mfa_failed", "auth.mfa_recovery_used", "auth.reauth", "auth.mfa_secret_unreadable"];
 const ADMIN_ACTIONS: &[&str] = &[
     "admin.grant", "admin.revoke", "user.suspend", "user.restore", "admin.token_revoke", "admin.require_mfa",
+    "org.role", "org.rename", "org.require_mfa", "admin.sessions_end", "admin.access_revoke", "admin.app_revoke",
     "access_review.start", "access_review.decide", "access_review.complete", "audit.export",
     "subject.legal_hold", "subject.legal_hold_lift", "subject.erase_request", "subject.erase", "subject.export_request_admin",
     "subject.export_download_admin", "org.owner_transfer", "subject.erase_cancel",
     "org.invite", "org.invite_resend", "org.invite_revoke", "org.invite_accept", "org.invite_expired",
+    "operator.org_create", "operator.org_update", "operator.org_suspend", "operator.org_resume", "operator.owner_claim_resend",
+    "operator.org_list", "operator.org_get", "operator.capacity", "operator.call",
 ];
 
 impl AuditCategory {
@@ -339,6 +346,27 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "subject.erase" => return "Deleted an account and its data (the erasure record keeps the counts)".into(),
         "subject.export_request" => "Exported their data".into(),
         "subject.export_request_admin" => "Exported someone's data for them".into(),
+        "org.role" => match kv(detail, "role") {
+            Some("admin") => format!("Made {email} an admin of the organisation"),
+            _ => format!("Made {email} an ordinary member of the organisation"),
+        },
+        "org.rename" => match rest_of(detail, "name") {
+            Some(n) => format!("Renamed the organisation to \u{201c}{n}\u{201d}"),
+            None => "Renamed the organisation".into(),
+        },
+        "org.require_mfa" if detail == "on" => "Required two-step verification for every password member of the organisation".into(),
+        "org.require_mfa" => "Stopped requiring two-step verification of the organisation's members".into(),
+        "admin.sessions_end" => format!("Signed {email} out everywhere"),
+        "admin.access_revoke" => format!(
+            "Ended every session, API token and connected app of {email} ({} sessions, {} tokens, {} apps)",
+            kv(detail, "sessions").unwrap_or("0"),
+            kv(detail, "tokens").unwrap_or("0"),
+            kv(detail, "apps").unwrap_or("0")
+        ),
+        "admin.app_revoke" => match rest_of(detail, "app") {
+            Some(a) => format!("Disconnected the app \u{201c}{a}\u{201d} from {email}"),
+            None => format!("Disconnected an app from {email}"),
+        },
         "admin.token_revoke" => match rest_of(detail, "token") {
             Some(t) => format!("Revoked {email}\u{2019}s API token \u{201c}{t}\u{201d}"),
             None => format!("Revoked an API token of {email}"),
@@ -491,14 +519,14 @@ fn via_words(actor_kind: &str) -> &'static str {
     get,
     path = "/api/admin/audit",
     tag = "admin",
-    summary = "Workspace activity log: sign-ins, tokens, app connections and space changes (admin only)",
-    description = "Reads the security ledger for the admin's workspace, newest first. Per-tool-call rows are left out (see `/api/audit/tool-usage`).",
+    summary = "Workspace activity log: sign-ins, tokens, app connections and space changes (organisation owner or admin)",
+    description = "Reads the security ledger for the caller's own organisation, newest first. Per-tool-call rows are left out (see `/api/audit/tool-usage`). Rows that belong to no organisation (sign-in attempts with an unknown email) are for the server's operators only.",
     params(WorkspaceAuditQuery),
     responses((status = 200, body = WorkspaceAuditPage), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
 async fn get_workspace_audit(State(state): State<AppState>, user: User, Query(q): Query<WorkspaceAuditQuery>) -> AppResult<Json<WorkspaceAuditPage>> {
-    require_admin(&state, &user).await?;
+    crate::org_admin::may_read_org_audit(&state.control, &user).await?;
     let limit = q.limit.clamp(1, 200);
     let (prefix, actions, exclude) = q.category.filter();
     let mut rows: Vec<LedgerRow> = store::control::ADMIN_AUDIT_PAGE
@@ -655,6 +683,16 @@ struct Person {
     /// Two-step verification: `on`, `off`, or `provider` for an account that signs in only through single
     /// sign-on (its identity provider handles the second factor).
     mfa: String,
+    /// The person's role in this organisation: `owner`, `admin` or `member` (`role` above is the server-wide
+    /// admin right, a different thing).
+    org_role: String,
+    /// The viewer may suspend or restore this person (`org_admin::decide`: not themselves, not the owner, not
+    /// an operator of the server, and only the owner acts on an admin).
+    can_suspend: bool,
+    /// The viewer may change this person's organisation role (the owner may, to `member` or `admin`).
+    can_set_role: bool,
+    /// The viewer may end this person's sessions and revoke their API tokens and connected apps.
+    can_revoke: bool,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -725,7 +763,7 @@ pub(crate) async fn people_rows(state: &AppState, user: &User) -> AppResult<Vec<
     Ok(store::control::ADMIN_PEOPLE.on(&state.control).bind(("org", user.org.record())).await?.take(0)?)
 }
 
-async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport> {
+pub(crate) async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport> {
     let org = state.org(&user.org).await?;
     let rows = people_rows(state, user).await?;
     let ids: Vec<RecordId> = rows.iter().map(|r| r.id.clone()).collect();
@@ -772,12 +810,27 @@ async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport>
         .into_iter()
         .next()
         .map(|r| r.user);
+    let roles = crate::org_admin::roles(&state.control, user).await?;
+    let viewer = crate::org_admin::standing(&state.control, user).await?;
     let people = rows
         .into_iter()
         .map(|r| {
             let key = r.id.to_string();
             let admin = admin_source(&r, creator.as_ref());
+            let org_role = roles.get(&key).copied().unwrap_or(crate::org_admin::OrgRole::Member);
+            let target = crate::org_admin::Target {
+                id: r.id.clone(),
+                email: r.email.clone(),
+                role: org_role,
+                protected: !admin.is_empty(),
+                suspended: r.suspended_at.is_some(),
+            };
+            let may = |act| viewer.is_some_and(|v| crate::org_admin::decide(&v, &user.id, &target, act).is_ok());
             Person {
+                org_role: org_role.as_str().into(),
+                can_suspend: may(crate::org_admin::MemberAct::Suspend),
+                can_set_role: may(crate::org_admin::MemberAct::SetRole),
+                can_revoke: may(crate::org_admin::MemberAct::Tokens),
                 last_active: last.get(&key).map(|t| t.to_rfc3339()),
                 shared_spaces: spaces.get(&key).copied().unwrap_or(0),
                 admin: admin.into(),
@@ -812,12 +865,13 @@ async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport>
     get,
     path = "/api/admin/people",
     tag = "admin",
-    summary = "Every account in the workspace and the sign-up policy (admin only)",
+    summary = "Every account in the workspace and the sign-up policy (organisation owner or admin)",
+    description = "The caller's own organisation only. Each person carries their organisation role and which actions the caller may take on them. The sign-up policy's allowlist and the server's operator list are filled in for the server's operators only.",
     responses((status = 200, body = PeopleReport), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
 async fn get_people(State(state): State<AppState>, user: User) -> AppResult<Json<PeopleReport>> {
-    require_admin(&state, &user).await?;
+    crate::org_admin::may_administer_members(&state.control, &user).await?;
     Ok(Json(people_report(&state, &user).await?))
 }
 
@@ -856,9 +910,16 @@ async fn target_of(state: &AppState, user: &User, user_id: &str) -> AppResult<(V
     member_of(state, user, user_id).await
 }
 
-/// The account `user_id` names, which must be in the admin's workspace (any credential).
+/// The account `user_id` names, which must be in the admin's workspace (any credential). Instance admins only:
+/// the data-subject routes use it. The organisation routes use `org_admin::may_act_on_member` and then [`org_member_rows`].
 async fn member_of(state: &AppState, user: &User, user_id: &str) -> AppResult<(Vec<PersonRow>, Option<RecordId>, RecordId)> {
     require_admin(state, user).await?;
+    org_member_rows(state, user, user_id).await
+}
+
+/// The caller's organisation's people, the first account, and the account `user_id` names, which must be one
+/// of those people. The caller's authority is checked by the caller of this function, not here.
+async fn org_member_rows(state: &AppState, user: &User, user_id: &str) -> AppResult<(Vec<PersonRow>, Option<RecordId>, RecordId)> {
     let not_found = || AppError::coded(ErrorCode::AuthNotFound, "That account isn't in this workspace.");
     let target: RecordId = crate::rid::parse(user_id).map_err(|_| not_found())?;
     let rows = people_rows(state, user).await?;
@@ -915,8 +976,8 @@ async fn set_admin(State(state): State<AppState>, user: User, Path(user_id): Pat
     put,
     path = "/api/admin/people/{user_id}/suspended",
     tag = "admin",
-    summary = "Suspend or restore an account (admin only, browser session)",
-    description = "A suspended account cannot sign in. Its sessions end at once, and its API tokens and app connections are refused until it is restored. You cannot suspend yourself or the first account.",
+    summary = "Suspend or restore an account (organisation owner or admin, browser session)",
+    description = "A suspended account cannot sign in. Its sessions end at once, and its API tokens and app connections are refused until it is restored. You cannot suspend yourself or the first account. An organisation's owner or admin can suspend a member of their own organisation; only the owner acts on an admin, and nobody but the server's operator acts on the owner or on an operator of the server (`org.protected_member`). A person in another organisation is `auth.not_found`.",
     params(("user_id" = String, Path)),
     request_body = SuspendChange,
     responses((status = 200, body = PeopleReport), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
@@ -928,8 +989,11 @@ async fn set_suspended(
     Path(user_id): Path<String>,
     Json(body): Json<SuspendChange>,
 ) -> AppResult<Json<PeopleReport>> {
-    let (rows, creator, target) = target_of(&state, &user, &user_id).await?;
-    let row = rows.iter().find(|r| r.id == target).expect("checked in target_of");
+    authz::require_session()?;
+    let act = if body.suspended { crate::org_admin::MemberAct::Suspend } else { crate::org_admin::MemberAct::Restore };
+    crate::org_admin::may_act_on_member(&state.control, &user, &user_id, act).await?;
+    let (rows, creator, target) = org_member_rows(&state, &user, &user_id).await?;
+    let row = rows.iter().find(|r| r.id == target).expect("checked in org_member_rows");
     let email = row.email.clone();
     if body.suspended == row.suspended_at.is_some() {
         return Ok(Json(people_report(&state, &user).await?));
@@ -952,12 +1016,17 @@ async fn set_suspended(
             return Err(AppError::bad_request("The workspace needs at least one admin. Make someone else an admin first."));
         }
     }
-    store::control::USER_SET_SUSPENDED
-        .on(&state.control)
-        .bind(("id", target.clone()))
-        .bind(("suspended", body.suspended))
-        .await?
-        .check()?;
+    if body.suspended {
+        store::control::USER_SET_SUSPENDED
+            .on(&state.control)
+            .bind(("id", target.clone()))
+            .bind(("suspended", true))
+            .await?
+            .check()?;
+    } else {
+        // restoring takes a seat back: refused with `org.seat_limit` when the organisation is full
+        crate::plan::restore_member(&state, &user.org, &target).await?;
+    }
     if body.suspended {
         // every browser session ends now; tokens and app connections are refused while suspended (`load_user`)
         store::control::AUTH_SESSION_REVOKE_OWNER.on(&state.control).bind(("owner", target.clone())).await?.check()?;
@@ -1086,14 +1155,15 @@ fn person_tokens(rows: Vec<crate::models_user::ApiTokenSummary>) -> Vec<PersonTo
     get,
     path = "/api/admin/people/{user_id}/tokens",
     tag = "admin",
-    summary = "Someone's API tokens, newest first (admin only)",
+    summary = "Someone's API tokens, newest first (organisation owner or admin)",
     description = "Names and dates only; a token's secret is never stored or shown.",
     params(("user_id" = String, Path)),
     responses((status = 200, body = Vec<PersonToken>), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
 async fn get_person_tokens(State(state): State<AppState>, user: User, Path(user_id): Path<String>) -> AppResult<Json<Vec<PersonToken>>> {
-    let (_, _, target) = member_of(&state, &user, &user_id).await?;
+    crate::org_admin::may_act_on_member(&state.control, &user, &user_id, crate::org_admin::MemberAct::Tokens).await?;
+    let (_, _, target) = org_member_rows(&state, &user, &user_id).await?;
     Ok(Json(person_tokens(crate::models_user::list_api_tokens(&state.control, &target).await?)))
 }
 
@@ -1102,7 +1172,7 @@ async fn get_person_tokens(State(state): State<AppState>, user: User, Path(user_
     delete,
     path = "/api/admin/people/{user_id}/tokens/{token_id}",
     tag = "admin",
-    summary = "Revoke someone's API token (admin only, browser session)",
+    summary = "Revoke someone's API token (organisation owner or admin, browser session)",
     description = "The token stops working at once. Returns the person's remaining tokens.",
     params(("user_id" = String, Path), ("token_id" = String, Path)),
     responses((status = 200, body = Vec<PersonToken>), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
@@ -1113,7 +1183,9 @@ async fn revoke_person_token(
     user: User,
     Path((user_id, token_id)): Path<(String, String)>,
 ) -> AppResult<Json<Vec<PersonToken>>> {
-    let (rows, _, target) = target_of(&state, &user, &user_id).await?;
+    authz::require_session()?;
+    crate::org_admin::may_act_on_member(&state.control, &user, &user_id, crate::org_admin::MemberAct::Tokens).await?;
+    let (rows, _, target) = org_member_rows(&state, &user, &user_id).await?;
     let email = rows.iter().find(|r| r.id == target).map(|r| r.email.clone()).unwrap_or_default();
     let not_found = || AppError::coded(ErrorCode::AuthNotFound, "That token doesn't exist any more.");
     let rid: RecordId = crate::rid::parse(&token_id).map_err(|_| not_found())?;

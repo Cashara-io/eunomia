@@ -10,6 +10,7 @@ pub const CONTROL_ALL: &[&ControlStmt] = &[
     &COMPLETE,
     &FAIL,
     &RELEASE_WORKER,
+    &DEFER_PAUSED,
     &REAP_POISONED,
     &REVIVE_DEAD_MIGRATIONS,
     &PRUNE_DONE,
@@ -40,21 +41,37 @@ pub const ENQUEUE: ControlStmt = ControlStmt::new(
 /// running cap, and take them with a conditional UPDATE. Two workers racing for a row conflict
 /// on commit (retried by `tx::with_retry`) and the loser re-reads, so a row is claimed once.
 /// The cap is soft: one claim batch can overshoot it.
+/// A job of a member of a suspended organisation (`org.status`, control migration 0015) is not taken: it stays
+/// `ready` and is claimed after the organisation is resumed, so nothing queued is lost. The kinds in the
+/// literal never pause (a schema migration, a person's own data export and erasure): `PAUSE_EXEMPT` in
+/// `jobs/mod.rs`, which a test keeps equal to this list.
 pub const CLAIM: ControlStmt = ControlStmt::new(
     "jobs.claim",
     "BEGIN TRANSACTION; \
      LET $full = (SELECT VALUE owner FROM (SELECT owner, count() AS n FROM job \
          WHERE status = 'running' AND locked_until >= time::now() GROUP BY owner) WHERE n >= $cap); \
+     LET $paused = (SELECT VALUE user FROM membership WHERE org IN (SELECT VALUE id FROM org WHERE status = 'suspended')); \
      LET $expired = (SELECT VALUE id FROM job WHERE status = 'running' AND locked_until < time::now() \
-         AND attempts < max_attempts AND owner NOT IN $full LIMIT $n); \
+         AND attempts < max_attempts AND owner NOT IN $full \
+         AND (kind IN ['migrate_tenant', 'subject_export', 'subject_erase'] OR owner NOT IN $paused) LIMIT $n); \
      LET $ready = (SELECT VALUE id FROM job WHERE status = 'ready' AND run_at <= time::now() \
-         AND owner NOT IN $full LIMIT $n); \
+         AND owner NOT IN $full \
+         AND (kind IN ['migrate_tenant', 'subject_export', 'subject_erase'] OR owner NOT IN $paused) LIMIT $n); \
      UPDATE array::slice(array::concat($expired, $ready), 0, $n) \
          SET status = 'running', locked_by = $worker, locked_until = time::now() + <duration>$lease, \
              attempts += 1, updated_at = time::now() \
          WHERE (status = 'ready' AND run_at <= time::now()) OR (status = 'running' AND locked_until < time::now()) \
          RETURN AFTER; \
      COMMIT TRANSACTION;",
+);
+
+/// A running job whose organisation was suspended meanwhile goes back to `ready` after `$delay`, without
+/// burning an attempt, so it runs after the organisation is resumed.
+pub const DEFER_PAUSED: ControlStmt = ControlStmt::new(
+    "jobs.defer_paused",
+    "UPDATE $id SET status = 'ready', run_at = time::now() + <duration>$delay, attempts = math::max([attempts - 1, 0]), \
+         locked_by = NONE, locked_until = NONE, updated_at = time::now() \
+     WHERE status = 'running' AND locked_by = $worker RETURN VALUE id",
 );
 
 /// Returns a row only while this worker still holds the lease.

@@ -194,6 +194,10 @@ async fn recheck(state: &OrgState, headers: &HeaderMap, vault: &RecordId) -> Res
         Ok(Some(a)) => a,
         _ => return Err(Stop::Denied("credential no longer valid".into())),
     };
+    // a suspended workspace's streams end (the gate refused new ones)
+    if state.plans.get(&state.control, &authn.user.org).await.map(|p| p.suspended()).unwrap_or(true) {
+        return Err(Stop::Denied(crate::plan::suspended_error().message));
+    }
     let allowed = authz::with_caller(authn.caller, authz::authorize(&state.db, &authn.user.id, Action::ReadMemories, vault)).await;
     allowed.map(|_| ()).map_err(|e| Stop::Denied(e.message))
 }

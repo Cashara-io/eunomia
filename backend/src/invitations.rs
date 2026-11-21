@@ -5,7 +5,9 @@
 //!   Its token is 32 random bytes; only the sha256 is stored (`org_invitation.token_hash`), and the token
 //!   is never logged or written to the audit ledger. It expires [`TTL_DAYS`] after it was (re)sent and
 //!   is single use.
-//! - The product sends no email: the admin gets the link and sends it themselves.
+//! - The admin always gets the link to copy and send themselves. When the server sends email (`SMTP_HOST`,
+//!   `mail.rs`) the same link is also emailed to the invited address, on create and on resend, and the
+//!   answer says whether the mail server took it (`emailed`). With email off nothing is sent and nothing differs.
 //! - A valid invitation is itself the permission to create an account, whatever `SIGNUP` says, and the
 //!   account lands in the inviting org (not an org of its own under `EUNOMIA_SIGNUP_ORG=personal`).
 //! - An invitation is only ever used through its token: password signup sends it, and single sign-on
@@ -14,6 +16,10 @@
 //! - An address in `EUNOMIA_ADMIN_EMAILS` is never invitable ([`create`]) and never accepted
 //!   ([`check_usable`]); both refusals say nothing about why.
 //! - Only the org's owner (or an instance admin) manages `admin` invitations; an org admin, `member` ones.
+//! - An `owner` invitation is the claim of an organisation the operator API made (`operator.rs`): no account
+//!   sent it, only the operator API creates or resends it, and the account that accepts it becomes the owner.
+//! - Seats: when the org has a seat limit (`plan.rs`), creating an invitation, resending one that had expired
+//!   and accepting one that adds a member each check the limit in the transaction that writes (`org.seat_limit`).
 //! - An account belongs to one org for now (a credential resolves to the oldest membership, with no org
 //!   switcher; see `models_user::org_of`). So an account already in another org cannot accept: it gets
 //!   `invitation.other_org`.
@@ -116,6 +122,9 @@ pub struct OrgInvitationLink {
     pub link: String,
     /// The token alone, for clients that build their own link.
     pub token: String,
+    /// The link was also emailed to the invited address and the mail server accepted it. `false` when this
+    /// server sends no email, or the mail server refused it or did not answer in time: copy the link.
+    pub emailed: bool,
 }
 
 /// OrgSeats for one org (the hosted business bills on these). Counts only.
@@ -137,8 +146,12 @@ pub struct Pending {
     #[surreal(default)]
     pub org_name: Option<String>,
     pub email: String,
+    /// `member`, `admin`, or `owner` (the claim of an organisation made through the operator API).
     pub role: String,
-    pub invited_by: RecordId,
+    /// Who sent it; none for an owner claim, which no account made.
+    #[serde(default)]
+    #[surreal(default)]
+    pub invited_by: Option<RecordId>,
     /// The hash of the link this acceptance started from: the claim only succeeds while it is current.
     pub token_hash: String,
     #[serde(default)]
@@ -275,12 +288,37 @@ fn creation_rate(state: &AppState, by: &User) -> AppResult<()> {
     rate(state, format!("org-invite-by:{}", by.id.to_string()), ratelimit::INVITES_PER_MIN)
 }
 
-fn link(state: &AppState, token: &str) -> String {
+pub(crate) fn link(state: &AppState, token: &str) -> String {
     format!("{}/invite#{token}", crate::oauth::frontend_url(&state.settings))
+}
+
+/// Emails `link` to the invited address when this server sends email. Waits for the mail server only up to
+/// the mail timeout; a failure is logged by the mailer and is not an error: the admin still has the link.
+async fn email_link(state: &AppState, by: &User, to: &str, link: &str) -> bool {
+    if !state.mailer.enabled() {
+        return false;
+    }
+    state.mailer.send("invitation", crate::recovery::invitation_mail(to, &by.email, link, TTL_DAYS)).await
+}
+
+/// ` emailed=true|false` for the audit detail when the server sends email; nothing when it does not, so a server
+/// without email writes the rows it always did.
+fn emailed_detail(state: &AppState, emailed: bool) -> String {
+    if state.mailer.enabled() { format!(" emailed={emailed}") } else { String::new() }
 }
 
 async fn record(control: &ControlDb, scope: &RecordId, actor: &Actor, action: &str, target: &str, outcome: &str, detail: &str) {
     audit::record(control, Event { user: Some(scope), actor, action, target, outcome, detail }).await;
+}
+
+/// A row about invitation `p` in the inviting org's ledger: scoped to the inviter, or, for an owner claim that
+/// no account sent, to the org itself.
+async fn record_for(control: &ControlDb, p: &Pending, actor: &Actor, action: &str, outcome: &str, detail: &str) {
+    match (&p.invited_by, p.org_id()) {
+        (Some(by), _) => record(control, by, actor, action, &p.id.to_string(), outcome, detail).await,
+        (None, Some(org)) => audit::record_in_org(control, &org, Event { user: None, actor, action, target: &p.id.to_string(), outcome, detail }).await,
+        (None, None) => {}
+    }
 }
 
 fn caller_actor(user: &RecordId) -> Actor {
@@ -310,16 +348,23 @@ pub async fn create(state: &AppState, by: &User, email: &str, role: OrgInviteRol
         return Err(AppError::coded(ErrorCode::InvitationExists, "That person is already in this organisation."));
     }
     let token = models_user::generate_token();
-    let created: AppResult<surrealdb::IndexedResults> = async { Ok(q::CREATE
-        .on(&state.control)
-        .bind(("org", by.org.record()))
-        .bind(("email", email.clone()))
-        .bind(("role", role.as_str().to_string()))
-        .bind(("hash", models_user::hash_token(&token)))
-        .bind(("by", by.id.clone()))
-        .bind(("ttl", format!("{TTL_DAYS}d")))
-        .await?
-        .check()?) }
+    let created: AppResult<surrealdb::IndexedResults> = async {
+        // one at a time in this process (and not while a mail is sent); across processes the statement's seat guard decides (store/plan.rs)
+        let _one = crate::tx::lock(&format!("seats:{}", by.org.key())).await;
+        Ok(crate::tx::with_retry(|| async {
+            q::CREATE
+                .on(&state.control)
+                .bind(("org", by.org.record()))
+                .bind(("email", email.clone()))
+                .bind(("role", role.as_str().to_string()))
+                .bind(("hash", models_user::hash_token(&token)))
+                .bind(("by", by.id.clone()))
+                .bind(("ttl", format!("{TTL_DAYS}d")))
+                .await?
+                .check()
+        })
+        .await?)
+    }
     .await;
     let mut res = match created {
         Ok(r) => r,
@@ -327,12 +372,14 @@ pub async fn create(state: &AppState, by: &User, email: &str, role: OrgInviteRol
         Err(e) if e.code == ErrorCode::DbDuplicate => {
             return Err(AppError::coded(ErrorCode::InvitationExists, "There's already an open invitation for that email. Resend it instead."));
         }
-        Err(e) => return Err(e),
+        Err(e) => return Err(crate::plan::explain_seat_refusal(&state.control, &by.org.record(), e).await),
     };
-    let row: Row = res.take::<Vec<Row>>(0)?.into_iter().next().ok_or_else(|| AppError::internal("invitation insert returned no row"))?;
+    let row: Row = res.take::<Vec<Row>>(q::CREATE.slot)?.into_iter().next().ok_or_else(|| AppError::internal("invitation insert returned no row"))?;
+    let link = link(state, &token);
+    let emailed = email_link(state, by, &email, &link).await;
     let actor = caller_actor(&by.id);
-    record(&state.control, &by.id, &actor, "org.invite", &row.id.to_string(), "ok", &format!("email={email} role={}", role.as_str())).await;
-    Ok(OrgInvitationLink { invitation: row.into(), link: link(state, &token), token })
+    record(&state.control, &by.id, &actor, "org.invite", &row.id.to_string(), "ok", &format!("email={email} role={}{}", role.as_str(), emailed_detail(state, emailed))).await;
+    Ok(OrgInvitationLink { invitation: row.into(), link, token, emailed })
 }
 
 /// The admin's org's open invitations, newest first.
@@ -353,19 +400,32 @@ pub async fn resend(state: &AppState, by: &User, id: &str) -> AppResult<OrgInvit
     require_role_of(state, by, m, &id).await?;
     creation_rate(state, by)?;
     let token = models_user::generate_token();
-    let mut res = q::RESEND
-        .on(&state.control)
-        .bind(("id", id.clone()))
-        .bind(("org", by.org.record()))
-        .bind(("roles", m.roles()))
-        .bind(("hash", models_user::hash_token(&token)))
-        .bind(("ttl", format!("{TTL_DAYS}d")))
-        .await?
-        .check()?;
-    let row: Row = res.take::<Vec<Row>>(0)?.into_iter().next().ok_or_else(admin_not_found)?;
+    let res = {
+        let _one = crate::tx::lock(&format!("seats:{}", by.org.key())).await;
+        crate::tx::with_retry(|| async {
+            q::RESEND
+                .on(&state.control)
+                .bind(("id", id.clone()))
+                .bind(("org", by.org.record()))
+                .bind(("roles", m.roles()))
+                .bind(("hash", models_user::hash_token(&token)))
+                .bind(("ttl", format!("{TTL_DAYS}d")))
+                .await?
+                .check()
+        })
+        .await
+        .map_err(AppError::from)
+    };
+    let mut res = match res {
+        Ok(r) => r,
+        Err(e) => return Err(crate::plan::explain_seat_refusal(&state.control, &by.org.record(), e).await),
+    };
+    let row: Row = res.take::<Vec<Row>>(q::RESEND.slot)?.into_iter().next().ok_or_else(admin_not_found)?;
+    let link = link(state, &token);
+    let emailed = email_link(state, by, &row.email, &link).await;
     let actor = caller_actor(&by.id);
-    record(&state.control, &by.id, &actor, "org.invite_resend", &row.id.to_string(), "ok", &format!("email={} role={}", row.email, row.role)).await;
-    Ok(OrgInvitationLink { invitation: row.into(), link: link(state, &token), token })
+    record(&state.control, &by.id, &actor, "org.invite_resend", &row.id.to_string(), "ok", &format!("email={} role={}{}", row.email, row.role, emailed_detail(state, emailed))).await;
+    Ok(OrgInvitationLink { invitation: row.into(), link, token, emailed })
 }
 
 /// Withdraws one of the admin's org's open invitations: its link stops working.
@@ -501,7 +561,7 @@ pub async fn check_usable(control: &ControlDb, p: Pending) -> AppResult<Pending>
     }
     if p.expired {
         // scoped to the inviter so the inviting org's log shows it; the actor is whoever held the link
-        record(control, &p.invited_by, &audit::anonymous(), "org.invite_expired", &p.id.to_string(), ErrorCode::InvitationExpired.as_str(), &format!("email={}", p.email)).await;
+        record_for(control, &p, &audit::anonymous(), "org.invite_expired", ErrorCode::InvitationExpired.as_str(), &format!("email={}", p.email)).await;
         return Err(expired_error(&p));
     }
     Ok(p)
@@ -510,6 +570,8 @@ pub async fn check_usable(control: &ControlDb, p: Pending) -> AppResult<Pending>
 /// Accepts `p` for `user` (whose email the caller has checked): marks it used and, when `join`, adds the
 /// membership, atomically. A second accept, or one that lost a race, is `invitation.not_found`.
 pub async fn claim(control: &ControlDb, user: &RecordId, p: &Pending, join: bool) -> AppResult<()> {
+    // joining takes a seat: one at a time in this process; across processes the seat guard decides
+    let _one = if join { crate::tx::lock(&format!("seats:{}", p.org_id().map(|o| o.key()).unwrap_or_default())).await } else { None };
     let res = crate::tx::with_retry(|| async {
         q::CLAIM
             .on(control)
@@ -525,7 +587,7 @@ pub async fn claim(control: &ControlDb, user: &RecordId, p: &Pending, join: bool
     match res {
         Ok(_) => Ok(()),
         Err(e) if e.to_string().contains("invitation.unavailable") => Err(not_found()),
-        Err(e) => Err(e.into()),
+        Err(e) => Err(crate::plan::explain_seat_refusal(control, &p.org, e.into()).await),
     }
 }
 
@@ -588,7 +650,7 @@ pub const NOT_ACCEPTED: &str = "invitation.not_accepted";
 /// row never tells the inviter why. The reason is in the server log. An expired link has its own
 /// `org.invite_expired` row: that says something about the link, not about the person.
 pub async fn record_not_accepted(control: &ControlDb, p: &Pending) {
-    record(control, &p.invited_by, &audit::anonymous(), "org.invite_accept", &p.id.to_string(), NOT_ACCEPTED, &format!("email={}", p.email)).await;
+    record_for(control, p, &audit::anonymous(), "org.invite_accept", NOT_ACCEPTED, &format!("email={}", p.email)).await;
 }
 
 /// [`email_matches`], and a refusal goes to the inviter's ledger as "not accepted".
@@ -612,7 +674,7 @@ mod tests {
             org_name: Some("Acme".into()),
             email: email.into(),
             role: "member".into(),
-            invited_by: crate::rid::parse("user:c").unwrap(),
+            invited_by: Some(crate::rid::parse("user:c").unwrap()),
             token_hash: "h".into(),
             accepted_at: None,
             revoked_at: None,

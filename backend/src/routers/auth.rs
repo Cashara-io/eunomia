@@ -90,6 +90,8 @@ struct BootstrapOut {
     auth_mode: AuthModeOut,
     /// The button label ("Continue with {oidc_provider}") when an OpenID Connect provider is configured.
     oidc_provider: Option<String>,
+    /// This server sends email (`SMTP_HOST` is set), so "Forgot password?" and emailed invitations work.
+    email_enabled: bool,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -365,7 +367,7 @@ async fn register(
 
     audit::record_as_caller(&state.control, &user.id, "auth.register", "", "ok").await;
     // the server requires two-step verification: the new account sets it up before any session
-    if crate::mfa::require_mfa(&state.control).await? {
+    if crate::mfa::required_for(&state.control, &user.id).await? {
         return challenge_response(&state, &user, &headers, https, crate::mfa::AfterPassword::Enrol).await;
     }
     session_response(&state, user, &headers, https, auth::Via::Password, false, None).await
@@ -533,7 +535,7 @@ async fn create_token(
     }
     // a new long-lived credential is a sensitive action. For an account with MFA (or while MFA is required) only
     // a browser session that passed a second factor may mint one: a token from before enrolment cannot breed
-    if me.actor.kind == "token" && (crate::mfa::enabled(&state.control, &user.id).await? || crate::mfa::require_mfa(&state.control).await?) {
+    if me.actor.kind == "token" && (crate::mfa::enabled(&state.control, &user.id).await? || crate::mfa::required_for(&state.control, &user.id).await?) {
         return Err(AppError::coded(
             ErrorCode::AuthStepUpRequired,
             "This account uses two-step verification, so new API tokens are created in Settings > API tokens, where you confirm with a code. This token can't create another one.",
@@ -758,7 +760,7 @@ async fn bootstrap(State(state): State<AppState>) -> AppResult<Json<BootstrapOut
         crate::oidc::AuthMode::Both => AuthModeOut::Both,
         crate::oidc::AuthMode::Oidc => AuthModeOut::Oidc,
     };
-    Ok(Json(BootstrapOut { has_users, auth_mode, oidc_provider: auth.oidc.as_ref().map(|o| o.provider_name.clone()) }))
+    Ok(Json(BootstrapOut { has_users, auth_mode, oidc_provider: auth.oidc.as_ref().map(|o| o.provider_name.clone()), email_enabled: state.mailer.enabled() }))
 }
 
 #[derive(utoipa::OpenApi)]

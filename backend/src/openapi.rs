@@ -64,6 +64,10 @@ impl Modify for Security {
         let components = openapi.components.get_or_insert_with(Default::default);
         components.add_security_scheme("cookie", SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::new(SESSION_COOKIE))));
         components.add_security_scheme(
+            "operator",
+            SecurityScheme::Http(HttpBuilder::new().scheme(HttpAuthScheme::Bearer).description(Some("The operator token (`EUNOMIA_OPERATOR_TOKEN`), for the hosted service's billing system. Not an API token.")).build()),
+        );
+        components.add_security_scheme(
             "bearer",
             SecurityScheme::Http(HttpBuilder::new().scheme(HttpAuthScheme::Bearer).description(Some("API token")).build()),
         );
@@ -85,10 +89,13 @@ pub fn spec() -> utoipa::openapi::OpenApi {
     for part in [
         routers::auth::Doc::openapi(),
         routers::mfa::Doc::openapi(),
+        routers::recovery::Doc::openapi(),
         routers::admin::Doc::openapi(),
         routers::audit_chain::Doc::openapi(),
         routers::access_reviews::Doc::openapi(),
         routers::org::Doc::openapi(),
+        routers::org_admin::Doc::openapi(),
+        routers::operator::Doc::openapi(),
         routers::audit::Doc::openapi(),
         routers::changes::Doc::openapi(),
         routers::chat::Doc::openapi(),

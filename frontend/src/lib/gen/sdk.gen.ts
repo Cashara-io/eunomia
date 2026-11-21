@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, type Options as Options2, type RequestResult, type ServerSentEventsResult, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AcceptOrgInvitationData, AcceptOrgInvitationErrors, AcceptOrgInvitationResponses, AckExtensionEventsData, AckExtensionEventsErrors, AckExtensionEventsResponses, AddMemoryData, AddMemoryErrors, AddMemoryResponses, AddRelationData, AddRelationErrors, AddRelationResponses, AutomapVaultOntologyData, AutomapVaultOntologyErrors, AutomapVaultOntologyResponses, CancelErasureData, CancelErasureErrors, CancelErasureResponses, CheckForUpdateData, CheckForUpdateErrors, CheckForUpdateResponses, CheckVaultIntegrityData, CheckVaultIntegrityErrors, CheckVaultIntegrityResponses, ClaimExtensionEventsData, ClaimExtensionEventsErrors, ClaimExtensionEventsResponses, CloneVaultData, CloneVaultErrors, CloneVaultResponses, CompleteAccessReviewData, CompleteAccessReviewErrors, CompleteAccessReviewResponses, CompleteOnboardingData, CompleteOnboardingErrors, CompleteOnboardingResponses, ComposioBeginData, ComposioBeginErrors, ComposioBeginResponses, ComposioCallbackData, ComposioCallbackErrors, ComposioCallbackResponses, ComposioDisconnectData, ComposioDisconnectErrors, ComposioDisconnectResponses, ComposioManageData, ComposioManageErrors, ComposioManageResponses, ComposioSelectionData, ComposioSelectionErrors, ComposioSelectionResponses, ComposioStatusData, ComposioStatusErrors, ComposioStatusResponses, ConfirmMfaChallengeEnrolmentData, ConfirmMfaChallengeEnrolmentErrors, ConfirmMfaChallengeEnrolmentResponses, ConfirmMfaEnrolmentData, ConfirmMfaEnrolmentErrors, ConfirmMfaEnrolmentResponses, CreateConnectorData, CreateConnectorErrors, CreateConnectorResponses, CreateEntityData, CreateEntityErrors, CreateEntityResponses, CreateExtensionData, CreateExtensionErrors, CreateExtensionResponses, CreateOrgInvitationData, CreateOrgInvitationErrors, CreateOrgInvitationResponses, CreateSecretRefData, CreateSecretRefErrors, CreateSecretRefResponses, CreateThreadData, CreateThreadErrors, CreateThreadResponses, CreateTokenData, CreateTokenErrors, CreateTokenResponses, CreateVaultData, CreateVaultErrors, CreateVaultResponses, CreateVaultShareCodeData, CreateVaultShareCodeErrors, CreateVaultShareCodeResponses, DecideAccessReviewData, DecideAccessReviewErrors, DecideAccessReviewResponses, DecideOauthConsentData, DecideOauthConsentErrors, DecideOauthConsentResponses, DecideVaultOntologyKindData, DecideVaultOntologyKindErrors, DecideVaultOntologyKindResponses, DecideVaultOntologyLinkData, DecideVaultOntologyLinkErrors, DecideVaultOntologyLinkResponses, DecideVaultOntologyMetricData, DecideVaultOntologyMetricErrors, DecideVaultOntologyMetricResponses, DecideVaultOntologyPropertyData, DecideVaultOntologyPropertyErrors, DecideVaultOntologyPropertyResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeclineSecretRequestData, DeclineSecretRequestErrors, DeclineSecretRequestResponses, DeleteConnectorData, DeleteConnectorDataData, DeleteConnectorDataErrors, DeleteConnectorDataResponses, DeleteConnectorErrors, DeleteConnectorResponses, DeleteDocumentData, DeleteDocumentErrors, DeleteDocumentResponses, DeleteEntityData, DeleteEntityErrors, DeleteEntityResponses, DeleteExtensionData, DeleteExtensionErrors, DeleteExtensionResponses, DeleteHeldSecretData, DeleteHeldSecretErrors, DeleteHeldSecretResponses, DeleteMemoryData, DeleteMemoryErrors, DeleteMemoryResponses, DeleteSecretProviderData, DeleteSecretProviderErrors, DeleteSecretProviderResponses, DeleteSecretRefData, DeleteSecretRefErrors, DeleteSecretRefResponses, DeleteThreadData, DeleteThreadErrors, DeleteThreadResponses, DeleteTokenData, DeleteTokenErrors, DeleteTokenResponses, DeleteVaultData, DeleteVaultErrors, DeleteVaultResponses, DeleteVaultShareCodeData, DeleteVaultShareCodeErrors, DeleteVaultShareCodeResponses, DisableMfaData, DisableMfaErrors, DisableMfaResponses, DownloadDiagnosticsData, DownloadDiagnosticsErrors, DownloadDiagnosticsResponses, DownloadDocumentData, DownloadDocumentErrors, DownloadDocumentResponses, DownloadSubjectExportData, DownloadSubjectExportErrors, DownloadSubjectExportResponses, EraseMyAccountData, EraseMyAccountErrors, EraseMyAccountResponses, ErasePersonData, ErasePersonErrors, ErasePersonResponses, ExportAccessReviewData, ExportAccessReviewErrors, ExportAccessReviewResponses, ExportAuditChainData, ExportAuditChainErrors, ExportAuditChainResponses, ExportDataData, ExportDataErrors, ExportDataResponses, ExportDocumentData, ExportDocumentErrors, ExportDocumentResponses, FillSecretRequestData, FillSecretRequestErrors, FillSecretRequestResponses, FollowEventsData, FollowEventsErrors, FollowEventsResponses, FollowVaultChangesData, FollowVaultChangesErrors, FollowVaultChangesResponses, GetAccessReviewData, GetAccessReviewErrors, GetAccessReviewResponses, GetBootstrapData, GetBootstrapErrors, GetBootstrapResponses, GetCloudSimilarityData, GetCloudSimilarityErrors, GetCloudSimilarityResponses, GetConnectorData, GetConnectorErrors, GetConnectorResponses, GetDocumentData, GetDocumentErrors, GetDocumentResponses, GetEntityData, GetEntityErrors, GetEntityGraphData, GetEntityGraphErrors, GetEntityGraphResponses, GetEntityResponses, GetExtensionData, GetExtensionErrors, GetExtensionResponses, GetFailureCapsuleData, GetFailureCapsuleErrors, GetFailureCapsuleResponses, GetHttpsStatusData, GetHttpsStatusErrors, GetHttpsStatusResponses, GetMeData, GetMeErrors, GetMeResponses, GetMetricsData, GetMetricsErrors, GetMetricsResponses, GetMfaData, GetMfaErrors, GetMfaResponses, GetOauthConsentData, GetOauthConsentErrors, GetOauthConsentResponses, GetOntologyActivityData, GetOntologyActivityErrors, GetOntologyActivityResponses, GetOntologyObjectData, GetOntologyObjectErrors, GetOntologyObjectResponses, GetOpenapiData, GetOpenapiResponses, GetOrgSeatsData, GetOrgSeatsErrors, GetOrgSeatsResponses, GetPocketaiAllData, GetPocketaiAllErrors, GetPocketaiAllResponses, GetPocketaiAudioData, GetPocketaiAudioErrors, GetPocketaiAudioResponses, GetPocketaiDetailData, GetPocketaiDetailErrors, GetPocketaiDetailResponses, GetPocketaiSummaryData, GetPocketaiSummaryErrors, GetPocketaiSummaryResponses, GetReadyzData, GetReadyzErrors, GetReadyzResponses, GetSecretAccessData, GetSecretAccessErrors, GetSecretAccessResponses, GetSecretCountsData, GetSecretCountsErrors, GetSecretCountsResponses, GetSecretRequestData, GetSecretRequestErrors, GetSecretRequestResponses, GetSecretsHelperData, GetSecretsHelperErrors, GetSecretsHelperResponses, GetServerSecurityData, GetServerSecurityErrors, GetServerSecurityResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, GetSnapshotData, GetSnapshotErrors, GetSnapshotResponses, GetSourcesStatusData, GetSourcesStatusErrors, GetSourcesStatusResponses, GetThreadHistoryData, GetThreadHistoryErrors, GetThreadHistoryResponses, GetToolUsageData, GetToolUsageErrors, GetToolUsageResponses, GetUpBankFinanceSummaryData, GetUpBankFinanceSummaryErrors, GetUpBankFinanceSummaryResponses, GetUpdateStatusData, GetUpdateStatusErrors, GetUpdateStatusResponses, GetVaultOntologyData, GetVaultOntologyErrors, GetVaultOntologyReadinessData, GetVaultOntologyReadinessErrors, GetVaultOntologyReadinessResponses, GetVaultOntologyResponses, GetVectorCloudData, GetVectorCloudErrors, GetVectorCloudResponses, ImportDocumentRowsData, ImportDocumentRowsErrors, ImportDocumentRowsResponses, InviteMemberData, InviteMemberErrors, InviteMemberResponses, InvokeToolData, InvokeToolErrors, InvokeToolResponses, JoinSharedVaultData, JoinSharedVaultErrors, JoinSharedVaultResponses, LeaveVaultData, LeaveVaultErrors, LeaveVaultResponses, ListAccessReviewsData, ListAccessReviewsErrors, ListAccessReviewsResponses, ListAuditData, ListAuditErrors, ListAuditResponses, ListConnectorsData, ListConnectorsErrors, ListConnectorsResponses, ListDocumentsData, ListDocumentsErrors, ListDocumentsResponses, ListEntitiesData, ListEntitiesErrors, ListEntitiesResponses, ListErasuresData, ListErasuresErrors, ListErasuresResponses, ListExtensionEventsData, ListExtensionEventsErrors, ListExtensionEventsResponses, ListExtensionsData, ListExtensionsErrors, ListExtensionsResponses, ListHeldSecretsData, ListHeldSecretsErrors, ListHeldSecretsResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOauthGrantsData, ListOauthGrantsErrors, ListOauthGrantsResponses, ListOntologyObjectsData, ListOntologyObjectsErrors, ListOntologyObjectsResponses, ListOpenaiModelsData, ListOpenaiModelsErrors, ListOpenaiModelsResponses, ListOrgInvitationsData, ListOrgInvitationsErrors, ListOrgInvitationsResponses, ListPeopleData, ListPeopleErrors, ListPeopleResponses, ListPersonTokensData, ListPersonTokensErrors, ListPersonTokensResponses, ListSecretActivityData, ListSecretActivityErrors, ListSecretActivityResponses, ListSecretKindsData, ListSecretKindsErrors, ListSecretKindsResponses, ListSecretProvidersData, ListSecretProvidersErrors, ListSecretProvidersResponses, ListSecretRefsData, ListSecretRefsErrors, ListSecretRefsResponses, ListSecretRequestsData, ListSecretRequestsErrors, ListSecretRequestsResponses, ListSecretResolutionsData, ListSecretResolutionsErrors, ListSecretResolutionsResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListSourcesData, ListSourcesErrors, ListSourcesResponses, ListSubjectExportsData, ListSubjectExportsErrors, ListSubjectExportsResponses, ListThreadsData, ListThreadsErrors, ListThreadsResponses, ListTokensData, ListTokensErrors, ListTokensResponses, ListToolsData, ListToolsErrors, ListToolsResponses, ListVaultChangesData, ListVaultChangesErrors, ListVaultChangesResponses, ListVaultPeersData, ListVaultPeersErrors, ListVaultPeersResponses, ListVaultPendingInvitationsData, ListVaultPendingInvitationsErrors, ListVaultPendingInvitationsResponses, ListVaultsData, ListVaultsErrors, ListVaultsResponses, ListWorkspaceAuditData, ListWorkspaceAuditErrors, ListWorkspaceAuditResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, LookupOrgInvitationData, LookupOrgInvitationErrors, LookupOrgInvitationResponses, MakeWorkspaceOwnerData, MakeWorkspaceOwnerErrors, MakeWorkspaceOwnerResponses, MergeEntitiesData, MergeEntitiesErrors, MergeEntitiesResponses, MergeVaultsData, MergeVaultsErrors, MergeVaultsResponses, MoveConnectorDataData, MoveConnectorDataErrors, MoveConnectorDataResponses, MyDataActivityData, MyDataActivityErrors, MyDataActivityResponses, NackExtensionEventsData, NackExtensionEventsErrors, NackExtensionEventsResponses, OidcCallbackData, OidcCallbackErrors, OidcCallbackResponses, OidcLinkData, OidcLinkErrors, OidcLinkInfoData, OidcLinkInfoErrors, OidcLinkInfoResponses, OidcLinkResponses, OidcStartData, OidcStartErrors, OidcStartInvitedData, OidcStartInvitedErrors, OidcStartInvitedResponses, OidcStartResponses, PeerExchangeData, PeerExchangeErrors, PeerExchangeResponses, PeerHelloData, PeerHelloErrors, PeerHelloResponses, PeerJoinData, PeerJoinErrors, PeerJoinResponses, ProfileDocumentData, ProfileDocumentErrors, ProfileDocumentResponses, PutSecretProviderData, PutSecretProviderErrors, PutSecretProviderResponses, ReapplyErasuresData, ReapplyErasuresErrors, ReapplyErasuresResponses, ReceiveExtensionWebhookData, ReceiveExtensionWebhookErrors, ReceiveExtensionWebhookResponses, ReceiveSourceWebhookData, ReceiveSourceWebhookErrors, ReceiveSourceWebhookResponses, ReextractSourceData, ReextractSourceErrors, ReextractSourceResponses, RegenerateRecoveryCodesData, RegenerateRecoveryCodesErrors, RegenerateRecoveryCodesResponses, RegisterData, RegisterErrors, RegisterResponses, ReindexDocumentData, ReindexDocumentErrors, ReindexDocumentResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RenameTokenData, RenameTokenErrors, RenameTokenResponses, RenameVaultData, RenameVaultErrors, RenameVaultResponses, RepairVaultIntegrityData, RepairVaultIntegrityErrors, RepairVaultIntegrityResponses, ReplaceHeldSecretData, ReplaceHeldSecretErrors, ReplaceHeldSecretResponses, RepointConnectorsData, RepointConnectorsErrors, RepointConnectorsResponses, RequestHttpsData, RequestHttpsErrors, RequestHttpsResponses, RequestSecretsHelperData, RequestSecretsHelperErrors, RequestSecretsHelperResponses, RequestUpdateData, RequestUpdateErrors, RequestUpdateResponses, ResendOrgInvitationData, ResendOrgInvitationErrors, ResendOrgInvitationResponses, RevokeOauthGrantData, RevokeOauthGrantErrors, RevokeOauthGrantResponses, RevokeOrgInvitationData, RevokeOrgInvitationErrors, RevokeOrgInvitationResponses, RevokePersonTokenData, RevokePersonTokenErrors, RevokePersonTokenResponses, RevokeSessionData, RevokeSessionErrors, RevokeSessionResponses, RotateExtensionSecretData, RotateExtensionSecretErrors, RotateExtensionSecretResponses, SearchPocketaiData, SearchPocketaiErrors, SearchPocketaiResponses, SendMessageData, SendMessageErrors, SendMessageResponse, SendMessageResponses, SetMemberRoleData, SetMemberRoleErrors, SetMemberRoleResponses, SetPersonAdminData, SetPersonAdminErrors, SetPersonAdminResponses, SetPersonLegalHoldData, SetPersonLegalHoldErrors, SetPersonLegalHoldResponses, SetPersonSuspendedData, SetPersonSuspendedErrors, SetPersonSuspendedResponses, SetServerSecurityData, SetServerSecurityErrors, SetServerSecurityResponses, SetVaultOntologyStrictData, SetVaultOntologyStrictErrors, SetVaultOntologyStrictResponses, StartAccessReviewData, StartAccessReviewErrors, StartAccessReviewResponses, StartMfaChallengeEnrolmentData, StartMfaChallengeEnrolmentErrors, StartMfaChallengeEnrolmentResponses, StartMfaEnrolmentData, StartMfaEnrolmentErrors, StartMfaEnrolmentResponses, StartPersonExportData, StartPersonExportErrors, StartPersonExportResponses, StartSubjectExportData, StartSubjectExportErrors, StartSubjectExportResponses, StopVaultPeerData, StopVaultPeerErrors, StopVaultPeerResponses, SuggestVaultOntologyData, SuggestVaultOntologyErrors, SuggestVaultOntologyResponses, SyncSourceData, SyncSourceErrors, SyncSourceResponses, SyncVaultPeerData, SyncVaultPeerErrors, SyncVaultPeerResponses, TestConnectorData, TestConnectorErrors, TestConnectorResponses, TestSecretProviderData, TestSecretProviderErrors, TestSecretProviderResponses, TransferOwnershipData, TransferOwnershipErrors, TransferOwnershipResponses, UpdateConnectorData, UpdateConnectorErrors, UpdateConnectorResponses, UpdateEntityData, UpdateEntityErrors, UpdateEntityResponses, UpdateExtensionData, UpdateExtensionErrors, UpdateExtensionResponses, UpdateMemoryData, UpdateMemoryErrors, UpdateMemoryResponses, UpdateSecretRefData, UpdateSecretRefErrors, UpdateSecretRefResponses, UpdateSettingsData, UpdateSettingsErrors, UpdateSettingsResponses, UploadDocumentData, UploadDocumentErrors, UploadDocumentResponses, VerifyAuditChainData, VerifyAuditChainErrors, VerifyAuditChainResponses, VerifyMfaChallengeData, VerifyMfaChallengeErrors, VerifyMfaChallengeResponses, VerifyVaultPeerData, VerifyVaultPeerErrors, VerifyVaultPeerResponses } from './types.gen';
+import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AcceptOrgInvitationData, AcceptOrgInvitationErrors, AcceptOrgInvitationResponses, AckExtensionEventsData, AckExtensionEventsErrors, AckExtensionEventsResponses, AddMemoryData, AddMemoryErrors, AddMemoryResponses, AddRelationData, AddRelationErrors, AddRelationResponses, AutomapVaultOntologyData, AutomapVaultOntologyErrors, AutomapVaultOntologyResponses, CancelErasureData, CancelErasureErrors, CancelErasureResponses, ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, CheckForUpdateData, CheckForUpdateErrors, CheckForUpdateResponses, CheckVaultIntegrityData, CheckVaultIntegrityErrors, CheckVaultIntegrityResponses, ClaimExtensionEventsData, ClaimExtensionEventsErrors, ClaimExtensionEventsResponses, CloneVaultData, CloneVaultErrors, CloneVaultResponses, CompleteAccessReviewData, CompleteAccessReviewErrors, CompleteAccessReviewResponses, CompleteOnboardingData, CompleteOnboardingErrors, CompleteOnboardingResponses, ComposioBeginData, ComposioBeginErrors, ComposioBeginResponses, ComposioCallbackData, ComposioCallbackErrors, ComposioCallbackResponses, ComposioDisconnectData, ComposioDisconnectErrors, ComposioDisconnectResponses, ComposioManageData, ComposioManageErrors, ComposioManageResponses, ComposioSelectionData, ComposioSelectionErrors, ComposioSelectionResponses, ComposioStatusData, ComposioStatusErrors, ComposioStatusResponses, ConfirmMfaChallengeEnrolmentData, ConfirmMfaChallengeEnrolmentErrors, ConfirmMfaChallengeEnrolmentResponses, ConfirmMfaEnrolmentData, ConfirmMfaEnrolmentErrors, ConfirmMfaEnrolmentResponses, CreateConnectorData, CreateConnectorErrors, CreateConnectorResponses, CreateEntityData, CreateEntityErrors, CreateEntityResponses, CreateExtensionData, CreateExtensionErrors, CreateExtensionResponses, CreateOrgInvitationData, CreateOrgInvitationErrors, CreateOrgInvitationResponses, CreateSecretRefData, CreateSecretRefErrors, CreateSecretRefResponses, CreateThreadData, CreateThreadErrors, CreateThreadResponses, CreateTokenData, CreateTokenErrors, CreateTokenResponses, CreateVaultData, CreateVaultErrors, CreateVaultResponses, CreateVaultShareCodeData, CreateVaultShareCodeErrors, CreateVaultShareCodeResponses, DecideAccessReviewData, DecideAccessReviewErrors, DecideAccessReviewResponses, DecideOauthConsentData, DecideOauthConsentErrors, DecideOauthConsentResponses, DecideVaultOntologyKindData, DecideVaultOntologyKindErrors, DecideVaultOntologyKindResponses, DecideVaultOntologyLinkData, DecideVaultOntologyLinkErrors, DecideVaultOntologyLinkResponses, DecideVaultOntologyMetricData, DecideVaultOntologyMetricErrors, DecideVaultOntologyMetricResponses, DecideVaultOntologyPropertyData, DecideVaultOntologyPropertyErrors, DecideVaultOntologyPropertyResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeclineSecretRequestData, DeclineSecretRequestErrors, DeclineSecretRequestResponses, DeleteConnectorData, DeleteConnectorDataData, DeleteConnectorDataErrors, DeleteConnectorDataResponses, DeleteConnectorErrors, DeleteConnectorResponses, DeleteDocumentData, DeleteDocumentErrors, DeleteDocumentResponses, DeleteEntityData, DeleteEntityErrors, DeleteEntityResponses, DeleteExtensionData, DeleteExtensionErrors, DeleteExtensionResponses, DeleteHeldSecretData, DeleteHeldSecretErrors, DeleteHeldSecretResponses, DeleteMemoryData, DeleteMemoryErrors, DeleteMemoryResponses, DeleteSecretProviderData, DeleteSecretProviderErrors, DeleteSecretProviderResponses, DeleteSecretRefData, DeleteSecretRefErrors, DeleteSecretRefResponses, DeleteThreadData, DeleteThreadErrors, DeleteThreadResponses, DeleteTokenData, DeleteTokenErrors, DeleteTokenResponses, DeleteVaultData, DeleteVaultErrors, DeleteVaultResponses, DeleteVaultShareCodeData, DeleteVaultShareCodeErrors, DeleteVaultShareCodeResponses, DisableMfaData, DisableMfaErrors, DisableMfaResponses, DownloadDiagnosticsData, DownloadDiagnosticsErrors, DownloadDiagnosticsResponses, DownloadDocumentData, DownloadDocumentErrors, DownloadDocumentResponses, DownloadSubjectExportData, DownloadSubjectExportErrors, DownloadSubjectExportResponses, EndPersonSessionsData, EndPersonSessionsErrors, EndPersonSessionsResponses, EraseMyAccountData, EraseMyAccountErrors, EraseMyAccountResponses, ErasePersonData, ErasePersonErrors, ErasePersonResponses, ExportAccessReviewData, ExportAccessReviewErrors, ExportAccessReviewResponses, ExportAuditChainData, ExportAuditChainErrors, ExportAuditChainResponses, ExportDataData, ExportDataErrors, ExportDataResponses, ExportDocumentData, ExportDocumentErrors, ExportDocumentResponses, FillSecretRequestData, FillSecretRequestErrors, FillSecretRequestResponses, FollowEventsData, FollowEventsErrors, FollowEventsResponses, FollowVaultChangesData, FollowVaultChangesErrors, FollowVaultChangesResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetAccessReviewData, GetAccessReviewErrors, GetAccessReviewResponses, GetBootstrapData, GetBootstrapErrors, GetBootstrapResponses, GetCloudSimilarityData, GetCloudSimilarityErrors, GetCloudSimilarityResponses, GetConnectorData, GetConnectorErrors, GetConnectorResponses, GetDocumentData, GetDocumentErrors, GetDocumentResponses, GetEntityData, GetEntityErrors, GetEntityGraphData, GetEntityGraphErrors, GetEntityGraphResponses, GetEntityResponses, GetExtensionData, GetExtensionErrors, GetExtensionResponses, GetFailureCapsuleData, GetFailureCapsuleErrors, GetFailureCapsuleResponses, GetHttpsStatusData, GetHttpsStatusErrors, GetHttpsStatusResponses, GetMeData, GetMeErrors, GetMeResponses, GetMetricsData, GetMetricsErrors, GetMetricsResponses, GetMfaData, GetMfaErrors, GetMfaResponses, GetOauthConsentData, GetOauthConsentErrors, GetOauthConsentResponses, GetOntologyActivityData, GetOntologyActivityErrors, GetOntologyActivityResponses, GetOntologyObjectData, GetOntologyObjectErrors, GetOntologyObjectResponses, GetOpenapiData, GetOpenapiResponses, GetOrgData, GetOrgErrors, GetOrgPlanData, GetOrgPlanErrors, GetOrgPlanResponses, GetOrgResponses, GetOrgSeatsData, GetOrgSeatsErrors, GetOrgSeatsResponses, GetPocketaiAllData, GetPocketaiAllErrors, GetPocketaiAllResponses, GetPocketaiAudioData, GetPocketaiAudioErrors, GetPocketaiAudioResponses, GetPocketaiDetailData, GetPocketaiDetailErrors, GetPocketaiDetailResponses, GetPocketaiSummaryData, GetPocketaiSummaryErrors, GetPocketaiSummaryResponses, GetReadyzData, GetReadyzErrors, GetReadyzResponses, GetSecretAccessData, GetSecretAccessErrors, GetSecretAccessResponses, GetSecretCountsData, GetSecretCountsErrors, GetSecretCountsResponses, GetSecretRequestData, GetSecretRequestErrors, GetSecretRequestResponses, GetSecretsHelperData, GetSecretsHelperErrors, GetSecretsHelperResponses, GetServerSecurityData, GetServerSecurityErrors, GetServerSecurityResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, GetSnapshotData, GetSnapshotErrors, GetSnapshotResponses, GetSourcesStatusData, GetSourcesStatusErrors, GetSourcesStatusResponses, GetThreadHistoryData, GetThreadHistoryErrors, GetThreadHistoryResponses, GetToolUsageData, GetToolUsageErrors, GetToolUsageResponses, GetUpBankFinanceSummaryData, GetUpBankFinanceSummaryErrors, GetUpBankFinanceSummaryResponses, GetUpdateStatusData, GetUpdateStatusErrors, GetUpdateStatusResponses, GetVaultOntologyData, GetVaultOntologyErrors, GetVaultOntologyReadinessData, GetVaultOntologyReadinessErrors, GetVaultOntologyReadinessResponses, GetVaultOntologyResponses, GetVectorCloudData, GetVectorCloudErrors, GetVectorCloudResponses, ImportDocumentRowsData, ImportDocumentRowsErrors, ImportDocumentRowsResponses, InviteMemberData, InviteMemberErrors, InviteMemberResponses, InvokeToolData, InvokeToolErrors, InvokeToolResponses, JoinSharedVaultData, JoinSharedVaultErrors, JoinSharedVaultResponses, LeaveVaultData, LeaveVaultErrors, LeaveVaultResponses, ListAccessReviewsData, ListAccessReviewsErrors, ListAccessReviewsResponses, ListAuditData, ListAuditErrors, ListAuditResponses, ListConnectorsData, ListConnectorsErrors, ListConnectorsResponses, ListDocumentsData, ListDocumentsErrors, ListDocumentsResponses, ListEntitiesData, ListEntitiesErrors, ListEntitiesResponses, ListErasuresData, ListErasuresErrors, ListErasuresResponses, ListExtensionEventsData, ListExtensionEventsErrors, ListExtensionEventsResponses, ListExtensionsData, ListExtensionsErrors, ListExtensionsResponses, ListHeldSecretsData, ListHeldSecretsErrors, ListHeldSecretsResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOauthGrantsData, ListOauthGrantsErrors, ListOauthGrantsResponses, ListOntologyObjectsData, ListOntologyObjectsErrors, ListOntologyObjectsResponses, ListOpenaiModelsData, ListOpenaiModelsErrors, ListOpenaiModelsResponses, ListOrgInvitationsData, ListOrgInvitationsErrors, ListOrgInvitationsResponses, ListPeopleData, ListPeopleErrors, ListPeopleResponses, ListPersonAppsData, ListPersonAppsErrors, ListPersonAppsResponses, ListPersonTokensData, ListPersonTokensErrors, ListPersonTokensResponses, ListSecretActivityData, ListSecretActivityErrors, ListSecretActivityResponses, ListSecretKindsData, ListSecretKindsErrors, ListSecretKindsResponses, ListSecretProvidersData, ListSecretProvidersErrors, ListSecretProvidersResponses, ListSecretRefsData, ListSecretRefsErrors, ListSecretRefsResponses, ListSecretRequestsData, ListSecretRequestsErrors, ListSecretRequestsResponses, ListSecretResolutionsData, ListSecretResolutionsErrors, ListSecretResolutionsResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListSourcesData, ListSourcesErrors, ListSourcesResponses, ListSubjectExportsData, ListSubjectExportsErrors, ListSubjectExportsResponses, ListThreadsData, ListThreadsErrors, ListThreadsResponses, ListTokensData, ListTokensErrors, ListTokensResponses, ListToolsData, ListToolsErrors, ListToolsResponses, ListVaultChangesData, ListVaultChangesErrors, ListVaultChangesResponses, ListVaultPeersData, ListVaultPeersErrors, ListVaultPeersResponses, ListVaultPendingInvitationsData, ListVaultPendingInvitationsErrors, ListVaultPendingInvitationsResponses, ListVaultsData, ListVaultsErrors, ListVaultsResponses, ListWorkspaceAuditData, ListWorkspaceAuditErrors, ListWorkspaceAuditResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, LookupOrgInvitationData, LookupOrgInvitationErrors, LookupOrgInvitationResponses, MakeWorkspaceOwnerData, MakeWorkspaceOwnerErrors, MakeWorkspaceOwnerResponses, MergeEntitiesData, MergeEntitiesErrors, MergeEntitiesResponses, MergeVaultsData, MergeVaultsErrors, MergeVaultsResponses, MoveConnectorDataData, MoveConnectorDataErrors, MoveConnectorDataResponses, MyDataActivityData, MyDataActivityErrors, MyDataActivityResponses, NackExtensionEventsData, NackExtensionEventsErrors, NackExtensionEventsResponses, OidcCallbackData, OidcCallbackErrors, OidcCallbackResponses, OidcLinkData, OidcLinkErrors, OidcLinkInfoData, OidcLinkInfoErrors, OidcLinkInfoResponses, OidcLinkResponses, OidcStartData, OidcStartErrors, OidcStartInvitedData, OidcStartInvitedErrors, OidcStartInvitedResponses, OidcStartResponses, OperatorCreateOrgData, OperatorCreateOrgErrors, OperatorCreateOrgResponses, OperatorGetCapacityData, OperatorGetCapacityErrors, OperatorGetCapacityResponses, OperatorGetOrgData, OperatorGetOrgErrors, OperatorGetOrgResponses, OperatorListOrgsData, OperatorListOrgsErrors, OperatorListOrgsResponses, OperatorResendOwnerClaimData, OperatorResendOwnerClaimErrors, OperatorResendOwnerClaimResponses, OperatorResumeOrgData, OperatorResumeOrgErrors, OperatorResumeOrgResponses, OperatorSuspendOrgData, OperatorSuspendOrgErrors, OperatorSuspendOrgResponses, OperatorUpdateOrgData, OperatorUpdateOrgErrors, OperatorUpdateOrgResponses, PeerExchangeData, PeerExchangeErrors, PeerExchangeResponses, PeerHelloData, PeerHelloErrors, PeerHelloResponses, PeerJoinData, PeerJoinErrors, PeerJoinResponses, ProfileDocumentData, ProfileDocumentErrors, ProfileDocumentResponses, PutSecretProviderData, PutSecretProviderErrors, PutSecretProviderResponses, ReapplyErasuresData, ReapplyErasuresErrors, ReapplyErasuresResponses, ReceiveExtensionWebhookData, ReceiveExtensionWebhookErrors, ReceiveExtensionWebhookResponses, ReceiveSourceWebhookData, ReceiveSourceWebhookErrors, ReceiveSourceWebhookResponses, ReextractSourceData, ReextractSourceErrors, ReextractSourceResponses, RegenerateRecoveryCodesData, RegenerateRecoveryCodesErrors, RegenerateRecoveryCodesResponses, RegisterData, RegisterErrors, RegisterResponses, ReindexDocumentData, ReindexDocumentErrors, ReindexDocumentResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RenameOrgData, RenameOrgErrors, RenameOrgResponses, RenameTokenData, RenameTokenErrors, RenameTokenResponses, RenameVaultData, RenameVaultErrors, RenameVaultResponses, RepairVaultIntegrityData, RepairVaultIntegrityErrors, RepairVaultIntegrityResponses, ReplaceHeldSecretData, ReplaceHeldSecretErrors, ReplaceHeldSecretResponses, RepointConnectorsData, RepointConnectorsErrors, RepointConnectorsResponses, RequestHttpsData, RequestHttpsErrors, RequestHttpsResponses, RequestSecretsHelperData, RequestSecretsHelperErrors, RequestSecretsHelperResponses, RequestUpdateData, RequestUpdateErrors, RequestUpdateResponses, ResendOrgInvitationData, ResendOrgInvitationErrors, ResendOrgInvitationResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RevokeOauthGrantData, RevokeOauthGrantErrors, RevokeOauthGrantResponses, RevokeOrgInvitationData, RevokeOrgInvitationErrors, RevokeOrgInvitationResponses, RevokePersonAccessData, RevokePersonAccessErrors, RevokePersonAccessResponses, RevokePersonAppData, RevokePersonAppErrors, RevokePersonAppResponses, RevokePersonTokenData, RevokePersonTokenErrors, RevokePersonTokenResponses, RevokeSessionData, RevokeSessionErrors, RevokeSessionResponses, RotateExtensionSecretData, RotateExtensionSecretErrors, RotateExtensionSecretResponses, SearchPocketaiData, SearchPocketaiErrors, SearchPocketaiResponses, SendMessageData, SendMessageErrors, SendMessageResponse, SendMessageResponses, SetMemberRoleData, SetMemberRoleErrors, SetMemberRoleResponses, SetOrgSecurityData, SetOrgSecurityErrors, SetOrgSecurityResponses, SetPersonAdminData, SetPersonAdminErrors, SetPersonAdminResponses, SetPersonLegalHoldData, SetPersonLegalHoldErrors, SetPersonLegalHoldResponses, SetPersonOrgRoleData, SetPersonOrgRoleErrors, SetPersonOrgRoleResponses, SetPersonSuspendedData, SetPersonSuspendedErrors, SetPersonSuspendedResponses, SetServerSecurityData, SetServerSecurityErrors, SetServerSecurityResponses, SetVaultOntologyStrictData, SetVaultOntologyStrictErrors, SetVaultOntologyStrictResponses, StartAccessReviewData, StartAccessReviewErrors, StartAccessReviewResponses, StartMfaChallengeEnrolmentData, StartMfaChallengeEnrolmentErrors, StartMfaChallengeEnrolmentResponses, StartMfaEnrolmentData, StartMfaEnrolmentErrors, StartMfaEnrolmentResponses, StartPersonExportData, StartPersonExportErrors, StartPersonExportResponses, StartSubjectExportData, StartSubjectExportErrors, StartSubjectExportResponses, StopVaultPeerData, StopVaultPeerErrors, StopVaultPeerResponses, SuggestVaultOntologyData, SuggestVaultOntologyErrors, SuggestVaultOntologyResponses, SyncSourceData, SyncSourceErrors, SyncSourceResponses, SyncVaultPeerData, SyncVaultPeerErrors, SyncVaultPeerResponses, TestConnectorData, TestConnectorErrors, TestConnectorResponses, TestSecretProviderData, TestSecretProviderErrors, TestSecretProviderResponses, TransferOwnershipData, TransferOwnershipErrors, TransferOwnershipResponses, UpdateConnectorData, UpdateConnectorErrors, UpdateConnectorResponses, UpdateEntityData, UpdateEntityErrors, UpdateEntityResponses, UpdateExtensionData, UpdateExtensionErrors, UpdateExtensionResponses, UpdateMemoryData, UpdateMemoryErrors, UpdateMemoryResponses, UpdateSecretRefData, UpdateSecretRefErrors, UpdateSecretRefResponses, UpdateSettingsData, UpdateSettingsErrors, UpdateSettingsResponses, UploadDocumentData, UploadDocumentErrors, UploadDocumentResponses, VerifyAuditChainData, VerifyAuditChainErrors, VerifyAuditChainResponses, VerifyMfaChallengeData, VerifyMfaChallengeErrors, VerifyMfaChallengeResponses, VerifyVaultPeerData, VerifyVaultPeerErrors, VerifyVaultPeerResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -26,7 +26,11 @@ export const myDataActivity = <ThrowOnError extends boolean = false>(options?: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/account/activity',
     ...options
 });
@@ -51,20 +55,43 @@ export const eraseMyAccount = <ThrowOnError extends boolean = false>(options: Op
 });
 
 /**
- * Access reviews, newest first (admin only)
+ * Change your own password (browser session)
+ *
+ * Needs the current password (10 wrong passwords per account in 15 minutes and it is refused, shared with setting up two-step verification) and, for an account with two-step verification, a recent second factor or `mfa_code` (`auth.step_up_required`). Every other session of the account ends; this one stays. A wrong current password is 403 `auth.forbidden`. Accounts that sign in only through single sign-on have no password to change.
+ */
+export const changePassword = <ThrowOnError extends boolean = false>(options: Options<ChangePasswordData, ThrowOnError>): RequestResult<ChangePasswordResponses, ChangePasswordErrors, ThrowOnError> => (options.client ?? client).post<ChangePasswordResponses, ChangePasswordErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }],
+    url: '/api/account/password',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Access reviews, newest first (organisation owner or admin)
  */
 export const listAccessReviews = <ThrowOnError extends boolean = false>(options?: Options<ListAccessReviewsData, ThrowOnError>): RequestResult<ListAccessReviewsResponses, ListAccessReviewsErrors, ThrowOnError> => (options?.client ?? client).get<ListAccessReviewsResponses, ListAccessReviewsErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/admin/access-reviews',
     ...options
 });
 
 /**
- * Start an access review: snapshot who has access to what (admin only, browser session)
+ * Start an access review: snapshot who has access to what (organisation owner or admin, browser session)
  *
  * One review can be open at a time. The snapshot lists every person, their role, admin rights and suspension, their spaces, and their API tokens, connected apps and live sessions by name and count. It never holds a secret.
  */
@@ -79,20 +106,24 @@ export const startAccessReview = <ThrowOnError extends boolean = false>(options?
 });
 
 /**
- * One access review with its snapshot and decisions (admin only)
+ * One access review with its snapshot and decisions (organisation owner or admin)
  */
 export const getAccessReview = <ThrowOnError extends boolean = false>(options: Options<GetAccessReviewData, ThrowOnError>): RequestResult<GetAccessReviewResponses, GetAccessReviewErrors, ThrowOnError> => (options.client ?? client).get<GetAccessReviewResponses, GetAccessReviewErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/admin/access-reviews/{review_id}',
     ...options
 });
 
 /**
- * Complete an access review; it can't be changed afterwards (admin only, browser session)
+ * Complete an access review; it can't be changed afterwards (organisation owner or admin, browser session)
  *
  * Everyone must have a decision, except you: your own access is recorded as not reviewed when no other admin decided it. The completion, with the hash of the review, goes into the security log.
  */
@@ -107,7 +138,7 @@ export const completeAccessReview = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * Record a decision about one person in an open access review (admin only, browser session)
+ * Record a decision about one person in an open access review (organisation owner or admin, browser session)
  *
  * Deciding again replaces the earlier decision while the review is open. You cannot decide about your own access. A decision is a record: suspending or removing the person is done from People.
  */
@@ -126,35 +157,43 @@ export const decideAccessReview = <ThrowOnError extends boolean = false>(options
 });
 
 /**
- * Download a completed access review with the hashes that tie it to the security log (admin only)
+ * Download a completed access review with the hashes that tie it to the security log (organisation owner or admin)
  */
 export const exportAccessReview = <ThrowOnError extends boolean = false>(options: Options<ExportAccessReviewData, ThrowOnError>): RequestResult<ExportAccessReviewResponses, ExportAccessReviewErrors, ThrowOnError> => (options.client ?? client).get<ExportAccessReviewResponses, ExportAccessReviewErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/admin/access-reviews/{review_id}/export',
     ...options
 });
 
 /**
- * Workspace activity log: sign-ins, tokens, app connections and space changes (admin only)
+ * Workspace activity log: sign-ins, tokens, app connections and space changes (organisation owner or admin)
  *
- * Reads the security ledger for the admin's workspace, newest first. Per-tool-call rows are left out (see `/api/audit/tool-usage`).
+ * Reads the security ledger for the caller's own organisation, newest first. Per-tool-call rows are left out (see `/api/audit/tool-usage`). Rows that belong to no organisation (sign-in attempts with an unknown email) are for the server's operators only.
  */
 export const listWorkspaceAudit = <ThrowOnError extends boolean = false>(options?: Options<ListWorkspaceAuditData, ThrowOnError>): RequestResult<ListWorkspaceAuditResponses, ListWorkspaceAuditErrors, ThrowOnError> => (options?.client ?? client).get<ListWorkspaceAuditResponses, ListWorkspaceAuditErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/admin/audit',
     ...options
 });
 
 /**
- * Download the security log for a time range, with checkpoints to verify it offline (admin only)
+ * Download the security log for a time range, with checkpoints to verify it offline (organisation owner or admin)
  *
  * Metadata only: who, what, when, on which record and the outcome. Free-text detail is replaced by a keyed digest (HMAC-SHA256 under a server key), so the file holds no memory text, chat content, prompts or secrets and still verifies. At most 50,000 events per file: `truncated` and `next_seq` say where to continue.
  */
@@ -163,13 +202,17 @@ export const exportAuditChain = <ThrowOnError extends boolean = false>(options?:
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/admin/audit/export',
     ...options
 });
 
 /**
- * Check that the security log was not altered (admin only)
+ * Check that the security log was not altered (organisation owner or admin)
  *
  * Seals anything still pending, then walks the workspace's hash chain and the instance chain from their starting checkpoints to their newest event and reports the first break: an edited, deleted or reordered event.
  */
@@ -178,7 +221,11 @@ export const verifyAuditChain = <ThrowOnError extends boolean = false>(options?:
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/admin/audit/verify',
     ...options
 });
@@ -193,7 +240,11 @@ export const listErasures = <ThrowOnError extends boolean = false>(options?: Opt
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/admin/erasures',
     ...options
 });
@@ -229,14 +280,75 @@ export const cancelErasure = <ThrowOnError extends boolean = false>(options: Opt
 });
 
 /**
- * Every account in the workspace and the sign-up policy (admin only)
+ * Your organisation's name and security policy (organisation owner or admin)
+ */
+export const getOrg = <ThrowOnError extends boolean = false>(options?: Options<GetOrgData, ThrowOnError>): RequestResult<GetOrgResponses, GetOrgErrors, ThrowOnError> => (options?.client ?? client).get<GetOrgResponses, GetOrgErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/api/admin/org',
+    ...options
+});
+
+/**
+ * Rename your organisation (its owner, browser session)
+ *
+ * The name is shown to people you invite. It is recorded in the audit log.
+ */
+export const renameOrg = <ThrowOnError extends boolean = false>(options: Options<RenameOrgData, ThrowOnError>): RequestResult<RenameOrgResponses, RenameOrgErrors, ThrowOnError> => (options.client ?? client).put<RenameOrgResponses, RenameOrgErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }],
+    url: '/api/admin/org/name',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Require two-step verification of your organisation's members, or stop (organisation owner or admin, browser session)
+ *
+ * Binds this organisation's members only, on top of the server-wide switch (`/api/admin/security`, the server's operator): a member must use two-step verification when either requires it. Turning it on works as the server-wide switch does: a password sign-in without two-step verification must set it up before it gets a session, and browser sessions that never passed a second factor are signed out. API tokens and app connections keep working. Needs your own account protected first.
+ */
+export const setOrgSecurity = <ThrowOnError extends boolean = false>(options: Options<SetOrgSecurityData, ThrowOnError>): RequestResult<SetOrgSecurityResponses, SetOrgSecurityErrors, ThrowOnError> => (options.client ?? client).put<SetOrgSecurityResponses, SetOrgSecurityErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }],
+    url: '/api/admin/org/security',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Every account in the workspace and the sign-up policy (organisation owner or admin)
+ *
+ * The caller's own organisation only. Each person carries their organisation role and which actions the caller may take on them. The sign-up policy's allowlist and the server's operator list are filled in for the server's operators only.
  */
 export const listPeople = <ThrowOnError extends boolean = false>(options?: Options<ListPeopleData, ThrowOnError>): RequestResult<ListPeopleResponses, ListPeopleErrors, ThrowOnError> => (options?.client ?? client).get<ListPeopleResponses, ListPeopleErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/admin/people',
     ...options
 });
@@ -258,6 +370,38 @@ export const setPersonAdmin = <ThrowOnError extends boolean = false>(options: Op
         'Content-Type': 'application/json',
         ...options.headers
     }
+});
+
+/**
+ * The apps a member connected through OAuth (organisation owner or admin)
+ */
+export const listPersonApps = <ThrowOnError extends boolean = false>(options: Options<ListPersonAppsData, ThrowOnError>): RequestResult<ListPersonAppsResponses, ListPersonAppsErrors, ThrowOnError> => (options.client ?? client).get<ListPersonAppsResponses, ListPersonAppsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/api/admin/people/{user_id}/apps',
+    ...options
+});
+
+/**
+ * Disconnect one app of a member (organisation owner or admin, browser session)
+ *
+ * The app's tokens stop working at once. Returns the member's remaining apps.
+ */
+export const revokePersonApp = <ThrowOnError extends boolean = false>(options: Options<RevokePersonAppData, ThrowOnError>): RequestResult<RevokePersonAppResponses, RevokePersonAppErrors, ThrowOnError> => (options.client ?? client).delete<RevokePersonAppResponses, RevokePersonAppErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }],
+    url: '/api/admin/people/{user_id}/apps/{grant_id}',
+    ...options
 });
 
 /**
@@ -314,9 +458,58 @@ export const setPersonLegalHold = <ThrowOnError extends boolean = false>(options
 });
 
 /**
- * Suspend or restore an account (admin only, browser session)
+ * End every session, API token and connected app of a member at once (organisation owner or admin, browser session)
  *
- * A suspended account cannot sign in. Its sessions end at once, and its API tokens and app connections are refused until it is restored. You cannot suspend yourself or the first account.
+ * For a lost laptop or a leaver. The account itself is untouched: it can sign in again unless it is suspended.
+ */
+export const revokePersonAccess = <ThrowOnError extends boolean = false>(options: Options<RevokePersonAccessData, ThrowOnError>): RequestResult<RevokePersonAccessResponses, RevokePersonAccessErrors, ThrowOnError> => (options.client ?? client).post<RevokePersonAccessResponses, RevokePersonAccessErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }],
+    url: '/api/admin/people/{user_id}/revoke-access',
+    ...options
+});
+
+/**
+ * Make a member an organisation admin, or an ordinary member again (the organisation's owner, browser session)
+ *
+ * An organisation admin can invite members, suspend members and revoke their access, read the audit log and run access reviews, for this organisation only. Only the owner changes roles. The owner's role never changes here, and an operator of the server is not changed by an organisation's owner.
+ */
+export const setPersonOrgRole = <ThrowOnError extends boolean = false>(options: Options<SetPersonOrgRoleData, ThrowOnError>): RequestResult<SetPersonOrgRoleResponses, SetPersonOrgRoleErrors, ThrowOnError> => (options.client ?? client).put<SetPersonOrgRoleResponses, SetPersonOrgRoleErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }],
+    url: '/api/admin/people/{user_id}/role',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Sign a member out everywhere (organisation owner or admin, browser session)
+ *
+ * Ends their browser sessions. Their API tokens and connected apps keep working: see `revoke-access`.
+ */
+export const endPersonSessions = <ThrowOnError extends boolean = false>(options: Options<EndPersonSessionsData, ThrowOnError>): RequestResult<EndPersonSessionsResponses, EndPersonSessionsErrors, ThrowOnError> => (options.client ?? client).delete<EndPersonSessionsResponses, EndPersonSessionsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }],
+    url: '/api/admin/people/{user_id}/sessions',
+    ...options
+});
+
+/**
+ * Suspend or restore an account (organisation owner or admin, browser session)
+ *
+ * A suspended account cannot sign in. Its sessions end at once, and its API tokens and app connections are refused until it is restored. You cannot suspend yourself or the first account. An organisation's owner or admin can suspend a member of their own organisation; only the owner acts on an admin, and nobody but the server's operator acts on the owner or on an operator of the server (`org.protected_member`). A person in another organisation is `auth.not_found`.
  */
 export const setPersonSuspended = <ThrowOnError extends boolean = false>(options: Options<SetPersonSuspendedData, ThrowOnError>): RequestResult<SetPersonSuspendedResponses, SetPersonSuspendedErrors, ThrowOnError> => (options.client ?? client).put<SetPersonSuspendedResponses, SetPersonSuspendedErrors, ThrowOnError>({
     security: [{
@@ -333,7 +526,7 @@ export const setPersonSuspended = <ThrowOnError extends boolean = false>(options
 });
 
 /**
- * Someone's API tokens, newest first (admin only)
+ * Someone's API tokens, newest first (organisation owner or admin)
  *
  * Names and dates only; a token's secret is never stored or shown.
  */
@@ -342,13 +535,17 @@ export const listPersonTokens = <ThrowOnError extends boolean = false>(options: 
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/admin/people/{user_id}/tokens',
     ...options
 });
 
 /**
- * Revoke someone's API token (admin only, browser session)
+ * Revoke someone's API token (organisation owner or admin, browser session)
  *
  * The token stops working at once. Returns the person's remaining tokens.
  */
@@ -385,7 +582,11 @@ export const getServerSecurity = <ThrowOnError extends boolean = false>(options?
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/admin/security',
     ...options
 });
@@ -417,7 +618,11 @@ export const listAudit = <ThrowOnError extends boolean = false>(options?: Option
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/audit',
     ...options
 });
@@ -432,7 +637,11 @@ export const getToolUsage = <ThrowOnError extends boolean = false>(options?: Opt
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/audit/tool-usage',
     ...options
 });
@@ -469,7 +678,11 @@ export const getMe = <ThrowOnError extends boolean = false>(options?: Options<Ge
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/auth/me',
     ...options
 });
@@ -645,6 +858,34 @@ export const oidcStartInvited = <ThrowOnError extends boolean = false>(options: 
 });
 
 /**
+ * Email a password reset link
+ *
+ * Always answers `{"ok": true}` for a well-formed address, whether or not an account exists, so it cannot be used to find out who has one. An account that has a password and is not suspended is emailed a link that works once and expires after 30 minutes; asking again replaces it, and a new one is not sent within a minute of the last. A single sign-on account has no password and is sent nothing. Limited per client address (429 `rate.limited`) and per email (no more links, same answer). `email.unavailable` (503) when this server sends no email: check `email_enabled` from `/api/auth/bootstrap` first.
+ */
+export const forgotPassword = <ThrowOnError extends boolean = false>(options: Options<ForgotPasswordData, ThrowOnError>): RequestResult<ForgotPasswordResponses, ForgotPasswordErrors, ThrowOnError> => (options.client ?? client).post<ForgotPasswordResponses, ForgotPasswordErrors, ThrowOnError>({
+    url: '/api/auth/password/forgot',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Set a new password with a reset link
+ *
+ * The token works once and for 30 minutes (`auth.reset_invalid`, `auth.reset_expired`). On success every browser session of the account ends and no session starts: sign in with the new password. Two-step verification is untouched, so the next sign-in still asks for the second factor. API tokens and app connections are not revoked. An account with no password (single sign-on) can't be given one here.
+ */
+export const resetPassword = <ThrowOnError extends boolean = false>(options: Options<ResetPasswordData, ThrowOnError>): RequestResult<ResetPasswordResponses, ResetPasswordErrors, ThrowOnError> => (options.client ?? client).post<ResetPasswordResponses, ResetPasswordErrors, ThrowOnError>({
+    url: '/api/auth/password/reset',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * Create an account and start a session
  *
  * When the server requires two-step verification, the account is created but no session starts: the answer is `{"mfa_required": "enrol"}` with a short-lived cookie for `/api/auth/mfa/challenge/enrol`.
@@ -666,7 +907,11 @@ export const listSessions = <ThrowOnError extends boolean = false>(options?: Opt
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/auth/sessions',
     ...options
 });
@@ -679,7 +924,11 @@ export const revokeSession = <ThrowOnError extends boolean = false>(options: Opt
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/auth/sessions/{session_id}',
     ...options
 });
@@ -692,7 +941,11 @@ export const listTokens = <ThrowOnError extends boolean = false>(options?: Optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/auth/tokens',
     ...options
 });
@@ -707,7 +960,11 @@ export const createToken = <ThrowOnError extends boolean = false>(options: Optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/auth/tokens',
     ...options,
     headers: {
@@ -724,7 +981,11 @@ export const deleteToken = <ThrowOnError extends boolean = false>(options: Optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/auth/tokens/{token_id}',
     ...options
 });
@@ -737,7 +998,11 @@ export const renameToken = <ThrowOnError extends boolean = false>(options: Optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/auth/tokens/{token_id}',
     ...options,
     headers: {
@@ -754,7 +1019,11 @@ export const listThreads = <ThrowOnError extends boolean = false>(options?: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/chat/threads',
     ...options
 });
@@ -767,7 +1036,11 @@ export const createThread = <ThrowOnError extends boolean = false>(options: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/chat/threads',
     ...options,
     headers: {
@@ -784,7 +1057,11 @@ export const deleteThread = <ThrowOnError extends boolean = false>(options: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/chat/threads/{thread_id}',
     ...options
 });
@@ -797,7 +1074,11 @@ export const sendMessage = <ThrowOnError extends boolean = false>(options: Optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/chat/threads/{thread_id}',
     ...options,
     headers: {
@@ -814,7 +1095,11 @@ export const getThreadHistory = <ThrowOnError extends boolean = false>(options: 
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/chat/threads/{thread_id}/history',
     ...options
 });
@@ -827,7 +1112,11 @@ export const listConnectors = <ThrowOnError extends boolean = false>(options?: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors',
     ...options
 });
@@ -842,7 +1131,11 @@ export const createConnector = <ThrowOnError extends boolean = false>(options: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors',
     ...options,
     headers: {
@@ -856,7 +1149,11 @@ export const composioBegin = <ThrowOnError extends boolean = false>(options?: Op
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/composio/begin',
     ...options
 });
@@ -866,7 +1163,11 @@ export const composioCallback = <ThrowOnError extends boolean = false>(options: 
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/composio/callback',
     ...options,
     headers: {
@@ -880,7 +1181,11 @@ export const composioDisconnect = <ThrowOnError extends boolean = false>(options
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/composio/disconnect',
     ...options
 });
@@ -890,7 +1195,11 @@ export const composioManage = <ThrowOnError extends boolean = false>(options: Op
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/composio/manage',
     ...options,
     headers: {
@@ -904,7 +1213,11 @@ export const composioSelection = <ThrowOnError extends boolean = false>(options:
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/composio/selection',
     ...options,
     headers: {
@@ -918,7 +1231,11 @@ export const composioStatus = <ThrowOnError extends boolean = false>(options?: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/composio/status',
     ...options
 });
@@ -931,7 +1248,11 @@ export const getPocketaiAll = <ThrowOnError extends boolean = false>(options?: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/pocketai/all',
     ...options
 });
@@ -944,7 +1265,11 @@ export const getPocketaiDetail = <ThrowOnError extends boolean = false>(options:
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/pocketai/detail/{recording_id}',
     ...options
 });
@@ -959,7 +1284,11 @@ export const getPocketaiAudio = <ThrowOnError extends boolean = false>(options: 
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/pocketai/recordings/{recording_id}/audio',
     ...options
 });
@@ -972,7 +1301,11 @@ export const searchPocketai = <ThrowOnError extends boolean = false>(options: Op
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/pocketai/search',
     ...options
 });
@@ -985,7 +1318,11 @@ export const getPocketaiSummary = <ThrowOnError extends boolean = false>(options
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/pocketai/summary',
     ...options
 });
@@ -998,7 +1335,11 @@ export const repointConnectors = <ThrowOnError extends boolean = false>(options:
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/repoint',
     ...options,
     headers: {
@@ -1015,7 +1356,11 @@ export const getUpBankFinanceSummary = <ThrowOnError extends boolean = false>(op
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/up_bank/finance-summary',
     ...options
 });
@@ -1030,7 +1375,11 @@ export const deleteConnector = <ThrowOnError extends boolean = false>(options: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/{connector}',
     ...options
 });
@@ -1043,7 +1392,11 @@ export const getConnector = <ThrowOnError extends boolean = false>(options: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/{connector}',
     ...options
 });
@@ -1056,7 +1409,11 @@ export const updateConnector = <ThrowOnError extends boolean = false>(options: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/{connector}',
     ...options,
     headers: {
@@ -1075,7 +1432,11 @@ export const deleteConnectorData = <ThrowOnError extends boolean = false>(option
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/{connector}/data',
     ...options
 });
@@ -1090,7 +1451,11 @@ export const moveConnectorData = <ThrowOnError extends boolean = false>(options:
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/{connector}/move',
     ...options
 });
@@ -1103,7 +1468,11 @@ export const testConnector = <ThrowOnError extends boolean = false>(options: Opt
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/connectors/{connector}/test',
     ...options
 });
@@ -1116,7 +1485,11 @@ export const getFailureCapsule = <ThrowOnError extends boolean = false>(options:
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/debug/capsules/{trace_id}',
     ...options
 });
@@ -1129,7 +1502,11 @@ export const getMetrics = <ThrowOnError extends boolean = false>(options?: Optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/debug/metrics',
     ...options
 });
@@ -1155,7 +1532,11 @@ export const listDocuments = <ThrowOnError extends boolean = false>(options?: Op
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/documents',
     ...options
 });
@@ -1169,7 +1550,11 @@ export const uploadDocument = <ThrowOnError extends boolean = false>(options: Op
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/documents',
     ...options,
     headers: {
@@ -1186,7 +1571,11 @@ export const deleteDocument = <ThrowOnError extends boolean = false>(options: Op
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/documents/{document_id}',
     ...options
 });
@@ -1199,7 +1588,11 @@ export const getDocument = <ThrowOnError extends boolean = false>(options: Optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/documents/{document_id}',
     ...options
 });
@@ -1212,7 +1605,11 @@ export const downloadDocument = <ThrowOnError extends boolean = false>(options: 
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/documents/{document_id}/download',
     ...options
 });
@@ -1225,7 +1622,11 @@ export const exportDocument = <ThrowOnError extends boolean = false>(options: Op
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/documents/{document_id}/export',
     ...options
 });
@@ -1238,7 +1639,11 @@ export const importDocumentRows = <ThrowOnError extends boolean = false>(options
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/documents/{document_id}/import',
     ...options,
     headers: {
@@ -1255,7 +1660,11 @@ export const profileDocument = <ThrowOnError extends boolean = false>(options: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/documents/{document_id}/profile',
     ...options
 });
@@ -1268,7 +1677,11 @@ export const reindexDocument = <ThrowOnError extends boolean = false>(options: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/documents/{document_id}/reindex',
     ...options
 });
@@ -1281,7 +1694,11 @@ export const listEntities = <ThrowOnError extends boolean = false>(options?: Opt
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/entities',
     ...options
 });
@@ -1294,7 +1711,11 @@ export const createEntity = <ThrowOnError extends boolean = false>(options: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/entities',
     ...options,
     headers: {
@@ -1311,7 +1732,11 @@ export const getVectorCloud = <ThrowOnError extends boolean = false>(options?: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/entities/cloud',
     ...options
 });
@@ -1324,7 +1749,11 @@ export const getCloudSimilarity = <ThrowOnError extends boolean = false>(options
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/entities/cloud/similarity',
     ...options,
     headers: {
@@ -1341,7 +1770,11 @@ export const getEntityGraph = <ThrowOnError extends boolean = false>(options?: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/entities/graph',
     ...options
 });
@@ -1354,7 +1787,11 @@ export const deleteMemory = <ThrowOnError extends boolean = false>(options: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/entities/memory/{memory_id}',
     ...options
 });
@@ -1367,7 +1804,11 @@ export const updateMemory = <ThrowOnError extends boolean = false>(options: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/entities/memory/{memory_id}',
     ...options,
     headers: {
@@ -1384,7 +1825,11 @@ export const deleteEntity = <ThrowOnError extends boolean = false>(options: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/entities/{entity_id}',
     ...options
 });
@@ -1397,7 +1842,11 @@ export const getEntity = <ThrowOnError extends boolean = false>(options: Options
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/entities/{entity_id}',
     ...options
 });
@@ -1410,7 +1859,11 @@ export const updateEntity = <ThrowOnError extends boolean = false>(options: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/entities/{entity_id}',
     ...options,
     headers: {
@@ -1427,7 +1880,11 @@ export const addMemory = <ThrowOnError extends boolean = false>(options: Options
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/entities/{entity_id}/memory',
     ...options,
     headers: {
@@ -1444,7 +1901,11 @@ export const mergeEntities = <ThrowOnError extends boolean = false>(options: Opt
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/entities/{entity_id}/merge',
     ...options,
     headers: {
@@ -1461,7 +1922,11 @@ export const addRelation = <ThrowOnError extends boolean = false>(options: Optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/entities/{entity_id}/relations',
     ...options,
     headers: {
@@ -1480,7 +1945,11 @@ export const followEvents = <ThrowOnError extends boolean = false>(options?: Opt
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/events/ws',
     ...options
 });
@@ -1493,7 +1962,11 @@ export const exportData = <ThrowOnError extends boolean = false>(options?: Optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/export',
     ...options
 });
@@ -1506,7 +1979,11 @@ export const listSubjectExports = <ThrowOnError extends boolean = false>(options
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/export/subject',
     ...options
 });
@@ -1549,7 +2026,11 @@ export const listExtensions = <ThrowOnError extends boolean = false>(options?: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/extensions',
     ...options
 });
@@ -1564,7 +2045,11 @@ export const createExtension = <ThrowOnError extends boolean = false>(options: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/extensions',
     ...options,
     headers: {
@@ -1581,7 +2066,11 @@ export const deleteExtension = <ThrowOnError extends boolean = false>(options: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/extensions/{id}',
     ...options
 });
@@ -1594,7 +2083,11 @@ export const getExtension = <ThrowOnError extends boolean = false>(options: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/extensions/{id}',
     ...options
 });
@@ -1607,7 +2100,11 @@ export const updateExtension = <ThrowOnError extends boolean = false>(options: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/extensions/{id}',
     ...options,
     headers: {
@@ -1624,7 +2121,11 @@ export const listExtensionEvents = <ThrowOnError extends boolean = false>(option
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/extensions/{id}/events',
     ...options
 });
@@ -1637,7 +2138,11 @@ export const ackExtensionEvents = <ThrowOnError extends boolean = false>(options
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/extensions/{id}/events/ack',
     ...options,
     headers: {
@@ -1656,7 +2161,11 @@ export const claimExtensionEvents = <ThrowOnError extends boolean = false>(optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/extensions/{id}/events/claim',
     ...options,
     headers: {
@@ -1675,7 +2184,11 @@ export const nackExtensionEvents = <ThrowOnError extends boolean = false>(option
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/extensions/{id}/events/nack',
     ...options,
     headers: {
@@ -1692,7 +2205,11 @@ export const rotateExtensionSecret = <ThrowOnError extends boolean = false>(opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/extensions/{id}/rotate-secret',
     ...options
 });
@@ -1705,7 +2222,11 @@ export const requestHttps = <ThrowOnError extends boolean = false>(options: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/https',
     ...options,
     headers: {
@@ -1722,7 +2243,11 @@ export const getHttpsStatus = <ThrowOnError extends boolean = false>(options?: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/https/status',
     ...options
 });
@@ -1824,6 +2349,134 @@ export const revokeOauthGrant = <ThrowOnError extends boolean = false>(options: 
 export const getOpenapi = <ThrowOnError extends boolean = false>(options?: Options<GetOpenapiData, ThrowOnError>): RequestResult<GetOpenapiResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetOpenapiResponses, unknown, ThrowOnError>({ url: '/api/openapi.json', ...options });
 
 /**
+ * How many organisations exist and the limit (`EUNOMIA_MAX_ORGS`)
+ */
+export const operatorGetCapacity = <ThrowOnError extends boolean = false>(options?: Options<OperatorGetCapacityData, ThrowOnError>): RequestResult<OperatorGetCapacityResponses, OperatorGetCapacityErrors, ThrowOnError> => (options?.client ?? client).get<OperatorGetCapacityResponses, OperatorGetCapacityErrors, ThrowOnError>({
+    security: [{
+            key: 'operator',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/api/operator/v1/capacity',
+    ...options
+});
+
+/**
+ * List organisations with plan state, seat usage and owner
+ *
+ * Control-database metadata only: this API never reads anything from an organisation's own database.
+ */
+export const operatorListOrgs = <ThrowOnError extends boolean = false>(options?: Options<OperatorListOrgsData, ThrowOnError>): RequestResult<OperatorListOrgsResponses, OperatorListOrgsErrors, ThrowOnError> => (options?.client ?? client).get<OperatorListOrgsResponses, OperatorListOrgsErrors, ThrowOnError>({
+    security: [{
+            key: 'operator',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/api/operator/v1/orgs',
+    ...options
+});
+
+/**
+ * Create an organisation for a buyer, with its owner claim (idempotent on external_ref)
+ *
+ * Provisions the organisation's database and makes a single-use owner claim for `owner_email`: whoever opens `claim_link` creates their account (password or single sign-on) and becomes the organisation's owner. The same `external_ref` is the same organisation, so a retried call returns it and never makes a second one (`created: false`, and no link: resend the claim). When this server sends email the link is also emailed to the owner; `emailed` says whether the mail server accepted it. Refused: an owner email that already has an account (`operator.owner_in_other_org`), an address in `EUNOMIA_ADMIN_EMAILS` (`operator.owner_email_reserved`), the same reference with a different owner (`operator.reference_reused`), and a full server (`operator.at_capacity`).
+ */
+export const operatorCreateOrg = <ThrowOnError extends boolean = false>(options: Options<OperatorCreateOrgData, ThrowOnError>): RequestResult<OperatorCreateOrgResponses, OperatorCreateOrgErrors, ThrowOnError> => (options.client ?? client).post<OperatorCreateOrgResponses, OperatorCreateOrgErrors, ThrowOnError>({
+    security: [{
+            key: 'operator',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/api/operator/v1/orgs',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * One organisation: plan state, seat usage, owner and whether it was claimed
+ */
+export const operatorGetOrg = <ThrowOnError extends boolean = false>(options: Options<OperatorGetOrgData, ThrowOnError>): RequestResult<OperatorGetOrgResponses, OperatorGetOrgErrors, ThrowOnError> => (options.client ?? client).get<OperatorGetOrgResponses, OperatorGetOrgErrors, ThrowOnError>({
+    security: [{
+            key: 'operator',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/api/operator/v1/orgs/{org_id}',
+    ...options
+});
+
+/**
+ * Change an organisation's plan, seat limit, trial end or name
+ *
+ * Only the fields you send change. `seat_limit` and `trial_ends_at` take `null` to clear them. Lowering the seat limit below the seats in use (active members plus pending invitations) is refused with `operator.seats_in_use`, so the billing service can tell the customer to remove people first.
+ */
+export const operatorUpdateOrg = <ThrowOnError extends boolean = false>(options: Options<OperatorUpdateOrgData, ThrowOnError>): RequestResult<OperatorUpdateOrgResponses, OperatorUpdateOrgErrors, ThrowOnError> => (options.client ?? client).patch<OperatorUpdateOrgResponses, OperatorUpdateOrgErrors, ThrowOnError>({
+    security: [{
+            key: 'operator',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/api/operator/v1/orgs/{org_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Make a new owner claim link while the organisation is unclaimed
+ *
+ * The old link stops working at once. Refused once the owner has claimed the organisation (`operator.owner_claimed`) or when the owner's email has since got an account (`operator.owner_in_other_org`). Emailed too when this server sends email.
+ */
+export const operatorResendOwnerClaim = <ThrowOnError extends boolean = false>(options: Options<OperatorResendOwnerClaimData, ThrowOnError>): RequestResult<OperatorResendOwnerClaimResponses, OperatorResendOwnerClaimErrors, ThrowOnError> => (options.client ?? client).post<OperatorResendOwnerClaimResponses, OperatorResendOwnerClaimErrors, ThrowOnError>({
+    security: [{
+            key: 'operator',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/api/operator/v1/orgs/{org_id}/owner-claim/resend',
+    ...options
+});
+
+/**
+ * Resume a suspended organisation
+ *
+ * Members' requests work again within a few seconds and paused background work picks up where it left off.
+ */
+export const operatorResumeOrg = <ThrowOnError extends boolean = false>(options: Options<OperatorResumeOrgData, ThrowOnError>): RequestResult<OperatorResumeOrgResponses, OperatorResumeOrgErrors, ThrowOnError> => (options.client ?? client).post<OperatorResumeOrgResponses, OperatorResumeOrgErrors, ThrowOnError>({
+    security: [{
+            key: 'operator',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/api/operator/v1/orgs/{org_id}/resume',
+    ...options
+});
+
+/**
+ * Suspend an organisation (for example when payment fails)
+ *
+ * Within a few seconds every member's requests that read or write workspace content are refused (`org.suspended`) and its background work pauses. Members can still sign in and out, read the plan status, change their own password, export or erase their own data, and an owner or admin can read the People list. Suspending again keeps the first time. Nothing is deleted.
+ */
+export const operatorSuspendOrg = <ThrowOnError extends boolean = false>(options: Options<OperatorSuspendOrgData, ThrowOnError>): RequestResult<OperatorSuspendOrgResponses, OperatorSuspendOrgErrors, ThrowOnError> => (options.client ?? client).post<OperatorSuspendOrgResponses, OperatorSuspendOrgErrors, ThrowOnError>({
+    security: [{
+            key: 'operator',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/api/operator/v1/orgs/{org_id}/suspend',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * Your organisation's open invitations, newest first (owner or admin)
  *
  * Expired invitations are listed too, so they can be resent. Never returns a link or token.
@@ -1833,7 +2486,11 @@ export const listOrgInvitations = <ThrowOnError extends boolean = false>(options
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/org/invitations',
     ...options
 });
@@ -1841,7 +2498,7 @@ export const listOrgInvitations = <ThrowOnError extends boolean = false>(options
 /**
  * Invite someone to your organisation by email (owner or admin, browser session)
  *
- * Returns the link once; only its hash is stored. Eunomia sends no email: send the link yourself. The link expires after 7 days and works once. It is refused for an email already in this organisation or already invited here.
+ * Returns the link once; only its hash is stored. When this server sends email the link is also emailed to the invited address (`emailed` says whether the mail server took it); either way you can copy the link and send it yourself. The link expires after 7 days and works once. It is refused for an email already in this organisation or already invited here.
  */
 export const createOrgInvitation = <ThrowOnError extends boolean = false>(options: Options<CreateOrgInvitationData, ThrowOnError>): RequestResult<CreateOrgInvitationResponses, CreateOrgInvitationErrors, ThrowOnError> => (options.client ?? client).post<CreateOrgInvitationResponses, CreateOrgInvitationErrors, ThrowOnError>({
     security: [{
@@ -1873,7 +2530,7 @@ export const revokeOrgInvitation = <ThrowOnError extends boolean = false>(option
 /**
  * Make a new link for an open invitation (owner or admin, browser session)
  *
- * The old link stops working and the expiry starts again.
+ * The old link stops working and the expiry starts again. When this server sends email the new link is emailed to the invited address too (`emailed`). Resending shares the rate limit of creating invitations.
  */
 export const resendOrgInvitation = <ThrowOnError extends boolean = false>(options: Options<ResendOrgInvitationData, ThrowOnError>): RequestResult<ResendOrgInvitationResponses, ResendOrgInvitationErrors, ThrowOnError> => (options.client ?? client).post<ResendOrgInvitationResponses, ResendOrgInvitationErrors, ThrowOnError>({
     security: [{
@@ -1886,6 +2543,25 @@ export const resendOrgInvitation = <ThrowOnError extends boolean = false>(option
 });
 
 /**
+ * Your organisation's plan: status, seat limit, seats in use, trial end and where to manage it (any member)
+ *
+ * Readable by every member, also while the organisation is suspended. An organisation no plan was set on (every organisation on a self-hosted install) answers with nulls. `manage_url` is where the owner goes to add seats or pay (`EUNOMIA_BILLING_URL`).
+ */
+export const getOrgPlan = <ThrowOnError extends boolean = false>(options?: Options<GetOrgPlanData, ThrowOnError>): RequestResult<GetOrgPlanResponses, GetOrgPlanErrors, ThrowOnError> => (options?.client ?? client).get<GetOrgPlanResponses, GetOrgPlanErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/api/org/plan',
+    ...options
+});
+
+/**
  * OrgSeats in your organisation: active and suspended members, pending invitations (owner or admin)
  */
 export const getOrgSeats = <ThrowOnError extends boolean = false>(options?: Options<GetOrgSeatsData, ThrowOnError>): RequestResult<GetOrgSeatsResponses, GetOrgSeatsErrors, ThrowOnError> => (options?.client ?? client).get<GetOrgSeatsResponses, GetOrgSeatsErrors, ThrowOnError>({
@@ -1893,7 +2569,11 @@ export const getOrgSeats = <ThrowOnError extends boolean = false>(options?: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/org/seats',
     ...options
 });
@@ -1939,7 +2619,11 @@ export const joinSharedVault = <ThrowOnError extends boolean = false>(options: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/peers/join',
     ...options,
     headers: {
@@ -1956,7 +2640,11 @@ export const stopVaultPeer = <ThrowOnError extends boolean = false>(options: Opt
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/peers/links/{link_id}',
     ...options
 });
@@ -1969,7 +2657,11 @@ export const syncVaultPeer = <ThrowOnError extends boolean = false>(options: Opt
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/peers/links/{link_id}/sync',
     ...options
 });
@@ -1982,7 +2674,11 @@ export const verifyVaultPeer = <ThrowOnError extends boolean = false>(options: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/peers/links/{link_id}/verify',
     ...options
 });
@@ -1997,7 +2693,11 @@ export const listSecretActivity = <ThrowOnError extends boolean = false>(options
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/secrets/activity',
     ...options
 });
@@ -2012,7 +2712,11 @@ export const getSecretCounts = <ThrowOnError extends boolean = false>(options?: 
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/secrets/counts',
     ...options
 });
@@ -2025,7 +2729,11 @@ export const listHeldSecrets = <ThrowOnError extends boolean = false>(options?: 
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/secrets/held',
     ...options
 });
@@ -2068,7 +2776,11 @@ export const getSecretsHelper = <ThrowOnError extends boolean = false>(options?:
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/secrets/helper',
     ...options
 });
@@ -2100,7 +2812,11 @@ export const listSecretKinds = <ThrowOnError extends boolean = false>(options?: 
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/secrets/kinds',
     ...options
 });
@@ -2115,7 +2831,11 @@ export const listSecretResolutions = <ThrowOnError extends boolean = false>(opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/secrets/log',
     ...options
 });
@@ -2128,7 +2848,11 @@ export const getSecretAccess = <ThrowOnError extends boolean = false>(options?: 
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/secrets/me',
     ...options
 });
@@ -2143,7 +2867,11 @@ export const listSecretProviders = <ThrowOnError extends boolean = false>(option
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/secrets/providers',
     ...options
 });
@@ -2203,7 +2931,11 @@ export const listSecretRefs = <ThrowOnError extends boolean = false>(options?: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/secrets/refs',
     ...options
 });
@@ -2216,7 +2948,11 @@ export const createSecretRef = <ThrowOnError extends boolean = false>(options: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/secrets/refs',
     ...options,
     headers: {
@@ -2233,7 +2969,11 @@ export const deleteSecretRef = <ThrowOnError extends boolean = false>(options: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/secrets/refs/{id}',
     ...options
 });
@@ -2246,7 +2986,11 @@ export const updateSecretRef = <ThrowOnError extends boolean = false>(options: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/secrets/refs/{id}',
     ...options,
     headers: {
@@ -2263,7 +3007,11 @@ export const listSecretRequests = <ThrowOnError extends boolean = false>(options
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/secrets/requests',
     ...options
 });
@@ -2276,7 +3024,11 @@ export const getSecretRequest = <ThrowOnError extends boolean = false>(options: 
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/secrets/requests/{id}',
     ...options
 });
@@ -2321,7 +3073,11 @@ export const getSettings = <ThrowOnError extends boolean = false>(options?: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/settings',
     ...options
 });
@@ -2334,7 +3090,11 @@ export const updateSettings = <ThrowOnError extends boolean = false>(options: Op
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/settings',
     ...options,
     headers: {
@@ -2351,7 +3111,11 @@ export const completeOnboarding = <ThrowOnError extends boolean = false>(options
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/settings/complete-onboarding',
     ...options
 });
@@ -2364,7 +3128,11 @@ export const listOpenaiModels = <ThrowOnError extends boolean = false>(options?:
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/settings/openai-models',
     ...options
 });
@@ -2377,7 +3145,11 @@ export const getSnapshot = <ThrowOnError extends boolean = false>(options?: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/snapshot',
     ...options
 });
@@ -2390,7 +3162,11 @@ export const listSources = <ThrowOnError extends boolean = false>(options?: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/sources',
     ...options
 });
@@ -2403,7 +3179,11 @@ export const getSourcesStatus = <ThrowOnError extends boolean = false>(options?:
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/sources/status',
     ...options
 });
@@ -2418,7 +3198,11 @@ export const reextractSource = <ThrowOnError extends boolean = false>(options: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/sources/{key}/reextract',
     ...options,
     headers: {
@@ -2437,7 +3221,11 @@ export const syncSource = <ThrowOnError extends boolean = false>(options: Option
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/sources/{key}/sync',
     ...options
 });
@@ -2460,7 +3248,11 @@ export const invokeTool = <ThrowOnError extends boolean = false>(options: Option
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/tools/{name}',
     ...options,
     headers: {
@@ -2477,7 +3269,11 @@ export const checkForUpdate = <ThrowOnError extends boolean = false>(options?: O
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/update/check',
     ...options
 });
@@ -2490,7 +3286,11 @@ export const requestUpdate = <ThrowOnError extends boolean = false>(options?: Op
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/update/request',
     ...options
 });
@@ -2503,7 +3303,11 @@ export const getUpdateStatus = <ThrowOnError extends boolean = false>(options?: 
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/update/status',
     ...options
 });
@@ -2516,7 +3320,11 @@ export const listVaults = <ThrowOnError extends boolean = false>(options?: Optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults',
     ...options
 });
@@ -2529,7 +3337,11 @@ export const createVault = <ThrowOnError extends boolean = false>(options: Optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults',
     ...options,
     headers: {
@@ -2546,7 +3358,11 @@ export const listInvitations = <ThrowOnError extends boolean = false>(options?: 
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/invitations',
     ...options
 });
@@ -2559,7 +3375,11 @@ export const mergeVaults = <ThrowOnError extends boolean = false>(options: Optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/merge',
     ...options,
     headers: {
@@ -2576,7 +3396,11 @@ export const deleteVault = <ThrowOnError extends boolean = false>(options: Optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}',
     ...options
 });
@@ -2589,7 +3413,11 @@ export const renameVault = <ThrowOnError extends boolean = false>(options: Optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}',
     ...options,
     headers: {
@@ -2608,7 +3436,11 @@ export const listVaultChanges = <ThrowOnError extends boolean = false>(options: 
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/changes',
     ...options
 });
@@ -2623,7 +3455,11 @@ export const followVaultChanges = <ThrowOnError extends boolean = false>(options
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/changes/ws',
     ...options
 });
@@ -2636,7 +3472,11 @@ export const cloneVault = <ThrowOnError extends boolean = false>(options: Option
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/clone',
     ...options,
     headers: {
@@ -2653,7 +3493,11 @@ export const checkVaultIntegrity = <ThrowOnError extends boolean = false>(option
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/integrity',
     ...options
 });
@@ -2666,7 +3510,11 @@ export const repairVaultIntegrity = <ThrowOnError extends boolean = false>(optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/integrity',
     ...options
 });
@@ -2681,7 +3529,11 @@ export const listVaultPendingInvitations = <ThrowOnError extends boolean = false
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/invitations',
     ...options
 });
@@ -2694,7 +3546,11 @@ export const acceptInvitation = <ThrowOnError extends boolean = false>(options: 
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/invitations/accept',
     ...options
 });
@@ -2707,7 +3563,11 @@ export const declineInvitation = <ThrowOnError extends boolean = false>(options:
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/invitations/decline',
     ...options
 });
@@ -2720,7 +3580,11 @@ export const leaveVault = <ThrowOnError extends boolean = false>(options: Option
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/leave',
     ...options
 });
@@ -2733,7 +3597,11 @@ export const listMembers = <ThrowOnError extends boolean = false>(options: Optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/members',
     ...options
 });
@@ -2746,7 +3614,11 @@ export const inviteMember = <ThrowOnError extends boolean = false>(options: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/members',
     ...options,
     headers: {
@@ -2763,7 +3635,11 @@ export const removeMember = <ThrowOnError extends boolean = false>(options: Opti
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/members/{email}',
     ...options
 });
@@ -2776,7 +3652,11 @@ export const setMemberRole = <ThrowOnError extends boolean = false>(options: Opt
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/members/{email}/role',
     ...options,
     headers: {
@@ -2793,7 +3673,11 @@ export const getVaultOntology = <ThrowOnError extends boolean = false>(options: 
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/ontology',
     ...options
 });
@@ -2803,7 +3687,11 @@ export const getOntologyActivity = <ThrowOnError extends boolean = false>(option
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/ontology/activity',
     ...options
 });
@@ -2816,7 +3704,11 @@ export const automapVaultOntology = <ThrowOnError extends boolean = false>(optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/ontology/automap',
     ...options,
     headers: {
@@ -2881,7 +3773,11 @@ export const listOntologyObjects = <ThrowOnError extends boolean = false>(option
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/ontology/objects',
     ...options
 });
@@ -2891,7 +3787,11 @@ export const getOntologyObject = <ThrowOnError extends boolean = false>(options:
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/ontology/objects/{id}',
     ...options
 });
@@ -2921,7 +3821,11 @@ export const getVaultOntologyReadiness = <ThrowOnError extends boolean = false>(
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/ontology/readiness',
     ...options
 });
@@ -2951,7 +3855,11 @@ export const suggestVaultOntology = <ThrowOnError extends boolean = false>(optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/ontology/suggest',
     ...options
 });
@@ -2964,7 +3872,11 @@ export const listVaultPeers = <ThrowOnError extends boolean = false>(options: Op
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/peers',
     ...options
 });
@@ -2979,7 +3891,11 @@ export const createVaultShareCode = <ThrowOnError extends boolean = false>(optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/share-codes',
     ...options,
     headers: {
@@ -2996,7 +3912,11 @@ export const deleteVaultShareCode = <ThrowOnError extends boolean = false>(optio
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/share-codes/{code_id}',
     ...options
 });
@@ -3009,7 +3929,11 @@ export const transferOwnership = <ThrowOnError extends boolean = false>(options:
             in: 'cookie',
             name: 'eunomia_session',
             type: 'apiKey'
-        }, { scheme: 'bearer', type: 'http' }],
+        }, {
+            key: 'bearer',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/api/vaults/{vault_id}/transfer',
     ...options,
     headers: {

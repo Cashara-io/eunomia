@@ -1087,6 +1087,212 @@ async fn invitation_routes_go_red_when_their_org_filter_is_removed() {
     }
 }
 
+/// Signs `email` in and returns its session cookie pair.
+async fn session_of(router: &Router, email: &str) -> String {
+    let ((status, body), set) = common::http(router, "POST", "/api/auth/login", Some(json!({"email": email, "password": common::PASSWORD})), None, None).await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{body}");
+    set.unwrap().split(';').next().unwrap().to_string()
+}
+
+/// A person in `org` with `role`, signed up through the real route and moved to the org the way an invitation
+/// would (their only membership), with a session.
+async fn member_of(w: &World, org: &Org, email: &str, role: &str) -> (User, String) {
+    let user = common::register_personal(&w.state, email).await;
+    w.state
+        .control
+        .test_raw()
+        .query("DELETE membership WHERE user = $u; CREATE membership SET user = $u, org = $o, role = $r, slot = string::concat(<string>$o, '/', <string>$u)")
+        .bind(("u", user.id.clone()))
+        .bind(("o", org.user.org.record()))
+        .bind(("r", role.to_string()))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    let cookie = session_of(&w.router, email).await;
+    (models_user::user_by_email(&w.state.control, email).await.unwrap().unwrap(), cookie)
+}
+
+/// What an organisation's own administration could touch of another organisation, and does not. The attackers
+/// are signed in with browser sessions (the mutating routes refuse a token): each org's non-operator owner,
+/// admin and plain member, who call EVERY `/api/admin/...` and `/api/org/...` route in the spec, with every
+/// path value naming the other org's people, grant, token, review and invitation. No secret of the victim
+/// may come back, and the victim is exactly as it was: its name, its roles, nobody suspended, every session of
+/// its people still working.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn org_owners_admins_and_members_cannot_read_or_act_on_another_orgs_people_log_policy_or_name() {
+    let _g = SERIAL.lock().await;
+    let w = build(Mode::Normal).await;
+    // the first account of the install (alpha) is its operator, so the attackers are the other side's people
+    // and Alpha's own non-operator admin and member
+    let (a_admin, a_admin_c) = member_of(&w, &w.a, "ann@example.com", "admin").await;
+    let (a_member, a_member_c) = member_of(&w, &w.a, "mia@example.com", "member").await;
+    let (b_admin, b_admin_c) = member_of(&w, &w.b, "bob@example.com", "admin").await;
+    let (b_member, b_member_c) = member_of(&w, &w.b, "bea@example.com", "member").await;
+    let b_owner_c = session_of(&w.router, "beta@example.com").await;
+    let a_owner_c = session_of(&w.router, "alpha@example.com").await;
+    let spec: Value = serde_json::from_str(&openapi::spec_json()).unwrap();
+
+    // (who, their cookie, the org they belong to, the org they attack, the people they name there)
+    let attacks: Vec<(&str, &String, &Org, &Org, Vec<String>)> = vec![
+        ("B owner", &b_owner_c, &w.b, &w.a, vec![w.a.user.id.to_string(), a_admin.id.to_string(), a_member.id.to_string()]),
+        ("B admin", &b_admin_c, &w.b, &w.a, vec![w.a.user.id.to_string(), a_admin.id.to_string(), a_member.id.to_string()]),
+        ("B member", &b_member_c, &w.b, &w.a, vec![w.a.user.id.to_string(), a_admin.id.to_string(), a_member.id.to_string()]),
+        ("A admin", &a_admin_c, &w.a, &w.b, vec![w.b.user.id.to_string(), b_admin.id.to_string(), b_member.id.to_string()]),
+        ("A member", &a_member_c, &w.a, &w.b, vec![w.b.user.id.to_string(), b_admin.id.to_string(), b_member.id.to_string()]),
+    ];
+    let _ = (&a_owner_c, &b_admin, &b_member);
+    let mut routes = 0;
+    for (who, cookie, _own, victim, people) in &attacks {
+        for person in people {
+            for (path, item) in spec["paths"].as_object().unwrap() {
+                if !(path.starts_with("/api/admin/") || path.starts_with("/api/org/")) {
+                    continue;
+                }
+                for (method, op) in item.as_object().unwrap() {
+                    let mut url = path.clone();
+                    for p in op["parameters"].as_array().into_iter().flatten().filter(|p| p["in"] == "path") {
+                        let name = p["name"].as_str().unwrap();
+                        let value = match name {
+                            "user_id" => person.clone(),
+                            "token_id" | "grant_id" => victim.ids.grant_id.clone(),
+                            "review_id" => "access_review:x".to_string(),
+                            other => path_value(other, victim),
+                        };
+                        let value: String = value.bytes().map(|b| if b.is_ascii_alphanumeric() || b == b'_' || b == b':' { (b as char).to_string() } else { format!("%{b:02X}") }).collect();
+                        url = url.replace(&format!("{{{name}}}"), &value);
+                    }
+                    if op["parameters"].as_array().into_iter().flatten().any(|p| p["in"] == "query") {
+                        url.push_str(&query_string(victim));
+                    }
+                    let body = op.get("requestBody").map(|_| {
+                        json!({
+                            "name": victim.word("Holdings"), "email": "beta@example.com", "role": "admin", "suspended": true, "admin": true,
+                            "require_mfa": true, "decision": "remove", "note": victim.canary, "token": "x", "hold": true,
+                        })
+                    });
+                    let (status, text) = raw_cookie(&w.router, &method.to_uppercase(), &url, body, cookie).await;
+                    assert!(status != 500, "{who}: {method} {path} answered 500: {text}");
+                    for secret in victim.secrets() {
+                        assert!(!text.contains(&secret), "{who} reads {secret} from {method} {path}: {text}");
+                    }
+                    // a route that names the victim's person never succeeds
+                    if path.contains("{user_id}") && !(path.ends_with("/people/{user_id}/export")) {
+                        assert!(status >= 400, "{who}: {method} {url} answered {status}: {text}");
+                    }
+                    routes += 1;
+                }
+            }
+        }
+    }
+    assert!(routes >= 5 * 3 * 15, "only {routes} calls");
+
+    // both orgs are exactly as they were
+    for org in [&w.a, &w.b] {
+        let mut res = w
+            .state
+            .control
+            .test_raw()
+            .query("SELECT VALUE name FROM ONLY $o; SELECT VALUE role FROM membership WHERE org = $o ORDER BY role; SELECT VALUE id FROM user WHERE suspended_at != NONE AND id IN (SELECT VALUE user FROM membership WHERE org = $o)")
+            .bind(("o", org.user.org.record()))
+            .await
+            .unwrap();
+        let name: Option<String> = res.take(0).unwrap();
+        let roles: Vec<String> = res.take(1).unwrap();
+        let suspended: Vec<surrealdb::types::RecordId> = res.take(2).unwrap();
+        // the planted org name is the canary; an attacker renaming its OWN org cannot have touched this one, and only owners rename
+        assert!(suspended.is_empty(), "{}: somebody was suspended: {suspended:?}", org.name);
+        assert_eq!(roles, vec!["admin", "member", "owner"], "{}: roles changed: {roles:?}", org.name);
+        if org.name == "Alpha" {
+            assert_eq!(name.as_deref(), Some(org.canary.as_str()), "Alpha's name was changed");
+        }
+    }
+    // Beta's owner renamed Beta (it is its own org: the generic body names "Beta Holdings"); Alpha's is untouched, and the reverse
+    for (c, who) in [(&a_owner_c, "alpha"), (&b_owner_c, "beta"), (&a_admin_c, "ann"), (&b_member_c, "bea")] {
+        assert_eq!(common::http(&w.router, "GET", "/api/auth/me", None, None, Some(c)).await.0 .0.as_u16(), 200, "{who} must still be signed in");
+    }
+    assert_eq!(a_admin.org, w.a.user.org);
+    assert_eq!(b_member.org, w.b.user.org);
+}
+
+async fn raw_cookie(router: &Router, method: &str, path: &str, body: Option<Value>, cookie: &str) -> (u16, String) {
+    let ((status, body), _) = common::http(router, method, path, body, None, Some(cookie)).await;
+    (status.as_u16(), body.to_string())
+}
+
+/// The statements behind the organisation's own administration filter on the organisation, and the suite sees
+/// it go: each case is clean with the filter and leaks, or acts on the other organisation, without it. The
+/// control database is shared by every org, so for these statements the filter is the only wall.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn org_admin_routes_go_red_when_their_org_filter_is_removed() {
+    let _g = SERIAL.lock().await;
+    let w = build(Mode::Normal).await;
+    let (mo, _mo_c) = member_of(&w, &w.a, "mo@example.com", "member").await;
+    let b_owner_c = session_of(&w.router, "beta@example.com").await;
+    let mo_token = models_user::create_api_token_with(&w.state.control, &mo.id, "laptop", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
+    // Alpha requires two-step verification of its own members (set in the database: Alpha's owner is the operator)
+    w.state.control.test_raw().query("UPDATE $o SET require_mfa = true").bind(("o", w.a.user.org.record())).await.unwrap().check().unwrap();
+    let a_canary = w.a.canary.clone();
+    let mo_id = mo.id.to_string();
+    let beta_policy_before = common::http(&w.router, "GET", "/api/admin/org", None, None, Some(&b_owner_c)).await.0 .1["without_mfa"].clone();
+
+    let leaked = |case: &str| {
+        let (router, b, mo_id, a_canary, token, before) = (w.router.clone(), b_owner_c.clone(), mo_id.clone(), a_canary.clone(), mo_token.clone(), beta_policy_before.clone());
+        let case = case.to_string();
+        async move {
+            let b = &b;
+            match case.as_str() {
+                // Beta's owner signs Alpha's member out of everything
+                "revoke access" => {
+                    let (status, _) = raw_cookie(&router, "POST", &format!("/api/admin/people/{mo_id}/revoke-access"), None, b).await;
+                    status == 200
+                }
+                "role" => {
+                    let (status, _) = raw_cookie(&router, "PUT", &format!("/api/admin/people/{mo_id}/role"), Some(json!({"role": "admin"})), b).await;
+                    status == 200
+                }
+                "people list" => raw_cookie(&router, "GET", "/api/admin/people", None, b).await.1.contains("mo@example.com"),
+                "audit log" => raw_cookie(&router, "GET", "/api/admin/audit?category=tokens&limit=200", None, b).await.1.contains(&a_canary),
+                // Alpha's policy must not make Beta's owner enrol
+                "mfa policy" => {
+                    let ((_, body), _) = common::http(&router, "POST", "/api/auth/login", Some(json!({"email": "beta@example.com", "password": common::PASSWORD})), None, None).await;
+                    body.get("mfa_required").is_some()
+                }
+                "mfa count" => raw_cookie(&router, "GET", "/api/admin/org", None, b).await.1.contains("without_mfa") && {
+                    let (_, text) = raw_cookie(&router, "GET", "/api/admin/org", None, b).await;
+                    serde_json::from_str::<Value>(&text).unwrap()["without_mfa"] != before
+                },
+                "token still works" => {
+                    let _ = &token;
+                    false
+                }
+                _ => unreachable!(),
+            }
+        }
+    };
+    type Case<'a> = (&'a str, &'a [(&'a str, &'a str)]);
+    let cases: [Case; 6] = [
+        ("role", &[("org_admin.member", "WHERE org = $org"), ("org_admin.set_role", "WHERE org = $org")]),
+        ("people list", &[("control.admin_people", "WHERE org = $org")]),
+        ("audit log", &[("control.admin_audit_page", "WHERE org = $org")]),
+        ("mfa policy", &[("org_admin.mfa_policy_for_user", "WHERE user = $user")]),
+        ("mfa count", &[("org_admin.without_mfa", "WHERE org = $org")]),
+        // last: it really ends Alpha's member's access once the filter is gone
+        ("revoke access", &[("org_admin.member", "WHERE org = $org")]),
+    ];
+    for (case, _) in &cases {
+        assert!(!leaked(case).await, "{case} leaks before any mutation");
+    }
+    for (case, stmts) in &cases {
+        for (stmt, from) in *stmts {
+            isolation::mutate(stmt, from, "WHERE true");
+        }
+        let hit = leaked(case).await;
+        isolation::clear_mutations();
+        assert!(hit, "removing the filter from {stmts:?} ({case}) must show or touch the other org's data");
+    }
+}
+
 /// The runtime counter is exposed to admins and reads zero.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_no_org_context_metric_is_exposed_and_zero() {

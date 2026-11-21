@@ -13,7 +13,7 @@ export function useSignIn() {
   const q = useQuery(bootstrapQuery());
   const mode = q.data?.auth_mode ?? "password";
   const provider = mode === "password" ? null : (q.data?.oidc_provider ?? "single sign-on");
-  return { pending: q.isPending, mode, provider, hasUsers: q.data?.has_users };
+  return { pending: q.isPending, mode, provider, hasUsers: q.data?.has_users, emailEnabled: q.data?.email_enabled ?? false };
 }
 
 /** The messages for the `?oidc_error=` codes the callback redirects with. */

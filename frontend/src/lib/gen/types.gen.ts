@@ -143,6 +143,24 @@ export type AccessReviewSummary = {
     } | null;
 };
 
+/**
+ * What ending a member's access removed.
+ */
+export type AccessRevoked = {
+    /**
+     * Connected apps (OAuth grants) revoked.
+     */
+    apps: number;
+    /**
+     * Browser sessions that were open.
+     */
+    sessions: number;
+    /**
+     * API tokens revoked.
+     */
+    tokens: number;
+};
+
 export type AckOut = {
     /**
      * Ids that were leased and are now done. Ids that are unknown, already done or not leased are skipped.
@@ -513,6 +531,10 @@ export type BootstrapOut = {
      * Which sign-in methods the login and register pages offer.
      */
     auth_mode: AuthModeOut;
+    /**
+     * This server sends email (`SMTP_HOST` is set), so "Forgot password?" and emailed invitations work.
+     */
+    email_enabled: boolean;
     has_users: boolean;
     /**
      * The button label ("Continue with {oidc_provider}") when an OpenID Connect provider is configured.
@@ -523,6 +545,21 @@ export type BootstrapOut = {
 export type Callback = {
     code: string;
     state: string;
+};
+
+/**
+ * How many organisations this server holds and how many it may.
+ */
+export type Capacity = {
+    /**
+     * Creating another organisation is refused (`operator.at_capacity`).
+     */
+    at_capacity: boolean;
+    /**
+     * `EUNOMIA_MAX_ORGS`; null: no limit.
+     */
+    max_organisations?: number | null;
+    organisations: number;
 };
 
 export type Capsule = {
@@ -584,6 +621,19 @@ export type Change = {
      * Strictly increasing per vault, with no gaps.
      */
     seq: number;
+};
+
+export type ChangeBody = {
+    current_password: string;
+    /**
+     * A current authenticator or recovery code. Needed from an account with two-step verification when its
+     * last second factor is older than 10 minutes (`auth.step_up_required`).
+     */
+    mfa_code?: string | null;
+    /**
+     * The same rules as sign-up (8 characters, at most 72 bytes).
+     */
+    new_password: string;
 };
 
 /**
@@ -708,6 +758,16 @@ export type ClaimOut = {
      * The extension's target vault, to pass as `vault_id` to the tools; `null` is your personal vault.
      */
     vault_id?: string | null;
+};
+
+/**
+ * A fresh owner claim link.
+ */
+export type ClaimResent = {
+    claim_expires_at: string;
+    claim_link: string;
+    email_enabled: boolean;
+    emailed: boolean;
 };
 
 export type CloneOut = {
@@ -894,6 +954,58 @@ export type CreateBody = {
      * A vault you belong to; omit for your personal vault.
      */
     vault_id?: string | null;
+};
+
+export type CreateOrg = {
+    /**
+     * The billing service's own id for this purchase. The same reference is the same organisation: a retried
+     * call returns it and never makes a second one.
+     */
+    external_ref: string;
+    /**
+     * The organisation's name (1 to 80 characters, no `@`); shown to people it invites.
+     */
+    name: string;
+    /**
+     * The owner's email. They claim the organisation with the link this call returns.
+     */
+    owner_email: string;
+    plan: PlanName;
+    /**
+     * How many seats the organisation has (at least 1): active members plus pending invitations.
+     */
+    seat_limit: number;
+    /**
+     * When the trial ends, for display. This server never suspends on its own.
+     */
+    trial_ends_at?: string | null;
+};
+
+/**
+ * The result of creating an organisation.
+ */
+export type CreateOrgResult = {
+    claim_expires_at?: string | null;
+    /**
+     * The link the owner opens to claim the organisation and become its owner. Returned once, when this call
+     * made it (a retry after the first reply was lost has none: resend the claim for a new one). Null when
+     * the organisation was already claimed or its claim was already made.
+     */
+    claim_link?: string | null;
+    /**
+     * `true` when this call made the organisation; `false` when the reference already had one (a retry).
+     */
+    created: boolean;
+    /**
+     * This server sends email (`SMTP_HOST`).
+     */
+    email_enabled: boolean;
+    /**
+     * The link was also emailed to the owner and the mail server accepted it.
+     */
+    emailed: boolean;
+    organisation: OrgSummary;
+    organisation_id: string;
 };
 
 export type Credentials = {
@@ -1408,6 +1520,10 @@ export type FinanceTransaction = {
     amount: string;
     created_at: string;
     description: string;
+};
+
+export type ForgotBody = {
+    email: string;
 };
 
 export type Grain = 'day' | 'week' | 'month' | 'quarter' | 'year';
@@ -2287,7 +2403,7 @@ export type MfaStatus = {
      */
     recovery_codes_left: number;
     /**
-     * An admin requires two-step verification for every password account on this server.
+     * The server's operator or this account's organisation requires two-step verification of it.
      */
     required: boolean;
     /**
@@ -2344,6 +2460,13 @@ export type NackOut = {
      * Back to pending.
      */
     requeued: number;
+};
+
+export type NameChange = {
+    /**
+     * The organisation's new display name (1 to 80 characters, no `@`).
+     */
+    name: string;
 };
 
 export type OkBody = {
@@ -2408,6 +2531,11 @@ export type OrgInvitationCreate = {
  * A new or resent invitation, with its link. The link is shown once: only its hash is kept.
  */
 export type OrgInvitationLink = {
+    /**
+     * The link was also emailed to the invited address and the mail server accepted it. `false` when this
+     * server sends no email, or the mail server refused it or did not answer in time: copy the link.
+     */
+    emailed: boolean;
     invitation: OrgInvitation;
     /**
      * `<frontend>/invite#<token>`. The token rides in the fragment, which browsers never send to a server.
@@ -2425,6 +2553,60 @@ export type OrgInvitationLink = {
 export type OrgInviteRole = 'member' | 'admin';
 
 /**
+ * One page of organisations, oldest first.
+ */
+export type OrgList = {
+    limit: number;
+    offset: number;
+    organisations: Array<OrgSummary>;
+    /**
+     * Every organisation on this server.
+     */
+    total: number;
+};
+
+/**
+ * The organisation's name and security policy, and what the caller may do with them.
+ */
+export type OrgOut = {
+    /**
+     * The caller may rename it (its owner).
+     */
+    can_rename: boolean;
+    /**
+     * The organisation's display name. A workspace made at sign-up is named after its founder's email until renamed.
+     */
+    name: string;
+    /**
+     * This organisation requires two-step verification of every member who signs in with a password.
+     */
+    require_mfa: boolean;
+    /**
+     * The server's operator requires it for everyone on the server too: an organisation cannot turn that off.
+     */
+    server_requires_mfa: boolean;
+    updated_at?: string | null;
+    /**
+     * Email of the member who last changed the organisation's policy.
+     */
+    updated_by?: string | null;
+    /**
+     * Active password members of this organisation without two-step verification yet: while it is required
+     * they must set it up at their next sign-in.
+     */
+    without_mfa: number;
+    /**
+     * The caller's role in it: `owner`, `admin` or `member`.
+     */
+    your_role: string;
+};
+
+/**
+ * The roles a role change may give.
+ */
+export type OrgRoleChoice = 'member' | 'admin';
+
+/**
  * OrgSeats for one org (the hosted business bills on these). Counts only.
  */
 export type OrgSeats = {
@@ -2437,6 +2619,51 @@ export type OrgSeats = {
      */
     pending_invitations: number;
     suspended_members: number;
+};
+
+/**
+ * One organisation as the operator sees it. Control-database metadata only.
+ */
+export type OrgSummary = {
+    created_at: string;
+    /**
+     * The reference the billing service gave when it created the organisation.
+     */
+    external_ref?: string | null;
+    /**
+     * The organisation id (32 hex digits).
+     */
+    id: string;
+    name: string;
+    /**
+     * When the unclaimed owner claim expires (resend it for a new link); null once claimed.
+     */
+    owner_claim_expires_at?: string | null;
+    /**
+     * The owner has claimed the organisation.
+     */
+    owner_claimed: boolean;
+    /**
+     * The owner's email: the account that claimed the organisation, or the address the claim was sent to.
+     */
+    owner_email?: string | null;
+    /**
+     * `trial`, `team` or `enterprise`; null for an organisation no plan was set on (every organisation on a
+     * self-hosted install, and the server's own).
+     */
+    plan?: string | null;
+    /**
+     * Null: no limit.
+     */
+    seat_limit?: number | null;
+    seats: Seats;
+    /**
+     * `active` or `suspended`. An organisation with no plan state is `active`.
+     */
+    status: string;
+    suspended_at?: string | null;
+    suspended_reason?: string | null;
+    trial_ends_at?: string | null;
 };
 
 /**
@@ -2549,6 +2776,19 @@ export type Person = {
      * admin emails), `granted` (made an admin in the app), or empty for a member.
      */
     admin: string;
+    /**
+     * The viewer may end this person's sessions and revoke their API tokens and connected apps.
+     */
+    can_revoke: boolean;
+    /**
+     * The viewer may change this person's organisation role (the owner may, to `member` or `admin`).
+     */
+    can_set_role: boolean;
+    /**
+     * The viewer may suspend or restore this person (`org_admin::decide`: not themselves, not the owner, not
+     * an operator of the server, and only the owner acts on an admin).
+     */
+    can_suspend: boolean;
     created_at?: string | null;
     email: string;
     id: string;
@@ -2569,6 +2809,11 @@ export type Person = {
      * sign-on (its identity provider handles the second factor).
      */
     mfa: string;
+    /**
+     * The person's role in this organisation: `owner`, `admin` or `member` (`role` above is the server-wide
+     * admin right, a different thing).
+     */
+    org_role: string;
     /**
      * `admin` or `member`.
      */
@@ -2592,6 +2837,18 @@ export type Person = {
     workspace_owner: boolean;
 };
 
+/**
+ * An app a member connected through OAuth (an MCP client such as Claude Desktop).
+ */
+export type PersonApp = {
+    client_id: string;
+    created_at?: string | null;
+    id: string;
+    last_used_at?: string | null;
+    name: string;
+    scope: Array<string>;
+};
+
 export type PersonToken = {
     created_at?: string | null;
     /**
@@ -2603,6 +2860,41 @@ export type PersonToken = {
     name: string;
 };
 
+/**
+ * `trial`, `team` or `enterprise`.
+ */
+export type PlanName = 'trial' | 'team' | 'enterprise';
+
+/**
+ * What the plan means for the people in an organisation.
+ */
+export type PlanStatus = {
+    /**
+     * Where the owner goes to add seats or pay (`EUNOMIA_BILLING_URL`); null when not configured or unmanaged.
+     */
+    manage_url?: string | null;
+    /**
+     * `trial`, `team` or `enterprise`; null for an unmanaged organisation.
+     */
+    plan?: string | null;
+    /**
+     * How many seats the organisation has; null when it has no limit.
+     */
+    seat_limit?: number | null;
+    /**
+     * Active members plus pending invitations; null for an unmanaged organisation.
+     */
+    seats_in_use?: number | null;
+    /**
+     * `active` or `suspended`; null for an unmanaged organisation.
+     */
+    status?: string | null;
+    /**
+     * When the trial ends, for display: this server never suspends on its own. Null when not set.
+     */
+    trial_ends_at?: string | null;
+};
+
 export type PocketaiSummary = {
     recent_recordings: Array<RecentRecording>;
     recordings_count: number;
@@ -2612,6 +2904,18 @@ export type PocketaiSummary = {
 
 export type PocketaiWeek = {
     recordings_count: number;
+};
+
+export type PolicyChange = {
+    /**
+     * A current authenticator or recovery code, when your own account has two-step verification and its
+     * last second factor is older than 10 minutes (`auth.step_up_required`).
+     */
+    mfa_code?: string | null;
+    /**
+     * `true` requires two-step verification of every member of this organisation who signs in with a password.
+     */
+    require_mfa: boolean;
 };
 
 /**
@@ -3065,6 +3369,17 @@ export type RequestOut = {
     vault_id: string;
 };
 
+export type ResetBody = {
+    /**
+     * The new password: the same rules as sign-up (8 characters, at most 72 bytes).
+     */
+    password: string;
+    /**
+     * The token from the reset link (the part after `#`).
+     */
+    token: string;
+};
+
 /**
  * An entity that already existed under a link column's value, in another kind than the link's
  * target: linked to as it is, never retyped and never duplicated.
@@ -3074,6 +3389,13 @@ export type ReusedTarget = {
     entity_id: string;
     kind: string;
     name: string;
+};
+
+export type RoleChange = {
+    /**
+     * `member` or `admin`. Only the organisation's owner changes roles; nobody changes the owner's.
+     */
+    role: OrgRoleChoice;
 };
 
 export type RoleRequest = {
@@ -3129,6 +3451,25 @@ export type Rule = {
     vault: string;
 };
 
+/**
+ * Seats in use, in the words the billing service needs.
+ */
+export type Seats = {
+    /**
+     * Members whose account is not suspended.
+     */
+    active_members: number;
+    /**
+     * `active_members + pending_invitations`: what the seat limit is checked against.
+     */
+    in_use: number;
+    /**
+     * Open invitations that have not expired (the owner's unclaimed invitation included).
+     */
+    pending_invitations: number;
+    suspended_members: number;
+};
+
 export type SecurityChange = {
     /**
      * A current authenticator or recovery code, when your own account has two-step verification and its
@@ -3175,6 +3516,13 @@ export type SessionOut = {
     id: string;
     last_seen_at: string;
     user_agent: string;
+};
+
+export type SessionsEnded = {
+    /**
+     * Browser sessions that were open.
+     */
+    sessions: number;
 };
 
 export type SettingsOut = {
@@ -3453,6 +3801,13 @@ export type SuspendChange = {
     suspended: boolean;
 };
 
+export type SuspendOrg = {
+    /**
+     * Why (for example `payment_failed`); kept on the organisation and on the ledger, never shown to its members.
+     */
+    reason: string;
+};
+
 /**
  * Outcome of a sync or webhook ingest: an ingest report, `source` + `error` when the sync failed, or
  * `status: "already_running"` when a sync of that source is already queued or running, or
@@ -3615,6 +3970,22 @@ export type UpdateAck = {
      * Present only when the updater is configured.
      */
     requested?: boolean | null;
+};
+
+export type UpdateOrg = {
+    /**
+     * A new name (1 to 80 characters, no `@`).
+     */
+    name?: string | null;
+    plan?: null | PlanName;
+    /**
+     * A new seat limit, or `null` for no limit. Refused (`operator.seats_in_use`) below the seats in use.
+     */
+    seat_limit?: number | null;
+    /**
+     * A new trial end, or `null` to clear it.
+     */
+    trial_ends_at?: string | null;
 };
 
 /**
@@ -3873,6 +4244,28 @@ export type EraseMyAccountResponses = {
 };
 
 export type EraseMyAccountResponse = EraseMyAccountResponses[keyof EraseMyAccountResponses];
+
+export type ChangePasswordData = {
+    body: ChangeBody;
+    path?: never;
+    query?: never;
+    url: '/api/account/password';
+};
+
+export type ChangePasswordErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ChangePasswordError = ChangePasswordErrors[keyof ChangePasswordErrors];
+
+export type ChangePasswordResponses = {
+    200: OkBody;
+};
+
+export type ChangePasswordResponse = ChangePasswordResponses[keyof ChangePasswordResponses];
 
 export type ListAccessReviewsData = {
     body?: never;
@@ -4173,6 +4566,72 @@ export type CancelErasureResponses = {
 
 export type CancelErasureResponse = CancelErasureResponses[keyof CancelErasureResponses];
 
+export type GetOrgData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/org';
+};
+
+export type GetOrgErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetOrgError = GetOrgErrors[keyof GetOrgErrors];
+
+export type GetOrgResponses = {
+    200: OrgOut;
+};
+
+export type GetOrgResponse = GetOrgResponses[keyof GetOrgResponses];
+
+export type RenameOrgData = {
+    body: NameChange;
+    path?: never;
+    query?: never;
+    url: '/api/admin/org/name';
+};
+
+export type RenameOrgErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RenameOrgError = RenameOrgErrors[keyof RenameOrgErrors];
+
+export type RenameOrgResponses = {
+    200: OrgOut;
+};
+
+export type RenameOrgResponse = RenameOrgResponses[keyof RenameOrgResponses];
+
+export type SetOrgSecurityData = {
+    body: PolicyChange;
+    path?: never;
+    query?: never;
+    url: '/api/admin/org/security';
+};
+
+export type SetOrgSecurityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetOrgSecurityError = SetOrgSecurityErrors[keyof SetOrgSecurityErrors];
+
+export type SetOrgSecurityResponses = {
+    200: OrgOut;
+};
+
+export type SetOrgSecurityResponse = SetOrgSecurityResponses[keyof SetOrgSecurityResponses];
+
 export type ListPeopleData = {
     body?: never;
     path?: never;
@@ -4218,6 +4677,55 @@ export type SetPersonAdminResponses = {
 };
 
 export type SetPersonAdminResponse = SetPersonAdminResponses[keyof SetPersonAdminResponses];
+
+export type ListPersonAppsData = {
+    body?: never;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/apps';
+};
+
+export type ListPersonAppsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListPersonAppsError = ListPersonAppsErrors[keyof ListPersonAppsErrors];
+
+export type ListPersonAppsResponses = {
+    200: Array<PersonApp>;
+};
+
+export type ListPersonAppsResponse = ListPersonAppsResponses[keyof ListPersonAppsResponses];
+
+export type RevokePersonAppData = {
+    body?: never;
+    path: {
+        user_id: string;
+        grant_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/apps/{grant_id}';
+};
+
+export type RevokePersonAppErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RevokePersonAppError = RevokePersonAppErrors[keyof RevokePersonAppErrors];
+
+export type RevokePersonAppResponses = {
+    200: Array<PersonApp>;
+};
+
+export type RevokePersonAppResponse = RevokePersonAppResponses[keyof RevokePersonAppResponses];
 
 export type ErasePersonData = {
     body: ErasePerson;
@@ -4290,6 +4798,78 @@ export type SetPersonLegalHoldResponses = {
 };
 
 export type SetPersonLegalHoldResponse = SetPersonLegalHoldResponses[keyof SetPersonLegalHoldResponses];
+
+export type RevokePersonAccessData = {
+    body?: never;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/revoke-access';
+};
+
+export type RevokePersonAccessErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RevokePersonAccessError = RevokePersonAccessErrors[keyof RevokePersonAccessErrors];
+
+export type RevokePersonAccessResponses = {
+    200: AccessRevoked;
+};
+
+export type RevokePersonAccessResponse = RevokePersonAccessResponses[keyof RevokePersonAccessResponses];
+
+export type SetPersonOrgRoleData = {
+    body: RoleChange;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/role';
+};
+
+export type SetPersonOrgRoleErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetPersonOrgRoleError = SetPersonOrgRoleErrors[keyof SetPersonOrgRoleErrors];
+
+export type SetPersonOrgRoleResponses = {
+    200: PeopleReport;
+};
+
+export type SetPersonOrgRoleResponse = SetPersonOrgRoleResponses[keyof SetPersonOrgRoleResponses];
+
+export type EndPersonSessionsData = {
+    body?: never;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/sessions';
+};
+
+export type EndPersonSessionsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type EndPersonSessionsError = EndPersonSessionsErrors[keyof EndPersonSessionsErrors];
+
+export type EndPersonSessionsResponses = {
+    200: SessionsEnded;
+};
+
+export type EndPersonSessionsResponse = EndPersonSessionsResponses[keyof EndPersonSessionsResponses];
 
 export type SetPersonSuspendedData = {
     body: SuspendChange;
@@ -4892,6 +5472,50 @@ export type OidcStartInvitedResponses = {
 };
 
 export type OidcStartInvitedResponse = OidcStartInvitedResponses[keyof OidcStartInvitedResponses];
+
+export type ForgotPasswordData = {
+    body: ForgotBody;
+    path?: never;
+    query?: never;
+    url: '/api/auth/password/forgot';
+};
+
+export type ForgotPasswordErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ForgotPasswordError = ForgotPasswordErrors[keyof ForgotPasswordErrors];
+
+export type ForgotPasswordResponses = {
+    200: OkBody;
+};
+
+export type ForgotPasswordResponse = ForgotPasswordResponses[keyof ForgotPasswordResponses];
+
+export type ResetPasswordData = {
+    body: ResetBody;
+    path?: never;
+    query?: never;
+    url: '/api/auth/password/reset';
+};
+
+export type ResetPasswordErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ResetPasswordError = ResetPasswordErrors[keyof ResetPasswordErrors];
+
+export type ResetPasswordResponses = {
+    200: OkBody;
+};
+
+export type ResetPasswordResponse = ResetPasswordResponses[keyof ResetPasswordResponses];
 
 export type RegisterData = {
     body: RegisterBody;
@@ -6921,6 +7545,216 @@ export type GetOpenapiResponses = {
 
 export type GetOpenapiResponse = GetOpenapiResponses[keyof GetOpenapiResponses];
 
+export type OperatorGetCapacityData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/operator/v1/capacity';
+};
+
+export type OperatorGetCapacityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorGetCapacityError = OperatorGetCapacityErrors[keyof OperatorGetCapacityErrors];
+
+export type OperatorGetCapacityResponses = {
+    200: Capacity;
+};
+
+export type OperatorGetCapacityResponse = OperatorGetCapacityResponses[keyof OperatorGetCapacityResponses];
+
+export type OperatorListOrgsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Page size, 1 to 500 (default 100).
+         */
+        limit?: number;
+        /**
+         * Organisations to skip, oldest first.
+         */
+        offset?: number;
+    };
+    url: '/api/operator/v1/orgs';
+};
+
+export type OperatorListOrgsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorListOrgsError = OperatorListOrgsErrors[keyof OperatorListOrgsErrors];
+
+export type OperatorListOrgsResponses = {
+    200: OrgList;
+};
+
+export type OperatorListOrgsResponse = OperatorListOrgsResponses[keyof OperatorListOrgsResponses];
+
+export type OperatorCreateOrgData = {
+    body: CreateOrg;
+    path?: never;
+    query?: never;
+    url: '/api/operator/v1/orgs';
+};
+
+export type OperatorCreateOrgErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorCreateOrgError = OperatorCreateOrgErrors[keyof OperatorCreateOrgErrors];
+
+export type OperatorCreateOrgResponses = {
+    200: CreateOrgResult;
+};
+
+export type OperatorCreateOrgResponse = OperatorCreateOrgResponses[keyof OperatorCreateOrgResponses];
+
+export type OperatorGetOrgData = {
+    body?: never;
+    path: {
+        /**
+         * The organisation id
+         */
+        org_id: string;
+    };
+    query?: never;
+    url: '/api/operator/v1/orgs/{org_id}';
+};
+
+export type OperatorGetOrgErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorGetOrgError = OperatorGetOrgErrors[keyof OperatorGetOrgErrors];
+
+export type OperatorGetOrgResponses = {
+    200: OrgSummary;
+};
+
+export type OperatorGetOrgResponse = OperatorGetOrgResponses[keyof OperatorGetOrgResponses];
+
+export type OperatorUpdateOrgData = {
+    body: UpdateOrg;
+    path: {
+        /**
+         * The organisation id
+         */
+        org_id: string;
+    };
+    query?: never;
+    url: '/api/operator/v1/orgs/{org_id}';
+};
+
+export type OperatorUpdateOrgErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorUpdateOrgError = OperatorUpdateOrgErrors[keyof OperatorUpdateOrgErrors];
+
+export type OperatorUpdateOrgResponses = {
+    200: OrgSummary;
+};
+
+export type OperatorUpdateOrgResponse = OperatorUpdateOrgResponses[keyof OperatorUpdateOrgResponses];
+
+export type OperatorResendOwnerClaimData = {
+    body?: never;
+    path: {
+        /**
+         * The organisation id
+         */
+        org_id: string;
+    };
+    query?: never;
+    url: '/api/operator/v1/orgs/{org_id}/owner-claim/resend';
+};
+
+export type OperatorResendOwnerClaimErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorResendOwnerClaimError = OperatorResendOwnerClaimErrors[keyof OperatorResendOwnerClaimErrors];
+
+export type OperatorResendOwnerClaimResponses = {
+    200: ClaimResent;
+};
+
+export type OperatorResendOwnerClaimResponse = OperatorResendOwnerClaimResponses[keyof OperatorResendOwnerClaimResponses];
+
+export type OperatorResumeOrgData = {
+    body?: never;
+    path: {
+        /**
+         * The organisation id
+         */
+        org_id: string;
+    };
+    query?: never;
+    url: '/api/operator/v1/orgs/{org_id}/resume';
+};
+
+export type OperatorResumeOrgErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorResumeOrgError = OperatorResumeOrgErrors[keyof OperatorResumeOrgErrors];
+
+export type OperatorResumeOrgResponses = {
+    200: OrgSummary;
+};
+
+export type OperatorResumeOrgResponse = OperatorResumeOrgResponses[keyof OperatorResumeOrgResponses];
+
+export type OperatorSuspendOrgData = {
+    body: SuspendOrg;
+    path: {
+        /**
+         * The organisation id
+         */
+        org_id: string;
+    };
+    query?: never;
+    url: '/api/operator/v1/orgs/{org_id}/suspend';
+};
+
+export type OperatorSuspendOrgErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorSuspendOrgError = OperatorSuspendOrgErrors[keyof OperatorSuspendOrgErrors];
+
+export type OperatorSuspendOrgResponses = {
+    200: OrgSummary;
+};
+
+export type OperatorSuspendOrgResponse = OperatorSuspendOrgResponses[keyof OperatorSuspendOrgResponses];
+
 export type ListOrgInvitationsData = {
     body?: never;
     path?: never;
@@ -7012,6 +7846,28 @@ export type ResendOrgInvitationResponses = {
 };
 
 export type ResendOrgInvitationResponse = ResendOrgInvitationResponses[keyof ResendOrgInvitationResponses];
+
+export type GetOrgPlanData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/org/plan';
+};
+
+export type GetOrgPlanErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetOrgPlanError = GetOrgPlanErrors[keyof GetOrgPlanErrors];
+
+export type GetOrgPlanResponses = {
+    200: PlanStatus;
+};
+
+export type GetOrgPlanResponse = GetOrgPlanResponses[keyof GetOrgPlanResponses];
 
 export type GetOrgSeatsData = {
     body?: never;

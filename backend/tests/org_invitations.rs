@@ -180,8 +180,11 @@ async fn an_invited_admin_can_invite_and_a_member_cannot() {
     let (status, body) = as_cookie(&h.app, &ada_cookie, "POST", "/api/org/invitations", Some(json!({ "email": "mo@example.com" }))).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["invitation"]["role"], "member", "member is the default");
-    // an org admin is not an instance admin
-    let (status, _) = as_cookie(&h.app, &ada_cookie, "GET", "/api/admin/people", None).await;
+    // an org admin runs their own organisation (`org_admin.rs`): the People list is theirs to read. They are
+    // not an instance admin, so the server's own settings stay closed to them
+    let (status, people) = as_cookie(&h.app, &ada_cookie, "GET", "/api/admin/people", None).await;
+    assert_eq!(status, StatusCode::OK, "{people}");
+    let (status, _) = as_cookie(&h.app, &ada_cookie, "GET", "/api/admin/security", None).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 
     let mo_token = body["token"].as_str().unwrap().to_string();

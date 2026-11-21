@@ -149,8 +149,8 @@ async fn enrol_confirm(State(state): State<AppState>, user: User, headers: Heade
 )]
 async fn disable(State(state): State<AppState>, user: User, Json(body): Json<CodeIn>) -> AppResult<Json<MfaStatus>> {
     authz::require_session()?;
-    if mfa::require_mfa(&state.control).await? && !mfa::secret_unreadable(&state, &user.id).await? {
-        return Err(AppError::coded(ErrorCode::AuthForbidden, "Your admin requires two-step verification on this server, so it can't be turned off."));
+    if mfa::required_for(&state.control, &user.id).await? && !mfa::secret_unreadable(&state, &user.id).await? {
+        return Err(AppError::coded(ErrorCode::AuthForbidden, "Two-step verification is required for your account (by this server or your organisation), so it can't be turned off."));
     }
     if !mfa::enabled(&state.control, &user.id).await? {
         return Ok(Json(mfa::status(&state.control, &user.id).await?));

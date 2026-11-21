@@ -109,6 +109,19 @@ services:
       - OIDC_SCOPES=${OIDC_SCOPES:-}
       - OIDC_PROVIDER_NAME=${OIDC_PROVIDER_NAME:-}
       - EUNOMIA_ADMIN_EMAILS=${EUNOMIA_ADMIN_EMAILS:-}
+      # outgoing email (password reset, invitations); off while SMTP_HOST is empty (docs/deployment.md)
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-}
+      - SMTP_USERNAME=${SMTP_USERNAME:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - SMTP_TLS=${SMTP_TLS:-}
+      # a hosted service: the billing service's operator API, a cap on organisations and where owners pay (docs/deployment.md);
+      # all empty on a self-hosted install, which then has no operator routes and no plans
+      - EUNOMIA_OPERATOR_TOKEN=${EUNOMIA_OPERATOR_TOKEN:-}
+      - EUNOMIA_MAX_ORGS=${EUNOMIA_MAX_ORGS:-}
+      - EUNOMIA_BILLING_URL=${EUNOMIA_BILLING_URL:-}
+      - RATE_LIMIT_OPERATOR_PER_MIN=${RATE_LIMIT_OPERATOR_PER_MIN:-300}
       - COOKIE_SECURE=${COOKIE_SECURE:-auto}
       - CAPSULE_ARGS=${CAPSULE_ARGS:-off}
       - ALLOW_PRIVATE_LLM_URL=${ALLOW_PRIVATE_LLM_URL:-1}

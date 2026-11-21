@@ -36,6 +36,7 @@ const cameBack = () => !window.location.hash && !!sessionStorage.getItem(KEY);
 const PLAIN: Record<string, string> = {
   "invitation.not_found": "This invitation link isn't valid any more. It may have been used or withdrawn. Ask for a new one.",
   "rate.limited": "Too many attempts. Wait a few minutes, then try again.",
+  "org.seat_limit": "This workspace has no free seat right now. Ask its owner to add seats, then try the link again.",
 };
 
 function Message({ title, children }: { title: string; children: React.ReactNode }) {
@@ -135,11 +136,15 @@ export default function InvitePage() {
   // is its founder's address and is not shown at all
   const org = inv.personal || !inv.org_name ? "this workspace" : `\u201c${inv.org_name}\u201d`;
   const orgPhrase = inv.personal || !inv.org_name ? "someone's personal workspace on this server" : `the organisation they call \u201c${inv.org_name}\u201d`;
-  const roleWords = inv.role === "admin" ? "an admin (you can invite members)" : "a member";
+  // an owner claim: the organisation was made for this address by whoever sells the workspace (the hosted service), and
+  // nobody invited them to somebody else's: they set it up and own it
+  const owner = inv.role === "owner";
+  const roleWords = owner ? "its owner" : inv.role === "admin" ? "an admin (you can invite members)" : "a member";
   const as = ` as ${roleWords}`;
+  const verb = owner ? "Set up" : "Join";
   if (joined)
     return (
-      <Message title={`You're in ${joined}`}>
+      <Message title={owner ? `${joined} is set up` : `You're in ${joined}`}>
         <Link href="/" className="btn btn-primary min-h-11 w-full" data-testid="invite-continue">
           Go to Eunomia
         </Link>
@@ -149,7 +154,7 @@ export default function InvitePage() {
     return (
       <Message title="This invitation has expired">
         <p>
-          Ask an admin of {org} to send a new link. Invitations last 7 days.
+          {owner ? `Ask whoever set up ${org} for you to send a new link.` : `Ask an admin of ${org} to send a new link.`} {owner ? "Setup links" : "Invitations"} last 7 days.
         </p>
       </Message>
     );
@@ -158,11 +163,11 @@ export default function InvitePage() {
   if (signedIn) {
     const same = signedIn.email.trim().toLowerCase() === inv.email;
     return (
-      <Message title={`Join ${org}`}>
+      <Message title={`${verb} ${org}`}>
         {same ? (
           <>
             <p>
-              You&apos;re signed in as <strong>{signedIn.email}</strong>. You were invited to {org}
+              You&apos;re signed in as <strong>{signedIn.email}</strong>. {owner ? `${org} was set up for you` : `You were invited to ${org}`}
               {as}.
             </p>
             {error && <ErrorLine error={error} />}
@@ -183,7 +188,7 @@ export default function InvitePage() {
                 }
               }}
             >
-              {busy ? "Joining…" : `Join ${org} as ${inv.role === "admin" ? "an admin" : "a member"}`}
+              {busy ? (owner ? "Setting up…" : "Joining…") : owner ? `Set up ${org} as its owner` : `Join ${org} as ${inv.role === "admin" ? "an admin" : "a member"}`}
             </button>
           </>
         ) : (
@@ -228,13 +233,22 @@ export default function InvitePage() {
 
   if (!confirmed)
     return (
-      <Message title={`Join ${org}?`}>
+      <Message title={`${verb} ${org}?`}>
         <p data-testid="invite-summary">
-          An admin invited <strong>{inv.email}</strong> to join {orgPhrase} as {roleWords}. Everything you save goes to {org}, and for now an
-          account can only be in one organisation.
+          {owner ? (
+            <>
+              A new workspace, {org}, was set up for <strong>{inv.email}</strong>. Claim it to become its owner: you choose who joins it, its sign-in
+              rules and its plan. Everything you save goes to {org}, and for now an account can only be in one organisation.
+            </>
+          ) : (
+            <>
+              An admin invited <strong>{inv.email}</strong> to join {orgPhrase} as {roleWords}. Everything you save goes to {org}, and for now an
+              account can only be in one organisation.
+            </>
+          )}
         </p>
         <button type="button" className="btn btn-primary min-h-11 w-full" onClick={() => setConfirmed(true)}>
-          Join {org}
+          {owner ? `Set up ${org} as its owner` : `Join ${org}`}
         </button>
         <p className="text-body">Not for you? Close this page; nothing has been created.</p>
       </Message>
@@ -244,10 +258,20 @@ export default function InvitePage() {
     <AuthShell>
       <div className="flex flex-col gap-4">
         <div className="mb-2">
-          <h1 className="connect-title">Join {org}</h1>
+          <h1 className="connect-title">
+            {verb} {org}
+          </h1>
           <p className="mt-3 text-reading" style={{ color: "var(--ink-dim)" }}>
-            An admin invited <strong>{inv.email}</strong> to join {orgPhrase}
-            {as}. Create your account to join.
+            {owner ? (
+              <>
+                {org} was set up for <strong>{inv.email}</strong>. Create your account to become its owner.
+              </>
+            ) : (
+              <>
+                An admin invited <strong>{inv.email}</strong> to join {orgPhrase}
+                {as}. Create your account to join.
+              </>
+            )}
           </p>
         </div>
         {provider && (
@@ -310,7 +334,7 @@ export default function InvitePage() {
             </div>
             {error && <ErrorLine error={error} />}
             <button type="submit" disabled={busy} className="btn btn-primary mt-1 min-h-11 w-full">
-              {busy ? "Creating account…" : `Create account and join`}
+              {busy ? "Creating account…" : owner ? "Create account and set up" : "Create account and join"}
             </button>
           </form>
         )}

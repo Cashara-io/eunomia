@@ -582,7 +582,24 @@ expression: first
         "select": false,
         "update": false
       },
-      "indexes": []
+      "indexes": [
+        {
+          "cols": [
+            "external_ref"
+          ],
+          "index": "",
+          "name": "org_external_ref_idx",
+          "table": "org"
+        },
+        {
+          "cols": [
+            "status"
+          ],
+          "index": "",
+          "name": "org_status_idx",
+          "table": "org"
+        }
+      ]
     },
     {
       "drop": false,
@@ -751,6 +768,14 @@ expression: first
           ],
           "index": "UNIQUE",
           "name": "user_email_unique",
+          "table": "user"
+        },
+        {
+          "cols": [
+            "reset_token_hash"
+          ],
+          "index": "",
+          "name": "user_reset_token_idx",
           "table": "user"
         }
       ]

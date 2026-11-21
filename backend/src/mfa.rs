@@ -195,7 +195,7 @@ pub struct MfaStatus {
     pub enabled_at: Option<Datetime>,
     /// Unused recovery codes left.
     pub recovery_codes_left: i64,
-    /// An admin requires two-step verification for every password account on this server.
+    /// The server's operator or this account's organisation requires two-step verification of it.
     pub required: bool,
     /// False for an account that signs in only through single sign-on: the provider handles its second factor.
     pub available: bool,
@@ -210,7 +210,7 @@ pub async fn status(control: &ControlDb, user: &RecordId) -> AppResult<MfaStatus
         enabled: row.mfa_secret_enc.is_some(),
         enabled_at: row.mfa_enabled_at,
         recovery_codes_left: recovery_left(control, user).await?,
-        required: require_mfa(control).await?,
+        required: required_for(control, user).await?,
         available: row.has_password,
         unreadable: false,
     })
@@ -252,6 +252,23 @@ pub async fn require_mfa(control: &ControlDb) -> AppResult<bool> {
     Ok(security(control).await?.require_mfa)
 }
 
+/// Whether `user` must use two-step verification: the instance switch is on, or an organisation they
+/// belong to requires it (`org.require_mfa`, set by its owner or admin). The one question every
+/// enforcement point asks, so the instance switch and an organisation's policy bind the same way: the
+/// enrolment prompt at sign-in, a session without a second factor, no turning it off, no new token from
+/// an unverified token.
+pub async fn required_for(control: &ControlDb, user: &RecordId) -> AppResult<bool> {
+    if require_mfa(control).await? {
+        return Ok(true);
+    }
+    #[derive(Deserialize, SurrealValue)]
+    struct N {
+        n: i64,
+    }
+    let rows: Vec<N> = crate::store::org_admin::MFA_POLICY_FOR_USER.on(control).bind(("user", user.clone())).await?.take(0)?;
+    Ok(rows.first().is_some_and(|r| r.n > 0))
+}
+
 pub async fn set_require_mfa(control: &ControlDb, on: bool, by: &RecordId) -> AppResult<()> {
     stmt::INSTANCE_SECURITY_SET.on(control).bind(("require_mfa", on)).bind(("by", by.clone())).await?.check()?;
     Ok(())
@@ -263,7 +280,7 @@ pub async fn set_require_mfa(control: &ControlDb, on: bool, by: &RecordId) -> Ap
 /// account with its own authenticator passes it on every route, single sign-on included
 /// (`routers/oidc.rs`), and its unverified sessions end when it enrols ([`confirm_enrolment`]).
 pub async fn session_allowed(control: &ControlDb, user: &RecordId, mfa_at: Option<&Datetime>, via: Option<&str>) -> AppResult<()> {
-    if mfa_at.is_some() || !require_mfa(control).await? {
+    if mfa_at.is_some() || !required_for(control, user).await? {
         return Ok(());
     }
     let row = state_row(control, user).await?;
@@ -619,7 +636,7 @@ impl AfterPassword {
 pub async fn after_password(control: &ControlDb, user: &RecordId) -> AppResult<AfterPassword> {
     if state_row(control, user).await?.mfa_secret_enc.is_some() {
         Ok(AfterPassword::Verify)
-    } else if require_mfa(control).await? {
+    } else if required_for(control, user).await? {
         Ok(AfterPassword::Enrol)
     } else {
         Ok(AfterPassword::Session)

@@ -41,7 +41,7 @@ async fn blocking_hash<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'sta
     tokio::task::spawn_blocking(work).await.map_err(|e| AppError::internal(e.to_string()))
 }
 
-async fn hash_password(password: &str) -> AppResult<String> {
+pub(crate) async fn hash_password(password: &str) -> AppResult<String> {
     let password = password.to_string();
     blocking_hash(move || bcrypt::hash(password, bcrypt::DEFAULT_COST)).await?.map_err(|e| AppError::internal(e.to_string()))
 }
@@ -125,6 +125,11 @@ pub fn validate_email(email: &str) -> AppResult<()> {
 /// past 72 bytes, so longer passwords are rejected rather than truncated.
 pub fn validate_credentials(email: &str, password: &str) -> AppResult<()> {
     validate_email(email)?;
+    validate_password(password)
+}
+
+/// The password rules signup applies, for every place a password is set (sign-up, reset, change).
+pub fn validate_password(password: &str) -> AppResult<()> {
     if password.chars().count() < 8 {
         return Err(AppError::bad_request("Password must be at least 8 characters."));
     }
@@ -242,7 +247,8 @@ async fn assign_org(state: &AppState, user: &RecordId, email: &str, personal: bo
     };
     // `role` is what we hoped for; the statement decides atomically (one owner per org, enforced by a unique slot),
     // and a lost race is retried so the loser re-reads and joins as a member
-    crate::tx::with_retry_dup(|| async {
+    // joining an org takes a seat: refused with `org.seat_limit` when the org has a limit and is full
+    let added = crate::tx::with_retry_dup(|| async {
         store::control::MEMBERSHIP_ADD
             .on(&state.control)
             .bind(("user", user.clone()))
@@ -250,7 +256,10 @@ async fn assign_org(state: &AppState, user: &RecordId, email: &str, personal: bo
             .await?
             .check()
     })
-    .await?;
+    .await;
+    if let Err(e) = added {
+        return Err(crate::plan::explain_seat_refusal(&state.control, &org.record(), e.into()).await);
+    }
     Ok(org)
 }
 
@@ -453,6 +462,12 @@ pub async fn password_matches(db: &ControlDb, user: &RecordId, password: &str) -
     let rows: Vec<UserRow> = store::control::AUTH_USER_BY_ID.on(db).bind(("id", user.clone())).await?.take(0)?;
     let hash = rows.into_iter().next().and_then(|r| r.password_hash);
     Ok(verify_password(password, hash.as_deref()).await)
+}
+
+/// The account's stored password hash; `None` for an account with no password (single sign-on).
+pub async fn password_hash_of(db: &ControlDb, user: &RecordId) -> AppResult<Option<String>> {
+    let rows: Vec<UserRow> = store::control::AUTH_USER_BY_ID.on(db).bind(("id", user.clone())).await?.take(0)?;
+    Ok(rows.into_iter().next().and_then(|r| r.password_hash))
 }
 
 #[derive(Debug, Serialize)]

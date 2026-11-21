@@ -2,12 +2,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   acceptOrgInvitation,
   createOrgInvitation,
+  getOrg,
+  getOrgPlan,
   getOrgSeats,
   listOrgInvitations,
   lookupOrgInvitation,
+  renameOrg,
   resendOrgInvitation,
   revokeOrgInvitation,
+  setOrgSecurity,
   type OrgInviteRole,
+  type OrgOut,
 } from "@/lib/gen";
 import { call } from "./client";
 
@@ -15,6 +20,8 @@ export const orgKeys = {
   all: ["org"] as const,
   invitations: () => [...orgKeys.all, "invitations"] as const,
   seats: () => [...orgKeys.all, "seats"] as const,
+  plan: () => [...orgKeys.all, "plan"] as const,
+  settings: () => [...orgKeys.all, "settings"] as const,
   lookup: (token: string) => [...orgKeys.all, "lookup", token] as const,
 };
 
@@ -24,6 +31,11 @@ export const useOrgInvitations = (enabled = true) =>
 
 /** Active members, suspended members and pending invitations (owner or admin). */
 export const useOrgSeats = (enabled = true) => useQuery({ queryKey: orgKeys.seats(), queryFn: () => call(getOrgSeats()), enabled });
+
+/** The organisation's plan, seats and status (any member). Nulls when no plan was set on it (a self-hosted install).
+ * Polled, so a workspace the billing service suspends or resumes shows it without a reload. */
+export const useOrgPlan = (enabled = true) =>
+  useQuery({ queryKey: orgKeys.plan(), queryFn: () => call(getOrgPlan()), enabled, staleTime: 15_000, refetchInterval: 30_000 });
 
 function useOrgMutation<V, R>(fn: (v: V) => Promise<R>) {
   const qc = useQueryClient();
@@ -63,3 +75,27 @@ export const useAcceptInvitation = () => {
     onSuccess: () => qc.invalidateQueries(),
   });
 };
+
+/** The organisation's name and its own two-step verification policy (owner or admin). */
+export const useOrg = (enabled = true) => useQuery({ queryKey: orgKeys.settings(), queryFn: () => call(getOrg()), enabled });
+
+function useOrgSettingsMutation<V>(fn: (v: V) => Promise<OrgOut>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: (org) => {
+      qc.setQueryData(orgKeys.settings(), org);
+      // the people list shows who still has to enrol, and the audit log has a new row
+      void qc.invalidateQueries({ queryKey: ["admin"] });
+    },
+  });
+}
+
+/** Rename the organisation (its owner). */
+export const useRenameOrg = () => useOrgSettingsMutation((name: string) => call(renameOrg({ body: { name } })));
+
+/** Require two-step verification of the organisation's members, or stop. `mfa_code` answers a step-up. */
+export const useSetOrgSecurity = () =>
+  useOrgSettingsMutation(({ require_mfa, mfa_code }: { require_mfa: boolean; mfa_code?: string }) =>
+    call(setOrgSecurity({ body: { require_mfa, ...(mfa_code ? { mfa_code } : {}) } }))
+  );

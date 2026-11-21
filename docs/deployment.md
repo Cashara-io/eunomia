@@ -203,18 +203,248 @@ Each database export is checked before it becomes a backup: the server is asked 
 
 On a host that runs many organisations (`EUNOMIA_SIGNUP_ORG=personal`), an organisation's owner, its admins (a role an invitation can give) and the instance admins invite colleagues from Settings > People:
 
-- Invite an email as `member` or `admin`. Only the organisation's owner (or an instance admin, in their own organisation) can invite, resend or withdraw an `admin` invitation; an org admin manages `member` invitations only. Nobody can be invited as the owner. An org admin can invite members and see seats; it is not an instance admin (no server settings, no other organisations).
+- Invite an email as `member` or `admin`. Only the organisation's owner (or an instance admin, in their own organisation) can invite, resend or withdraw an `admin` invitation; an org admin manages `member` invitations only. Nobody can be invited as the owner by an organisation's admins (the owner of a new organisation on a hosted service claims it with a link the operator API makes: see [Running a hosted service](#running-a-hosted-service)). An org admin can invite members and see seats; it is not an instance admin (no server settings, no other organisations).
 - An address listed in `EUNOMIA_ADMIN_EMAILS` can never be invited, and an invitation can never create it (by password or single sign-on). The refusal says only that the address can't be invited.
-- **Eunomia sends no email.** The admin gets a link (`<frontend>/invite#<token>`) to copy and send themselves. It works once, expires after 7 days, and is shown once; Resend makes a new link (the old one stops working), Revoke withdraws it. Only a sha256 of the token is stored; the token is in no log or audit row, and it rides in the URL fragment, which browsers never send to a server.
+- **The admin gets a link** (`<frontend>/invite#<token>`) to copy and send themselves; with email configured (see [Email](#email-password-recovery-and-emailed-invitations)) it is also emailed to the invited address. It works once, expires after 7 days, and is shown once; Resend makes a new link (the old one stops working), Revoke withdraws it. Only a sha256 of the token is stored; the token is in no log or audit row, and it rides in the URL fragment, which browsers never send to a server.
 - The person opens the link. The page names the organisation and the role and asks them to confirm before anything is created or joined. Then, without an account, they sign up with the invited email by password, or by single sign-on: the button posts the link's token to the server, which keeps it in the signed sign-in cookie (never in a URL, so never sent to the provider), and only that invitation is honoured, only when the signed-in email is the invited one. Signed in already, they accept with the button; the account's email must be the invited one (trimmed, lowercased).
 - **An invitation is never used by email alone.** A first single sign-on without a link follows the host's normal sign-up rules (`SIGNUP`, `EUNOMIA_SIGNUP_ORG`), whatever invitations exist for the address.
 - **An account belongs to one organisation for now.** An account already in another organisation cannot accept (`invitation.other_org`); invite a different email. There is no organisation switcher yet. Accepting an `admin` invitation as an existing member of that organisation makes them an admin (an owner stays the owner).
 - Inviting an email that has an account in another organisation looks exactly like inviting one with no account, and when such an invitation is not accepted, the inviting organisation's log says only that it could not be accepted.
 - Limits (per process): creating and resending, 20 a minute per organisation and per admin; opening or accepting links, 20 a minute per address or account; and after 10 links that don't work in 15 minutes from one address or account, further tries are refused for a while.
-- `GET /api/org/seats` gives active members, suspended members and pending (unexpired) invitations, for billing on seats. Counts only.
-- **Audit.** Invitations sent, resent, withdrawn, accepted and refused (expired, or could not be accepted) are written to the security ledger. Settings > Audit log is for **instance admins only** and shows the instance admin's own organisation, so on a shared host the operator sees these rows and customers' owners and admins do not. A customer-facing audit view is not built yet.
+- `GET /api/org/seats` gives active members, suspended members and pending (unexpired) invitations, for billing on seats. Counts only. On a hosted service an organisation can have a seat limit that these count against (`org.seat_limit`, see [Running a hosted service](#running-a-hosted-service)).
+- **Audit.** Invitations sent, resent, withdrawn, accepted and refused (expired, or could not be accepted) are written to the security ledger. Settings > Audit log shows the viewer's **own organisation** to its owner and admins (see [Who may administer what](#who-may-administer-what)), so each customer reads its own rows and never another organisation's.
 
-**Who holds instance-wide admin.** `authz::is_admin` is true for exactly three kinds of account: (1) the install's first account (the oldest user row); (2) any account whose email is listed in `EUNOMIA_ADMIN_EMAILS`, compared in normalized form; (3) any account an instance admin made an admin in Settings > People (`user.admin`), which only reaches accounts in that admin's own organisation. An organisation owner or admin role grants none of this.
+## Who may administer what
+
+Three kinds of authority, kept apart in code (`backend/src/org_admin.rs` holds one function per capability, and every route calls it) and here.
+
+- **Organisation owner and organisation admin** (`membership.role`) run **their own organisation, and nothing outside it**. The organisation is always the caller's own (their oldest membership), never a request value, and a person is looked up through that organisation's membership before anything about them is read or changed: an account in another organisation gets the same `auth.not_found` as one that does not exist. An invitation can make a member an `admin`; only the owner changes roles afterwards. There is one owner per organisation, set when it is created or handed over (Settings > People > Data > Make workspace owner); nobody changes the owner's role.
+- **Instance admins** (`authz::is_admin`: the install's first account, an address in `EUNOMIA_ADMIN_EMAILS`, or an account made an admin in Settings > People, which sets `user.admin`) keep every right they had. Inside their own organisation they are treated like its owner, as invitations always did.
+- **Instance operators** (the install's first account, or an address in `EUNOMIA_ADMIN_EMAILS`) keep what spans organisations or the server: the instance ledger, the server-wide two-step verification switch, debug routes, updates, HTTPS and the AI provider, erasing another person's account, lifting a legal hold, and making an account an instance admin. An organisation's owner or admin passes none of those gates.
+
+| Capability | Plain member | Org admin | Org owner | Instance admin | Instance operator |
+|---|---|---|---|---|---|
+| See the organisation's people (role, status, two-step verification, last activity) | no | own org | own org | own org | own org |
+| Invite members; withdraw or resend a member invitation; see seats | no | yes | yes | yes | yes |
+| Invite an `admin`; manage `admin` invitations | no | no | yes | yes | yes |
+| Suspend or restore a member | no | members | members and admins | as before | as before |
+| End a member's sessions; revoke their API tokens and connected apps | no | members | members and admins | as before | as before |
+| Change a member's role (`member` or `admin`) | no | no | yes (never the owner's) | yes (never the owner's) | yes |
+| Act on the owner, or on an account that is an instance admin or operator | no | no | no | as before | as before |
+| Read, verify and export the organisation's audit log | no | yes | yes | yes | yes |
+| Start, decide and complete the organisation's access reviews | no | yes | yes | yes | yes |
+| Require two-step verification of the organisation's members | no | yes | yes | yes | yes |
+| Rename the organisation | no | no | yes | no (unless owner) | no (unless owner) |
+| The instance ledger (sign-ins with an unknown email) | no | no | no | only while the install has one organisation | yes |
+| Server-wide two-step verification switch; make someone an instance admin | no | no | no | no / as before | yes |
+| Erase another person's account; lift a legal hold; update, HTTPS, debug | no | no | no | update, HTTPS, debug as before | yes |
+
+Rules that hold for every row: nobody acts on their own account through these routes (their own Settings do that); a **suspended** account has no powers at once (its sessions end, and its tokens and apps are refused); an organisation admin cannot act on another admin, and nobody but an instance operator acts on the owner. An address in `EUNOMIA_ADMIN_EMAILS`, the first account, and an account carrying the `user.admin` flag are **protected**: an organisation's owner or admin cannot suspend, restore, sign out or revoke them (`org.protected_member`). An organisation's owner, like anyone, can erase only their own account; erasing another person's stays with that person and the server operator.
+
+**Removing a member.** There is no "remove from the organisation" distinct from erasing the account, which stays with the person and the operator. Suspending a member is how an organisation takes someone out: the account cannot sign in, its sessions end at once, and its tokens and apps are refused until it is restored. "Revoke all access" ends sessions, tokens and apps without suspending.
+
+**Per-organisation two-step verification.** An owner or admin turns on "Require two-step verification" for the organisation in Settings > Organisation (`PUT /api/admin/org/security`). A member must use two-step verification when the server-wide switch or their organisation's policy requires it (`mfa::required_for`, asked at every enforcement point). Turning it on behaves for that organisation's members as the server-wide switch does: a password sign-in without it must enrol before it gets a session, a session that never passed a second factor is refused on its next request, a new account joining the organisation enrols at sign-up, and a member cannot turn it off while it is required. Members who sign in only through single sign-on are left to their identity provider, as for the server-wide switch. API tokens and app connections keep working. The policy binds only the organisation's own members, and an organisation cannot turn off the server-wide switch.
+
+**Naming the organisation.** An organisation created under `EUNOMIA_SIGNUP_ORG=personal` is named after its founder's email until its owner renames it (Settings > Organisation, `PUT /api/admin/org/name`: 1 to 80 characters, no `@`). The name is shown to people invited to it.
+
+**Audit.** Role changes, renames, policy changes, sign-outs and revocations are written to the organisation's ledger, attributed to the person who acted (`org.role`, `org.rename`, `org.require_mfa`, `admin.sessions_end`, `admin.access_revoke`, `admin.app_revoke`, plus the earlier `user.suspend`, `user.restore`, `admin.token_revoke`).
+
+## Email, password recovery and emailed invitations
+
+Eunomia sends email only when you give it a mail server. **With `SMTP_HOST` unset (the default) email is off and nothing in the product changes**: no route sends anything, invitations are copied and sent by hand as before, and the web app does not show "Forgot password?". A self-hosted install that configures no mail server behaves exactly as it did.
+
+One path, SMTP, works with any provider (Resend's SMTP relay, Postmark, SES, your own server):
+
+| Var | Default | Meaning |
+|---|---|---|
+| `SMTP_HOST` | empty (email off) | The mail server. Setting it turns email on. |
+| `SMTP_PORT` | `587` (`465` with `SMTP_TLS=tls`, `25` with `none`) | The server's port. |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | empty | Set both or neither (Resend: username `resend`, the API key as the password). Never logged or printed. |
+| `SMTP_FROM` | none, required with `SMTP_HOST` | The sender, for example `Eunomia <no-reply@example.com>`. It must be an address your provider lets you send from. |
+| `SMTP_TLS` | `starttls` | `starttls`: connect, then upgrade; nothing is sent if the server will not upgrade. `tls`: TLS from the first byte (usually port 465). `none`: no encryption, for a relay on a trusted local network only. TLS is rustls with built-in roots (no OpenSSL). |
+
+A setting that cannot work (no `SMTP_FROM`, a bad port, a username without a password) stops the backend at boot, like a bad `AUTH_MODE`, rather than run without the mail you asked for. The web app learns whether email works from `email_enabled` in `GET /api/auth/bootstrap`.
+
+- **A send waits at most 8 seconds** for the mail server. A failure is logged (`email not sent: ...`, with what the message was for and the error) and never carries the recipient, the body or a link. A mail failure never fails the request that wanted the mail: a reset request answers as always, and an invitation answers `emailed: false` so the admin copies the link.
+- **Links** are `PUBLIC_URL` plus `/reset-password#<token>` for a reset. `PUBLIC_URL` must therefore be the address people open in a browser (see above). An invitation email carries exactly the link the admin can copy (`<frontend>/invite#<token>`, which is `FRONTEND_URL`, the first `CORS_ALLOWED_ORIGINS` entry, when set). On a single-origin deployment these are the same address. Tokens sit in the fragment, which browsers never send to a server.
+
+**Forgot and reset password.** The login page shows "Forgot password?" when email is on. `POST /api/auth/password/forgot` with an email answers `{"ok": true}` for every well-formed address, whether or not an account exists, and the work done does not differ (the mail goes out from a task of its own), so it cannot be used to find out who has an account. An account that has a password and is not suspended is sent a link; a single sign-on account has no password and is sent nothing. The link works once, expires after 30 minutes, and only its sha256 is stored (on the account row, so asking again replaces the older link). Limits, per process: 10 requests per client address and 3 per target email in 15 minutes (past the address limit `rate.limited`; past the email limit no mail and the same answer), no new link within a minute of the last (kept in the database, so it holds across replicas), and 10 links that did not work per client address in 15 minutes. With email off the route answers 503 `email.unavailable`.
+
+`POST /api/auth/password/reset` with the token and a new password (the sign-up rules) sets the password in one transaction that also spends the link. It **ends every browser session of the account** and drops its pending sign-in steps, and starts none: the person signs in with the new password. **Two-step verification is untouched**: the next sign-in still asks for the second factor, and a reset neither removes nor bypasses enrolment. **API tokens and app connections are not revoked**, the same as when single sign-on is linked to an account or an admin suspends it (sessions end, tokens are revoked one at a time by their owner or an admin). Revoke tokens in Settings, API tokens, after a suspected compromise. A password is never created for an account that has none.
+
+**Change password.** Settings, Security: `POST /api/account/password` with the current password and a new one, from a browser session only (an API token cannot). The current password is counted like the one asked to set up two-step verification: 10 wrong in 15 minutes and it is refused, on every replica. An account with two-step verification passes the same step-up as for a new API token (a code from the last 10 minutes, or `mfa_code`). Every other session ends; the one making the change stays.
+
+**Invitations by email.** With email on, creating or resending an organisation invitation also emails the link to the invited address. The admin still gets the link to copy, and the answer says `emailed` (the mail server took it). Resending uses the same limits as before (20 a minute per organisation and per admin). Without email nothing changes.
+
+**Audit.** `auth.password_forgot` (every request; the account is named only when there is one, and the detail records whether a link was sent), `auth.password_reset` (completed, or refused as expired) and `auth.password_change` (changed, or a wrong current password) are written to the security ledger. No token, link or password is ever in an audit row, a log line or an error message. `org.invite` and `org.invite_resend` rows gain `emailed=true|false` only when email is on.
+
+## Running a hosted service
+
+A company can buy a workspace on your website and never talk to you: the website's billing service tells this server to create an organisation for the buyer, size it, pause it when payment fails and resume it when they pay. **With none of the settings below set (the default) nothing here exists**: there are no operator routes (they answer 404), no organisation has a plan, a seat limit or a suspended state, and an organisation behaves exactly as it always did. A self-hosted install is unaffected.
+
+A hosted server runs with sign-up closed to the public, so the operator API (and organisation invitations) is the only way a new organisation comes into being:
+
+```bash
+SIGNUP=invite
+EUNOMIA_SIGNUP_ORG=personal
+EUNOMIA_OPERATOR_TOKEN=<openssl rand -base64 48>
+EUNOMIA_BILLING_URL=https://billing.example.com/manage
+EUNOMIA_MAX_ORGS=500            # optional
+SMTP_HOST=...                    # optional, see Email above: the owner's claim link is also emailed
+```
+
+| Var | Default | Meaning |
+|---|---|---|
+| `EUNOMIA_OPERATOR_TOKEN` | unset (no operator API) | The bearer token of the operator API, at least 32 characters; a shorter one stops the backend at boot. It is not a user credential: it opens nothing but `/api/operator/v1/...`, and no session, API token or OAuth token opens those. Compared in constant time. Never logged, never in an audit row or an error. |
+| `EUNOMIA_MAX_ORGS` | unset (no limit) | The most organisations this server holds, the server's own included. Creating another is refused with `operator.at_capacity`. A whole number. |
+| `EUNOMIA_BILLING_URL` | unset | Where an organisation's owner goes to add seats or pay: `manage_url` in the plan status and the button on the suspended page. An `http(s)` address. |
+| `RATE_LIMIT_OPERATOR_PER_MIN` | `300` | Operator API calls a minute, in all (the billing service is the one caller). A wrong token is throttled per client address like any failed credential. |
+
+The server warns at boot when `EUNOMIA_OPERATOR_TOKEN` is set while `SIGNUP=open` (a hosted server should not let the public sign up). Putting the operator routes behind a network allow-list of the billing service's addresses is a sensible second layer; the token is the first.
+
+### Plans, seats and the unmanaged organisation
+
+An organisation record gains optional fields (control migration 0015): a plan (`trial`, `team` or `enterprise`), a seat limit, a status (`active` or `suspended`) with the reason and time it was suspended, a trial end (display only: **this server never suspends on its own**, the billing service decides) and an opaque external reference. An organisation with none of them set is **unmanaged and unlimited**: every organisation on a self-hosted install, and the server's own.
+
+**Seats in use are active members plus pending (open, unexpired) invitations.** A suspended member does not count. When an organisation has a limit, these are refused with `org.seat_limit` (409), whose message says how many seats the workspace has:
+
+- creating an invitation, and resending one that had expired (it takes a seat again);
+- accepting an invitation, when that would take the organisation past its limit (an invitation already holds its seat, so accepting normally changes nothing; it is refused only for an organisation that is already over its limit);
+- restoring a suspended member;
+- signing up into an existing organisation without an invitation (`EUNOMIA_SIGNUP_ORG=join`, the install's one organisation).
+
+Each check and its write are one transaction that also writes the organisation's `seat_guard`, so two changes racing for the last seat meet on one row: the first commits, the other retries and finds the seat taken (tests: `two_people_racing_for_the_last_seat_do_not_both_get_it`, `two_restores_racing_for_the_last_seat_do_not_both_get_it`). Lowering a limit below the seats in use is refused the same way (`operator.seats_in_use`).
+
+**Plan status for members.** `GET /api/org/plan` (any member, also while suspended) answers the plan, status, seat limit, seats in use, trial end and `manage_url`; an unmanaged organisation answers with nulls:
+
+```json
+{ "plan": "team", "status": "active", "seat_limit": 10, "seats_in_use": 7, "trial_ends_at": null, "manage_url": "https://billing.example.com/manage" }
+```
+
+### What suspension does
+
+A suspended organisation's members get `org.suspended` (403) for every request that reads or writes workspace content: REST, MCP tools, uploads, connector sync, chat, webhook deliveries and peer sync into it. It is enforced **at one point, the request gate** (`gate.rs`, `plan.rs`): every authenticated route is refused unless it is on a short allow-list, so a route added later cannot forget it. `backend/tests/hosted.rs` walks every route in the OpenAPI document as a member of a suspended organisation and expects the refusal.
+
+| Still allowed while suspended | Refused |
+|---|---|
+| Signing in and signing out | Every REST route that touches content: vaults, entities, documents, chat, connectors, sources, settings, tokens, the organisation's invitations and seats, audit log, access reviews |
+| `GET /api/auth/me` and `GET /api/org/plan` (the plan status, with `manage_url`) | `/mcp` and every tool |
+| Changing your own password (`POST /api/account/password`) | Uploads, live change streams (an open stream is closed within the recheck interval) |
+| Your own data export and erasure (`/api/export/subject`, `/api/account/erasure`, `/api/account/activity`): people keep their data-subject rights when a company stops paying | Source and extension webhooks, shared-space (peer) links into the organisation |
+| For an owner or admin, the People list (`GET /api/admin/people`) so they can see who is there | Everything else |
+
+**Background work pauses and resumes without loss.** The job queue does not claim a job of a suspended organisation's member (connector sync, extraction, embedding, anything that costs model spend): it stays `ready` and runs after the resume. A job already running when the organisation is suspended is cancelled at its next lease check (about a third of the lease, 10 seconds by default) and handed back to the queue without using an attempt. Never paused: schema migrations of the organisation's database and a person's own export and erasure jobs.
+
+**How fast.** The server that handles the operator call applies a suspension or a resume at once; any other replica within 3 seconds (the plan state is cached for that long per process). Nothing is deleted; there is no per-organisation switch for sign-in, and a member's sessions and tokens stay valid (they just reach nothing).
+
+The web app shows a suspended workspace as one full-page state instead of a wall of failed requests: what happened, and for the owner a button to `manage_url` when there is one. Settings > People shows seats in use against the limit, with a link to `manage_url`, and the seat-limit refusal in words.
+
+### The operator API
+
+Base path `/api/operator/v1`, JSON, `Authorization: Bearer <EUNOMIA_OPERATOR_TOKEN>`. The document is in the OpenAPI description under the tag `operator`. A wrong or missing token, and any other kind of credential, is 401 `auth.unauthorized`; **the routes do not exist (404) while the token is unset**. Errors are the usual problem+json with a stable `code` ([errors.md](errors.md)). It reads and writes the control database only: organisation records, membership and invitation counts. It never reads anything from an organisation's own database (memories, documents, chat), which a test checks by planting a canary there.
+
+**Every call is on the instance ledger** (Settings > Audit log for the server's operators, and `GET /api/admin/audit`), as actor `operator` with id `operator-api`, with the action (`operator.org_create`, `operator.org_list`, `operator.org_get`, `operator.org_update`, `operator.org_suspend`, `operator.org_resume`, `operator.owner_claim_resend`, `operator.capacity`), its target (`ref:<external_ref>` for a create, `org:<id>` otherwise), its outcome (`ok` or the error code) and the request's parameters (plan, seats, the owner's email, the suspension reason). A call refused by the gate (a wrong token) leaves an `auth.failed` row holding a hash of what was presented; a call refused by the rate limit is not recorded.
+
+An organisation as the API shows it (`OrgSummary`), in every response below:
+
+```json
+{
+  "id": "6f1c2f0a3b9d4c5e8a7b1d2e3f4a5b6c",
+  "name": "Acme Ltd",
+  "plan": "team",
+  "status": "active",
+  "seat_limit": 10,
+  "seats": { "active_members": 3, "suspended_members": 1, "pending_invitations": 2, "in_use": 5 },
+  "trial_ends_at": null,
+  "suspended_at": null,
+  "suspended_reason": null,
+  "external_ref": "sub_1Nxyz",
+  "owner_email": "owner@acme.example",
+  "owner_claimed": true,
+  "owner_claim_expires_at": null,
+  "created_at": "2026-11-21T03:12:44Z"
+}
+```
+
+#### Create an organisation: `POST /orgs`
+
+Provisions the organisation's database and makes a **single-use, expiring (7 days) owner claim** for the owner's email. `external_ref` makes the call idempotent: the organisation's id is derived from it, so a retried webhook returns the same organisation and never a second one.
+
+```http
+POST /api/operator/v1/orgs
+{ "name": "Acme Ltd", "owner_email": "owner@acme.example", "plan": "team", "seat_limit": 10,
+  "trial_ends_at": "2026-12-05T00:00:00Z", "external_ref": "sub_1Nxyz" }
+```
+```json
+{
+  "organisation_id": "6f1c2f0a3b9d4c5e8a7b1d2e3f4a5b6c",
+  "created": true,
+  "claim_link": "https://eunomia.example.com/invite#q8Wv...",
+  "claim_expires_at": "2026-11-28T03:12:44Z",
+  "email_enabled": true,
+  "emailed": true,
+  "organisation": { "...": "an OrgSummary: owner_claimed false, seats.pending_invitations 1" }
+}
+```
+
+- The **claim** is an organisation invitation of kind `owner` (the existing invitation machinery, with no inviting account). The person who opens `claim_link` sees the new workspace's name, creates their account (a password, or single sign-on, with two-step verification rules applying as for any sign-up; `SIGNUP=invite` does not matter) and becomes the organisation's one owner. The link works once; only a sha256 of its token is stored, and the token is in no log or audit row.
+- `email_enabled` says whether this server sends email; `emailed` says whether the mail server accepted the owner's copy. When `emailed` is false, deliver `claim_link` yourself.
+- **A retry** with the same `external_ref` and owner returns the same organisation with `created: false`; it has no `claim_link` (the link is shown once, when it is made: after a lost reply, call the resend route). A retry that finds a half-made organisation (a crash between steps) finishes it.
+- `name`: 1 to 80 characters, no `@`. `seat_limit`: 1 to 1,000,000. `trial_ends_at` is optional.
+- Refused: `operator.owner_in_other_org` (409: the email already has an account; an account belongs to exactly one organisation, so use another email), `operator.owner_email_reserved` (400: an address in `EUNOMIA_ADMIN_EMAILS` can never be made an owner this way), `operator.reference_reused` (409: that reference belongs to an organisation with another owner), `operator.at_capacity` (409: `EUNOMIA_MAX_ORGS` reached; a retry of an existing organisation is not refused), `validation.invalid` (400).
+
+#### List and get: `GET /orgs`, `GET /orgs/{org_id}`
+
+```http
+GET /api/operator/v1/orgs?limit=50&offset=0
+```
+```json
+{ "organisations": [ { "...": "OrgSummary" } ], "total": 12, "limit": 50, "offset": 0 }
+```
+
+`GET /orgs/6f1c2f0a3b9d4c5e8a7b1d2e3f4a5b6c` answers one `OrgSummary` (above). An id that is malformed or names no organisation is `operator.org_not_found` (404). The list includes the server's own organisation, with no plan. Seat usage uses the same counts as `GET /api/org/seats`.
+
+#### Update: `PATCH /orgs/{org_id}`
+
+Only the fields you send change: `name`, `plan`, `seat_limit` (a number, or `null` for no limit), `trial_ends_at` (a time, or `null` to clear).
+
+```http
+PATCH /api/operator/v1/orgs/6f1c2f0a3b9d4c5e8a7b1d2e3f4a5b6c
+{ "plan": "enterprise", "seat_limit": 25 }
+```
+
+The answer is the updated `OrgSummary`. **Lowering the seat limit below the seats in use is refused** and changes nothing, so the billing service can tell the customer to remove people first:
+
+```json
+{ "status": 409, "code": "operator.seats_in_use", "detail": "The organisation uses 5 seats (active members plus pending invitations), more than that. Ask the customer to remove people or withdraw invitations first." }
+```
+
+#### Suspend and resume: `POST /orgs/{org_id}/suspend`, `POST /orgs/{org_id}/resume`
+
+```http
+POST /api/operator/v1/orgs/6f1c2f0a3b9d4c5e8a7b1d2e3f4a5b6c/suspend
+{ "reason": "payment_failed" }
+```
+
+The answer is the `OrgSummary` with `"status": "suspended"`, `suspended_at` and `suspended_reason` set. The reason (1 to 200 characters) is for the operator: it is on the ledger and the organisation record and is never shown to members. Suspending again keeps the first time. `resume` takes no body and answers the `OrgSummary` with `"status": "active"`. See [What suspension does](#what-suspension-does). Suspending the organisation the server's own operators belong to is allowed and locks them out of its content: resume it through this API.
+
+#### Resend the owner claim: `POST /orgs/{org_id}/owner-claim/resend`
+
+While the organisation is unclaimed: a new token and a new 7-day expiry, and **the old link stops working at once**.
+
+```json
+{ "claim_link": "https://eunomia.example.com/invite#Zk3r...", "claim_expires_at": "2026-11-28T09:40:02Z", "email_enabled": true, "emailed": true }
+```
+
+Refused: `operator.owner_claimed` (409: the owner has already claimed it), `operator.owner_in_other_org` (409: the owner's email has got an account since, so the claim could never be used).
+
+#### Capacity: `GET /capacity`
+
+```json
+{ "organisations": 12, "max_organisations": 500, "at_capacity": false }
+```
+
+`max_organisations` is `null` when `EUNOMIA_MAX_ORGS` is unset. The create route checks the limit in the transaction that writes the organisation; two servers creating at the limit at the same instant can in theory both pass, so keep a little headroom.
 
 ## Single sign-on (OpenID Connect)
 
