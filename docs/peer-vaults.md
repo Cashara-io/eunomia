@@ -31,7 +31,7 @@ copy of the space, and the copies keep each other in step by themselves.
 | A change failed its integrity check | Something arrived damaged or altered and was refused. See below. |
 | Sharing stopped. Your copy stays here. | The other side stopped sharing. Your copy is now a normal space. |
 
-**Copies match ✓** means both Eunomias computed the same fingerprint of everything shared. Each
+**Copies match ✓** means both Cupel instances computed the same fingerprint of everything shared. Each
 Cupel also shows a short **ID** (like `3f9a-07c2`): the share code's maker can compare it with what the
 joiner sees, to be sure they reached the right one.
 
