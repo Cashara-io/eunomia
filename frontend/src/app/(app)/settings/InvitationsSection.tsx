@@ -6,7 +6,7 @@ import CopyButton from "@/components/bits/CopyButton";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import { useQuery } from "@tanstack/react-query";
 import { bootstrapQuery } from "@/lib/queries/auth";
-import { useCreateInvitation, useOrgInvitations, useOrgSeats, useResendInvitation, useRevokeInvitation } from "@/lib/queries/org";
+import { useCreateInvitation, useOrgInvitations, useOrgPlan, useOrgSeats, useResendInvitation, useRevokeInvitation } from "@/lib/queries/org";
 import type { OrgInvitation, OrgInviteRole } from "@/lib/gen";
 import { RevokeButton } from "./shared";
 
@@ -94,10 +94,21 @@ function Row({ inv, onLink, onError }: { inv: OrgInvitation; onLink: (fresh: Fre
   );
 }
 
+/** Where the owner adds seats or pays: the hosted service's billing page, when it has one. */
+export function ManageLink({ url, children }: { url: string | null | undefined; children: React.ReactNode }) {
+  if (!url) return null;
+  return (
+    <a href={url} className="link font-medium" data-testid="manage-seats" target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  );
+}
+
 /** Settings > People: invite by email, see open invitations and the organisation's seats. */
 export function InvitationsSection() {
   const list = useOrgInvitations();
   const seats = useOrgSeats();
+  const plan = useOrgPlan().data;
   const create = useCreateInvitation();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<OrgInviteRole>("member");
@@ -131,6 +142,18 @@ export function InvitationsSection() {
           </span>
         )}
       </div>
+      {/* a plan with a seat limit: what is used of it (members plus open invitations), and where to add more */}
+      {plan?.seat_limit != null && (
+        <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[13px]" style={{ color: "var(--ink-dim)" }} data-testid="org-seat-limit">
+          <span className="tabular-nums">
+            <strong style={{ color: "var(--ink)" }}>
+              {plan.seats_in_use ?? 0} of {plan.seat_limit}
+            </strong>{" "}
+            {plan.seat_limit === 1 ? "seat" : "seats"} in use (members and open invitations)
+          </span>
+          <ManageLink url={plan.manage_url}>Add seats</ManageLink>
+        </p>
+      )}
       <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
         <div className="flex flex-col gap-1 flex-1 min-w-[220px]">
           <label htmlFor="invite-email" className="label">
@@ -161,7 +184,7 @@ export function InvitationsSection() {
           {create.isPending ? "Inviting…" : "Invite"}
         </button>
       </form>
-      {error && <ErrorLine error={error} />}
+      {error && <ErrorLine error={error} action={error.code === "org.seat_limit" ? <ManageLink url={plan?.manage_url}>Add seats</ManageLink> : undefined} />}
       {fresh && <FreshLink email={fresh.email} link={fresh.link} emailed={fresh.emailed} emailEnabled={emailEnabled} onDone={() => setFresh(null)} />}
       {list.isError && <ErrorLine error={failure(list.error, "Could not load the invitations. Reload to try again.")} />}
       {list.data === undefined && !list.isError ? (

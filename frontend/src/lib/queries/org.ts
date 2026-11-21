@@ -3,6 +3,7 @@ import {
   acceptOrgInvitation,
   createOrgInvitation,
   getOrg,
+  getOrgPlan,
   getOrgSeats,
   listOrgInvitations,
   lookupOrgInvitation,
@@ -19,6 +20,7 @@ export const orgKeys = {
   all: ["org"] as const,
   invitations: () => [...orgKeys.all, "invitations"] as const,
   seats: () => [...orgKeys.all, "seats"] as const,
+  plan: () => [...orgKeys.all, "plan"] as const,
   settings: () => [...orgKeys.all, "settings"] as const,
   lookup: (token: string) => [...orgKeys.all, "lookup", token] as const,
 };
@@ -29,6 +31,11 @@ export const useOrgInvitations = (enabled = true) =>
 
 /** Active members, suspended members and pending invitations (owner or admin). */
 export const useOrgSeats = (enabled = true) => useQuery({ queryKey: orgKeys.seats(), queryFn: () => call(getOrgSeats()), enabled });
+
+/** The organisation's plan, seats and status (any member). Nulls when no plan was set on it (a self-hosted install).
+ * Polled, so a workspace the billing service suspends or resumes shows it without a reload. */
+export const useOrgPlan = (enabled = true) =>
+  useQuery({ queryKey: orgKeys.plan(), queryFn: () => call(getOrgPlan()), enabled, staleTime: 15_000, refetchInterval: 30_000 });
 
 function useOrgMutation<V, R>(fn: (v: V) => Promise<R>) {
   const qc = useQueryClient();

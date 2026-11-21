@@ -663,6 +663,7 @@ mod tests {
         secrets_helper_enabled: true,
         chat_model_timeout_secs: 90,
             mail: Default::default(),
+            hosted: Default::default(),
         };
         AppState::build(&settings, surrealdb::opt::Config::new()).await.unwrap()
     }

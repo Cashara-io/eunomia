@@ -116,6 +116,12 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - SMTP_FROM=${SMTP_FROM:-}
       - SMTP_TLS=${SMTP_TLS:-}
+      # a hosted service: the billing service's operator API, a cap on organisations and where owners pay (docs/deployment.md);
+      # all empty on a self-hosted install, which then has no operator routes and no plans
+      - EUNOMIA_OPERATOR_TOKEN=${EUNOMIA_OPERATOR_TOKEN:-}
+      - EUNOMIA_MAX_ORGS=${EUNOMIA_MAX_ORGS:-}
+      - EUNOMIA_BILLING_URL=${EUNOMIA_BILLING_URL:-}
+      - RATE_LIMIT_OPERATOR_PER_MIN=${RATE_LIMIT_OPERATOR_PER_MIN:-300}
       - COOKIE_SECURE=${COOKIE_SECURE:-auto}
       - CAPSULE_ARGS=${CAPSULE_ARGS:-off}
       - ALLOW_PRIVATE_LLM_URL=${ALLOW_PRIVATE_LLM_URL:-1}

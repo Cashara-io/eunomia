@@ -323,9 +323,9 @@ mod tests {
 
     #[test]
     fn a_short_operator_token_is_refused_at_boot() {
-        let e = HostedConfig::from_vars(vars(&[("EUNOMIA_OPERATOR_TOKEN", "short-token-31-characters-long!!")])).unwrap_err();
+        let e = HostedConfig::from_vars(vars(&[("EUNOMIA_OPERATOR_TOKEN", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")])).unwrap_err();
         assert!(e.contains("too short"), "{e}");
-        assert!(!e.contains("short-token"), "the error never repeats the token: {e}");
+        assert!(!e.contains("xxxxxxxx"), "the error never repeats the token: {e}");
         let ok = HostedConfig::from_vars(vars(&[("EUNOMIA_OPERATOR_TOKEN", "an-operator-token-of-32-characters")])).unwrap();
         assert!(ok.operator_token.is_some());
         assert!(!format!("{ok:?}").contains("an-operator-token"), "Debug never prints the token");
