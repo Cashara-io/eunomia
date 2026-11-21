@@ -1,7 +1,10 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { WarningCircleIcon } from "@phosphor-icons/react/ssr";
 import { useRouter } from "next/navigation";
+import { DataSection } from "@/app/(app)/settings/DataSection";
+import { PasswordSection } from "@/app/(app)/settings/PasswordSection";
 import { useLogout, useMe } from "@/lib/queries/auth";
 import { useOrgPlan } from "@/lib/queries/org";
 
@@ -13,17 +16,41 @@ export default function WorkspaceGate({ children }: { children: React.ReactNode 
   const plan = useOrgPlan();
   if (plan.isPending) return null;
   if (plan.data?.status !== "suspended") return <>{children}</>;
-  return <Suspended manageUrl={plan.data.manage_url ?? null} />;
+  return <SuspendedPage manageUrl={plan.data.manage_url ?? null} />;
 }
 
-function Suspended({ manageUrl }: { manageUrl: string | null }) {
+/** The account screens a suspended workspace's member can still use: the server lets exactly these routes through
+ * (`plan::allowed_while_suspended`), so the page shows them itself rather than sending the person to Settings, which
+ * is part of the workspace and is refused. Chosen by the address's `#fragment`, so each is a real link. */
+export type AccountView = "password" | "data";
+
+export function accountViewOf(hash: string): AccountView | null {
+  const v = hash.replace(/^#/, "");
+  return v === "password" || v === "data" ? v : null;
+}
+
+const subscribeToHash = (onChange: () => void) => {
+  window.addEventListener("hashchange", onChange);
+  return () => window.removeEventListener("hashchange", onChange);
+};
+
+function SuspendedPage({ manageUrl }: { manageUrl: string | null }) {
+  const hash = useSyncExternalStore(
+    subscribeToHash,
+    () => window.location.hash,
+    () => ""
+  );
+  return <Suspended manageUrl={manageUrl} view={accountViewOf(hash)} />;
+}
+
+export function Suspended({ manageUrl, view }: { manageUrl: string | null; view: AccountView | null }) {
   const me = useMe().data;
   const router = useRouter();
   const logout = useLogout();
   const isOwner = me?.org_role === "owner";
   return (
     <main id="main" className="flex-1 flex items-center justify-center px-4 py-10" data-testid="workspace-suspended">
-      <div className="flex flex-col gap-4 max-w-lg">
+      <div className={`flex flex-col gap-4 w-full ${view ? "max-w-2xl" : "max-w-lg"}`}>
         <WarningCircleIcon weight="duotone" size={28} aria-hidden style={{ color: "var(--critical)" }} />
         <h1 className="text-[22px] font-medium">This workspace is paused</h1>
         <p className="text-[15px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
@@ -57,9 +84,29 @@ function Suspended({ manageUrl }: { manageUrl: string | null }) {
             Sign out
           </button>
         </div>
-        <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-          You can still sign in, change your password, and export or delete your own data from your account.
-        </p>
+        <nav aria-label="Your account" className="flex flex-col gap-1.5 text-[14px]" data-testid="workspace-account-links">
+          <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+            You can still change your password, and export or delete your own data.
+          </p>
+          <div className="flex flex-wrap gap-x-5 gap-y-1">
+            <a href="#password" className="underline" aria-current={view === "password" ? "page" : undefined} data-testid="workspace-link-password">
+              Change your password
+            </a>
+            <a href="#data" className="underline" aria-current={view === "data" ? "page" : undefined} data-testid="workspace-link-data">
+              Export or delete your data
+            </a>
+          </div>
+        </nav>
+        {view === "password" && (
+          <section aria-label="Change your password" data-testid="workspace-view-password">
+            <PasswordSection />
+          </section>
+        )}
+        {view === "data" && (
+          <section aria-label="Your data" data-testid="workspace-view-data">
+            <DataSection paused />
+          </section>
+        )}
       </div>
     </main>
   );
