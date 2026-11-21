@@ -120,6 +120,13 @@ impl KeySource {
 /// allowance, and the output a call's reservation assumes.
 pub const MAX_OUTPUT_TOKENS: u64 = 4096;
 
+/// Whether a call's output is capped at [`MAX_OUTPUT_TOKENS`] (`max_completion_tokens`): only on the server's key, only
+/// when the organisation has an allowance to protect, and only on api.openai.com, which accepts the field (another
+/// server may reject it). Everything else is sent exactly as before.
+pub fn caps_output(source: KeySource, has_allowance: bool, base_url: &str) -> bool {
+    source == KeySource::Server && has_allowance && provider::same_url(base_url, provider::OPENAI_BASE_URL)
+}
+
 /// Tokens in `bytes` of text, counted conservatively: one token per three bytes. English averages about four
 /// bytes a token, so this overcounts typical text by a third; for Chinese, Japanese and Korean text (three bytes
 /// a character, one to two tokens a character) it is close. Used where the provider reports nothing, and for
@@ -447,9 +454,9 @@ impl Grant {
         &self.provider.base_url
     }
 
-    /// Whether to cap the output of a call: only on api.openai.com, and only when there is an allowance to protect.
+    /// Whether to cap the output of a call (see [`caps_output`]).
     fn caps_output(&self) -> bool {
-        self.source == KeySource::Server && self.allowance.is_some() && provider::same_url(&self.provider.base_url, provider::OPENAI_BASE_URL)
+        caps_output(self.source, self.allowance.is_some(), &self.provider.base_url)
     }
 
     /// Whether the provider is asked to report usage in a stream (`stream_options`): our key on api.openai.com.

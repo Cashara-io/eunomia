@@ -261,7 +261,11 @@ async fn validate_update(db: &OrgDb, settings: &Settings, owner: &RecordId, body
 }
 
 async fn respond(state: &crate::state::OrgState, user: &User, row: &AppSettingsRow) -> AppResult<Json<SettingsOut>> {
-    let ready = crate::chat::service::ensure_configured(&state.db, &state.settings, &user.id).await.is_ok();
+    // a refusal (AI switched off, allowance used up) is not "no model": the chat stays reachable so it can say why
+    let ready = match crate::chat::service::ensure_configured(&state.db, &state.settings, &user.id).await {
+        Ok(()) => true,
+        Err(e) => crate::ai::Refusal::is_hold(e.code),
+    };
     Ok(Json(out(row, &state.settings.openai_base_url, ready)))
 }
 

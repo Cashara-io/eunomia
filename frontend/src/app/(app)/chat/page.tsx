@@ -5,6 +5,7 @@ import MorphText from "@/components/ui/MorphText";
 import { haptic } from "@/lib/haptics";
 
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
+import { aiRefusal } from "@/lib/aiRefusal";
 import Select from "@/components/Select";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -412,6 +413,9 @@ export default function ChatPage() {
   const me = meData?.email ?? null;
   // Only admins can turn chat on; members are told to ask one.
   const isAdmin = meData?.is_admin ?? false;
+  const canManageOrg = (meData?.can_manage_org ?? false) || isAdmin;
+  // the workspace's allowance is used up, or AI is switched off: one clear message instead of a generic failure
+  const refusal = aiRefusal(error?.code, canManageOrg);
   // unknown while loading counts as ready: the server still refuses a send it cannot answer
   const modelReady = useSettings().data?.model_configured ?? true;
   const [lastSent, setLastSent] = useState("");
@@ -695,9 +699,18 @@ export default function ChatPage() {
                 >
                   <WarningCircleIcon weight="duotone" size={18} className="shrink-0 mt-px" aria-hidden />
                   <div className="min-w-0 break-words">
-                    <div className="font-medium">The assistant couldn&apos;t reply.</div>
+                    <div className="font-medium">{refusal ? refusal.title : "The assistant couldn't reply."}</div>
                     <div className="mt-0.5" style={{ color: "var(--ink-dim)" }}>
-                      {needsKey && !isAdmin ? (
+                      {refusal ? (
+                        <>
+                          {refusal.body}{" "}
+                          {canManageOrg && (
+                            <Link href="/settings?tab=org" className="link">
+                              Open Settings &gt; Organisation
+                            </Link>
+                          )}
+                        </>
+                      ) : needsKey && !isAdmin ? (
                         `Chat isn't turned on yet. Ask your ${PRODUCT_NAME} admin.`
                       ) : needsKey ? (
                         <>
@@ -717,7 +730,7 @@ export default function ChatPage() {
                         {error.traceId && <span>Trace {error.traceId}</span>}
                       </div>
                     ) : null}
-                    {!needsKey && lastSent && (
+                    {!needsKey && !refusal && lastSent && (
                       <button type="button" onClick={() => send(lastSent, true)} className="btn btn-sm mt-2.5">
                         <ArrowCounterClockwiseIcon weight="duotone" size={13} /> Retry
                       </button>

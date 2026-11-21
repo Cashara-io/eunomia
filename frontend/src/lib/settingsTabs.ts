@@ -21,7 +21,7 @@ export const SETTINGS_GROUPS = [
     admin: true,
     tabs: [
       { id: "people", label: "People", keywords: "users accounts admin suspend sign up members role sessions revoke" },
-      { id: "org", label: "Organisation", keywords: "organization name rename security two-step verification mfa require policy" },
+      { id: "org", label: "Organisation", keywords: "organization name rename security two-step verification mfa require policy ai model allowance key provider openai switch off" },
       { id: "reviews", label: "Access reviews", keywords: "access review recertify who has access compliance" },
       { id: "audit", label: "Audit log", keywords: "history events activity integrity verify export" },
       { id: "usage", label: "Usage", keywords: "tool calls stats" },

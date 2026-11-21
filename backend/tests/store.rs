@@ -197,6 +197,35 @@ fn raw_database_access_stays_in_its_modules() {
     assert!(offenders.is_empty(), "go through src/store/ (Stmt::on, store::dynamic) and the pool: {offenders:#?}");
 }
 
+/// Static gate (docs/deployment.md, "Model spend and the AI switch"): every call to a model provider goes
+/// through `src/ai/`, which decides whether it may be made and with whose key, and counts it. Types already
+/// make a request impossible without a `Grant` (a `Provider`'s client, URL and bearer are private to `ai`); this
+/// fails too when a source file elsewhere names a provider endpoint or reads the server's key, so a call site
+/// added later cannot build its own request.
+#[test]
+fn no_model_call_outside_the_ai_module() {
+    // (what, text that gives it away, where it may appear)
+    let rules: [(&str, &[&str], &[&str]); 4] = [
+        ("a chat completions endpoint", &["chat/completions"], &["src/ai/"]),
+        ("an embeddings or model-list endpoint", &["url(\"embeddings\")", "url(\"models\")", "\"/embeddings\"", "\"/models\""], &["src/ai/"]),
+        ("the server's provider key", &["settings.openai_api_key", "OPENAI_API_KEY"], &["src/ai/", "src/config.rs", "src/diagnostics/"]),
+        // the guarded model client; connectors reuse it for their own, non-model destinations
+        ("the guarded model client", &["llm_net::client("], &["src/ai/", "src/llm_net.rs", "src/sources/composio.rs", "src/connectors/clients.rs"]),
+    ];
+    let mut offenders = Vec::new();
+    for entry in walk("src") {
+        let text = std::fs::read_to_string(&entry).unwrap();
+        let code: String = text.lines().filter(|l| !l.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n");
+        for (what, needles, homes) in rules {
+            let at_home = homes.iter().any(|h| entry.starts_with(h));
+            if !at_home && needles.iter().any(|n| code.contains(n)) {
+                offenders.push(format!("{entry}: {what}"));
+            }
+        }
+    }
+    assert!(offenders.is_empty(), "a model call must go through crate::ai (authorize/grant, then a Grant method): {offenders:#?}");
+}
+
 fn walk(dir: &str) -> Vec<String> {
     let mut out = Vec::new();
     for e in std::fs::read_dir(dir).unwrap() {
