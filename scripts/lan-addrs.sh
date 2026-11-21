@@ -6,7 +6,7 @@
 #   scripts/lan-addrs.sh            -> 192.168.1.20:3000,100.101.1.2:3000
 #   scripts/lan-addrs.sh --env .env -> adds EUNOMIA_LAN_ADDRS=... to .env unless it is already set
 #
-# The port is FRONTEND_PORT (default 3000): other Eunomias reach this one through its frontend.
+# The port is FRONTEND_PORT (default 3000): other Cupel instances reach this one through its frontend.
 set -eu
 
 port="${FRONTEND_PORT:-3000}"
@@ -51,7 +51,7 @@ if [ -n "$envfile" ]; then
   touch "$envfile"
   sed -i.bak '/^EUNOMIA_LAN_ADDRS=/d' "$envfile" && rm -f "$envfile.bak"
   echo "EUNOMIA_LAN_ADDRS=$addrs" >> "$envfile"
-  echo "==> other Eunomias on this network can reach this one at: $addrs"
+  echo "==> other Cupel instances on this network can reach this one at: $addrs"
 else
   echo "$addrs"
 fi

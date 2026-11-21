@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Adds Eunomia's MCP server (<url>/mcp) to AI agents' config files, each with
+# Adds Cupel's MCP server (<url>/mcp) to AI agents' config files, each with
 # its own API token, so the agent can recall/search/write memory with no
 # OpenAI key on the server -- the agent is the model. Also installs the
-# Eunomia memory skill (SKILL.md for Claude Code, Codex, Hermes) and, for
+# Cupel memory skill (SKILL.md for Claude Code, Codex, Hermes) and, for
 # Claude Code, optional hooks that inject the skill each session and recall
 # memories for every prompt (the MCP server carries the skill without them).
 #
@@ -19,7 +19,7 @@
 #
 # Credentials can also come from EUNOMIA_EMAIL / EUNOMIA_PASSWORD /
 # EUNOMIA_TOKEN (keeps the password out of `ps`). Re-running replaces the
-# previous Eunomia entry and revokes the token it minted.
+# previous Cupel entry and revokes the token it minted.
 set -euo pipefail
 
 SUPPORTED="claude codex hermes gemini cursor windsurf opencode vscode claude-desktop"
@@ -109,7 +109,7 @@ http() {
 
 login() {
   [ "$LOGGED_IN" -eq 0 ] || return 0
-  [ -n "$EMAIL" ] && [ -n "$PASSWORD" ] || die "need --token, or --email and --password for the Eunomia account"
+  [ -n "$EMAIL" ] && [ -n "$PASSWORD" ] || die "need --token, or --email and --password for the Cupel account"
   JAR="$(mktemp)"
   local body
   if [ "$JSON" = jq ]; then body="$(EMAIL="$EMAIL" PASSWORD="$PASSWORD" jq -n '{email: env.EMAIL, password: env.PASSWORD}')"
@@ -122,8 +122,8 @@ login() {
   if [ "$HTTP_CODE" != 200 ]; then
     # the server says why (signup closed, invite only, ...): show it rather than a bare status (#76)
     local why=""; [ -n "$HTTP_BODY" ] && why="$(printf '%s' "$HTTP_BODY" | jfield detail 2>/dev/null)"
-    [ "$HTTP_CODE" = 403 ] && [ -n "$why" ] && die "Eunomia refused the account for $EMAIL: $why"
-    die "could not log in to $URL (HTTP $HTTP_CODE${why:+: $why}) -- is Eunomia running?"
+    [ "$HTTP_CODE" = 403 ] && [ -n "$why" ] && die "Cupel refused the account for $EMAIL: $why"
+    die "could not log in to $URL (HTTP $HTTP_CODE${why:+: $why}) -- is Cupel running?"
   fi
   LOGGED_IN=1
 }
@@ -262,7 +262,7 @@ connect() {
 # ---------------------------------------------------------------------------
 SKILL_FRONTMATTER='---
 name: eunomia-memory
-description: Use Eunomia, the user'"'"'s long-term memory, on every task. Recall what'"'"'s relevant before answering or acting, and save durable new facts, preferences and decisions as you learn them.
+description: Use Cupel, the user'"'"'s long-term memory, on every task. Recall what'"'"'s relevant before answering or acting, and save durable new facts, preferences and decisions as you learn them.
 ---
 '
 
@@ -302,7 +302,7 @@ install_claude_hooks() {
   fi
 }
 
-# jhooks <command>: stdin settings.json -> with one Eunomia entry per hook event
+# jhooks <command>: stdin settings.json -> with one Cupel entry per hook event
 jhooks() {
   local input; input="$(cat)"; [ -n "$input" ] || input='{}'
   if [ "$JSON" = jq ]; then
@@ -325,9 +325,9 @@ print(json.dumps(d,indent=2))' "$1"
 write_hook_script() {
   cat <<'HOOK'
 #!/usr/bin/env bash
-# Claude Code hook installed by Eunomia's connect-agents.sh (re-run it to update).
-#   session: print your Eunomia memory skill, live from the server
-#   prompt:  print memories Eunomia recalls for the prompt Claude Code is about to see
+# Claude Code hook installed by Cupel's connect-agents.sh (re-run it to update).
+#   session: print your Cupel memory skill, live from the server
+#   prompt:  print memories Cupel recalls for the prompt Claude Code is about to see
 # Prints nothing and exits 0 on any failure, so it can never block a prompt.
 . "${EUNOMIA_ENV:-${XDG_CONFIG_HOME:-$HOME/.config}/eunomia/env}" 2>/dev/null || exit 0
 [ -n "${EUNOMIA_URL:-}" ] && [ -n "${EUNOMIA_TOKEN:-}" ] || exit 0
@@ -361,7 +361,7 @@ import json,sys
 for r in json.load(sys.stdin).get("results",[]): print("- "+" ".join(r["text"].split())[:400]+" ("+r["id"]+")")' 2>/dev/null)"
     fi
     [ -n "$lines" ] || exit 0
-    printf 'Relevant memories from Eunomia, recalled for this message (use them if they help; cite naturally):
+    printf 'Relevant memories from Cupel, recalled for this message (use them if they help; cite naturally):
 %s
 ' "$lines"
     ;;
@@ -371,7 +371,7 @@ HOOK
 }
 
 main() {
-  [ -n "$TOKEN" ] || [ -n "$JSON" ] || die "need jq or python3 to talk to the Eunomia API"
+  [ -n "$TOKEN" ] || [ -n "$JSON" ] || die "need jq or python3 to talk to the Cupel API"
   local list a failed=0 tok host n=0
   list="$(targets)"
   for a in $list; do
@@ -387,7 +387,7 @@ main() {
   done
   [ "$n" -gt 0 ] || { warn "no agents to connect"; return 0; }
   echo
-  printf '  Eunomia MCP: %s\n' "$MCP_URL"
+  printf '  Cupel MCP: %s\n' "$MCP_URL"
   printf '  Restart each agent to pick it up (Claude Code: exit and run claude --continue). ChatGPT and Claude.ai need a public https URL: add it by hand under Connectors.\n'
   return "$failed"
 }

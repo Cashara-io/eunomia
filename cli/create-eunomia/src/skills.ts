@@ -103,7 +103,7 @@ export interface SyncResult {
   results: { file: string; name?: string; outcome: Outcome; error?: string }[];
   /** Skill names in the vault with no file in the folder. Never deleted. */
   serverOnly: string[];
-  /** The server has no `skill_list` (before Eunomia 2.1): `serverOnly` came from a 50-result search and may miss some. */
+  /** The server has no `skill_list` (before server version 2.1): `serverOnly` came from a 50-result search and may miss some. */
   serverOnlyPartial?: boolean;
 }
 

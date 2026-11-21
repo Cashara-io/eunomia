@@ -52,7 +52,7 @@ main() {
   secrets_apply "$status_dir"
   heal_stack "$status_dir"
 
-  # Eunomia moved from Qyrhal/Eunomia: installs cloned from there follow it.
+  # The repository moved from Qyrhal/Eunomia: installs cloned from there follow it.
   case "$(git remote get-url origin 2>/dev/null)" in
     *[Qq]yrhal/[Ee]unomia*) git remote set-url origin https://github.com/Cashara-io/eunomia.git ;;
   esac
@@ -216,7 +216,7 @@ start_stack() {
   shift 3
   until docker compose up -d --remove-orphans "$@" >/dev/null 2>"$dir/.last-error"; do
     [ $((SECONDS - started)) -lt "$UP_RETRY_FOR" ] || return 1
-    write_status "$dir" "$current" "$latest" true "" "Waiting for Eunomia to start (try $try: $(tail -1 "$dir/.last-error")). Retrying in ${delay}s."
+    write_status "$dir" "$current" "$latest" true "" "Waiting for Cupel to start (try $try: $(tail -1 "$dir/.last-error")). Retrying in ${delay}s."
     touch "$dir/.lock" # a long first boot is not a crashed run
     sleep "$delay"
     try=$((try + 1))

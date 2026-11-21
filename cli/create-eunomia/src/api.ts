@@ -1,4 +1,4 @@
-/** The few Eunomia REST routes init and sync use. Auth is a Bearer token or a session cookie. */
+/** The few Cupel REST routes init and sync use. Auth is a Bearer token or a session cookie. */
 
 export interface Vault {
   id: string;

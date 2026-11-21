@@ -1,4 +1,4 @@
-"""Python client for the Eunomia REST API."""
+"""Python client for the Cupel REST API."""
 
 from .client import (
     CloneResult,

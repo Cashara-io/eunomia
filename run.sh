@@ -24,5 +24,5 @@ export EUNOMIA_LAN_ADDRS
 trap 'kill 0' EXIT INT TERM
 (cd backend && cargo run) &
 (cd frontend && bun run dev) &
-echo "==> Eunomia dev on http://localhost:3000 (ctrl-c to stop; '$DB' keeps running -- docker stop $DB)"
+echo "==> Cupel dev on http://localhost:3000 (ctrl-c to stop; '$DB' keeps running -- docker stop $DB)"
 wait

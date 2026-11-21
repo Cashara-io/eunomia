@@ -69,7 +69,7 @@ VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usag
 # Tables this checkout's tenant migrations add (0023_changes: the change log and its per-vault
 # counter; 0024_redact_backfill: the backfill's per-org marker; 0028_peers: peer vaults;
 # 0031_credential_refs: the credential broker's references and provider settings;
-# 0032_secret_requests: secret requests and the secrets Eunomia holds for agents; 0033_ontology: the kinds
+# 0032_secret_requests: secret requests and the secrets Cupel holds for agents; 0033_ontology: the kinds
 # and link types a vault's owners reviewed; 0034_ontology_properties: typed properties and their values; 0035_ontology_metrics: certified metrics;
 # 0044_audit_chain: access reviews and their decisions; 0045_erasure: data-subject export archives;
 # 0046_fact_dates: the fact-date backfill's per-org marker and its ledger of re-dated facts, empty because

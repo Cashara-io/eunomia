@@ -5,7 +5,7 @@ import { init, sync } from "./init.js";
 import { defaultsPrompter, terminalPrompter } from "./prompt.js";
 import { watch } from "./watch.js";
 
-const HELP = `create-eunomia: turn this repo into a Eunomia project (one shared vault for every agent)
+const HELP = `create-eunomia: turn this repo into a Cupel project (one shared vault for every agent)
 
   npm create eunomia [-- flags]        set up .eunomia/ here (also bun create / pnpm create)
   npx create-eunomia sync              save .eunomia/skills/*.md into the project's vault
@@ -13,7 +13,7 @@ const HELP = `create-eunomia: turn this repo into a Eunomia project (one shared 
                                        (resumes after the last one it printed; Ctrl-C stops)
 
 Flags (init):
-  --url <url>        Eunomia server (or EUNOMIA_URL; default http://localhost:8001)
+  --url <url>        Cupel server (or EUNOMIA_URL; default http://localhost:8001)
   --email <email>    sign in with email and password (or EUNOMIA_EMAIL)
   --password <pw>    the password (prefer EUNOMIA_PASSWORD, or the hidden prompt)
   --token <token>    sign in with an API token instead (or EUNOMIA_TOKEN)

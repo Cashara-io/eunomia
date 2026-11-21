@@ -65,7 +65,7 @@ async function signIn(api: Api, o: InitOptions): Promise<User> {
     const mode = await api.authMode().catch(() => "password");
     if (mode === "oidc") {
       throw new Error(
-        "this server signs in through single sign-on only, so password sign-in is off. In the Eunomia app open Settings, API tokens, create a token, and run again with --token <token> (or EUNOMIA_TOKEN).",
+        "this server signs in through single sign-on only, so password sign-in is off. In the Cupel app open Settings, API tokens, create a token, and run again with --token <token> (or EUNOMIA_TOKEN).",
       );
     }
     if (!email && !o.yes) {
@@ -172,7 +172,7 @@ function runScript(args: string[], env: NodeJS.ProcessEnv): number | null {
 
 function manualAgentSteps(url: string, log: (l: string) => void): void {
   log("  Connect agents by hand (bash was not available):");
-  log("    1. In the Eunomia app open Settings, API tokens, and create a token for each agent.");
+  log("    1. In the Cupel app open Settings, API tokens, and create a token for each agent.");
   log(`    2. Add an HTTP MCP server named eunomia at ${url}/mcp with the header Authorization: Bearer <token>.`);
   log(`       Claude Code: claude mcp add --transport http eunomia ${url}/mcp --header "Authorization: Bearer <token>"`);
   log("    See docs/agents.md for the other agents.");
@@ -247,13 +247,13 @@ export async function init(o: InitOptions): Promise<number> {
     url = existing.url;
     fromRepo = true;
   } else {
-    url = normalizeUrl(await o.prompt.ask("Eunomia server URL", DEFAULT_URL));
+    url = normalizeUrl(await o.prompt.ask("Cupel server URL", DEFAULT_URL));
   }
   if (url.startsWith("http://") && !isLocalUrl(url)) {
     o.log(`  ! ${url} is plain http: your password and tokens would cross the network unencrypted. Use https:// for a server on another machine.`);
   }
   const api = new Api(url);
-  if (!(await api.healthy())) throw new Error(`no Eunomia server answers at ${url}/healthz: is it running?`);
+  if (!(await api.healthy())) throw new Error(`no Cupel server answers at ${url}/healthz: is it running?`);
   o.log(`  ✓ ${url} is up`);
 
   // a re-run keeps the vault unless asked to change it
@@ -323,9 +323,9 @@ export async function init(o: InitOptions): Promise<number> {
 
   // 7. summary
   o.log("");
-  o.log(agentsFailed ? `Eunomia project set up (vault ${vault.name} on ${url}), but connecting agents failed.` : `Eunomia project ready: vault ${vault.name} on ${url}.`);
+  o.log(agentsFailed ? `Cupel project set up (vault ${vault.name} on ${url}), but connecting agents failed.` : `Cupel project ready: vault ${vault.name} on ${url}.`);
   o.log("Commit the folder (it holds no secrets):");
-  o.log('  git add .eunomia && git commit -m "Add Eunomia project"');
+  o.log('  git add .eunomia && git commit -m "Add Cupel project"');
   o.log("Teammates run `npm create eunomia` in their clone and sign in with their own account (share the vault with them first, under Vaults, Members).");
   o.log("Sync skills after editing them: npx create-eunomia sync");
   return failed(result) || agentsFailed ? 1 : 0;

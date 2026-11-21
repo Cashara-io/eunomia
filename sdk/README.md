@@ -1,6 +1,6 @@
-# Eunomia SDKs
+# Cupel SDKs
 
-Two small clients for the Eunomia REST API. Use them to manage vaults and to read and write memories from a script. Neither has runtime dependencies.
+Two small clients for the Cupel REST API. Use them to manage vaults and to read and write memories from a script. Neither has runtime dependencies.
 
 | SDK | Package | Needs |
 |---|---|---|

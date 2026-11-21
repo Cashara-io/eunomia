@@ -1,6 +1,6 @@
 # eunomia (Python)
 
-Client for the Eunomia REST API. No dependencies, Python 3.9 or newer.
+Client for the Cupel REST API. No dependencies, Python 3.9 or newer.
 
 ```python
 from eunomia import Eunomia

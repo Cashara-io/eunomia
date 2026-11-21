@@ -1,4 +1,4 @@
-/** TypeScript client for the Eunomia REST API. */
+/** TypeScript client for the Cupel REST API. */
 
 export interface Vault {
   id: string;

@@ -107,7 +107,7 @@ export const skillsDir = (root: string) => join(projectDir(root), "skills");
 const configPath = (root: string) => join(projectDir(root), "eunomia.toml");
 
 const HEADER = [
-  "Eunomia project: every agent working in this repo shares the vault below.",
+  "Cupel project: every agent working in this repo shares the vault below.",
   `Docs: ${DOCS_URL}`,
   "Commit this folder. No token or password ever goes here: each person's token",
   "lives in ~/.config/eunomia (run `npx create-eunomia` to sign in).",

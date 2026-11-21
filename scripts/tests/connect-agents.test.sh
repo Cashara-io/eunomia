@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests scripts/connect-agents.sh against a throwaway HOME and a mock Eunomia
+# Tests scripts/connect-agents.sh against a throwaway HOME and a mock Cupel
 
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -153,12 +153,12 @@ check "re-running revokes the previous tokens" has "$TMP/api.log" 'DELETE /api/a
 check "the config holds the fresh token" test "$(auth_of "$H/.claude.json")" != "$tok_claude"
 # --- memory skill + Claude Code hooks ------------------------------------------
 check "skill installed for claude" has "$H/.claude/skills/eunomia-memory/SKILL.md" '^name: eunomia-memory'
-check "skill installed for codex" has "$H/.codex/skills/eunomia-memory/SKILL.md" '# Eunomia memory'
+check "skill installed for codex" has "$H/.codex/skills/eunomia-memory/SKILL.md" '# Cupel memory'
 check "hook env is private" mode "$H/.config/eunomia/env"
 check "hook env has the claude token" grep -q "EUNOMIA_TOKEN=$(auth_of "$H/.claude.json" | sed 's/Bearer //')" "$H/.config/eunomia/env"
 HOOK() { env -i PATH="$PATH" HOME="$H" bash "$H/.config/eunomia/hook.sh" "$@"; }
 export H
-check "session hook prints the skill" bash -c "$(declare -f HOOK); HOOK session | grep -q '^# Eunomia memory'"
+check "session hook prints the skill" bash -c "$(declare -f HOOK); HOOK session | grep -q '^# Cupel memory'"
 check "session hook strips frontmatter" bash -c "$(declare -f HOOK); ! HOOK session | grep -q '^name:'"
 check "prompt hook injects recalled memories" bash -c "$(declare -f HOOK); echo '{\"prompt\":\"what does Ada like?\"}' | HOOK prompt | grep -q '^- Ada prefers async updates. (memory:1)'"
 check "prompt hook is silent when nothing is recalled" bash -c "$(declare -f HOOK); test -z \"\$(echo '{\"prompt\":\"weather\"}' | HOOK prompt)\""
@@ -182,7 +182,7 @@ check "a refused signup fails" test "$rc" -ne 0
 check "a refused signup says why, not just HTTP 403" bash -c 'printf "%s" "$1" | grep -q "refused the account for closed@b.co: Signup is closed"' _ "$out"
 H="$KEEP_H"
 kill "$MOCK_PID" 2>/dev/null; sleep 0.3
-check "hooks never fail when Eunomia is down" bash -c "$(declare -f HOOK); echo '{\"prompt\":\"Ada\"}' | HOOK prompt; HOOK session"
+check "hooks never fail when Cupel is down" bash -c "$(declare -f HOOK); echo '{\"prompt\":\"Ada\"}' | HOOK prompt; HOOK session"
 
 echo "connect-agents: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

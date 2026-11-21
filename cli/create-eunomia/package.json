@@ -1,7 +1,7 @@
 {
   "name": "create-eunomia",
   "version": "0.1.0",
-  "description": "Turn a repo into a Eunomia project: one shared vault and skills for every agent on the team.",
+  "description": "Turn a repo into a Cupel project: one shared vault and skills for every agent on the team.",
   "type": "module",
   "license": "PolyForm-Noncommercial-1.0.0",
   "engines": { "node": ">=18" },

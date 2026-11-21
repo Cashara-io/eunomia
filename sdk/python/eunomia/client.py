@@ -1,4 +1,4 @@
-"""A small Eunomia client built on the standard library."""
+"""A small Cupel client built on the standard library."""
 
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ def _parse_retry_after(value: Optional[str]) -> Optional[float]:
 
 
 class Eunomia:
-    """Client for one Eunomia server.
+    """Client for one Cupel server.
 
     `base_url` is the server root (for example `http://localhost:3000`), `token` a personal
     API token. A `429` is retried up to `max_retries` times, waiting for `Retry-After`; while

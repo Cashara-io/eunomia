@@ -1,6 +1,6 @@
 # k6 load tests
 
-Drives Eunomia through its public HTTP and MCP surface only. Point it at a **test stack**, never at a real install: `setup` registers `ORGS` users and writes memories for each.
+Drives Cupel through its public HTTP and MCP surface only. Point it at a **test stack**, never at a real install: `setup` registers `ORGS` users and writes memories for each.
 
 ## Run
 

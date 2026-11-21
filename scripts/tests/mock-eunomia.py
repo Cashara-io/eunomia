@@ -1,4 +1,4 @@
-"""Just enough of Eunomia's auth API for connect-agents.sh: login/register,
+"""Just enough of Cupel's auth API for connect-agents.sh: login/register,
 list/create/delete tokens. Prints its port, logs every request to argv[1]."""
 import json, secrets, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -44,7 +44,7 @@ class H(BaseHTTPRequestHandler):
         if self.path == "/mcp" and method == "POST":
             body = self._body()
             if body.get("method") == "resources/read" and body.get("params", {}).get("uri") == "eunomia://skill":
-                return self._send(200, {"jsonrpc": "2.0", "id": body["id"], "result": {"contents": [{"text": "# Eunomia memory\n\nRecall first."}]}})
+                return self._send(200, {"jsonrpc": "2.0", "id": body["id"], "result": {"contents": [{"text": "# Cupel memory\n\nRecall first."}]}})
             return self._send(400, {})
         if self.path == "/api/tools/recall" and method == "POST":
             q = self._body().get("query", "")

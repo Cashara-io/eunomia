@@ -1,4 +1,4 @@
-// secrets-helper: Eunomia's credential broker sidecar. Listens on the internal compose network only
+// secrets-helper: Cupel's credential broker sidecar. Listens on the internal compose network only
 // (docker-compose.yml publishes no port). Env: SECRETS_HELPER_KEY (the shared internal key; unset: the
 // dedicated internal network is the only gate), SECRETS_HELPER_PORT (default 8080).
 
