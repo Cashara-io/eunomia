@@ -310,7 +310,8 @@ An organisation record gains optional fields (control migration 0015): a plan (`
 
 - creating an invitation, and resending one that had expired (it takes a seat again);
 - accepting an invitation, when that would take the organisation past its limit (an invitation already holds its seat, so accepting normally changes nothing; it is refused only for an organisation that is already over its limit);
-- restoring a suspended member.
+- restoring a suspended member;
+- signing up into an existing organisation without an invitation (`EUNOMIA_SIGNUP_ORG=join`, the install's one organisation).
 
 Each check and its write are one transaction that also writes the organisation's `seat_guard`, so two changes racing for the last seat meet on one row: the first commits, the other retries and finds the seat taken (tests: `two_people_racing_for_the_last_seat_do_not_both_get_it`, `two_restores_racing_for_the_last_seat_do_not_both_get_it`). Lowering a limit below the seats in use is refused the same way (`operator.seats_in_use`).
 
