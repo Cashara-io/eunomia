@@ -39,6 +39,7 @@ pub enum ErrorCode {
     AuthResetInvalid,
     AuthResetExpired,
     EmailUnavailable,
+    OrgProtectedMember,
     RateLimited,
     TenantDenied,
     TenantNotFound,
@@ -114,6 +115,7 @@ impl ErrorCode {
         ErrorCode::AuthResetInvalid,
         ErrorCode::AuthResetExpired,
         ErrorCode::EmailUnavailable,
+        ErrorCode::OrgProtectedMember,
         ErrorCode::RateLimited,
         ErrorCode::TenantDenied,
         ErrorCode::TenantNotFound,
@@ -189,6 +191,7 @@ impl ErrorCode {
             ErrorCode::AuthResetInvalid => "auth.reset_invalid",
             ErrorCode::AuthResetExpired => "auth.reset_expired",
             ErrorCode::EmailUnavailable => "email.unavailable",
+            ErrorCode::OrgProtectedMember => "org.protected_member",
             ErrorCode::RateLimited => "rate.limited",
             ErrorCode::TenantDenied => "tenant.denied",
             ErrorCode::TenantNotFound => "tenant.not_found",
@@ -245,6 +248,7 @@ impl ErrorCode {
         match self {
             ErrorCode::AuthUnauthorized | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthMfaRequired | ErrorCode::AuthMfaInvalid | ErrorCode::AuthMfaChallengeExpired => StatusCode::UNAUTHORIZED,
             ErrorCode::AuthStepUpRequired | ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled
+            | ErrorCode::OrgProtectedMember
             | ErrorCode::SecretHostDenied
             | ErrorCode::SecretOutboundBlocked
             | ErrorCode::AccessReviewSelf => StatusCode::FORBIDDEN,
@@ -457,7 +461,7 @@ mod tests {
                 ErrorCode::AuthUnauthorized | ErrorCode::AuthForbidden | ErrorCode::AuthEmailTaken | ErrorCode::AuthNotFound
                 | ErrorCode::AuthScope | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::RateLimited
                 | ErrorCode::AuthMfaRequired | ErrorCode::AuthMfaInvalid | ErrorCode::AuthMfaChallengeExpired | ErrorCode::AuthStepUpRequired | ErrorCode::AuthMfaUnreadable
-                | ErrorCode::InvitationNotFound | ErrorCode::InvitationExpired | ErrorCode::InvitationEmailMismatch | ErrorCode::InvitationOtherOrg | ErrorCode::InvitationExists
+                | ErrorCode::InvitationNotFound | ErrorCode::InvitationExpired | ErrorCode::InvitationEmailMismatch | ErrorCode::InvitationOtherOrg | ErrorCode::InvitationExists | ErrorCode::OrgProtectedMember
                 | ErrorCode::AuthResetInvalid | ErrorCode::AuthResetExpired | ErrorCode::EmailUnavailable
                 | ErrorCode::TenantDenied | ErrorCode::TenantNotFound | ErrorCode::TenantSchemaBehind
                 | ErrorCode::TenantProvisioningDisabled | ErrorCode::VaultNotFound | ErrorCode::VaultForbidden | ErrorCode::VaultNameTaken | ErrorCode::EntityNotFound

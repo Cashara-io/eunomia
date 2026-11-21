@@ -143,6 +143,24 @@ export type AccessReviewSummary = {
     } | null;
 };
 
+/**
+ * What ending a member's access removed.
+ */
+export type AccessRevoked = {
+    /**
+     * Connected apps (OAuth grants) revoked.
+     */
+    apps: number;
+    /**
+     * Browser sessions that were open.
+     */
+    sessions: number;
+    /**
+     * API tokens revoked.
+     */
+    tokens: number;
+};
+
 export type AckOut = {
     /**
      * Ids that were leased and are now done. Ids that are unknown, already done or not leased are skipped.
@@ -2308,7 +2326,7 @@ export type MfaStatus = {
      */
     recovery_codes_left: number;
     /**
-     * An admin requires two-step verification for every password account on this server.
+     * The server's operator or this account's organisation requires two-step verification of it.
      */
     required: boolean;
     /**
@@ -2365,6 +2383,13 @@ export type NackOut = {
      * Back to pending.
      */
     requeued: number;
+};
+
+export type NameChange = {
+    /**
+     * The organisation's new display name (1 to 80 characters, no `@`).
+     */
+    name: string;
 };
 
 export type OkBody = {
@@ -2449,6 +2474,47 @@ export type OrgInvitationLink = {
  * The role an invitation gives.
  */
 export type OrgInviteRole = 'member' | 'admin';
+
+/**
+ * The organisation's name and security policy, and what the caller may do with them.
+ */
+export type OrgOut = {
+    /**
+     * The caller may rename it (its owner).
+     */
+    can_rename: boolean;
+    /**
+     * The organisation's display name. A workspace made at sign-up is named after its founder's email until renamed.
+     */
+    name: string;
+    /**
+     * This organisation requires two-step verification of every member who signs in with a password.
+     */
+    require_mfa: boolean;
+    /**
+     * The server's operator requires it for everyone on the server too: an organisation cannot turn that off.
+     */
+    server_requires_mfa: boolean;
+    updated_at?: string | null;
+    /**
+     * Email of the member who last changed the organisation's policy.
+     */
+    updated_by?: string | null;
+    /**
+     * Active password members of this organisation without two-step verification yet: while it is required
+     * they must set it up at their next sign-in.
+     */
+    without_mfa: number;
+    /**
+     * The caller's role in it: `owner`, `admin` or `member`.
+     */
+    your_role: string;
+};
+
+/**
+ * The roles a role change may give.
+ */
+export type OrgRoleChoice = 'member' | 'admin';
 
 /**
  * OrgSeats for one org (the hosted business bills on these). Counts only.
@@ -2575,6 +2641,19 @@ export type Person = {
      * admin emails), `granted` (made an admin in the app), or empty for a member.
      */
     admin: string;
+    /**
+     * The viewer may end this person's sessions and revoke their API tokens and connected apps.
+     */
+    can_revoke: boolean;
+    /**
+     * The viewer may change this person's organisation role (the owner may, to `member` or `admin`).
+     */
+    can_set_role: boolean;
+    /**
+     * The viewer may suspend or restore this person (`org_admin::decide`: not themselves, not the owner, not
+     * an operator of the server, and only the owner acts on an admin).
+     */
+    can_suspend: boolean;
     created_at?: string | null;
     email: string;
     id: string;
@@ -2595,6 +2674,11 @@ export type Person = {
      * sign-on (its identity provider handles the second factor).
      */
     mfa: string;
+    /**
+     * The person's role in this organisation: `owner`, `admin` or `member` (`role` above is the server-wide
+     * admin right, a different thing).
+     */
+    org_role: string;
     /**
      * `admin` or `member`.
      */
@@ -2618,6 +2702,18 @@ export type Person = {
     workspace_owner: boolean;
 };
 
+/**
+ * An app a member connected through OAuth (an MCP client such as Claude Desktop).
+ */
+export type PersonApp = {
+    client_id: string;
+    created_at?: string | null;
+    id: string;
+    last_used_at?: string | null;
+    name: string;
+    scope: Array<string>;
+};
+
 export type PersonToken = {
     created_at?: string | null;
     /**
@@ -2638,6 +2734,18 @@ export type PocketaiSummary = {
 
 export type PocketaiWeek = {
     recordings_count: number;
+};
+
+export type PolicyChange = {
+    /**
+     * A current authenticator or recovery code, when your own account has two-step verification and its
+     * last second factor is older than 10 minutes (`auth.step_up_required`).
+     */
+    mfa_code?: string | null;
+    /**
+     * `true` requires two-step verification of every member of this organisation who signs in with a password.
+     */
+    require_mfa: boolean;
 };
 
 /**
@@ -3113,6 +3221,13 @@ export type ReusedTarget = {
     name: string;
 };
 
+export type RoleChange = {
+    /**
+     * `member` or `admin`. Only the organisation's owner changes roles; nobody changes the owner's.
+     */
+    role: OrgRoleChoice;
+};
+
 export type RoleRequest = {
     /**
      * `owner` or `member`
@@ -3212,6 +3327,13 @@ export type SessionOut = {
     id: string;
     last_seen_at: string;
     user_agent: string;
+};
+
+export type SessionsEnded = {
+    /**
+     * Browser sessions that were open.
+     */
+    sessions: number;
 };
 
 export type SettingsOut = {
@@ -4232,6 +4354,72 @@ export type CancelErasureResponses = {
 
 export type CancelErasureResponse = CancelErasureResponses[keyof CancelErasureResponses];
 
+export type GetOrgData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/org';
+};
+
+export type GetOrgErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetOrgError = GetOrgErrors[keyof GetOrgErrors];
+
+export type GetOrgResponses = {
+    200: OrgOut;
+};
+
+export type GetOrgResponse = GetOrgResponses[keyof GetOrgResponses];
+
+export type RenameOrgData = {
+    body: NameChange;
+    path?: never;
+    query?: never;
+    url: '/api/admin/org/name';
+};
+
+export type RenameOrgErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RenameOrgError = RenameOrgErrors[keyof RenameOrgErrors];
+
+export type RenameOrgResponses = {
+    200: OrgOut;
+};
+
+export type RenameOrgResponse = RenameOrgResponses[keyof RenameOrgResponses];
+
+export type SetOrgSecurityData = {
+    body: PolicyChange;
+    path?: never;
+    query?: never;
+    url: '/api/admin/org/security';
+};
+
+export type SetOrgSecurityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetOrgSecurityError = SetOrgSecurityErrors[keyof SetOrgSecurityErrors];
+
+export type SetOrgSecurityResponses = {
+    200: OrgOut;
+};
+
+export type SetOrgSecurityResponse = SetOrgSecurityResponses[keyof SetOrgSecurityResponses];
+
 export type ListPeopleData = {
     body?: never;
     path?: never;
@@ -4277,6 +4465,55 @@ export type SetPersonAdminResponses = {
 };
 
 export type SetPersonAdminResponse = SetPersonAdminResponses[keyof SetPersonAdminResponses];
+
+export type ListPersonAppsData = {
+    body?: never;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/apps';
+};
+
+export type ListPersonAppsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListPersonAppsError = ListPersonAppsErrors[keyof ListPersonAppsErrors];
+
+export type ListPersonAppsResponses = {
+    200: Array<PersonApp>;
+};
+
+export type ListPersonAppsResponse = ListPersonAppsResponses[keyof ListPersonAppsResponses];
+
+export type RevokePersonAppData = {
+    body?: never;
+    path: {
+        user_id: string;
+        grant_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/apps/{grant_id}';
+};
+
+export type RevokePersonAppErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RevokePersonAppError = RevokePersonAppErrors[keyof RevokePersonAppErrors];
+
+export type RevokePersonAppResponses = {
+    200: Array<PersonApp>;
+};
+
+export type RevokePersonAppResponse = RevokePersonAppResponses[keyof RevokePersonAppResponses];
 
 export type ErasePersonData = {
     body: ErasePerson;
@@ -4349,6 +4586,78 @@ export type SetPersonLegalHoldResponses = {
 };
 
 export type SetPersonLegalHoldResponse = SetPersonLegalHoldResponses[keyof SetPersonLegalHoldResponses];
+
+export type RevokePersonAccessData = {
+    body?: never;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/revoke-access';
+};
+
+export type RevokePersonAccessErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RevokePersonAccessError = RevokePersonAccessErrors[keyof RevokePersonAccessErrors];
+
+export type RevokePersonAccessResponses = {
+    200: AccessRevoked;
+};
+
+export type RevokePersonAccessResponse = RevokePersonAccessResponses[keyof RevokePersonAccessResponses];
+
+export type SetPersonOrgRoleData = {
+    body: RoleChange;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/role';
+};
+
+export type SetPersonOrgRoleErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetPersonOrgRoleError = SetPersonOrgRoleErrors[keyof SetPersonOrgRoleErrors];
+
+export type SetPersonOrgRoleResponses = {
+    200: PeopleReport;
+};
+
+export type SetPersonOrgRoleResponse = SetPersonOrgRoleResponses[keyof SetPersonOrgRoleResponses];
+
+export type EndPersonSessionsData = {
+    body?: never;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/sessions';
+};
+
+export type EndPersonSessionsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type EndPersonSessionsError = EndPersonSessionsErrors[keyof EndPersonSessionsErrors];
+
+export type EndPersonSessionsResponses = {
+    200: SessionsEnded;
+};
+
+export type EndPersonSessionsResponse = EndPersonSessionsResponses[keyof EndPersonSessionsResponses];
 
 export type SetPersonSuspendedData = {
     body: SuspendChange;

@@ -17,6 +17,7 @@ pub mod extensions;
 pub mod gate;
 pub mod integrity;
 pub mod invitations;
+pub mod org_admin;
 #[cfg(feature = "test-support")]
 pub mod isolation;
 pub mod jobs;
@@ -92,6 +93,7 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
         .merge(routers::audit_chain::router())
         .merge(routers::access_reviews::router())
         .merge(routers::org::router())
+        .merge(routers::org_admin::router())
         .merge(routers::export::router())
         .merge(routers::subject::router())
         .merge(routers::debug::router())

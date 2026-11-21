@@ -32,6 +32,7 @@ pub mod extensions;
 pub mod fact_dates;
 pub mod integrity;
 pub mod invitations;
+pub mod org_admin;
 pub mod jobs;
 pub mod ontology;
 pub mod ontology_activity;
@@ -372,5 +373,5 @@ pub fn all() -> Vec<&'static Stmt> {
 
 /// Every static control statement.
 pub fn all_control() -> Vec<&'static ControlStmt> {
-    [diagnostics::CONTROL_ALL, control::ALL, tenant::ALL, capsules::ALL, jobs::CONTROL_ALL, secret_requests::CONTROL_ALL, subject::CONTROL_ALL, invitations::CONTROL_ALL, recovery::CONTROL_ALL].concat()
+    [diagnostics::CONTROL_ALL, control::ALL, tenant::ALL, capsules::ALL, jobs::CONTROL_ALL, secret_requests::CONTROL_ALL, subject::CONTROL_ALL, invitations::CONTROL_ALL, recovery::CONTROL_ALL, org_admin::CONTROL_ALL].concat()
 }
