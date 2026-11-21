@@ -635,7 +635,7 @@
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. bcrypt and throttling exist; change/recovery and breached-password checks not found. E02.",
+      "finding": "Partial. bcrypt and throttling exist. The code now also has a password change for a signed-in account (POST /api/account/password: current password, step-up for MFA accounts, other sessions ended) and emailed password recovery (POST /api/auth/password/forgot and /reset: single-use hashed token, 30 minutes, no account enumeration, sessions ended, MFA untouched, audited), which needs SMTP_* settings; the evidence records below still describe the earlier snapshot commit and have not been refreshed for this. Breached-password checks not found. E02.",
       "evidence": [
         "EV-C01-1",
         "EV-C01-2"

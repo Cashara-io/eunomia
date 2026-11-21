@@ -109,6 +109,13 @@ services:
       - OIDC_SCOPES=${OIDC_SCOPES:-}
       - OIDC_PROVIDER_NAME=${OIDC_PROVIDER_NAME:-}
       - EUNOMIA_ADMIN_EMAILS=${EUNOMIA_ADMIN_EMAILS:-}
+      # outgoing email (password reset, invitations); off while SMTP_HOST is empty (docs/deployment.md)
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-}
+      - SMTP_USERNAME=${SMTP_USERNAME:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - SMTP_TLS=${SMTP_TLS:-}
       - COOKIE_SECURE=${COOKIE_SECURE:-auto}
       - CAPSULE_ARGS=${CAPSULE_ARGS:-off}
       - ALLOW_PRIVATE_LLM_URL=${ALLOW_PRIVATE_LLM_URL:-1}
