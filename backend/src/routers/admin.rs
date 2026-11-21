@@ -71,7 +71,7 @@ const ADMIN_ACTIONS: &[&str] = &[
     "subject.export_download_admin", "org.owner_transfer", "subject.erase_cancel",
     "org.invite", "org.invite_resend", "org.invite_revoke", "org.invite_accept", "org.invite_expired",
     "operator.org_create", "operator.org_update", "operator.org_suspend", "operator.org_resume", "operator.owner_claim_resend",
-    "operator.org_list", "operator.org_get", "operator.capacity",
+    "operator.org_list", "operator.org_get", "operator.capacity", "operator.call",
 ];
 
 impl AuditCategory {

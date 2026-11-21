@@ -58,7 +58,7 @@ function Row({ inv, onLink, onError }: { inv: OrgInvitation; onLink: (fresh: Fre
           {inv.email}
         </span>
         <span className="text-[12px] tabular-nums" style={{ color: inv.expired ? "var(--critical)" : "var(--ink-dim)" }}>
-          {[inv.role === "admin" ? "Admin" : "Member", inv.expired ? `expired ${when(inv.expires_at)}` : `expires ${when(inv.expires_at)}`, inv.invited_by && `sent by ${inv.invited_by}`]
+          {[inv.role === "owner" ? "Owner" : inv.role === "admin" ? "Admin" : "Member", inv.expired ? `expired ${when(inv.expires_at)}` : `expires ${when(inv.expires_at)}`, inv.invited_by && `sent by ${inv.invited_by}`]
             .filter(Boolean)
             .join(" · ")}
         </span>

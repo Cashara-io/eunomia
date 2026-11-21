@@ -47,8 +47,15 @@ fn actor() -> Actor {
     Actor { kind: ACTOR_KIND, id: ACTOR_ID.to_string() }
 }
 
+tokio::task_local! {
+    /// Set by the gate around an operator call: whether a handler wrote its own ledger row, so the gate writes
+    /// one for a call that never reached a handler (a body that does not parse, an unknown path or method).
+    pub static AUDITED: std::sync::Arc<std::sync::atomic::AtomicBool>;
+}
+
 /// Runs `fut` and writes one instance-ledger row for it, whatever it returns.
 async fn audited<T>(state: &AppState, action: &str, target: &str, detail: String, fut: impl Future<Output = AppResult<T>>) -> AppResult<T> {
+    let _ = AUDITED.try_with(|a| a.store(true, std::sync::atomic::Ordering::SeqCst));
     let result = fut.await;
     let outcome = match &result {
         Ok(_) => "ok",

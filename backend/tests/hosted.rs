@@ -724,7 +724,7 @@ async fn every_route_refuses_a_suspended_organisations_member_unless_it_is_an_ac
                 let mut in_param = false;
                 for c in path.chars() {
                     match c {
-                        '{' => { in_param = true; concrete.push_str("x"); }
+                        '{' => { in_param = true; concrete.push('x'); }
                         '}' => in_param = false,
                         c if !in_param => concrete.push(c),
                         _ => {}
@@ -759,7 +759,7 @@ async fn every_route_refuses_a_suspended_organisations_member_unless_it_is_an_ac
         refused += 1;
     }
     assert!(refused > 100, "refused {refused}, allowed {allowed}, skipped {skipped}");
-    assert!(allowed >= 5 && allowed <= 12, "the allow-list is small: {allowed}");
+    assert!((5..=12).contains(&allowed), "the allow-list is small: {allowed}");
 }
 
 #[tokio::test]
@@ -894,7 +894,7 @@ async fn the_operator_token_opens_only_the_operator_routes_and_nothing_else_open
     for p in [&owner, &tester] {
         for (m, path) in [("GET", "/api/operator/v1/capacity".to_string()), ("GET", "/api/operator/v1/orgs".to_string()), ("GET", format!("/api/operator/v1/orgs/{id}")), ("POST", format!("/api/operator/v1/orgs/{id}/suspend"))] {
             for (bearer, cookie) in [(Some(p.bearer.as_str()), None), (None, Some(p.cookie.as_str())), (Some(p.bearer.as_str()), Some(p.cookie.as_str()))] {
-                let (status, body) = common::http(&app.router, &m, &path, Some(json!({ "reason": "x" })), bearer, cookie).await.0;
+                let (status, body) = common::http(&app.router, m, &path, Some(json!({ "reason": "x" })), bearer, cookie).await.0;
                 assert_eq!((status, code(&body)), (StatusCode::UNAUTHORIZED, "auth.unauthorized"), "{} {m} {path}: {body}", p.email);
             }
         }
@@ -942,7 +942,19 @@ async fn every_operator_call_is_on_the_instance_ledger_and_the_token_is_nowhere(
     assert!(creates[0]["detail"].as_str().unwrap().contains("plan=team seats=3"), "{:?}", creates[0]);
     let suspends = ledger(&app, "operator.org_suspend").await;
     assert_eq!((suspends[0]["target"].clone(), suspends[0]["detail"].clone()), (json!(format!("org:{id}")), json!("reason=r")), "{:?}", suspends[0]);
-    common::assert_chained(app.control(), &["operator.org_create", "operator.org_suspend", "operator.org_resume"]).await;
+    // a call that never reaches a handler (no body, an unknown path, a method the route does not have) is on it too
+    let before = ledger(&app, "operator.call").await.len();
+    assert_eq!(before, 0, "a call a handler answered has no second row");
+    let (s1, _) = op(&app, "POST", "/api/operator/v1/orgs", None).await;
+    let (s2, _) = op(&app, "GET", "/api/operator/v1/nope", None).await;
+    let (s3, _) = op(&app, "DELETE", "/api/operator/v1/orgs", None).await;
+    assert!(s1.is_client_error() && s2 == StatusCode::NOT_FOUND && s3 == StatusCode::METHOD_NOT_ALLOWED, "{s1} {s2} {s3}");
+    let calls = ledger(&app, "operator.call").await;
+    assert_eq!(calls.len(), 3, "{calls:?}");
+    assert_eq!(calls[1]["target"], "GET /api/operator/v1/nope", "{calls:?}");
+    assert_eq!(calls[1]["outcome"], "http.404", "{calls:?}");
+    assert!(calls.iter().all(|c| c["actor_kind"] == "operator" && c["actor_id"] == "operator-api"), "{calls:?}");
+    common::assert_chained(app.control(), &["operator.org_create", "operator.org_suspend", "operator.org_resume", "operator.call"]).await;
     // nothing in the control database holds the operator token, or a claim token
     let dump: Vec<Value> = app.control().test_raw().query("SELECT * FROM audit_event").await.unwrap().take(0).unwrap();
     let dump = serde_json::to_string(&dump).unwrap();

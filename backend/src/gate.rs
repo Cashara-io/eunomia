@@ -348,7 +348,16 @@ async fn operator_gate(g: &Gate, mut req: Request, next: Next) -> Response {
         return rate_limited(wait);
     }
     req.extensions_mut().insert(OperatorCall);
-    next.run(req).await
+    // every call is on the ledger: a handler writes its own row; one that never reached a handler (a body that
+    // does not parse, an unknown path or method) gets this one
+    let audited = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let resp = crate::operator::AUDITED.scope(audited.clone(), next.run(req)).await;
+    if !audited.load(std::sync::atomic::Ordering::SeqCst) {
+        let outcome = format!("http.{}", resp.status().as_u16());
+        let actor = crate::authz::Actor { kind: crate::operator::ACTOR_KIND, id: crate::operator::ACTOR_ID.to_string() };
+        audit::record(&g.state.control, Event { user: None, actor: &actor, action: "operator.call", target: &target, outcome: &outcome, detail: "" }).await;
+    }
+    resp
 }
 
 /// One `auth.failed` row per presented credential per minute: a client replaying a bad token
