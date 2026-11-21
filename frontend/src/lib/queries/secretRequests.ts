@@ -3,7 +3,7 @@ import { declineSecretRequest, deleteHeldSecret, fillSecretRequest, getSecretReq
 import type { ActivityPage, FillBody, FillOut, HeldOut, RequestOut } from "@/lib/gen";
 import { call } from "./client";
 
-/** Secret requests and the secrets Eunomia holds (docs/secret-requests.md). Nothing here ever carries a value back. */
+/** Secret requests and the secrets Cupel holds (docs/secret-requests.md). Nothing here ever carries a value back. */
 export const secretRequestKeys = {
   all: ["secret-requests"] as const,
   pending: () => [...secretRequestKeys.all, "pending"] as const,

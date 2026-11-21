@@ -1,7 +1,7 @@
 //! The credential broker (docs/architecture/specs/broker.md). Agents name a secret held in the org's own
 //! password manager (`{"$secret": "op://Ops/Square/access_token"}`); [`broker::prepare`] resolves it through
 //! the `secrets-helper` sidecar for one tool execution, and the value never enters what the call leaves
-//! behind. Eunomia stores references ([`CredentialRef`]) and, per provider kind, the bootstrap token as
+//! behind. Cupel stores references ([`CredentialRef`]) and, per provider kind, the bootstrap token as
 //! `enc:v1:` ciphertext ([`ProviderRow`]); never a secret value.
 
 pub mod broker;
@@ -58,7 +58,7 @@ pub const PROVIDERS: &[Kind] = &[
         "bitwarden_sm",
         "Bitwarden Secrets Manager",
         Stability::Preview,
-        Some("Preview: Eunomia's own Bitwarden client is tested against a mock of Bitwarden's API, not yet against Bitwarden's cloud. Try it on non-critical secrets first."),
+        Some(concat!("Preview: ", crate::product_name!(), "'s own Bitwarden client is tested against a mock of Bitwarden's API, not yet against Bitwarden's cloud. Try it on non-critical secrets first.")),
     ),
 ];
 

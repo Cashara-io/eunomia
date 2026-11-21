@@ -1,6 +1,6 @@
 # @eunomia/sdk (TypeScript)
 
-Client for the Eunomia REST API. ESM, no runtime dependencies, uses the global `fetch` (Node 18+, Bun, Deno, browsers).
+Client for the Cupel REST API. ESM, no runtime dependencies, uses the global `fetch` (Node 18+, Bun, Deno, browsers).
 
 ```ts
 import { Eunomia } from "@eunomia/sdk";

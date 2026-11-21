@@ -148,7 +148,7 @@ test("Gmail quota pauses stay partial across setup and connected sources", async
     await expect(page.getByRole("status")).toContainText(/rate limited, [01] imported, more remaining/);
     await expect(page.getByRole("status")).not.toContainText("Synced:");
     await page.goto("/connectors/gmail");
-    await expect(page.getByRole("status")).toContainText("Eunomia will continue automatically");
+    await expect(page.getByRole("status")).toContainText("Cupel will continue automatically");
     await expect(page.getByText("(no subject)", { exact: true })).toBeVisible();
     await page.goto("/connectors");
     await expect(page.getByText("Rate limited", { exact: true })).toBeVisible();

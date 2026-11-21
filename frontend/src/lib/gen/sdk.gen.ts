@@ -1277,7 +1277,7 @@ export const getPocketaiDetail = <ThrowOnError extends boolean = false>(options:
 /**
  * A Pocket recording's stored audio
  *
- * The audio Eunomia kept for one of the caller's Pocket recordings (connections with `config.store_audio` on). 404 when none was stored.
+ * The audio Cupel kept for one of the caller's Pocket recordings (connections with `config.store_audio` on). 404 when none was stored.
  */
 export const getPocketaiAudio = <ThrowOnError extends boolean = false>(options: Options<GetPocketaiAudioData, ThrowOnError>): RequestResult<GetPocketaiAudioResponses, GetPocketaiAudioErrors, ThrowOnError> => (options.client ?? client).get<GetPocketaiAudioResponses, GetPocketaiAudioErrors, ThrowOnError>({
     security: [{
@@ -2579,12 +2579,12 @@ export const getOrgSeats = <ThrowOnError extends boolean = false>(options?: Opti
 });
 
 /**
- * For another Eunomia: which instance answers at this address
+ * For another Cupel: which instance answers at this address
  */
 export const peerHello = <ThrowOnError extends boolean = false>(options: Options<PeerHelloData, ThrowOnError>): RequestResult<PeerHelloResponses, PeerHelloErrors, ThrowOnError> => (options.client ?? client).get<PeerHelloResponses, PeerHelloErrors, ThrowOnError>({ url: '/api/peer/v1/{org}/hello', ...options });
 
 /**
- * For another Eunomia: redeem a share code (the request carries a MAC keyed by the code's secret)
+ * For another Cupel: redeem a share code (the request carries a MAC keyed by the code's secret)
  */
 export const peerJoin = <ThrowOnError extends boolean = false>(options: Options<PeerJoinData, ThrowOnError>): RequestResult<PeerJoinResponses, PeerJoinErrors, ThrowOnError> => (options.client ?? client).post<PeerJoinResponses, PeerJoinErrors, ThrowOnError>({
     url: '/api/peer/v1/{org}/join',
@@ -2596,7 +2596,7 @@ export const peerJoin = <ThrowOnError extends boolean = false>(options: Options<
 });
 
 /**
- * For another Eunomia: one sealed request on a link (exchange, verify, leave), one sealed answer
+ * For another Cupel: one sealed request on a link (exchange, verify, leave), one sealed answer
  *
  * Body `{link, ts, nonce, data}`: `data` is AES-256-GCM under the link key, with `POST|path|link|ts|nonce` as associated data. Refused outside a 5 minute clock window or for a nonce already seen.
  */
@@ -2610,9 +2610,9 @@ export const peerExchange = <ThrowOnError extends boolean = false>(options: Opti
 });
 
 /**
- * Join a vault another Eunomia shared, with its share code
+ * Join a vault another Cupel shared, with its share code
  *
- * Finds the first address in the code that answers as the right instance (LAN first), proves knowledge of the code's secret, and makes a new vault holding this Eunomia's copy. The first sync runs before this returns.
+ * Finds the first address in the code that answers as the right instance (LAN first), proves knowledge of the code's secret, and makes a new vault holding this Cupel's copy. The first sync runs before this returns.
  */
 export const joinSharedVault = <ThrowOnError extends boolean = false>(options: Options<JoinSharedVaultData, ThrowOnError>): RequestResult<JoinSharedVaultResponses, JoinSharedVaultErrors, ThrowOnError> => (options.client ?? client).post<JoinSharedVaultResponses, JoinSharedVaultErrors, ThrowOnError>({
     security: [{
@@ -2633,7 +2633,7 @@ export const joinSharedVault = <ThrowOnError extends boolean = false>(options: O
 });
 
 /**
- * Stop sharing with one other Eunomia (owner only); both sides keep their copy
+ * Stop sharing with one other Cupel (owner only); both sides keep their copy
  */
 export const stopVaultPeer = <ThrowOnError extends boolean = false>(options: Options<StopVaultPeerData, ThrowOnError>): RequestResult<StopVaultPeerResponses, StopVaultPeerErrors, ThrowOnError> => (options.client ?? client).delete<StopVaultPeerResponses, StopVaultPeerErrors, ThrowOnError>({
     security: [{
@@ -2650,7 +2650,7 @@ export const stopVaultPeer = <ThrowOnError extends boolean = false>(options: Opt
 });
 
 /**
- * Sync a shared vault with the other Eunomia now
+ * Sync a shared vault with the other Cupel now
  */
 export const syncVaultPeer = <ThrowOnError extends boolean = false>(options: Options<SyncVaultPeerData, ThrowOnError>): RequestResult<SyncVaultPeerResponses, SyncVaultPeerErrors, ThrowOnError> => (options.client ?? client).post<SyncVaultPeerResponses, SyncVaultPeerErrors, ThrowOnError>({
     security: [{
@@ -2722,7 +2722,7 @@ export const getSecretCounts = <ThrowOnError extends boolean = false>(options?: 
 });
 
 /**
- * Secrets Eunomia holds that you filled or manage (never a value)
+ * Secrets Cupel holds that you filled or manage (never a value)
  */
 export const listHeldSecrets = <ThrowOnError extends boolean = false>(options?: Options<ListHeldSecretsData, ThrowOnError>): RequestResult<ListHeldSecretsResponses, ListHeldSecretsErrors, ThrowOnError> => (options?.client ?? client).get<ListHeldSecretsResponses, ListHeldSecretsErrors, ThrowOnError>({
     security: [{
@@ -2805,7 +2805,7 @@ export const requestSecretsHelper = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * The password manager kinds Eunomia supports, with their stability (Bitwarden Secrets Manager is a preview)
+ * The password manager kinds Cupel supports, with their stability (Bitwarden Secrets Manager is a preview)
  */
 export const listSecretKinds = <ThrowOnError extends boolean = false>(options?: Options<ListSecretKindsData, ThrowOnError>): RequestResult<ListSecretKindsResponses, ListSecretKindsErrors, ThrowOnError> => (options?.client ?? client).get<ListSecretKindsResponses, ListSecretKindsErrors, ThrowOnError>({
     security: [{
@@ -3865,7 +3865,7 @@ export const suggestVaultOntology = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * The other Eunomias a vault is shared with, their sync status, and unused share codes
+ * The other Cupel instances a vault is shared with, their sync status, and unused share codes
  */
 export const listVaultPeers = <ThrowOnError extends boolean = false>(options: Options<ListVaultPeersData, ThrowOnError>): RequestResult<ListVaultPeersResponses, ListVaultPeersErrors, ThrowOnError> => (options.client ?? client).get<ListVaultPeersResponses, ListVaultPeersErrors, ThrowOnError>({
     security: [{
@@ -3882,7 +3882,7 @@ export const listVaultPeers = <ThrowOnError extends boolean = false>(options: Op
 });
 
 /**
- * Make a one-time code to share a vault with another Eunomia (owner only)
+ * Make a one-time code to share a vault with another Cupel (owner only)
  *
  * The code carries this instance's addresses (LAN first), a share id and a secret. It works once and expires (default 7 days). Only the secret's ciphertext is kept here.
  */

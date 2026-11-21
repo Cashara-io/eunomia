@@ -76,7 +76,7 @@ impl Modify for Security {
 
 #[derive(OpenApi)]
 #[openapi(
-    info(title = "Eunomia API", version = "1"),
+    info(title = "Cupel API", version = "1"),
     paths(openapi_json, crate::readyz),
     components(schemas(Problem, OkBody, DeletedBody, RemovedBody, LeftBody, DeclinedBody)),
     modifiers(&Security),

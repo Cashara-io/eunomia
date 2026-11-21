@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify a Eunomia security log export offline (docs/audit-chain.md).
+"""Verify a Cupel security log export offline (docs/audit-chain.md).
 
     python3 scripts/audit/verify-audit-export.py EXPORT.json [--checkpoint SEQ:HASH ...] [--partial] [--expect-empty]
     python3 scripts/audit/verify-audit-export.py EXPORT.json --review REVIEW.json [--checkpoint ...]

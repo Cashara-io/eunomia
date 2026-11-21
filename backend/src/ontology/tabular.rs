@@ -477,8 +477,9 @@ pub struct ImportOut {
 
 fn not_ready(kind: &Kind, why: &str) -> AppError {
     AppError::bad_request(format!(
-        "the kind {:?} {why}: a vault owner approves the kind and its properties in the Eunomia app (the vault's Kinds and links), then import again",
-        kind.as_str()
+        "the kind {:?} {why}: a vault owner approves the kind and its properties in the {} app (the vault's Kinds and links), then import again",
+        kind.as_str(),
+        crate::config::PRODUCT_NAME
     ))
 }
 

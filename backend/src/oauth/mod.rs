@@ -66,7 +66,7 @@ async fn protected_resource(axum::extract::State(state): axum::extract::State<Ap
         "authorization_servers": [state.settings.public_url],
         "scopes_supported": scopes::ALL,
         "bearer_methods_supported": ["header"],
-        "resource_name": "Eunomia",
+        "resource_name": crate::config::PRODUCT_NAME,
     }))
 }
 

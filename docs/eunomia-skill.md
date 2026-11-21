@@ -1,11 +1,11 @@
 ---
 name: eunomia-memory
-description: Use Eunomia, the user's long-term memory, on every task. Recall what's relevant before answering or acting, and save durable new facts, preferences and decisions as you learn them.
+description: Use Cupel, the user's long-term memory, on every task. Recall what's relevant before answering or acting, and save durable new facts, preferences and decisions as you learn them.
 ---
 
-# Eunomia memory
+# Cupel memory
 
-You're connected to Eunomia (MCP server `eunomia`), the user's long-term memory.
+You're connected to Cupel (MCP server `eunomia`), the user's long-term memory.
 Use it so the user never has to repeat themselves.
 
 ## Before you answer or act

@@ -1,6 +1,6 @@
 # Documents
 
-Upload a file, and Eunomia keeps the original and makes its text searchable. The original stays downloadable byte for byte, and its text is split into passages that `search`, `recall` and `get` find like synced records. Each hit names its document, so you can always open the source. Entities and facts are extracted from the passages too, when a model is configured.
+Upload a file, and Cupel keeps the original and makes its text searchable. The original stays downloadable byte for byte, and its text is split into passages that `search`, `recall` and `get` find like synced records. Each hit names its document, so you can always open the source. Entities and facts are extracted from the passages too, when a model is configured.
 
 Upload from the **Documents** page (sidebar) or with the `document_upload` MCP tool. A document lives in one vault: your personal vault unless you name another with `vault_id`. Whoever can read that vault can read the document, and its members can upload, re-index and delete there. A document in your personal vault is yours alone.
 
@@ -15,7 +15,7 @@ Upload from the **Documents** page (sidebar) or with the `document_upload` MCP t
 
 ## How it works
 
-- The original bytes go into a SurrealDB **file bucket** named `documents`, one per org database. Each vault has its own storage area in it: Eunomia picks the object path (`/<vault key>/<document key>/<revision>/<sanitised name>`), so one vault's files never sit beside another's (with the `file:` backend, each vault is its own folder). Nothing you send becomes a path or a URL.
+- The original bytes go into a SurrealDB **file bucket** named `documents`, one per org database. Each vault has its own storage area in it: Cupel picks the object path (`/<vault key>/<document key>/<revision>/<sanitised name>`), so one vault's files never sit beside another's (with the `file:` backend, each vault is its own folder). Nothing you send becomes a path or a URL.
 - A document uploaded before 2.0.4 keeps the path it was stored at (`/<document key>/<revision>/<sanitised name>`, no vault folder) and still downloads after the upgrade: every record names its own path, so nothing is moved. Its next version, or a vault clone or merge, stores it under a vault.
 - The extracted passages are ordinary cache records (source `documents`, type `document.chunk`, id `documents:document.chunk:<key>:<revision>:<part>`), filed in the document's vault, so `search` and `recall` show them to that vault's members. Their payload holds the document id, the revision, the part number, the character range and the filename. They are embedded into the same vector index as everything else, and keyword search works without an embedding key.
 - A search, recall or get hit on a passage carries a `document` object: `document_id`, `chunk_id`, `revision`, `part`, `char_start`, `char_end`, `filename` and `download_url`.
@@ -38,7 +38,7 @@ Upload from the **Documents** page (sidebar) or with the `document_upload` MCP t
 
 | `document_import_rows` | A CSV's rows as entities of an approved kind, with values of its approved properties ([CSV import](#csv-import)). |
 
-An agent that has an HTTP tool can download with the same `Authorization: Bearer <token>` header it uses for MCP. Paths are relative to the address the agent reaches Eunomia at, the same one as `/mcp`.
+An agent that has an HTTP tool can download with the same `Authorization: Bearer <token>` header it uses for MCP. Paths are relative to the address the agent reaches Cupel at, the same one as `/mcp`.
 
 ## HTTP
 
@@ -92,15 +92,15 @@ The backend reads two settings:
 | `EUNOMIA_DOCUMENTS_BACKEND` | `file:/data/documents` in `docker-compose.yml`; empty (off) when unset | Where the bucket keeps the files, as SurrealDB's `DEFINE BUCKET ... BACKEND`: `file:/absolute/path` on the database server (inside `SURREAL_BUCKET_FOLDER_ALLOWLIST`), or optionally an S3 URL (below). `memory` keeps them in the server's memory and loses them on restart (tests only). Empty turns documents off: uploads answer `document.storage_unavailable`, and everything else works. |
 | `EUNOMIA_DOCUMENTS_MAX_BYTES` | `26214400` (25 MiB) | The largest upload accepted. |
 
-Eunomia appends each org's database name to the folder (`/data/documents/org_<id>/...`) or the S3 key prefix, so orgs never share keys, and puts each vault's files in a folder of their own under it (`/data/documents/org_<id>/<vault key>/...`). Every org's bucket is defined when the org is created, and again at every backend start, so a changed setting applies after a restart. Only the root user can define a bucket. The org's own database user cannot.
+Cupel appends each org's database name to the folder (`/data/documents/org_<id>/...`) or the S3 key prefix, so orgs never share keys, and puts each vault's files in a folder of their own under it (`/data/documents/org_<id>/<vault key>/...`). Every org's bucket is defined when the org is created, and again at every backend start, so a changed setting applies after a restart. Only the root user can define a bucket. The org's own database user cannot.
 
 The `file:` path is on the **database server**, not the backend. A folder outside the allowlist is refused.
 
 ### Optional: an S3 bucket as the backend
 
-SurrealDB 3.3 can also keep a bucket's files in S3 or an S3-compatible store. This is optional configuration of the same built-in bucket: Eunomia does not ship or need an S3 service.
+SurrealDB 3.3 can also keep a bucket's files in S3 or an S3-compatible store. This is optional configuration of the same built-in bucket: Cupel does not ship or need an S3 service.
 
-1. Give the **SurrealDB server** the credentials in its environment, never in the URL. `DEFINE BUCKET` text is visible to `INFO FOR DB`, so Eunomia refuses a URL with credentials in it. For example, in a `docker-compose.override.yml`:
+1. Give the **SurrealDB server** the credentials in its environment, never in the URL. `DEFINE BUCKET` text is visible to `INFO FOR DB`, so Cupel refuses a URL with credentials in it. For example, in a `docker-compose.override.yml`:
    ```yaml
    services:
      surrealdb:
@@ -113,14 +113,14 @@ SurrealDB 3.3 can also keep a bucket's files in S3 or an S3-compatible store. Th
 2. Set `EUNOMIA_DOCUMENTS_BACKEND=s3://my-bucket?region=eu-west-1`. A host in the URL (`s3+https://host/bucket`) is a custom S3-compatible endpoint with path-style addressing. Only `region` and `prefix` are accepted as options.
 3. Restart: `docker compose up -d`.
 
-Downloads always go through the backend, which checks access to the document's vault every time. There are no pre-signed URLs, so revoking access is immediate, and the bucket needs no CORS rules and no public access. Eunomia has not been tested against any particular S3 provider. Try an upload and a download before you rely on one.
+Downloads always go through the backend, which checks access to the document's vault every time. There are no pre-signed URLs, so revoking access is immediate, and the bucket needs no CORS rules and no public access. Cupel has not been tested against any particular S3 provider. Try an upload and a download before you rely on one.
 
 ## Backups
 
 **A SurrealDB export does not contain the files.** It holds the document records, the passages and their vectors, and the bucket definition, but not the bytes. You need both to restore documents.
 
 - With the default `file:` backend, the nightly `backup` service also writes `documents.tar.enc`: the documents folder of the data volume, encrypted the same way as the database exports, in the same backup directory. Restoring that backup (`backend/scripts/restore.sh`, or `eunomia-backup restore`) unpacks it back. With `--wipe`, files not in the backup are removed first. Check for `documents.tar.enc` after your first backup.
-- With an S3 backend, back the bucket up with the provider's own tools, such as versioning or replication. Eunomia does not copy S3 buckets.
+- With an S3 backend, back the bucket up with the provider's own tools, such as versioning or replication. Cupel does not copy S3 buckets.
 
 A database restored without its files lists the documents and finds their passages, but downloads answer `document.storage_unavailable` ("the stored file is missing"). Delete those documents or upload them again.
 

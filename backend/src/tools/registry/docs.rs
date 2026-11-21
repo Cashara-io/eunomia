@@ -1,4 +1,4 @@
-//! Read Eunomia's own documentation.
+//! Read Cupel's own documentation.
 //! Part of the tool registry (see `registry/mod.rs`); one `register` call per tool.
 
 use std::collections::HashMap;

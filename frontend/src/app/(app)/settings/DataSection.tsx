@@ -10,6 +10,7 @@ import { leaveTo } from "@/lib/queries/client";
 import { useEraseMe, useMyDataActivity, useStartExport, useSubjectExports } from "@/lib/queries/subject";
 import { ICON, PanelHead, StatusLine } from "./shared";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 /* "12 memories, 3 documents, …": the manifest's non-empty categories in words. */
@@ -217,7 +218,7 @@ export function DataSection() {
   return (
     <div className="flex flex-col gap-5">
       <PanelHead title="Your data">
-        Get a copy of everything Eunomia holds about you, or delete your account and the data that is yours alone.
+        Get a copy of everything {PRODUCT_NAME} holds about you, or delete your account and the data that is yours alone.
       </PanelHead>
       <div className="ledger px-5 py-4 flex flex-col gap-2">
         <div className="flex flex-wrap items-center justify-between gap-3">

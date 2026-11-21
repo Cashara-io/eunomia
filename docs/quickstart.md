@@ -31,7 +31,7 @@ Restart your agent so it loads the new server (in Claude Code: exit, then `claud
 
 > What do you know about Ada?
 
-The agent calls Eunomia's `memory_write` and `recall` tools. No OpenAI key is
+The agent calls Cupel's `memory_write` and `recall` tools. No OpenAI key is
 needed: your agent is the model.
 
 Agent not connected yet (or installed it later)? The **Connect your AI app**
@@ -42,7 +42,7 @@ setup for Claude Code, Codex and ChatGPT with your address filled in. See [Conne
 
 Settings → OpenAI. Set the **base URL** first (any OpenAI-compatible
 endpoint), then the key. It's optional but recommended, because it saves your
-agent's tokens: Eunomia then does embeddings (semantic search) and answer
+agent's tokens: Cupel then does embeddings (semantic search) and answer
 synthesis (`reflect`) itself, and the in-app Chat works.
 
 ## 5. Tune what agents remember
@@ -53,4 +53,4 @@ They are the instructions agents follow, for example "always remember my project
 ## Next
 
 - [Connecting AI apps](agents.md): connect more agents and see every tool.
-- [How Eunomia works](concepts.md): vaults, memories, the graph and the vector cloud.
+- [How Cupel works](concepts.md): vaults, memories, the graph and the vector cloud.

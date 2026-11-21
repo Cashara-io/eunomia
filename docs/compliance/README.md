@@ -1,6 +1,6 @@
 # Self-hosted readiness catalogue
 
-This catalogue describes Eunomia's source at the commit recorded in [controls.json](controls.json). It does not establish deployed effectiveness or independent assurance. There are 36 capabilities: 5 Done, 23 Partial and 8 Missing. A capability can support several clauses without satisfying any whole clause.
+This catalogue describes Cupel's source at the commit recorded in [controls.json](controls.json). It does not establish deployed effectiveness or independent assurance. There are 36 capabilities: 5 Done, 23 Partial and 8 Missing. A capability can support several clauses without satisfying any whole clause.
 
 Start with [responsibilities](responsibilities.md) and [applicability](applicability.md). The [ASVS checklist](asvs-checklist.md) covers every L1/L2 requirement separately. Organisational work belongs to the [policy track](policy-track.md).
 
@@ -22,7 +22,7 @@ Keep three fields separate:
 |---|---|
 | Implementation | Done, Partial, Missing. These are bounded source findings. |
 | Operation | passes measured check, fails measured check, unknown, stale, not applicable with reason and approver. |
-| Source | Eunomia, imported signed evidence, customer attestation. A customer statement is not a measured pass. |
+| Source | `Eunomia` (this product, kept under its former name in the data), imported signed evidence, customer attestation. A customer statement is not a measured pass. |
 
 Measured results need a check ID, check time and freshness deadline. Schema examples are illustrative, including a deliberate failed check. They are not operating evidence. The baseline records use `operation: unknown`. A schema-valid record is only structurally valid; review its truth, signatures, scope and freshness separately.
 

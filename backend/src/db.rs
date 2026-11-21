@@ -45,8 +45,9 @@ fn old_server_hint(err: &str) -> Option<String> {
     let version = err.split_once("server version `")?.1.split('`').next()?;
     version.starts_with("2.").then(|| {
         format!(
-            "the database server is SurrealDB {version} but Eunomia needs 3.x. Upgrade it with scripts/upgrade-surreal-v3.sh \
-             (it exports first; see docs/upgrading-to-surrealdb-3.md), then start Eunomia again"
+            "the database server is SurrealDB {version} but {product} needs 3.x. Upgrade it with scripts/upgrade-surreal-v3.sh \
+             (it exports first; see docs/upgrading-to-surrealdb-3.md), then start {product} again",
+            product = crate::config::PRODUCT_NAME
         )
     })
 }

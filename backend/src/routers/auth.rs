@@ -297,7 +297,7 @@ pub(crate) fn signup_allowed(mode: &str, has_users: bool, email: &str, allowlist
 /// left a second user guessing). One text for every policy, so it names no setting and says
 /// nothing about which addresses are operators; the setting goes to the server log
 /// ([`signup_refusal_reason`]) for the admin.
-const SIGNUP_REFUSED: &str = "Signing up here is by invitation. Ask your Eunomia admin to invite you.";
+const SIGNUP_REFUSED: &str = concat!("Signing up here is by invitation. Ask your ", crate::product_name!(), " admin to invite you.");
 
 /// Which setting refused a signup, for the server log.
 fn signup_refusal_reason(mode: &str, reserved: bool) -> &'static str {

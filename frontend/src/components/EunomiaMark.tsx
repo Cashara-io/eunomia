@@ -1,4 +1,4 @@
-/** Eunomia's mark: the shape trio. A red circle, a yellow square and a blue
+/** Cupel's mark: the shape trio. A red circle, a yellow square and a blue
  * triangle in a row, one unit apart: the personal, project and company
  * vaults as one mark. Flat brand fills (the Bauhaus red, yellow and blue): the
  * mark keeps its colours even where Personal is drawn grey. `size` is the footprint height the old tile used (20 in the

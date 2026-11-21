@@ -1,4 +1,4 @@
-//! The operator API: what the billing service of a hosted Eunomia calls to create an organisation for a
+//! The operator API: what the billing service of a hosted Cupel calls to create an organisation for a
 //! buyer, size it, pause it when payment fails and resume it when they pay (`routers/operator.rs`,
 //! docs/deployment.md "Running a hosted service").
 //!

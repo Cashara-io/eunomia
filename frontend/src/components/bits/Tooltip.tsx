@@ -1,4 +1,4 @@
-// Inspired by React Bits WarmTooltip (reactbits.dev). Original implementation for Eunomia.
+// Inspired by React Bits WarmTooltip (reactbits.dev). Original implementation for Cupel.
 // Usage: <Tooltip label="New chat" shortcut="N"><button aria-label="New chat" ...>{icon}</button></Tooltip>; wrap a toolbar in <TooltipGroup> to share its warm window.
 // Visual only: the trigger keeps its own aria-label. Opens after 400ms on mouse hover, at once on keyboard focus, and instantly for 300ms after another one closed.
 "use client";

@@ -7,6 +7,7 @@ import { bootstrapQuery, meQuery } from "@/lib/queries/auth";
 import { isSessionEnded } from "@/lib/queries/client";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 /** Gates every page under the `(app)` route group behind a session check.
  * No session (401 from `/api/auth/me`; other failures show an error with retry) sends a fresh visitor to `/register`
  * if no account exists yet anywhere on the instance, else `/login`.
@@ -34,7 +35,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       .catch(async (e) => {
         if (cancelled) return;
         if (!isSessionEnded(e)) {
-          setError(failure(e, "Could not check your sign-in. Eunomia may be restarting."));
+          setError(failure(e, `Could not check your sign-in. ${PRODUCT_NAME} may be restarting.`));
           return;
         }
         const next = encodeURIComponent(pathname);

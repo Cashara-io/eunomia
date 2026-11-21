@@ -192,7 +192,7 @@ export type ToolRecord = ToolHit & {
     action_items: string[];
     transcript: string;
     recording_id?: string;
-    /** Set when Eunomia kept the recording's audio (connector option `store_audio`, #117). */
+    /** Set when Cupel kept the recording's audio (connector option `store_audio`, #117). */
     audio_media_type?: string | null;
     audio_bytes?: number | null;
   };

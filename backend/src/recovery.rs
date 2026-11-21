@@ -113,12 +113,13 @@ pub async fn request_reset(state: &AppState, ip: &str, raw_email: &str) -> AppRe
 fn reset_mail(to: &str, link: &str) -> Mail {
     Mail {
         to: to.to_string(),
-        subject: "Reset your Eunomia password".into(),
+        subject: concat!("Reset your ", crate::product_name!(), " password").into(),
         body: format!(
-            "Someone asked to reset the password for your Eunomia account.\n\n\
+            "Someone asked to reset the password for your {product} account.\n\n\
              To choose a new password, open this link within {RESET_TTL_MINUTES} minutes:\n\n{link}\n\n\
              The link works once. Using it signs you out everywhere, and your two-step verification (if you use it) still applies when you sign in again.\n\n\
-             If you didn't ask for this, you can ignore this email: your password hasn't changed and nobody can use the link without it.\n"
+             If you didn't ask for this, you can ignore this email: your password hasn't changed and nobody can use the link without it.\n",
+            product = crate::config::PRODUCT_NAME
         ),
     }
 }
@@ -127,12 +128,13 @@ fn reset_mail(to: &str, link: &str) -> Mail {
 pub fn invitation_mail(to: &str, invited_by: &str, link: &str, days: i64) -> Mail {
     Mail {
         to: to.to_string(),
-        subject: "You've been invited to Eunomia".into(),
+        subject: concat!("You've been invited to ", crate::product_name!()).into(),
         body: format!(
-            "{invited_by} invited you to join their workspace on Eunomia, a shared memory for people and their AI tools.\n\n\
+            "{invited_by} invited you to join their workspace on {product}, a shared memory for people and their AI tools.\n\n\
              To accept, open this link and sign in or create your account with this email address ({to}):\n\n{link}\n\n\
              The link works once and expires in {days} days.\n\n\
-             If you weren't expecting this, you can ignore this email.\n"
+             If you weren't expecting this, you can ignore this email.\n",
+            product = crate::config::PRODUCT_NAME
         ),
     }
 }
@@ -142,12 +144,13 @@ pub fn invitation_mail(to: &str, invited_by: &str, link: &str, days: i64) -> Mai
 pub fn owner_claim_mail(to: &str, org_name: &str, link: &str, days: i64) -> Mail {
     Mail {
         to: to.to_string(),
-        subject: "Your Eunomia workspace is ready".into(),
+        subject: concat!("Your ", crate::product_name!(), " workspace is ready").into(),
         body: format!(
-            "Your Eunomia workspace \u{201c}{org_name}\u{201d} is ready, and you're its owner.\n\n\
+            "Your {product} workspace \u{201c}{org_name}\u{201d} is ready, and you're its owner.\n\n\
              To set it up, open this link and sign in or create your account with this email address ({to}):\n\n{link}\n\n\
              The link works once and expires in {days} days. If it expires, ask whoever set up the workspace for a new one.\n\n\
-             If you weren't expecting this, you can ignore this email.\n"
+             If you weren't expecting this, you can ignore this email.\n",
+            product = crate::config::PRODUCT_NAME
         ),
     }
 }

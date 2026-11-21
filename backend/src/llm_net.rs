@@ -14,7 +14,7 @@ use std::net::{IpAddr, SocketAddr};
 
 use crate::error::{AppError, AppResult};
 
-/// Hosts that name Eunomia's own stack or a cloud metadata service: never a model server.
+/// Hosts that name Cupel's own stack or a cloud metadata service: never a model server.
 const BLOCKED_LLM_HOSTS: &[&str] = &["surrealdb", "backup", "metadata", "metadata.google.internal"];
 
 /// `ALLOW_PRIVATE_LLM_URL`: a model server on this machine or its network (Ollama on localhost) is the

@@ -1,4 +1,4 @@
-//! Statements for secret requests and the secrets Eunomia holds (`secrets::requests`, `secrets::held`,
+//! Statements for secret requests and the secrets Cupel holds (`secrets::requests`, `secrets::held`,
 //! migration 0032; docs/architecture/specs/secret-requests.md).
 //!
 //! Isolation's second layer (docs/architecture/tenancy.md): every statement that reads or changes a row

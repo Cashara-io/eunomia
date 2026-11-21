@@ -56,7 +56,7 @@ async fn signup_policy_and_cookie_flags_follow_the_environment() {
     set("SIGNUP", "closed");
     let ((status, body), _) = register("late@example.com").await;
     assert_eq!((status, body["code"].as_str()), (StatusCode::FORBIDDEN, Some("auth.forbidden")), "{body}");
-    assert_eq!(body["detail"], "Signing up here is by invitation. Ask your Eunomia admin to invite you.", "{body}");
+    assert_eq!(body["detail"], "Signing up here is by invitation. Ask your Cupel admin to invite you.", "{body}");
 
     set("SIGNUP", "invite");
     set("SIGNUP_ALLOWLIST", "invited@example.com");

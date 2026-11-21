@@ -16,6 +16,7 @@ import AuthShell, { LABEL, RevealToggle } from "../login/AuthShell";
 import { OrDivider, useSignIn } from "../login/Sso";
 import SecondStep from "../login/SecondStep";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const KEY = "eunomia_invite";
 const noSubscribe = () => () => {};
 
@@ -111,7 +112,7 @@ export default function InvitePage() {
         <Message title="You're signed in">
           <p data-testid="invite-done">If you just joined through this invitation, you&apos;re all set.</p>
           <Link href="/" className="btn btn-primary min-h-11 w-full">
-            Go to Eunomia
+            Go to {PRODUCT_NAME}
           </Link>
         </Message>
       );
@@ -146,7 +147,7 @@ export default function InvitePage() {
     return (
       <Message title={owner ? `${joined} is set up` : `You're in ${joined}`}>
         <Link href="/" className="btn btn-primary min-h-11 w-full" data-testid="invite-continue">
-          Go to Eunomia
+          Go to {PRODUCT_NAME}
         </Link>
       </Message>
     );

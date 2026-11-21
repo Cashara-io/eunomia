@@ -1,4 +1,4 @@
-# HTTPS for Eunomia: the `caddy` service in docker-compose.yml (profile
+# HTTPS for Cupel: the `caddy` service in docker-compose.yml (profile
 # "https") gets and renews a Let's Encrypt certificate for EUNOMIA_DOMAIN and
 # proxies everything to the frontend, which forwards the API, MCP and OAuth paths to the
 # backend. Turn it on from Settings, HTTPS or the installer's --domain flag;

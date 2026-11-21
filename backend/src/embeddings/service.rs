@@ -93,9 +93,10 @@ pub fn model_for(p: &Provider) -> &str {
 pub fn check_model(base_url: &str, model: &str) -> Result<(), String> {
     if provider::same_url(base_url, provider::OPENAI_BASE_URL) && !OPENAI_MODELS.contains(&model) {
         return Err(format!(
-            "embedding model `{model}` isn't supported: Eunomia's vector index is {DIM}-dimensional, \
+            "embedding model `{model}` isn't supported: {product}'s vector index is {DIM}-dimensional, \
              so on api.openai.com use {}",
-            OPENAI_MODELS.join(" or ")
+            OPENAI_MODELS.join(" or "),
+            product = crate::config::PRODUCT_NAME
         ));
     }
     Ok(())
@@ -127,8 +128,9 @@ fn order_response(data: Vec<EmbeddingDatum>, n: usize) -> Result<Vec<Vec<f32>>, 
         }
         if d.embedding.len() != DIM {
             return Err(format!(
-                "embedding model returned {}-dimension vectors; Eunomia's index needs {DIM} -- choose a {DIM}-dimension model in Settings",
-                d.embedding.len()
+                "embedding model returned {}-dimension vectors; {product}'s index needs {DIM} -- choose a {DIM}-dimension model in Settings",
+                d.embedding.len(),
+                product = crate::config::PRODUCT_NAME
             ));
         }
         if !d.embedding.iter().all(|x| x.is_finite()) {

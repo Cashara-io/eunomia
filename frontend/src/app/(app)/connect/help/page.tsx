@@ -7,6 +7,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import { useMe } from "@/lib/queries/auth";
 import { EXAMPLE_QUESTION, Kbd, Note, useMcpAddress } from "@/components/connect/Guide";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 function Problem({ id, title, children }: { id?: string; title: string; children: React.ReactNode }) {
   return (
     <section id={id} className="guide-step flex flex-col gap-3 py-6 scroll-mt-6" aria-labelledby={id ? `${id}-title` : undefined}>
@@ -47,8 +48,8 @@ export default function ConnectionHelpPage() {
             save new ones. Ask your workspace administrator to enable custom connections, or use another AI app.
           </Note>
           <Note>
-            ChatGPT also needs Eunomia to have a public https:// address. If yours starts with http://localhost or a home network address, an admin can
-            turn on HTTPS in Eunomia&apos;s settings.
+            ChatGPT also needs {PRODUCT_NAME} to have a public https:// address. If yours starts with http://localhost or a home network address, an admin can
+            turn on HTTPS in {PRODUCT_NAME}&apos;s settings.
           </Note>
           <div className="flex flex-wrap gap-2">
             <Link href="/connect/chatgpt" className="btn">
@@ -102,14 +103,14 @@ export default function ConnectionHelpPage() {
             Sign-in did not finish?
           </h3>
           <Note>
-            Return to your app&apos;s connection steps and sign in again. If the Eunomia page will not open, copy its address and ask the person who installed
-            Eunomia to check that it can be reached.
+            Return to your app&apos;s connection steps and sign in again. If the {PRODUCT_NAME} page will not open, copy its address and ask the person who installed
+            {PRODUCT_NAME} to check that it can be reached.
           </Note>
           <div className="flex flex-wrap gap-2">
             <Link href="/" className="btn btn-primary">
               Try sign-in again
             </Link>
-            <CopyButton value={url} label="Copy Eunomia address" size="sm" />
+            <CopyButton value={url} label={`Copy ${PRODUCT_NAME} address`} size="sm" />
           </div>
         </section>
       </div>

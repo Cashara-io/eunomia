@@ -1,5 +1,25 @@
 # Release notes
 
+## Next release
+
+### Eunomia is now Cupel
+
+The product has been renamed Cupel, because the old name collides with someone
+else's trademark filing. Everything a person reads (the app, emails, the
+connection details AI apps see, the API reference and the documentation) now says
+Cupel.
+
+Nothing an install depends on changed. Settings (`EUNOMIA_*`), paths such as
+`/opt/eunomia` and `.eunomia/`, Docker images, services and volumes, database
+names, API routes, cookies, MCP tool names, the `eunomia` name AI apps use for the
+server, share codes and this repository's address keep their existing names. An
+existing install updates in place from Settings, Updates (or the auto-update) and
+comes back with its settings, data and connected apps intact. No migration runs
+and no setting needs changing.
+
+The release notes below describe releases that were published as Eunomia and are
+left as written.
+
 ## 2.3.0
 
 ### Ontology, chat diagrams and Composio

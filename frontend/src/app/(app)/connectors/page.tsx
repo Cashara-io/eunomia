@@ -21,6 +21,7 @@ import ExtensionsSection from "./ExtensionsSection";
 import PasswordManagersSection from "./PasswordManagersSection";
 import SecretRequestsSection from "./SecretRequestsSection";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 type StatusFilter = "all" | "connected" | "disconnected";
 
 /** One row of the connected table: a connection with credentials, or a source that holds records without one (demo data). */
@@ -94,7 +95,7 @@ export default function ConnectorsPage() {
   const connectors = connectorsQuery.data ?? null;
   // Sources only add sync health; the page still works if that call fails.
   const sourceRows: SourceRow[] = sourcesQuery.data ?? [];
-  const error = connectorsQuery.isError ? failure(connectorsQuery.error, "Could not load your sources.", " Check that Eunomia is running, then try again.") : null;
+  const error = connectorsQuery.isError ? failure(connectorsQuery.error, "Could not load your sources.", ` Check that ${PRODUCT_NAME} is running, then try again.`) : null;
   const [query, setQuery] = useState("");
   const [chosenFilter, setStatusFilter] = useState<StatusFilter>("all");
   // Custom integrations are an advanced path: closed until asked for.
@@ -168,7 +169,7 @@ export default function ConnectorsPage() {
       <PageHeader
         icon={PlugIcon}
         title="Connected sources"
-        intro="Bring emails, meeting notes and other information into Eunomia. Sign-ins are stored encrypted."
+        intro={`Bring emails, meeting notes and other information into ${PRODUCT_NAME}. Sign-ins are stored encrypted.`}
       />
 
       <ComposioCard />

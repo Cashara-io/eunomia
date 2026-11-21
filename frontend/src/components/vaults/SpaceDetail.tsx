@@ -2,7 +2,7 @@
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 
 // Everything you can do with one memory space, in plain sections: who is in it, its kinds and links
-// and sharing it with another Eunomia (both folded away), then "Hand over this space" and "Leave or delete" (copy, leave,
+// and sharing it with another Cupel (both folded away), then "Hand over this space" and "Leave or delete" (copy, leave,
 // delete) at the very bottom.
 import { useEffect, useRef, useState } from "react";
 import { CopyIcon, PencilSimpleIcon, SignOutIcon, TrashIcon, UserPlusIcon } from "@phosphor-icons/react/ssr";

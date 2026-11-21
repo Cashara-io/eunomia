@@ -11,6 +11,7 @@ import AuthShell, { LABEL, RevealToggle } from "./AuthShell";
 import { OrDivider, SsoButton, useOidcError, useSignIn } from "./Sso";
 import SecondStep from "./SecondStep";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const noSubscribe = () => () => {};
 /** `?email=` from "Sign in instead" on the register page. */
 const emailFromUrl = () => new URLSearchParams(window.location.search).get("email") ?? "";
@@ -82,9 +83,9 @@ export default function LoginPage() {
     <AuthShell>
       <div className="flex flex-col gap-4">
         <div className="mb-3">
-          <h1 className="connect-title">Sign in to Eunomia</h1>
+          <h1 className="connect-title">Sign in to {PRODUCT_NAME}</h1>
           <p className="mt-3 text-reading" style={{ color: "var(--ink-dim)" }}>
-            {mode === "oidc" ? `Use your ${provider} account.` : "Use your Eunomia email and password."}
+            {mode === "oidc" ? `Use your ${provider} account.` : `Use your ${PRODUCT_NAME} email and password.`}
           </p>
         </div>
 

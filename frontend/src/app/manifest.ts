@@ -1,9 +1,10 @@
 import type { MetadataRoute } from "next";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Eunomia",
-    short_name: "Eunomia",
+    name: PRODUCT_NAME,
+    short_name: PRODUCT_NAME,
     description: "Shared memory for the AI apps you already use",
     start_url: "/",
     display: "standalone",

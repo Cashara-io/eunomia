@@ -1,5 +1,5 @@
 /**
- * Marks for the AI assistants Eunomia connects to (paths from the
+ * Marks for the AI assistants Cupel connects to (paths from the
  * Simple Icons set, CC0, and LobeHub's icon set, MIT; 24x24 viewBox). They say "we connect to Claude/ChatGPT":
  * a factual reference to their products, not an implied endorsement, so the
  * copy says "connected", never "partner of".

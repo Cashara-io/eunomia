@@ -4,7 +4,7 @@
 //! and the routes that need email answer `email.unavailable`.
 //!
 //! - `SMTP_HOST`, `SMTP_PORT` (default by `SMTP_TLS`), `SMTP_USERNAME` and `SMTP_PASSWORD` (both or
-//!   neither), `SMTP_FROM` (a mailbox such as `Eunomia <no-reply@example.com>`), `SMTP_TLS`:
+//!   neither), `SMTP_FROM` (a mailbox such as `Cupel <no-reply@example.com>`), `SMTP_TLS`:
 //!   `starttls` (default: upgrade a plain connection, refuse to send if the server will not), `tls`
 //!   (implicit TLS, usually port 465) or `none` (no encryption: a relay on a trusted local network only).
 //! - TLS is rustls with the bundled webpki roots (no OpenSSL, no system trust store).
@@ -96,7 +96,7 @@ impl MailBackend {
             None => tls.default_port(),
             Some(p) => p.parse::<u16>().ok().filter(|p| *p > 0).ok_or_else(|| format!("SMTP_PORT must be a port number, not {p:?}"))?,
         };
-        let from = var("SMTP_FROM").ok_or("SMTP_FROM is required when SMTP_HOST is set (for example: Eunomia <no-reply@example.com>)")?;
+        let from = var("SMTP_FROM").ok_or(concat!("SMTP_FROM is required when SMTP_HOST is set (for example: ", crate::product_name!(), " <no-reply@example.com>)"))?;
         let from: Mailbox = from.parse().map_err(|e| format!("SMTP_FROM is not a valid mailbox: {e}"))?;
         // the password is taken as typed: it may have leading or trailing spaces
         let credentials = match (var("SMTP_USERNAME"), get("SMTP_PASSWORD").filter(|p| !p.is_empty())) {
@@ -258,7 +258,7 @@ mod tests {
     #[test]
     fn a_host_needs_a_sender_and_the_ports_follow_the_tls_mode() {
         assert!(MailBackend::from_vars(vars(&[("SMTP_HOST", "smtp.example.com")])).unwrap_err().contains("SMTP_FROM"));
-        let from = ("SMTP_FROM", "Eunomia <no-reply@example.com>");
+        let from = ("SMTP_FROM", "Cupel <no-reply@example.com>");
         let port = |extra: &[(&str, &str)]| {
             let mut all = vec![("SMTP_HOST", "smtp.example.com"), from];
             all.extend_from_slice(extra);

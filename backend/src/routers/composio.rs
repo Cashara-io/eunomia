@@ -291,7 +291,7 @@ async fn disconnect(State(app): State<AppState>, user: User) -> AppResult<Json<V
         ));
     }
     Ok(Json(
-        json!({"revoked":revoked,"message":if revoked{"Disconnected. Composio tokens were revoked and deleted."}else{"Disconnected. Local tokens were deleted. Remove Eunomia's session in Composio to revoke remote access."}}),
+        json!({"revoked":revoked,"message":if revoked{"Disconnected. Composio tokens were revoked and deleted."}else{concat!("Disconnected. Local tokens were deleted. Remove ", crate::product_name!(), "'s session in Composio to revoke remote access.")}}),
     ))
 }
 

@@ -1,6 +1,6 @@
 # Connectors
 
-Connectors pull your data from other services into Eunomia, where agents read it with the `search`, `get`, `list`, `links` and `recall` tools. Each record is filed in a vault (by default your personal vault; see [which vault records go to](#which-vault-records-go-to)). Set one up on the **Connectors** page: paste the credential, **Save**, then **Test connection** (one real call to the provider) and **Sync now**. Credentials are encrypted at rest and only ever sent to that provider.
+Connectors pull your data from other services into Cupel, where agents read it with the `search`, `get`, `list`, `links` and `recall` tools. Each record is filed in a vault (by default your personal vault; see [which vault records go to](#which-vault-records-go-to)). Set one up on the **Connectors** page: paste the credential, **Save**, then **Test connection** (one real call to the provider) and **Sync now**. Credentials are encrypted at rest and only ever sent to that provider.
 
 After the first sync, each connector syncs again on its interval (changeable on its setup page). A failed sync shows the provider's error on the connector's page and the dashboard, and retries with backoff (15 min → 6 h).
 
@@ -80,7 +80,7 @@ recordings** on the connection's setup page (it sets `config.store_audio`). Then
   [documents](documents.md)). Without one, syncs carry on and keep transcripts only, and the server logs
   why once.
 - It is downloaded once, after the transcript. Recall and search still use the transcript only.
-- Pocket keeps audio on the device first. Until the device uploads it, Pocket answers 404 and Eunomia tries
+- Pocket keeps audio on the device first. Until the device uploads it, Pocket answers 404 and Cupel tries
   again on the next sync, but only while the recording is inside the sync window (the last day). A
   recording whose audio arrives later than that keeps its transcript only.
 - Recordings over 200 MiB keep their transcript only. A failed or refused download never fails the sync.
@@ -91,7 +91,7 @@ recordings** on the connection's setup page (it sets `config.store_audio`). Then
 
 Unverified: the audio endpoint, `GET /public/recordings/{id}/audio` on `https://public.heypocketai.com/api/v1`
 with the same API key, comes from third-party integrations, not from Pocket's documentation, and was not
-checked against a real account. Eunomia accepts either answer: the audio itself (its `Content-Type` is
+checked against a real account. Cupel accepts either answer: the audio itself (its `Content-Type` is
 kept), or JSON with a signed link (`url`, `audio_url`, `signed_url` or `download_url`, at the top level
 or under `data`), which it then downloads without sending your key. If Pocket answers differently, the
 sync still succeeds and the server logs `pocket audio: not downloaded`.
@@ -108,13 +108,13 @@ Google has no personal access tokens, and a self-hosted server has no public red
 2. Configure the OAuth consent screen (External), add yourself as a test user, then **publish** it ("In production"): refresh tokens of apps left in "Testing" expire after 7 days.
 3. Create an OAuth client ID, type **Web application**, with redirect URI `https://developers.google.com/oauthplayground`.
 4. In the [OAuth 2.0 Playground](https://developers.google.com/oauthplayground), click ⚙ → "Use your own OAuth credentials" and enter the client ID and secret. Authorize the scope(s) above (both at once if you want one token for both connectors), then "Exchange authorization code for tokens".
-5. Paste the client ID, client secret and refresh token into the connector. Eunomia exchanges the refresh token for a fresh access token on every sync.
+5. Paste the client ID, client secret and refresh token into the connector. Cupel exchanges the refresh token for a fresh access token on every sync.
 
 ### Large Gmail imports and Google rate limits
 
-A large first Gmail import can take several syncs. Eunomia reads up to 200 messages per sync,
+A large first Gmail import can take several syncs. Cupel reads up to 200 messages per sync,
 oldest first within the initial listing, at one full-message request per second per connection.
-Unread IDs are saved with the checkpoint. Before listing, Eunomia captures the mailbox history ID.
+Unread IDs are saved with the checkpoint. Before listing, Cupel captures the mailbox history ID.
 Each sync follows [Gmail history](https://developers.google.com/workspace/gmail/api/guides/sync)
 and merges added messages with pending IDs, so backdated imports arriving during recovery are
 included regardless of their internal date. History advances only with the saved pending queue.
@@ -170,7 +170,7 @@ stored mail. Gmail needs reconnecting or a cursor reset before syncing can resum
 
 To reset the cursor while keeping imported data and credentials:
 
-1. Stop the Eunomia backend and its workers, and back up the tenant database. Keep the existing
+1. Stop the Cupel backend and its workers, and back up the tenant database. Keep the existing
    Gmail cursor in the backup so its pending IDs remain available if you upgrade again.
 2. Open the affected organisation's tenant database in SurrealDB as its database administrator.
    Run `SELECT id, owner, cursor FROM sync_status;` and find the affected Gmail connection.
@@ -224,7 +224,7 @@ Even with the override on, connector requests go through the same outbound guard
 
 Connected sources has a Composio card. Connect your own Composio account, complete its sign-in, then use **Connect another app** to open Composio's own authorisation link. Return and refresh the app list. Choose individual connected accounts and a target vault, save the choices and sync. Several Drive accounts can be selected together. No platform key or developer project is needed.
 
-The card shows connected-account status, the last completed sync and partial or rate-limited progress. Disconnect deletes Eunomia's tokens and attempts advertised remote revocation. If Composio does not support it, remove Eunomia's session in Composio too. Imported data stays in Eunomia.
+The card shows connected-account status, the last completed sync and partial or rate-limited progress. Disconnect deletes Cupel's tokens and attempts advertised remote revocation. If Composio does not support it, remove Cupel's session in Composio too. Imported data stays in Cupel.
 
 Drive ingests supported files and Docs/Sheets exports as searchable documents. Folder selection covers direct children. Gmail imports the last 30 days initially, then follows mailbox history, preserving partial progress on quota limits. Calendar reads the primary calendar. Personal WhatsApp needs a separate TimelinesAI service and reads text chats. The `whatsapp` toolkit is Business-only and reads delivery history, without personal inboxes or message bodies. Obsidian reads Markdown pushed to GitHub, including wikilinks and a limited front-matter relation format. A Drive folder containing exported vault files is another option. No adapter sends messages or edits upstream files.
 

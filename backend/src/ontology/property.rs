@@ -679,7 +679,7 @@ pub struct SetProperty<'a> {
 
 fn not_approved(kind: &Kind, name: &PropertyName) -> AppError {
     AppError::bad_request(format!(
-        "the property {:?} on {:?} is proposed, not approved: a vault owner approves it in the Eunomia app (the vault's Kinds and links), then write the value again",
+        concat!("the property {:?} on {:?} is proposed, not approved: a vault owner approves it in the ", crate::product_name!(), " app (the vault's Kinds and links), then write the value again"),
         name.0,
         kind.as_str()
     ))

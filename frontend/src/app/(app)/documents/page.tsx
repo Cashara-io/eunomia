@@ -20,6 +20,7 @@ import { useDeleteDocument, useDocument, useDocuments, useRefreshDocuments, useR
 import { useVaults } from "@/lib/queries/vaults";
 import type { Vault } from "@/lib/types";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const ICON = { size: 18, weight: "duotone" } as const;
 const ACCEPT = ".txt,.text,.md,.markdown,.json,.csv,.pdf,text/plain,text/markdown,application/json,text/csv,application/pdf";
 const EXTENSIONS = ["txt", "text", "log", "md", "markdown", "json", "csv", "pdf"];
@@ -592,7 +593,7 @@ function StorageOff({ isAdmin }: { isAdmin: boolean }) {
           )
         }
       >
-        {isAdmin ? "To let people upload files, add this line to the server’s .env file and restart Eunomia:" : "Ask your admin."}
+        {isAdmin ? `To let people upload files, add this line to the server’s .env file and restart ${PRODUCT_NAME}:` : "Ask your admin."}
       </EmptyState>
     </div>
   );

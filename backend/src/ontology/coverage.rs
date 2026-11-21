@@ -7,7 +7,7 @@
 //!
 //! The idea (extract the question's entities, match each against the semantic layer under a distance
 //! threshold, coverage = matched / extracted) follows NVIDIA Auto Ontology's entity coverage check; the
-//! code and the prompt are Eunomia's own (THIRD_PARTY_NOTICES.md).
+//! code and the prompt are Cupel's own (THIRD_PARTY_NOTICES.md).
 
 use std::collections::{HashMap, HashSet};
 

@@ -264,7 +264,7 @@ async fn require_manager(state: &AppState, user: &User) -> AppResult<Manager> {
 /// The answer for an address that may not be invited. One text whatever the reason, so it says nothing
 /// about the address; the reason goes to the server log.
 fn uninvitable() -> AppError {
-    AppError::coded(ErrorCode::ValidationInvalid, "This address can't be invited. Check it, or ask whoever runs this Eunomia server.")
+    AppError::coded(ErrorCode::ValidationInvalid, concat!("This address can't be invited. Check it, or ask whoever runs this ", crate::product_name!(), " server."))
 }
 
 /// The role a caller may change on an open invitation of their org, read before the change.

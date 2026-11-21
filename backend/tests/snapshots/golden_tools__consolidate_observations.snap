@@ -6,5 +6,5 @@ expression: stable
   "consolidated": [],
   "skipped": [],
   "errors": [],
-  "note": "Eunomia has no model configured, so nothing was consolidated. Do it yourself: read the entity with `entities_get`, then record the updated belief with `memory_write` (type `observation`)."
+  "note": "Cupel has no model configured, so nothing was consolidated. Do it yourself: read the entity with `entities_get`, then record the updated belief with `memory_write` (type `observation`)."
 }

@@ -1,8 +1,8 @@
 //! Peer vaults (`peers/`, docs/peer-vaults.md). Two kinds of route:
 //!
 //! * For the UI and agents, behind the gate like every vault route: share codes, the list of other
-//!   Eunomias a vault is shared with, joining, "Sync now", verify, stop sharing.
-//! * For another Eunomia, under `/api/peer/v1/{org}/...`: public (the gate limits them per client
+//!   Cupel instances a vault is shared with, joining, "Sync now", verify, stop sharing.
+//! * For another Cupel, under `/api/peer/v1/{org}/...`: public (the gate limits them per client
 //!   address, like webhooks), and answering nothing of substance without proof of the share secret
 //!   (join) or the link key (everything after).
 
@@ -48,7 +48,7 @@ fn default_role() -> String {
 
 #[derive(Deserialize, utoipa::ToSchema)]
 struct ShareCodeRequest {
-    /// `read` by default. Explicit `edit` lets the other Eunomia add and change.
+    /// `read` by default. Explicit `edit` lets the other Cupel add and change.
     #[serde(default = "default_role")]
     #[schema(default = "read")]
     role: String,
@@ -61,7 +61,7 @@ struct ShareCodeRequest {
 struct JoinRequestBody {
     /// The share code, `eunomia1:...`.
     code: String,
-    /// How the other Eunomia will name this one (default: `EUNOMIA_INSTANCE_NAME`, else your email).
+    /// How the other Cupel will name this one (default: `EUNOMIA_INSTANCE_NAME`, else your email).
     #[serde(default)]
     name: Option<String>,
 }
@@ -87,7 +87,7 @@ fn my_addrs(state: &OrgState, headers: &HeaderMap) -> Vec<String> {
     post,
     path = "/api/vaults/{vault_id}/share-codes",
     tag = "vaults",
-    summary = "Make a one-time code to share a vault with another Eunomia (owner only)",
+    summary = "Make a one-time code to share a vault with another Cupel (owner only)",
     description = "The code carries this instance's addresses (LAN first), a share id and a secret. It works once and expires (default 7 days). Only the secret's ciphertext is kept here.",
     params(("vault_id" = String, Path)),
     request_body = ShareCodeRequest,
@@ -152,7 +152,7 @@ async fn delete_share_code(State(state): State<AppState>, user: User, Path((vaul
     get,
     path = "/api/vaults/{vault_id}/peers",
     tag = "vaults",
-    summary = "The other Eunomias a vault is shared with, their sync status, and unused share codes",
+    summary = "The other Cupel instances a vault is shared with, their sync status, and unused share codes",
     params(("vault_id" = String, Path)),
     responses((status = 200, body = peers::PeersOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
@@ -169,8 +169,8 @@ async fn list_peers(State(state): State<AppState>, user: User, headers: HeaderMa
     post,
     path = "/api/peers/join",
     tag = "vaults",
-    summary = "Join a vault another Eunomia shared, with its share code",
-    description = "Finds the first address in the code that answers as the right instance (LAN first), proves knowledge of the code's secret, and makes a new vault holding this Eunomia's copy. The first sync runs before this returns.",
+    summary = "Join a vault another Cupel shared, with its share code",
+    description = "Finds the first address in the code that answers as the right instance (LAN first), proves knowledge of the code's secret, and makes a new vault holding this Cupel's copy. The first sync runs before this returns.",
     request_body = JoinRequestBody,
     responses((status = 200, body = peers::JoinOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
@@ -194,7 +194,7 @@ async fn join_shared(State(state): State<AppState>, user: User, headers: HeaderM
     delete,
     path = "/api/peers/links/{link_id}",
     tag = "vaults",
-    summary = "Stop sharing with one other Eunomia (owner only); both sides keep their copy",
+    summary = "Stop sharing with one other Cupel (owner only); both sides keep their copy",
     params(("link_id" = String, Path)),
     responses((status = 200, body = crate::openapi::DeletedBody), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
@@ -204,7 +204,7 @@ async fn stop_sharing(State(state): State<AppState>, user: User, Path(link_id): 
     let link = if peers::valid_key(&link_id) { peers::load_link(&state.db, &link_id).await.ok().flatten() } else { None };
     let res = peers::stop(&state, &user.id, &link_id).await;
     if let Some(link) = link {
-        let peer = if link.peer_name.trim().is_empty() { "another Eunomia" } else { link.peer_name.trim() };
+        let peer = if link.peer_name.trim().is_empty() { concat!("another ", crate::product_name!()) } else { link.peer_name.trim() };
         audit(&state, &user, "peer.stop", &space_of(&state, &link.vault).await, &format!("from={peer}"), &res).await;
     }
     res?;
@@ -216,7 +216,7 @@ async fn stop_sharing(State(state): State<AppState>, user: User, Path(link_id): 
     post,
     path = "/api/peers/links/{link_id}/sync",
     tag = "vaults",
-    summary = "Sync a shared vault with the other Eunomia now",
+    summary = "Sync a shared vault with the other Cupel now",
     params(("link_id" = String, Path)),
     responses((status = 200, body = peers::PeerOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
@@ -241,7 +241,7 @@ async fn verify_link(State(state): State<AppState>, user: User, Path(link_id): P
     Ok(Json(peers::verify(&state, &user.id, &link_id).await?))
 }
 
-// --- for another Eunomia ------------------------------------------------------------------------
+// --- for another Cupel ------------------------------------------------------------------------
 
 /// The org a peer route names, if it is served here.
 async fn peer_org(state: &AppState, org: &str) -> Option<OrgState> {
@@ -258,7 +258,7 @@ fn refuse(status: u16, reason: &str) -> Response {
     get,
     path = "/api/peer/v1/{org}/hello",
     tag = "peer",
-    summary = "For another Eunomia: which instance answers at this address",
+    summary = "For another Cupel: which instance answers at this address",
     params(("org" = String, Path)),
     responses((status = 200, body = Object), (status = 404, description = "No such org here", body = Object)),
     security(()),
@@ -276,7 +276,7 @@ async fn peer_hello(State(state): State<AppState>, Path(org): Path<String>) -> R
     post,
     path = "/api/peer/v1/{org}/join",
     tag = "peer",
-    summary = "For another Eunomia: redeem a share code (the request carries a MAC keyed by the code's secret)",
+    summary = "For another Cupel: redeem a share code (the request carries a MAC keyed by the code's secret)",
     params(("org" = String, Path)),
     request_body(content = Object, description = "share, guest_instance, guest_org, guest_name, guest_addrs, nonce_g, mac"),
     responses((status = 200, body = Object), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
@@ -296,7 +296,7 @@ async fn peer_join(State(state): State<AppState>, Path(org): Path<String>, body:
     post,
     path = "/api/peer/v1/{org}/links/{link_id}",
     tag = "peer",
-    summary = "For another Eunomia: one sealed request on a link (exchange, verify, leave), one sealed answer",
+    summary = "For another Cupel: one sealed request on a link (exchange, verify, leave), one sealed answer",
     description = "Body `{link, ts, nonce, data}`: `data` is AES-256-GCM under the link key, with `POST|path|link|ts|nonce` as associated data. Refused outside a 5 minute clock window or for a nonce already seen.",
     params(("org" = String, Path), ("link_id" = String, Path)),
     request_body(content = Object, description = "{link, ts, nonce, data}"),

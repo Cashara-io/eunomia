@@ -1,13 +1,13 @@
-# How Eunomia works
+# How Cupel works
 
-Vaults are Eunomia's core memory boundary. Each vault contains its own
+Vaults are Cupel's core memory boundary. Each vault contains its own
 entities, facts, observations and relationships, with access checked against
 active membership. Agents use one tool registry to work in these vaults and
 recall their knowledge alongside the caller's own synced app records. The
 architecture below describes the 2.0 implementation in this repository; the
 design notes behind it are in [architecture/](architecture/foundation-plan.md).
 
-![Eunomia component architecture](diagrams/architecture.svg)
+![Cupel component architecture](diagrams/architecture.svg)
 
 [Interactive version](diagrams/architecture.html) — download and open the
 HTML locally to explore components, switch themes and export the diagram.

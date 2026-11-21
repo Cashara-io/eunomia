@@ -55,14 +55,14 @@ this exact shape:\n\n\
 \"row\": {\"op\": str, \"left\": str or number or row, \"right\": str or number or row} or null, \
 \"filters\": [{\"property\": str, \"op\": str, \"value\": any}]}, \"unit\": str or null, \"reason\": str}]}";
 
-const HINT: &str = "Eunomia has no model configured, so you review the ontology. Read the profile: each kind and link type \
+const HINT: &str = concat!(crate::product_name!(), " has no model configured, so you review the ontology. Read the profile: each kind and link type \
 with its counts and sample names, and each kind's properties. Then call `ontology_propose` with a one-sentence description for \
 each kind and link type that has none, the kinds that name the same thing as another (`merge_into` the one to keep), the link \
 types worth keeping, the typed properties the kinds' facts show (`properties`: kind, name, datatype, unit), and the metrics \
 those properties can compute (`metrics`: kind, name, description, expr such as {\"agg\": \"avg\", \"property\": \"price\"}, or a \
 per-entity `row` such as {\"agg\": \"sum\", \"row\": {\"op\": \"mul\", \"left\": \"stock\", \"right\": \"cost\"}}). \
 Give a kind or property `synonyms` only when the vault's own names or facts spell them out. A vault owner approves or \
-rejects proposals in the Eunomia app.";
+rejects proposals in the ", crate::product_name!(), " app.");
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(tag = "mode", rename_all = "snake_case")]

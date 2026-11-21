@@ -1,6 +1,6 @@
 # Extensions
 
-Your own scripts (Python, JS, anything that speaks HTTP) can feed Eunomia: scraping, recurring jobs, bulk imports. This is **phase 1**: Eunomia gives an extension a registry entry, a webhook inbox that buffers deliveries, and an API to take them in batches. It does **not** run your code. The script runs where you run it (your machine, a GitHub Action, cron, a container) and talks to Eunomia over HTTP with an API token. Hosting code is phase 2, below.
+Your own scripts (Python, JS, anything that speaks HTTP) can feed Cupel: scraping, recurring jobs, bulk imports. This is **phase 1**: Cupel gives an extension a registry entry, a webhook inbox that buffers deliveries, and an API to take them in batches. It does **not** run your code. The script runs where you run it (your machine, a GitHub Action, cron, a container) and talks to Cupel over HTTP with an API token. Hosting code is phase 2, below.
 
 Code: `backend/src/extensions.rs` (service), `backend/src/routers/extensions.rs` (HTTP), `backend/src/store/extensions.rs` (statements), migration `tenant/0020_extensions.surql`. UI: Connectors, Extensions. Issue: #91.
 
@@ -87,7 +87,7 @@ Standard library only. It claims a batch, writes one fact per event, acks the on
 
 ```python
 #!/usr/bin/env python3
-"""Drain an Eunomia extension inbox: claim a batch, write each event as a fact, ack."""
+"""Drain a Cupel extension inbox: claim a batch, write each event as a fact, ack."""
 import json, os, urllib.error, urllib.request
 
 BASE = os.environ.get("EUNOMIA_URL", "http://localhost:8001").rstrip("/")
@@ -133,7 +133,7 @@ while True:
 print(f"done: claimed {claimed}, acked {acked}")
 ```
 
-Run it from a schedule. A GitHub Actions workflow every 15 minutes (the shortest cron GitHub honours is 5 minutes, and runs can start late; the Eunomia URL must be reachable from GitHub's runners):
+Run it from a schedule. A GitHub Actions workflow every 15 minutes (the shortest cron GitHub honours is 5 minutes, and runs can start late; the Cupel URL must be reachable from GitHub's runners):
 
 ```yaml
 name: drain-eunomia-inbox
@@ -161,25 +161,25 @@ jobs:
 - **Guessing.** Secrets are 256 random bits; the gate also limits the inbox per client address.
 - **Bounds.** Body at most 256 KiB, read with a 10 second timeout before any database work. At most 10,000 waiting or leased events per extension (`EXTENSION_BUFFER_MAX`); the check is not locked against the insert, so a burst at the edge can overshoot by a few. Finished events are pruned after 7 days, dead ones after 30, by the scheduler leader.
 - **Ownership.** Every route is owner-scoped; another user's extension is `extension.not_found` (404), in the same org or another. Create, edit, rotate and delete are written to the audit ledger (`extension.*`), without the secret. Deliveries are not audited one by one.
-- **Why code runs outside the server.** Running a user's script inside the Eunomia process would put it next to the database credentials, the `ENCRYPTION_KEY`, every org's data and the network. That boundary is a maintainers' decision (see phase 2), so phase 1 keeps the server a data plane only: the script holds one revocable token with the scopes you chose, and Eunomia never executes it.
+- **Why code runs outside the server.** Running a user's script inside the Cupel process would put it next to the database credentials, the `ENCRYPTION_KEY`, every org's data and the network. That boundary is a maintainers' decision (see phase 2), so phase 1 keeps the server a data plane only: the script holds one revocable token with the scopes you chose, and Cupel never executes it.
 - Payloads are untrusted input. The buffer stores them as text and returns them as JSON; nothing interprets them. A script that feeds them to a model should treat them like any other web content.
 
 ## Phase 2: hosted runtimes (proposal)
 
-Goal: write the script, push it to git, and Eunomia runs it on a schedule or per batch, with no machine of your own.
+Goal: write the script, push it to git, and Cupel runs it on a schedule or per batch, with no machine of your own.
 
 - **A separate worker container**, never the API process. It has no database credentials, no `ENCRYPTION_KEY`, no access to SurrealDB's network. It talks to the backend only over HTTP, with the same claim/ack and tool APIs as above.
-- **A sandboxed runtime per run.** Deno started with `--allow-net=<eunomia host>` and no file, env, run or FFI permissions is the leading candidate (JS/TS only, permissions are first class); WebAssembly (Python via a wasm build, or JS via QuickJS) is the alternative where Deno's model is not enough. Plus the container's own limits: CPU and memory caps, a wall-clock timeout, a read-only filesystem, no outbound network except the Eunomia host (and an optional per-extension allow-list for scraping).
+- **A sandboxed runtime per run.** Deno started with `--allow-net=<eunomia host>` and no file, env, run or FFI permissions is the leading candidate (JS/TS only, permissions are first class); WebAssembly (Python via a wasm build, or JS via QuickJS) is the alternative where Deno's model is not enough. Plus the container's own limits: CPU and memory caps, a wall-clock timeout, a read-only filesystem, no outbound network except the Cupel host (and an optional per-extension allow-list for scraping).
 - **A scoped token per run**, minted by the worker's supervisor for one run: `memory:write` (and `memory:read` if asked for), restricted to the extension's target vault, expiring a few minutes after the timeout, revoked when the run ends. The script never sees a long-lived credential.
 - **Config as code.** A manifest in a git repo, for example `eunomia.yaml`: extension name, target vault, entrypoint, `schedule: "*/15 * * * *"`, `trigger: batch` (run when N events or T minutes of events are waiting, with `max` and `lease_secs`), network allow-list, limits. The registry row records the repo, path and commit.
-- **Deploy via GitHub Action.** On push to the default branch an Action reads the manifest and calls `PUT /api/extensions/{id}/deployment` with the bundle and commit sha, using a token scoped to extension management only. Eunomia stores the bundle immutably and runs the newest one; rollback is redeploying an older sha.
+- **Deploy via GitHub Action.** On push to the default branch an Action reads the manifest and calls `PUT /api/extensions/{id}/deployment` with the bundle and commit sha, using a token scoped to extension management only. Cupel stores the bundle immutably and runs the newest one; rollback is redeploying an older sha.
 - **Observability.** Per-run records (start, end, exit, events claimed/acked, bytes of log capped) in the extension's page; failing runs back off like failing source syncs.
 
 Open questions:
 
 1. Who may enable hosted runs: instance admins only, or any user? On a shared org one user's code is every user's neighbour.
 2. Sandbox choice: Deno alone, or wasm to allow Python? Where does the isolation boundary sit when the host is a single self-hosted box with no container runtime to spare?
-3. Egress: is "Eunomia host only" enough, or do scrapers need an allow-list, and who audits it? Server-side request forgery from the worker to internal addresses must be blocked either way.
+3. Egress: is "Cupel host only" enough, or do scrapers need an allow-list, and who audits it? Server-side request forgery from the worker to internal addresses must be blocked either way.
 4. Quotas: runs per day, CPU seconds, storage for bundles and logs, per user and per org. What happens on a self-host install with no billing?
 5. Secrets for the script's own third-party APIs: a per-extension secret store (encrypted, injected at run time), and whether a script may read them back out through its logs.
 6. Batching in the platform: should a scheduled job get the buffer's events as its input directly (push) instead of claiming them (pull)?

@@ -1,6 +1,6 @@
 # Observability (optional)
 
-Eunomia ships an optional self-host observability stack: [SigNoz](https://signoz.io) for traces, logs and metrics. **It is off by default.** A normal install never starts it and the backend exports nothing unless you set `OTEL_EXPORTER_OTLP_ENDPOINT`.
+Cupel ships an optional self-host observability stack: [SigNoz](https://signoz.io) for traces, logs and metrics. **It is off by default.** A normal install never starts it and the backend exports nothing unless you set `OTEL_EXPORTER_OTLP_ENDPOINT`.
 
 ## Resource needs
 

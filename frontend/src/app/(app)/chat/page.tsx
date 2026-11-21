@@ -24,8 +24,9 @@ import { useSettings } from "@/lib/queries/settings";
 import { chatKeys, historyQuery, threadsQuery, useCreateThread, useDeleteThread, useThreads } from "@/lib/queries/chat";
 import ChatView, { parseView, SHOW_VIEW } from "@/components/chat/views";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 // The built-in agent, labelled by the name its system prompt gives it.
-const ASSISTANT = "Eunomia";
+const ASSISTANT = PRODUCT_NAME;
 
 const EXAMPLES = [
   "What do you remember about me?",
@@ -351,7 +352,7 @@ function EmptyState({ onPick }: { onPick: (text: string) => void }) {
         Ask your memory anything
       </h2>
       <p className="text-reading mt-2 mb-5 leading-relaxed" style={{ color: "var(--ink-dim)" }}>
-        Ask about people, projects or documents you&apos;ve saved. Each answer shows where Eunomia looked, so you can check what it read and
+        Ask about people, projects or documents you&apos;ve saved. Each answer shows where {PRODUCT_NAME} looked, so you can check what it read and
         what it saved. Pick an example or type your own question below.
       </p>
       <div className="ledger hairline-rows overflow-hidden">
@@ -382,7 +383,7 @@ function NoModel({ isAdmin }: { isAdmin: boolean }) {
       >
         {isAdmin
           ? "Chat answers questions from your saved memories and documents. It needs an OpenAI key or a local model endpoint."
-          : "Ask your Eunomia admin to turn on Chat. Your connected AI apps can still look things up in the meantime."}
+          : `Ask your ${PRODUCT_NAME} admin to turn on Chat. Your connected AI apps can still look things up in the meantime.`}
       </EmptyNote>
     </div>
   );
@@ -612,7 +613,7 @@ export default function ChatPage() {
       <PageHeader
         icon={ChatsCircleIcon}
         title="Chat"
-        intro="Ask a question about your saved memories and documents. Eunomia shows where each answer came from."
+        intro={`Ask a question about your saved memories and documents. ${PRODUCT_NAME} shows where each answer came from.`}
       />
 
       {/* No model and no history: only the empty state. With history, the conversations stay readable
@@ -697,7 +698,7 @@ export default function ChatPage() {
                     <div className="font-medium">The assistant couldn&apos;t reply.</div>
                     <div className="mt-0.5" style={{ color: "var(--ink-dim)" }}>
                       {needsKey && !isAdmin ? (
-                        "Chat isn't turned on yet. Ask your Eunomia admin."
+                        `Chat isn't turned on yet. Ask your ${PRODUCT_NAME} admin.`
                       ) : needsKey ? (
                         <>
                           No OpenAI API key is set, so the assistant can&apos;t answer yet.{" "}

@@ -10,6 +10,7 @@ import type { ApiToken, Scope, Vault } from "@/lib/types";
 import Tooltip from "@/components/bits/Tooltip";
 import { ICON, CopyField, relativeTime, expiryLabel, PanelHead, RevokeButton, TableSkeleton } from "./shared";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const SCOPES: { id: Scope; label: string; hint: string }[] = [
   { id: "memory:read", label: "Read memories", hint: "Look up and read memories, people & topics and memory spaces" },
   { id: "memory:write", label: "Save memories", hint: "Add, change and delete memories and people & topics" },
@@ -137,7 +138,7 @@ export function TokensSection() {
   return (
     <div className="flex flex-col gap-5">
       <PanelHead title="API tokens">
-        A token lets an AI app or script use Eunomia as you. It is shown once, when you create it.
+        A token lets an AI app or script use {PRODUCT_NAME} as you. It is shown once, when you create it.
       </PanelHead>
 
       <form

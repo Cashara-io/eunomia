@@ -10,7 +10,7 @@ const FILL: Record<DuoTone, string> = {
   none: "transparent",
 };
 
-/** A Phosphor Duotone icon with the Eunomia twist: the line stays ink (or the
+/** A Phosphor Duotone icon with the Cupel twist: the line stays ink (or the
  * current text colour), the back layer is a solid vault colour. Pick the tone
  * for meaning when there is one (a vault, a scope); otherwise vary the three
  * across a row so no two neighbours match. "none" drops the back layer, for

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import EunomiaMark from "@/components/EunomiaMark";
 import { InputModeTracker } from "@/components/bits/motion";
+import { PRODUCT_WORDMARK } from "@/lib/brand";
 
 /** Layout shared by /login and /register: the wordmark, a centred form, and
  * the "by Paperless" mark underneath. Nothing decorative. */
@@ -10,7 +11,7 @@ export default function AuthShell({ children }: { children: React.ReactNode }) {
       <main className="w-full max-w-[420px] flex-1 flex flex-col gap-10 sm:justify-center">
         <Link href="/login" className="inline-flex items-center gap-2 self-center text-[20px] font-semibold tracking-[-0.03em] rounded-[3px]">
           <EunomiaMark size={24} />
-          eunomia
+          {PRODUCT_WORDMARK}
         </Link>
         <div className="w-full">{children}</div>
       </main>

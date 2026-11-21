@@ -27,6 +27,7 @@ import { AccessReviewsSection } from "./AccessReviewsSection";
 import { OrgSection } from "./OrgSection";
 import { SETTINGS_GROUPS, visibleGroups } from "@/lib/settingsTabs";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const GROUPS = SETTINGS_GROUPS;
 
 type TabId = (typeof GROUPS)[number]["tabs"][number]["id"];
@@ -59,7 +60,7 @@ function Settings() {
   const settingsQuery = useSettings();
   const settings = settingsQuery.data ?? null;
   const loadError = settingsQuery.isError
-    ? failure(settingsQuery.error, "Could not load settings.", " Check that the Eunomia API is running, then reload this page.")
+    ? failure(settingsQuery.error, "Could not load settings.", ` Check that the ${PRODUCT_NAME} API is running, then reload this page.`)
     : null;
   const tabRefs = useRef<Partial<Record<TabId, HTMLButtonElement | null>>>({});
 

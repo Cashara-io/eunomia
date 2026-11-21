@@ -27,7 +27,7 @@ test("OAuth consent explains read and write access to every member space", async
   });
   await page.goto(`/oauth/authorize?${params}`);
   await expect(page).toHaveURL((url) => url.origin === origin && url.pathname === "/consent");
-  await expect(page.getByRole("heading", { name: "Allow Consent fixture to use Eunomia?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Allow Consent fixture to use Cupel?" })).toBeVisible();
   await expect(page.getByText("Read memories in every space you belong to", { exact: true })).toBeVisible();
   await expect(page.getByText("Save memories in every space you belong to", { exact: true })).toBeVisible();
   await expect(page.getByText("These permissions apply to every space you belong to, including your Personal space and team spaces.", { exact: true })).toBeVisible();

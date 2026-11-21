@@ -1,4 +1,4 @@
-// Shared helpers for the Eunomia k6 scripts: user setup, MCP calls, metrics.
+// Shared helpers for the Cupel k6 scripts: user setup, MCP calls, metrics.
 import http from "k6/http";
 import { check, fail } from "k6";
 import { Rate } from "k6/metrics";

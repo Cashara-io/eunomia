@@ -6,7 +6,7 @@ expression: stable
   "answer": null,
   "mode": "recall_only",
   "note": null,
-  "instructions": "Eunomia has no model configured, so you answer. Use ONLY the numbered memories below, cite them by index like [1], and say so plainly if they don't contain enough to answer.",
+  "instructions": "Cupel has no model configured, so you answer. Use ONLY the numbered memories below, cite them by index like [1], and say so plainly if they don't contain enough to answer.",
   "question": "tea",
   "memories": [
     {

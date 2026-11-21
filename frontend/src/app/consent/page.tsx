@@ -10,12 +10,13 @@ import EunomiaMark from "@/components/EunomiaMark";
 import { InputModeTracker } from "@/components/bits/motion";
 import { CodeField } from "@/components/mfa/Mfa";
 
+import { PRODUCT_NAME, PRODUCT_WORDMARK } from "@/lib/brand";
 // Each permission in plain words: what the app can do, and what that means for you.
 const SCOPE_WORDS: Record<string, { title: string; detail: string }> = {
   "memory:read": { title: "Read memories in every space you belong to", detail: "Look up what you and your other AI apps have saved, in the memory spaces you can see." },
   "memory:write": { title: "Save memories in every space you belong to", detail: "Add, change or delete memories in every space you belong to, as you." },
   "vaults:admin": { title: "Manage your memory spaces", detail: "Create, rename, share and delete memory spaces." },
-  connectors: { title: "Manage your connected sources", detail: "See and sync sources like GitHub or Gmail that you connected to Eunomia." },
+  connectors: { title: "Manage your connected sources", detail: `See and sync sources like GitHub or Gmail that you connected to ${PRODUCT_NAME}.` },
 };
 
 /** The OAuth consent screen. /oauth/authorize validates the request and sends the browser here
@@ -71,7 +72,7 @@ export default function ConsentPage() {
       <header className="flex items-center justify-between">
         <span className="inline-flex items-center gap-2 text-heading font-semibold tracking-[-0.03em]">
           <EunomiaMark size={24} />
-          eunomia
+          {PRODUCT_WORDMARK}
         </span>
       </header>
 
@@ -106,14 +107,14 @@ export default function ConsentPage() {
                     style={{ border: "var(--hair) solid var(--border)", background: "var(--surface-raised)" }}
                   />
                 ) : null}
-                <h1 className="connect-title">Allow {info.client.name} to use Eunomia?</h1>
+                <h1 className="connect-title">Allow {info.client.name} to use {PRODUCT_NAME}?</h1>
               </div>
 
               <p className="text-reading leading-[1.55]" style={{ color: "var(--ink)" }}>
                 <span className="font-medium" style={{ color: "var(--ink)" }}>
                   {info.client.name}
                 </span>{" "}
-                is asking to use your Eunomia memory as{" "}
+                is asking to use your {PRODUCT_NAME} memory as{" "}
                 <span className="font-medium" style={{ color: "var(--ink)" }}>
                   {info.user_email}
                 </span>

@@ -366,7 +366,7 @@ async fn walk_bound_token_scenario(team_bound: bool, admin: bool) {
                     // above proves the guarded model-enabled path too.
                     "no_model" => {
                         for key in ["consolidated","skipped","errors"] { assert_eq!(v[key],json!([]),"{name}: {v}"); }
-                        assert!(v["note"].as_str().unwrap().starts_with("Eunomia has no model configured"));
+                        assert!(v["note"].as_str().unwrap().starts_with("Cupel has no model configured"));
                         assert_eq!(v.as_object().unwrap().len(),4);
                     }
                     "unavailable" => assert_eq!(v["code"],"secret.unavailable","{name}: {v}"),

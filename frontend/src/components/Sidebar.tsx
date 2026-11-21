@@ -37,6 +37,7 @@ import { UPDATER_OFF, versionLabel } from "@/lib/version";
 const noSubscribe = () => () => {};
 import { isLiveSource, sourceHealth, sourceLabel } from "@/lib/sourceState";
 
+import { PRODUCT_NAME, PRODUCT_WORDMARK } from "@/lib/brand";
 // Visible labels follow the design spec; the routes stay as they were.
 export const MAIN_NAV = [
   { href: "/", label: "Home", icon: House },
@@ -73,13 +74,13 @@ function NavLink({ href, active, children }: { href: string; active: boolean; ch
   );
 }
 
-/** The wordmark: the mark plus "eunomia", cream on the ink sidebar, and "by Paperless" under it. */
+/** The wordmark: the mark plus the lower-case product name, cream on the ink sidebar, and "by Paperless" under it. */
 function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex flex-col gap-1.5 min-w-0">
-      <Link href="/" className="flex items-center gap-2 min-w-0 rounded-[3px]" aria-label="Eunomia home">
+      <Link href="/" className="flex items-center gap-2 min-w-0 rounded-[3px]" aria-label={`${PRODUCT_NAME} home`}>
         <EunomiaMark size={22} />
-        <span className="text-[18px] font-semibold tracking-[-0.03em] truncate">eunomia</span>
+        <span className="text-[18px] font-semibold tracking-[-0.03em] truncate">{PRODUCT_WORDMARK}</span>
       </Link>
       {!compact && (
       <a
@@ -215,7 +216,7 @@ export default function Sidebar() {
       <div className="flex-1" />
 
       <div className="px-4 flex flex-col gap-2 text-[12px] leading-snug">
-        {/* Server status is for whoever runs this Eunomia; members get a clean footer. */}
+        {/* Server status is for whoever runs this Cupel; members get a clean footer. */}
         {isAdmin && (
           <Link href="/connectors" className="sidebar-muted hover:underline underline-offset-2 rounded-[3px]">
             {sourceStatus}

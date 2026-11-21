@@ -222,7 +222,7 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect([batch.written, batch.failed]).toEqual([1, 1]);
   expect(batch.results[1].code).toBe("validation.invalid");
 
-  // peer vaults (no second Eunomia here): a share code (an error when this install knows no address), the
+  // peer vaults (no second Cupel here): a share code (an error when this install knows no address), the
   // vault's peers, and a bad code or an unknown link are errors
   const shared = await ok("vault_create", { name: `Peer share ${Date.now()}` });
   await call("vault_share_code", { vault_id: shared.id, role: "read" });

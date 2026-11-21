@@ -12,6 +12,7 @@ import type { UpdateStatus } from "@/lib/types";
 import SyncMark from "@/components/bits/SyncMark";
 import { ICON, CopyField, relativeTime, PanelHead, StatusLine, type Tone } from "./shared";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 // The version this frontend was built as; the updater's report, when there is one, wins.
 const BUILT_VERSION = versionLabel(APP_VERSION);
 
@@ -131,7 +132,7 @@ export function UpdateSection() {
         <Versions running={BUILT_VERSION} />
         <div className="flex flex-col gap-3 max-w-[62ch]">
           <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-            The updater ships with Eunomia and reports in within a minute of starting. If this stays, your install predates it: run
+            The updater ships with {PRODUCT_NAME} and reports in within a minute of starting. If this stays, your install predates it: run
             the installer once more from your install folder. It updates in place and keeps your data and settings.
           </p>
           <CopyField value={INSTALL_CMD} />
@@ -148,13 +149,13 @@ export function UpdateSection() {
       : phase === "applying"
         ? (status.progress ?? `Installing ${target ?? status.latest_version}…`)
         : phase === "restarting"
-          ? "Restarting Eunomia…"
+          ? `Restarting ${PRODUCT_NAME}…`
           : status.update_available
             ? `${status.latest_version} is available`
             : "Up to date";
   const tone: Tone = busy || done ? "accent" : status.update_available ? "warning" : "good";
-  // The real step, from what the updater reports: it writes "Waiting for Eunomia to start" once the new images are up.
-  const restartingNow = phase === "restarting" || (phase === "applying" && /waiting for eunomia to start/i.test(status.progress ?? ""));
+  // The real step, from what the updater reports: it writes "Waiting for Cupel to start" (installs on an older updater still write "Cupel") once the new images are up.
+  const restartingNow = phase === "restarting" || (phase === "applying" && /waiting for (?:eunomia|cupel) to start/i.test(status.progress ?? ""));
   const step = done ? 3 : restartingNow ? 2 : phase === "applying" ? 1 : 0;
 
   return (
@@ -200,7 +201,7 @@ export function UpdateSection() {
   );
 }
 
-const STEPS = ["Requested", "Downloading the new release", "Restarting Eunomia", "Reloading this page"] as const;
+const STEPS = ["Requested", "Downloading the new release", `Restarting ${PRODUCT_NAME}`, "Reloading this page"] as const;
 
 /* Where the update is, step by step. Only the current step is "in progress"; earlier ones are done. */
 function UpdateSteps({ current, detail }: { current: number; detail: string | null }) {

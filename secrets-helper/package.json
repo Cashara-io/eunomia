@@ -2,7 +2,7 @@
   "name": "eunomia-secrets-helper",
   "version": "0.1.0",
   "private": true,
-  "description": "Eunomia's credential broker sidecar: resolves 1Password and Bitwarden Secrets Manager references for the backend over the internal compose network.",
+  "description": "Cupel's credential broker sidecar: resolves 1Password and Bitwarden Secrets Manager references for the backend over the internal compose network.",
   "type": "module",
   "license": "PolyForm-Noncommercial-1.0.0",
   "engines": {

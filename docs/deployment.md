@@ -11,7 +11,7 @@ vars are baked in at *build* time, not read at runtime.
 ### Built in: Let's Encrypt via Caddy
 
 The stack ships an optional `caddy` service (compose profile `https`) that serves
-Eunomia at your own domain with a free Let's Encrypt certificate and renews it on its own.
+Cupel at your own domain with a free Let's Encrypt certificate and renews it on its own.
 
 You need:
 
@@ -153,7 +153,7 @@ their local-dev defaults in production:
 | `EXTENSION_BUFFER_MAX` | `10000` | Waiting plus leased events one extension's webhook inbox holds before it answers 429 `extension.buffer_full`. See [extensions.md](extensions.md). |
 | `MAX_REQUEST_BODY_BYTES` | `1048576` | Largest request body any route accepts (413 over it). Raise it only if a route you use needs more. |
 | `TRUSTED_PROXIES` | loopback only (`127.0.0.0/8`, `::1/128`); `docker-compose.yml` sets `frontend` | Comma-separated proxies whose `X-Forwarded-For` is believed: CIDRs, bare addresses or hostnames. A hostname (the compose service `frontend`) is resolved at boot and again every 60 seconds; the last good answer is kept and failures are logged at warn. The right-most address that is not itself trusted is the client. A LAN or bridge peer that is not listed cannot spoof its address. Only if you point a proxy straight at the backend (not recommended, see section 1): add its address or name (`TRUSTED_PROXIES=frontend,203.0.113.5`). `none` trusts nobody (every client is its peer address). |
-| `PUBLIC_URL` | `http://localhost:8001` | The address MCP clients reach Eunomia at, no trailing slash, e.g. `https://eunomia.example.com`. Used in OAuth discovery documents and as the audience of OAuth tokens, so it must match what clients connect to. |
+| `PUBLIC_URL` | `http://localhost:8001` | The address MCP clients reach Cupel at, no trailing slash, e.g. `https://eunomia.example.com`. Used in OAuth discovery documents and as the audience of OAuth tokens, so it must match what clients connect to. |
 | `SIGNUP` | `open` | Who can create an account once the install has a first user (the first user can always sign up). `open`: anyone who can reach the server. `invite`: only emails listed in `SIGNUP_ALLOWLIST` (comma separated). `closed`: nobody. A typo closes signup. The default is `open` because a vault invitation needs an existing account (`no user with email`), so a team's second member has to be able to sign up before anyone can invite them. **On an instance reachable by people you do not trust, set `SIGNUP=invite` or `closed` after your team has signed up.** The same gate applies with `EUNOMIA_SIGNUP_ORG=personal`. Once the install has users, an address listed in `EUNOMIA_ADMIN_EMAILS` can never sign up (so nobody can claim an operator address first): register the account, then list it. |
 | `SIGNUP` + `ALLOW_PRIVATE_LLM_URL` | see above | Defaults `open` and allowed together: anyone who can reach the server can sign up and point a model URL at a private address. The backend logs one warning at boot when both are in effect. Set `SIGNUP=invite` or `ALLOW_PRIVATE_LLM_URL=0` on a reachable instance. |
 | `SIGNUP_ALLOWLIST` | empty | Emails allowed to sign up when `SIGNUP=invite`. |
@@ -161,7 +161,7 @@ their local-dev defaults in production:
 **Organisation invitations override `SIGNUP`.** An owner or admin of an organisation can invite an email from Settings > People (see [Organisation invitations](#organisation-invitations)). A valid invitation link is the permission to create that one account, with that one email, under `SIGNUP=invite` or `closed`. An address in `EUNOMIA_ADMIN_EMAILS` cannot be invited or sign up this way, by password or single sign-on.
 | `AUTH_MODE` | `password` | How people sign in. `password`: email and password only (what every install did before OIDC). `both`: email and password, plus "Continue with {provider}". `oidc`: the provider only; password login and signup answer 403 `auth.password_disabled` and the web app hides the form. Needs the `OIDC_*` settings below for `both` and `oidc`; a typo or a missing setting stops the backend at boot rather than falling back to another method. See "Single sign-on" below. |
 | `OIDC_ISSUER` | none | The provider's issuer URL, exactly as it appears in its discovery document (`{issuer}/.well-known/openid-configuration`), for example `https://dev-123.okta.com`, `https://accounts.google.com`, `https://login.microsoftonline.com/<tenant>/v2.0` or a Keycloak realm URL. https only (http for `localhost`). |
-| `OIDC_CLIENT_ID` | none | The client id you registered for Eunomia at the provider. |
+| `OIDC_CLIENT_ID` | none | The client id you registered for Cupel at the provider. |
 | `OIDC_CLIENT_SECRET` | none | The client secret. Leave it out for a public client: PKCE is always used, so the secret is optional. Never logged. |
 | `OIDC_SCOPES` | `openid email profile` | Scopes requested. `openid` is always added. The email claim is required to create or match an account. |
 | `OIDC_PROVIDER_NAME` | `single sign-on` | The label on the button: "Continue with {name}", and "Signed in with {name}" in Settings. |
@@ -251,7 +251,7 @@ Rules that hold for every row: nobody acts on their own account through these ro
 
 ## Email, password recovery and emailed invitations
 
-Eunomia sends email only when you give it a mail server. **With `SMTP_HOST` unset (the default) email is off and nothing in the product changes**: no route sends anything, invitations are copied and sent by hand as before, and the web app does not show "Forgot password?". A self-hosted install that configures no mail server behaves exactly as it did.
+Cupel sends email only when you give it a mail server. **With `SMTP_HOST` unset (the default) email is off and nothing in the product changes**: no route sends anything, invitations are copied and sent by hand as before, and the web app does not show "Forgot password?". A self-hosted install that configures no mail server behaves exactly as it did.
 
 One path, SMTP, works with any provider (Resend's SMTP relay, Postmark, SES, your own server):
 
@@ -260,7 +260,7 @@ One path, SMTP, works with any provider (Resend's SMTP relay, Postmark, SES, you
 | `SMTP_HOST` | empty (email off) | The mail server. Setting it turns email on. |
 | `SMTP_PORT` | `587` (`465` with `SMTP_TLS=tls`, `25` with `none`) | The server's port. |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | empty | Set both or neither (Resend: username `resend`, the API key as the password). Never logged or printed. |
-| `SMTP_FROM` | none, required with `SMTP_HOST` | The sender, for example `Eunomia <no-reply@example.com>`. It must be an address your provider lets you send from. |
+| `SMTP_FROM` | none, required with `SMTP_HOST` | The sender, for example `Cupel <no-reply@example.com>`. It must be an address your provider lets you send from. |
 | `SMTP_TLS` | `starttls` | `starttls`: connect, then upgrade; nothing is sent if the server will not upgrade. `tls`: TLS from the first byte (usually port 465). `none`: no encryption, for a relay on a trusted local network only. TLS is rustls with built-in roots (no OpenSSL). |
 
 A setting that cannot work (no `SMTP_FROM`, a bad port, a username without a password) stops the backend at boot, like a bad `AUTH_MODE`, rather than run without the mail you asked for. The web app learns whether email works from `email_enabled` in `GET /api/auth/bootstrap`.
@@ -448,14 +448,14 @@ Refused: `operator.owner_claimed` (409: the owner has already claimed it), `oper
 
 ## Single sign-on (OpenID Connect)
 
-An install can delegate sign-in to an OpenID Connect provider (AuthKit/WorkOS, Okta, Entra ID, Google, Keycloak, any compliant provider) instead of, or alongside, Eunomia's own email and password. SAML is not supported yet; the account mapping below only needs verified claims, so a SAML provider could feed the same code later.
+An install can delegate sign-in to an OpenID Connect provider (AuthKit/WorkOS, Okta, Entra ID, Google, Keycloak, any compliant provider) instead of, or alongside, Cupel's own email and password. SAML is not supported yet; the account mapping below only needs verified claims, so a SAML provider could feed the same code later.
 
 1. At the provider, create a "web application" client (authorization code flow) with the redirect URI `{PUBLIC_URL}/api/auth/oidc/callback`. `PUBLIC_URL` must be the origin people open in the browser (the one the cookie is set on), for example `https://eunomia.example.com`.
 2. Set `AUTH_MODE=both` (or `oidc`), `OIDC_ISSUER`, `OIDC_CLIENT_ID` and, unless the client is public, `OIDC_CLIENT_SECRET`; set `OIDC_PROVIDER_NAME=Okta` (or your provider) for the button label. Restart the backend.
 
 **Flow.** The login page's button goes to `GET /api/auth/oidc/start?next=...`: the backend discovers the provider (cached) and redirects the browser with `state`, `nonce` and a PKCE challenge. Those, and where to return to, travel in a short-lived signed cookie (`eunomia_oidc`: HttpOnly, SameSite=Lax, 10 minutes, scoped to `/api/auth/oidc`; served over https it is `__Host-eunomia_oidc` with `Path=/` and `Secure`, so no other host, not even a sibling subdomain, can set it, and the same goes for `eunomia_oidc_link`); nothing is stored server-side, and a callback from a different browser has no cookie and is refused. At `GET /api/auth/oidc/callback` the backend checks `state`, exchanges the code with the PKCE verifier, and validates the ID token: signature against the provider's JWKS (cached, refetched when a token names an unknown `kid`, at most once every 30 seconds), `iss`, `aud` (and `azp`), `exp`, `nbf` and the `nonce`. Only RS*/PS*/ES*/EdDSA are accepted; `none` and `HS*` never are. Then it starts the same session cookie password login does and sends the browser to `next`. A failure sends the browser back to the login page with a message; every attempt, good or bad, is in the audit ledger (`auth.oidc_login`, `auth.oidc_link`, and `auth.register` for a new account).
 
-**Agents.** Eunomia is already an OAuth 2.1 server for MCP clients (Claude Desktop and others). `/oauth/authorize` needs a browser session, so with OIDC on, an unauthenticated authorize request goes to the login page with `next` set to the consent page, the person signs in at the provider, comes back to the consent page, approves, and the client's token belongs to the same Eunomia account and vaults as their browser session. Nothing else to configure.
+**Agents.** Cupel is already an OAuth 2.1 server for MCP clients (Claude Desktop and others). `/oauth/authorize` needs a browser session, so with OIDC on, an unauthenticated authorize request goes to the login page with `next` set to the consent page, the person signs in at the provider, comes back to the consent page, approves, and the client's token belongs to the same Cupel account and vaults as their browser session. Nothing else to configure.
 
 **Accounts.** A provider identity is `(issuer, subject)`, stored in the control database (`identity`, unique). The first time one signs in:
 
@@ -500,7 +500,7 @@ inlined at `bun run build`, so changing it requires rebuilding the image.
 Settings → Updates shows the running release and, when a newer one is
 published, **Update now**. A sidebar badge appears when an update is waiting.
 **Check now** asks GitHub immediately instead of waiting for the 10-minute
-check. Only an instance admin (the first user, or an email in `EUNOMIA_ADMIN_EMAILS`) can use **Update now** and **Check now**: the update restarts the stack. After you click, the page shows progress, Eunomia restarts on the new
+check. Only an instance admin (the first user, or an email in `EUNOMIA_ADMIN_EMAILS`) can use **Update now** and **Check now**: the update restarts the stack. After you click, the page shows progress, Cupel restarts on the new
 release's prebuilt images (a few seconds of downtime, no build), and the page
 reloads itself. Data lives in the `eunomia-surreal-data-v3` volume (installs
 from before 2.0 keep their old SurrealDB 2.x data on `eunomia-surreal-data`, see
@@ -564,7 +564,7 @@ collect logs from the command line when the web app is down.
 
 ## Readiness evidence for self-hosters
 
-Read the [readiness catalogue](compliance/README.md), [shared responsibilities](compliance/responsibilities.md) and [applicability notes](compliance/applicability.md) before planning an assessment. Done, Partial and Missing describe source implementation, not your installation's operation. Record host settings, access reviews, restore drills and unknowns separately. The customer-selected model data path is excluded and assumed encrypted; Eunomia's own storage, ordinary transport and maker AI governance remain in scope. Policy placeholders belong to the separate organisational track.
+Read the [readiness catalogue](compliance/README.md), [shared responsibilities](compliance/responsibilities.md) and [applicability notes](compliance/applicability.md) before planning an assessment. Done, Partial and Missing describe source implementation, not your installation's operation. Record host settings, access reviews, restore drills and unknowns separately. The customer-selected model data path is excluded and assumed encrypted; Cupel's own storage, ordinary transport and maker AI governance remain in scope. Policy placeholders belong to the separate organisational track.
 
 
 ### Upload transfer budgets

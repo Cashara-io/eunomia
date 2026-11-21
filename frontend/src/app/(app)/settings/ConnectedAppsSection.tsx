@@ -8,6 +8,7 @@ import { useOauthGrants, useRevokeOauthGrant } from "@/lib/queries/oauth";
 import EmptyState from "@/components/ui/EmptyState";
 import { relativeTime, PanelHead, QUIET_DANGER, TableSkeleton } from "./shared";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const SCOPE_WORDS: Record<string, string> = {
   "memory:read": "read memories",
   "memory:write": "save memories",
@@ -39,7 +40,7 @@ export function ConnectedAppsSection() {
   return (
     <div className="flex flex-col gap-5">
       <PanelHead title="Connected apps">
-        AI apps you allowed to use Eunomia. Disconnecting one stops it at once; your memories stay.
+        AI apps you allowed to use {PRODUCT_NAME}. Disconnecting one stops it at once; your memories stay.
       </PanelHead>
       {grantsQuery.isError && <ErrorLine error={failure(grantsQuery.error, "Could not load your connected apps.", " Reload the page to try again.")} />}
       {error && <ErrorLine error={error} />}
@@ -111,7 +112,7 @@ export function ConnectedAppsSection() {
       >
         <p>
           {pending?.name ?? "This app"} will stop being able to read or save your memories right away. Your saved memories
-          stay in Eunomia. To use it again, you will need to connect it and approve access again.
+          stay in {PRODUCT_NAME}. To use it again, you will need to connect it and approve access again.
         </p>
       </ConfirmDialog>
     </div>

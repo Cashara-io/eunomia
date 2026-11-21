@@ -15,7 +15,7 @@ import { defaultsPrompter, type Prompter } from "../src/prompt.js";
 import { watch } from "../src/watch.js";
 
 // ---------------------------------------------------------------------------
-// A small fake Eunomia: the routes init and sync call, with real-ish auth rules.
+// A small fake Cupel: the routes init and sync call, with real-ish auth rules.
 // ---------------------------------------------------------------------------
 
 type Tok = { id: string; name: string; token: string; scopes: string[]; vault_id: string | null };
@@ -389,7 +389,7 @@ describe("init", () => {
   });
 
   it("refuses a server that does not answer", async () => {
-    await assert.rejects(init(opts({ url: "http://127.0.0.1:9" })), /no Eunomia server answers/);
+    await assert.rejects(init(opts({ url: "http://127.0.0.1:9" })), /no Cupel server answers/);
   });
 
   it("tells a teammate who is not in the project's vault to ask for an invite", async () => {

@@ -275,7 +275,7 @@ async fn the_memory_skill_prompt_follows_token_scopes() {
     let (_, _, got) = send(&app.router, "POST", "/mcp", Some(rpc("prompts/get", json!({"name": "eunomia-memory"}))), &bearer(&reader)).await;
     assert!(got["result"]["messages"][0]["content"]["text"].as_str().unwrap().contains("## Before you finish"), "{got}");
     let (_, _, read) = send(&app.router, "POST", "/mcp", Some(rpc("resources/read", json!({"uri": "eunomia://skill"}))), &bearer(&reader)).await;
-    assert!(read["result"]["contents"][0]["text"].as_str().unwrap().starts_with("# Eunomia memory"), "{read}");
+    assert!(read["result"]["contents"][0]["text"].as_str().unwrap().starts_with("# Cupel memory"), "{read}");
 
     // a token that cannot read memory is offered no prompt and cannot fetch it
     let connectors = token(&app, &[scopes::CONNECTORS], None).await;

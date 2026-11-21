@@ -1,6 +1,6 @@
 # AI agents & MCP
 
-Eunomia is an MCP server (Streamable HTTP) at `http://localhost:8001/mcp`
+Cupel is an MCP server (Streamable HTTP) at `http://localhost:8001/mcp`
 (also proxied at `http://localhost:3000/mcp`). The backend port listens on this machine only; agents on other machines use the frontend URL, e.g. `https://eunomia.example.com/mcp` (see [deployment](deployment.md#1-https)). It exposes the same tools the
 in-app chat uses. Every call is scoped to the token's user and logged in the
 audit log if it changes anything.
@@ -85,7 +85,7 @@ The onboarding wizard's **Connect your AI app** step, and the app picker on
 **Home**, do this for you: pick the app and copy the command or config with
 your address already filled in (an API token, if you need one, is under
 Advanced). The steps it shows are these. Use the address you open
-Eunomia at, plus `/mcp` (for example `http://localhost:3000/mcp`, or
+Cupel at, plus `/mcp` (for example `http://localhost:3000/mcp`, or
 `https://eunomia.example.com/mcp`). A `localhost` or LAN address only works
 for agents on that computer or network. Agents learn when to recall and what
 to remember from the server itself, so there is nothing else to install.
@@ -125,19 +125,19 @@ Check it with `codex mcp list`, then `/mcp` in a new Codex session.
 
 ### ChatGPT
 
-ChatGPT connects from OpenAI's servers, so Eunomia needs a public `https://`
+ChatGPT connects from OpenAI's servers, so Cupel needs a public `https://`
 address (Settings → HTTPS, or a tunnel), and `PUBLIC_URL` must be that address
 (the HTTPS setup sets it). A `localhost` or LAN install can't be reached.
 
 1. In ChatGPT on the web, open [chatgpt.com/plugins](https://chatgpt.com/plugins),
    choose **+**, then **Add custom MCP server**.
-2. Name it Eunomia, enter the server URL including `/mcp`, and set
+2. Name it Cupel, enter the server URL including `/mcp`, and set
    authentication to **OAuth** (ChatGPT has no option for a pasted bearer
-   token; it registers itself with Eunomia's OAuth server).
+   token; it registers itself with Cupel's OAuth server).
 3. Select **I understand and want to continue**, then **Create as a plugin**,
-   and approve access on Eunomia's consent page.
+   and approve access on Cupel's consent page.
 4. Install it from your personal plugins, then in a chat type `@` and pick
-   Eunomia.
+   Cupel.
 
 Custom MCP servers depend on your ChatGPT plan and workspace policy: OpenAI
 lists Business, Enterprise and Edu with full (read and write) access, and Pro
@@ -158,7 +158,7 @@ edit them, or reset them to the built-in default. It reaches agents three ways:
 - **Claude Code** also gets two hooks in `~/.claude/settings.json`:
   `SessionStart` injects your current skill, and `UserPromptSubmit` calls
   `recall` with each prompt and injects the relevant memories before Claude
-  sees it. The hooks are silent and never block a prompt if Eunomia is down.
+  sees it. The hooks are silent and never block a prompt if Cupel is down.
 
 By hand, for any MCP client: URL `http://localhost:8001/mcp`, header
 `Authorization: Bearer <token>`. Create a token in Settings → API tokens.
@@ -173,7 +173,7 @@ MCP authorization spec, revision 2026-07-28) need only the URL:
 claude mcp add --transport http eunomia http://localhost:8001/mcp
 ```
 
-The client discovers Eunomia's authorization server, opens your browser, and
+The client discovers Cupel's authorization server, opens your browser, and
 shows a consent page: who is asking, where you return to afterwards, and what
 it may do (read memory, write memory, manage vaults, manage sources). Allow
 it and the client holds a 15-minute access token plus a refresh token it
@@ -187,14 +187,14 @@ rotates on its own. Nothing is pasted.
 - **Bound to this server**: tokens are issued for the MCP URL only, work on
   `/mcp` only, and are rejected anywhere else.
 - **Public URL**: set `PUBLIC_URL` (default `http://localhost:8001`) to the
-  address clients reach Eunomia at, with no trailing slash. It becomes the
+  address clients reach Cupel at, with no trailing slash. It becomes the
   token audience and the base of the discovery documents, so set it to
-  `https://eunomia.example.com` when you put Eunomia behind a domain. Behind
+  `https://eunomia.example.com` when you put Cupel behind a domain. Behind
   the frontend on port 3000, use `http://localhost:3000`; `/.well-known/*` and
   `/oauth/*` are proxied there too. Changing it invalidates existing tokens.
 - **Client registration**: clients identified by an HTTPS metadata URL (Client
   ID Metadata Documents) work without registering; older clients register
-  through `/oauth/register`. Eunomia fetches metadata documents only from
+  through `/oauth/register`. Cupel fetches metadata documents only from
   public HTTPS hosts. A self-hosted install with no internet access can still
   use clients that register dynamically.
 - **Discovery**: `/.well-known/oauth-protected-resource` and
@@ -211,8 +211,8 @@ No. The connected agent is the model.
 | Without a key | With a key (recommended to save tokens) |
 |---|---|
 | `recall`: keyword + full-text over memories + graph + recency | adds semantic (embedding) search |
-| `reflect` returns the numbered memories; your agent writes the answer | Eunomia writes the cited answer |
-| `consolidate_observations`: your agent writes the belief with `memory_write` type `observation` | Eunomia synthesizes it |
+| `reflect` returns the numbered memories; your agent writes the answer | Cupel writes the cited answer |
+| `consolidate_observations`: your agent writes the belief with `memory_write` type `observation` | Cupel synthesizes it |
 | Vector cloud uses a lexical (word) space | Real embedding space |
 | In-app Chat is off | In-app Chat works |
 
@@ -252,10 +252,10 @@ No. The connected agent is the model.
 | `document_upload` / `document_list` / `document_get` | Upload a document (text, Markdown, JSON, CSV, text PDF) and read its extracted text; its passages are found by `search`, `recall` and `get`, each hit naming the document ([documents](documents.md)) |
 | `document_download` / `document_export` / `document_delete` | The HTTP route for the original bytes, the passages-and-vectors manifest, deletion |
 | `skill_save` / `skill_find` / `skill_list` / `skill_get` / `skill_delete` | Keep a skill an agent learned, find it later by meaning, list a vault's skills, read its body, delete it ([agent skills](#agent-skills)) |
-| `vault_share_code` / `vault_join_shared` / `vault_peers` / `vault_peer_sync` | Share a vault with another Eunomia install by a one-time code, join one, see each link's sync status, sync now ([peer vaults](peer-vaults.md)) |
+| `vault_share_code` / `vault_join_shared` / `vault_peers` / `vault_peer_sync` | Share a vault with another Cupel install by a one-time code, join one, see each link's sync status, sync now ([peer vaults](peer-vaults.md)) |
 | `vault_check` / `vault_repair` | Check a vault for broken or leftover data (memories whose entity is gone, relations with a missing end, misfiled memories, a change-log counter behind); repair removes the dangling rows and fixes the counter (owner only). Also `GET`/`POST /api/vaults/{vault}/integrity` |
 | `changes_since` | A vault's numbered change log after a cursor: what was created, updated, merged or deleted, by whom, with no content ([change log](#change-log)) |
-| `secret_request` / `secret_request_status` | Ask the user for a password or API key through a masked pop-up in the Eunomia web app instead of the chat; you get a handle, never the value ([secret requests](#secret-requests)) |
+| `secret_request` / `secret_request_status` | Ask the user for a password or API key through a masked pop-up in the Cupel web app instead of the chat; you get a handle, never the value ([secret requests](#secret-requests)) |
 | `secret_transform` | Make a new held secret from others (base64, a Bearer or Basic header, an HMAC, a JWT) and get its handle |
 | `http_request` | Send one HTTPS request with handles in its headers, query or body, to a host the user approved |
 
@@ -327,10 +327,10 @@ An impact view whose start has no saved links says so ("has no saved links to fo
 
 ### Auto-mapping
 
-`ontology_automap` builds the ontology from what Eunomia already holds. Say a cafe uploads its supplier
+`ontology_automap` builds the ontology from what Cupel already holds. Say a cafe uploads its supplier
 price list as a CSV (product, supplier, price AUD, unit, lead_time_days, status):
 
-1. `document_upload` the file, then `ontology_automap` `{"document_id": "<its id>"}`. Eunomia profiles each
+1. `document_upload` the file, then `ontology_automap` `{"document_id": "<its id>"}`. Cupel profiles each
    column (type, empty share, uniqueness, top values, enum values, date format, min and max). With a
    server model it returns `mode: "model"`: one kind (`supply_item`), a property per column with the
    column it comes from in `source_map`, and links such as `supply_item supplied_by organisation` from
@@ -518,7 +518,7 @@ rejected ones. It is off by default, so nothing changes for a vault until its ow
 
 ### What a change affects
 
-Nothing in Eunomia hardcodes what affects what. Your agent works it out from the vault's ontology
+Nothing in Cupel hardcodes what affects what. Your agent works it out from the vault's ontology
 (its kinds and link types, with their descriptions and review status), the relations and the facts,
 then shows the answer as a view. Say a logistics vault has `driver drives truck`, `truck carries
 shipment` and `shipment fulfils order`, and the user says "Truck 7 is late, what does that affect?":
@@ -561,13 +561,13 @@ tools and draws the view as cards above its reply. A `subgraph` view (`title`, `
 
 ### Secret requests
 
-Never ask the user to paste a password, API key or token into the chat. Ask Eunomia for it instead
+Never ask the user to paste a password, API key or token into the chat. Ask Cupel for it instead
 ([secret requests](secret-requests.md)):
 
 1. `secret_request` with a stable `name` (`stripe_api_key`), a `label`, a `description` of why, and
    `target.hosts` it will be sent to (`api.stripe.com`). You get a `request_id`, a `fill_url` and the
    `handle` the secret will have, `{"$secret": "eu://<vault>/<name>"}`. Never a value.
-2. The user sees a pop-up in the Eunomia web app (or opens `fill_url`), pastes the value there and saves.
+2. The user sees a pop-up in the Cupel web app (or opens `fill_url`), pastes the value there and saves.
    MCP clients that support URL elicitation (protocol 2025-11-25) are sent the page directly.
 3. `secret_request_status` tells you when it is filled.
 4. Use the handle in `http_request` (in a header by default), or derive another with `secret_transform`,
@@ -624,7 +624,7 @@ The same log is `GET /api/vaults/{vault}/changes` over REST and a WebSocket for 
 
 ### Changes show up in the web app by themselves
 
-What an agent does over MCP shows in every open Eunomia tab within a few seconds, without a reload: a vault
+What an agent does over MCP shows in every open Cupel tab within a few seconds, without a reload: a vault
 created, renamed, cloned, merged or deleted, a member invited, removed or promoted, ownership handed over,
 an invitation accepted or declined, and any memory, entity, relation or document written, edited, merged
 or deleted. The same goes for changes made in chat, in another tab, or by another member of a shared vault.

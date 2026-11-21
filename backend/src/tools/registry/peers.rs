@@ -1,4 +1,4 @@
-//! Peer vaults (`crate::peers`, docs/peer-vaults.md): share a vault with another Eunomia, join one,
+//! Peer vaults (`crate::peers`, docs/peer-vaults.md): share a vault with another Cupel, join one,
 //! list who a vault is shared with, sync now. The same service calls as the REST routes in
 //! `routers/peers.rs`, so an agent can do what the UI does.
 //! Part of the tool registry (see `registry/mod.rs`); one `register` call per tool.
@@ -32,7 +32,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
             "type": "object",
             "properties": {
                 "vault_id": {"type": "string", "description": "the vault to share (an id or its name); you must own it"},
-                "role": {"type": "string", "enum": ["read", "edit"], "default": "read", "description": "read (default): the other Eunomia only receives; explicit edit lets it add and change"},
+                "role": {"type": "string", "enum": ["read", "edit"], "default": "read", "description": concat!("read (default): the other ", crate::product_name!(), " only receives; explicit edit lets it add and change")},
                 "expires_in_hours": {"type": "integer", "description": "how long the code works, default 168 (7 days), at most 720"},
             },
             "required": ["vault_id"],
@@ -66,8 +66,8 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
         json!({
             "type": "object",
             "properties": {
-                "share_code": {"type": "string", "description": "the code the other Eunomia's owner sent, starting with eunomia1:"},
-                "name": {"type": "string", "description": "how the other Eunomia will name this one"},
+                "share_code": {"type": "string", "description": concat!("the code the other ", crate::product_name!(), "'s owner sent, starting with eunomia1:")},
+                "name": {"type": "string", "description": concat!("how the other ", crate::product_name!(), " will name this one")},
             },
             "required": ["share_code"],
         }),
@@ -80,7 +80,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                 let addrs = peers::addrs::advertised(&state.settings.public_url);
                 let name = a.name.filter(|n| !n.trim().is_empty()).unwrap_or_else(|| {
                     let n = peers::instance_name();
-                    if n.is_empty() { "Another Eunomia".to_string() } else { n }
+                    if n.is_empty() { concat!("Another ", crate::product_name!()).to_string() } else { n }
                 });
                 Ok(to_tool_value(peers::join(state, owner, &a.share_code, addrs, &name).await))
             })

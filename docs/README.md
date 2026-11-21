@@ -1,4 +1,9 @@
-# Eunomia docs
+# Cupel docs
+
+> **Formerly Eunomia.** The product was renamed Cupel. Settings (`EUNOMIA_*`),
+> paths, image and service names, the repository and the `eunomia` name an AI app
+> uses for the server keep their existing names, so these pages show them as they
+> are and an existing install needs no changes.
 
 The core user guides are shown in this folder, the **Docs** page in the
 app, and the `docs` MCP tool. The other pages are repository references for
@@ -12,10 +17,10 @@ operators and contributors.
 | [Projects](projects.md) | `npm create eunomia`: a repo's `.eunomia/` folder, one shared vault, skills sync |
 | [Python and TypeScript SDKs](sdk.md) | Manage vaults and memories from a script with a personal API token |
 | [Documents](documents.md) | Uploading files: what is indexed, the MCP tools, storage (SurrealDB's built-in file buckets, optionally on S3), backups |
-| [Sharing with another Eunomia](peer-vaults.md) | Share a memory space between separate Eunomia installs with a one-time code: addresses (LAN first), the encrypted sync protocol, integrity checks, limits |
+| [Sharing with another Cupel](peer-vaults.md) | Share a memory space between separate Cupel installs with a one-time code: addresses (LAN first), the encrypted sync protocol, integrity checks, limits |
 | [Concepts](concepts.md) | Vaults, entities, memories, recall, merging, the graph and the 3D vector cloud |
 | [Connectors](connectors.md) | Credentials, source options and sync setup |
-| [Extensions](extensions.md) | Your own scripts feeding Eunomia: a webhook inbox that buffers events, batch claim/ack, the security model, and the plan for hosted runtimes |
+| [Extensions](extensions.md) | Your own scripts feeding Cupel: a webhook inbox that buffers events, batch claim/ack, the security model, and the plan for hosted runtimes |
 | [Password managers](password-managers.md) | Let tools use secrets kept in your own 1Password or Bitwarden Secrets Manager (Bitwarden in preview): switching it on, set-up, references (vault owners for their own vaults), the resolution log, what it protects against |
 | [Two-step verification](security/mfa.md) | Authenticator codes and recovery codes for password accounts, requiring them for everyone, single sign-on and `OIDC_REQUIRE_MFA`, upgrade notes |
 | [Secret requests](secret-requests.md) | Agents ask for a key in a pop-up instead of the chat, then use and transform it by handle without seeing it: the pop-up, approved hosts, transforms, `http_request`, what it protects against |

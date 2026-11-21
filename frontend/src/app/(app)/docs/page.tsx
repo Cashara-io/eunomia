@@ -11,22 +11,23 @@ import ErrorLine, { failure } from "@/components/ErrorLine";
 import CopyButton from "@/components/bits/CopyButton";
 import Tooltip from "@/components/bits/Tooltip";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 type Topic = { topic: string; title: string };
 
 // A short, people-first start page that lives here rather than in docs/: what someone does day to day.
 const USING_TOPIC = "using";
-const USING_TITLE = "Using Eunomia";
-const USING_MARKDOWN = `# Using Eunomia
+const USING_TITLE = `Using ${PRODUCT_NAME}`;
+const USING_MARKDOWN = `# Using ${PRODUCT_NAME}
 
-Eunomia is your shared memory. Your AI app looks things up in it and saves what is worth keeping, so you don't have to repeat yourself.
+${PRODUCT_NAME} is your shared memory. Your AI app looks things up in it and saves what is worth keeping, so you don't have to repeat yourself.
 
-## Using Eunomia with ChatGPT
+## Using ${PRODUCT_NAME} with ChatGPT
 
 1. On **Home**, choose ChatGPT under *Which AI app do you use?* and follow the steps. Other apps (Claude, Codex and more) work the same way.
-2. In a new ChatGPT conversation, type \`@\` and choose Eunomia, then ask your question, for example *What do we know about the billing rewrite?*
+2. In a new ChatGPT conversation, type \`@\` and choose ${PRODUCT_NAME}, then ask your question, for example *What do we know about the billing rewrite?*
 3. Ask it to remember things too: *Remember that Priya owns the billing rewrite.*
 
-If ChatGPT can't reach Eunomia, the steps say so. Ask your Eunomia admin to give the server a public address.
+If ChatGPT can't reach ${PRODUCT_NAME}, the steps say so. Ask your ${PRODUCT_NAME} admin to give the server a public address.
 
 ## Finding what's saved
 
@@ -37,28 +38,28 @@ If ChatGPT can't reach Eunomia, the steps say so. Ask your Eunomia admin to give
 
 ## Memory spaces
 
-Everything is saved in a space. **Personal** is yours alone; a team space is shared with everyone in it. When someone invites you, the invitation appears on Home. See [How Eunomia works](concepts.md) for how spaces work.
+Everything is saved in a space. **Personal** is yours alone; a team space is shared with everyone in it. When someone invites you, the invitation appears on Home. See [How ${PRODUCT_NAME} works](concepts.md) for how spaces work.
 
 ## AI provider
 
-An AI provider is optional. Connected AI apps can recall and save memory using their own models. To let Eunomia search by meaning and answer questions in Chat, an admin can add a provider in **Settings > AI provider**. Any OpenAI-compatible endpoint works, including a local model server or proxy. You can skip this during setup and add it later.
+An AI provider is optional. Connected AI apps can recall and save memory using their own models. To let ${PRODUCT_NAME} search by meaning and answer questions in Chat, an admin can add a provider in **Settings > AI provider**. Any OpenAI-compatible endpoint works, including a local model server or proxy. You can skip this during setup and add it later.
 
 The embedding model supports meaning search. The chat model finds people, topics and connections in synced data and answers questions in Chat. Leave the chat model blank for automatic selection: gpt-4o-mini on OpenAI, or the first chat model offered by another endpoint.
 
 ## Custom integrations
 
-An extension gives your own script a webhook inbox. Eunomia holds incoming data until the script collects it over the API. The script runs on your computer or server; Eunomia does not host it. Open **Connected sources > Advanced: custom integrations** to create an extension. Its target memory space tells the script where it is expected to save each batch.
+An extension gives your own script a webhook inbox. ${PRODUCT_NAME} holds incoming data until the script collects it over the API. The script runs on your computer or server; ${PRODUCT_NAME} does not host it. Open **Connected sources > Advanced: custom integrations** to create an extension. Its target memory space tells the script where it is expected to save each batch.
 
 ## Changing what your AI remembers
 
 Admins can add **AI instructions**: the instructions AI apps follow, for example *always remember project deadlines*. If there is something your AI app should always remember, ask your admin.
 `;
 
-/** Help topics, people first: reading and using Eunomia, then installation and running it. */
+/** Help topics, people first: reading and using Cupel, then installation and running it. */
 const ADMIN_TOPICS = new Set(["quickstart", "installation", "deployment"]);
 
 /** Plain names for topics whose served title is jargon. Used for the nav and the page title. */
-const PLAIN_TITLES: Record<string, string> = { agents: "Connecting AI apps", concepts: "How Eunomia works" };
+const PLAIN_TITLES: Record<string, string> = { agents: "Connecting AI apps", concepts: `How ${PRODUCT_NAME} works` };
 const plainTitle = (t: Topic): Topic => ({ ...t, title: PLAIN_TITLES[t.topic] ?? t.title });
 
 function textOf(node: ReactNode): string {
@@ -118,7 +119,7 @@ export default function DocsPage() {
   const using: Topic[] = served.length > 0 ? [{ topic: USING_TOPIC, title: USING_TITLE }, ...served.filter((t) => !ADMIN_TOPICS.has(t.topic))] : [];
   const forAdmins: Topic[] = served.filter((t) => ADMIN_TOPICS.has(t.topic));
   const groups = [
-    { label: "Using Eunomia", topics: using },
+    { label: `Using ${PRODUCT_NAME}`, topics: using },
     { label: "For admins", topics: forAdmins },
   ].filter((g) => g.topics.length > 0);
   const topics: Topic[] = [...using, ...forAdmins];
@@ -128,9 +129,9 @@ export default function DocsPage() {
   const docQuery = useDoc(local ? "agents" : topic);
   const body = local ? USING_MARKDOWN : (docQuery.data?.markdown ?? null);
   const error = !local && docQuery.isError
-    ? failure(docQuery.error, "Could not load that help page.", " Check that Eunomia is running, then reload the page.")
+    ? failure(docQuery.error, "Could not load that help page.", ` Check that ${PRODUCT_NAME} is running, then reload the page.`)
     : topicsQuery.isError
-      ? failure(topicsQuery.error, "Could not load the help pages.", " Check that Eunomia is running, then reload the page.")
+      ? failure(topicsQuery.error, "Could not load the help pages.", ` Check that ${PRODUCT_NAME} is running, then reload the page.`)
       : null;
   const [outline, setOutline] = useState<{ id: string; text: string }[]>([]);
   const [active, setActive] = useState<string | null>(null);
@@ -208,7 +209,7 @@ export default function DocsPage() {
         <div className="hidden md:flex flex-col gap-5">
           {groups.map((g) => (
             <div key={g.label} className="flex flex-col gap-1">
-              {/* No group label that would just repeat the page title ("Using Eunomia" on its own page). */}
+              {/* No group label that would just repeat the page title ("Using Cupel" on its own page). */}
               {g.label !== docTitle && (
                 <h2 className="text-caption font-semibold px-3" style={{ color: "var(--ink-dim)" }}>
                   {g.label}

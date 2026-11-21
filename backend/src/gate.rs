@@ -103,7 +103,7 @@ pub fn explicit_class(method: &Method, path: &str) -> Option<Class> {
         ["api", "events", "ws"] => Vault(scopes::MEMORY_READ),
         ["api", "connectors", ..] | ["api", "snapshot"] => Account(scopes::CONNECTORS),
         ["api", "sources", _, "webhook", _] => Webhook,
-        // another Eunomia (peer vaults): public, authenticated by the share secret or the link key, limited per client address
+        // another Cupel (peer vaults): public, authenticated by the share secret or the link key, limited per client address
         ["api", "peer", ..] => Webhook,
         ["api", "peers", ..] => Account(scopes::VAULTS_ADMIN),
         // an extension's inbox: public, authenticated by its own secret, limited per client address

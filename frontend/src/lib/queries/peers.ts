@@ -1,4 +1,4 @@
-// Sharing a memory space with another Eunomia (backend `routers/peers.rs`, docs/peer-vaults.md).
+// Sharing a memory space with another Cupel (backend `routers/peers.rs`, docs/peer-vaults.md).
 // A small hand-written client: these routes are new, so they are typed here rather than in lib/gen.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { API_URL, ApiError, traceparent } from "@/lib/api";
@@ -10,7 +10,7 @@ export type PeerRole = "edit" | "read";
 
 export type PeerLink = {
   id: string;
-  /** host: this Eunomia has the original and shares it out; guest: this space is a copy of another's. */
+  /** host: this Cupel has the original and shares it out; guest: this space is a copy of another's. */
   direction: "host" | "guest";
   role: PeerRole;
   peer_name: string;

@@ -1,5 +1,5 @@
 //! Secret requests (docs/architecture/specs/secret-requests.md): an agent asks for a secret with
-//! `secret_request`, the person behind the agent's credential pastes it into Eunomia's own pop-up, and the
+//! `secret_request`, the person behind the agent's credential pastes it into Cupel's own pop-up, and the
 //! agent only ever gets the handle. This module holds the request lifecycle (create, status, list, fill,
 //! decline) and the management of held secrets (list, replace, delete), with who may do each; the REST
 //! routes (`routers/secret_requests.rs`) and the tools (`tools/registry/secrets.rs`) are thin layers on it.
@@ -138,7 +138,7 @@ async fn client_name(state: &OrgState, user: &RecordId, who: &Caller) -> String 
             };
             names.into_iter().next().unwrap_or_default()
         }
-        "user" => "Eunomia web app".into(),
+        "user" => concat!(crate::product_name!(), " web app").into(),
         _ => String::new(),
     }
 }
@@ -183,8 +183,8 @@ struct RequestArgs {
     replace: bool,
 }
 
-const NEXT: &str = "Ask the user to open fill_url in their browser (signed in to Eunomia) and paste the secret there, never in this chat. \
-Then call secret_request_status with request_id. Once it is filled, use handle in http_request or secret_transform; you never see the value.";
+const NEXT: &str = concat!("Ask the user to open fill_url in their browser (signed in to ", crate::product_name!(), ") and paste the secret there, never in this chat. \
+Then call secret_request_status with request_id. Once it is filled, use handle in http_request or secret_transform; you never see the value.");
 
 fn pending_value(state: &OrgState, r: &RequestRow) -> Value {
     let (url, insecure) = fill_url(&state.settings, &r.id);

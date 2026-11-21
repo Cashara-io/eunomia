@@ -845,8 +845,8 @@ pub enum CallError {
 impl CallError {
     pub fn into_app(self) -> AppError {
         match self {
-            CallError::Unreachable(m) => AppError::new(axum::http::StatusCode::BAD_GATEWAY, format!("Can't reach the other Eunomia: {m}")),
-            CallError::Revoked => AppError::bad_request("The other Eunomia stopped sharing this space."),
+            CallError::Unreachable(m) => AppError::new(axum::http::StatusCode::BAD_GATEWAY, format!("Can't reach the other {}: {m}", crate::config::PRODUCT_NAME)),
+            CallError::Revoked => AppError::bad_request(concat!("The other ", crate::product_name!(), " stopped sharing this space.")),
         }
     }
 }
@@ -988,7 +988,7 @@ pub async fn sync_link(state: &OrgState, key: &str) -> AppResult<Report> {
         };
         addr = Some(used);
         let Ok(resp) = serde_json::from_value::<ExchangeResponse>(v) else {
-            failure = Some(CallError::Unreachable("an answer this Eunomia can't read (is the other one a different version?)".into()));
+            failure = Some(CallError::Unreachable(concat!("an answer this ", crate::product_name!(), " can't read (is the other one a different version?)").into()));
             break;
         };
         theirs.add(&resp.report);
@@ -1018,7 +1018,7 @@ pub async fn sync_link(state: &OrgState, key: &str) -> AppResult<Report> {
     let report = json!({ "received": mine, "sent": theirs, "documents_not_shared": documents });
     match failure {
         Some(CallError::Revoked) => {
-            let msg = "The other Eunomia stopped sharing this space. Your copy stays here as a normal space.".to_string();
+            let msg = concat!("The other ", crate::product_name!(), " stopped sharing this space. Your copy stays here as a normal space.").to_string();
             save_progress(&state.db, &row, (out_cursor, in_cursor), addr, status::REVOKED, Some(msg), mine.rejected, (None, None), report).await?;
         }
         Some(CallError::Unreachable(why)) => {
@@ -1114,7 +1114,7 @@ pub async fn host_rpc(state: &OrgState, org: &str, key: &str, env: &Value) -> Re
             "leave" => {
                 let _ = super::forget(&state.db, &row).await;
                 let space = super::vault_name(&state.db, &row.vault).await.ok().flatten().unwrap_or_default();
-                let peer = if row.peer_name.trim().is_empty() { "another Eunomia" } else { row.peer_name.trim() };
+                let peer = if row.peer_name.trim().is_empty() { concat!("another ", crate::product_name!()) } else { row.peer_name.trim() };
                 super::audit_from_peer(state, &row.user, &row.peer_instance, "peer.left", &space, &format!("from={peer}")).await;
                 json!({ "left": true })
             }

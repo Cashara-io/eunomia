@@ -3,7 +3,7 @@
 import { DownloadSimpleIcon } from "@phosphor-icons/react/ssr";
 import { API_URL } from "@/lib/api";
 
-/** Plays (or downloads) the audio Eunomia kept for one Pocket recording (#117). Render it only when the recording has audio. */
+/** Plays (or downloads) the audio Cupel kept for one Pocket recording (#117). Render it only when the recording has audio. */
 export default function PocketAudioPlayer({ recordingId, title }: { recordingId: string; title?: string }) {
   const src = `${API_URL}/api/connectors/pocketai/recordings/${encodeURIComponent(recordingId)}/audio`;
   return (

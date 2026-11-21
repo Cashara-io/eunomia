@@ -1,4 +1,4 @@
-// Original implementation for Eunomia: shared motion helpers for the bits components.
+// Original implementation for Cupel: shared motion helpers for the bits components.
 // Usage: const reduced = useReducedMotion(); const fine = useFinePointer(); cssVar("--accent") reads a token at fire time.
 // Mount <InputModeTracker /> once per page tree; it sets data-input="pointer"|"keyboard" on <html> for CSS to gate motion.
 "use client";

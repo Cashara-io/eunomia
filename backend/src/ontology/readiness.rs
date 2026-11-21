@@ -1,6 +1,6 @@
 //! Whether a vault's ontology is ready to answer number and what-if questions: its kinds, properties,
 //! metrics and link types counted by status, and what still blocks it, in plain words. Read-only; the
-//! owner fixes a blocker in the Eunomia app (Kinds and links).
+//! owner fixes a blocker in the Cupel app (Kinds and links).
 //!
 //! Ready means: nothing proposed is waiting for an owner, at least one metric is approved, and every
 //! property an approved metric reads is approved and has values. A kind with no metric is not a

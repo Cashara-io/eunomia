@@ -312,7 +312,7 @@ struct AudioQuery {
     path = "/api/connectors/pocketai/recordings/{recording_id}/audio",
     tag = "connectors",
     summary = "A Pocket recording's stored audio",
-    description = "The audio Eunomia kept for one of the caller's Pocket recordings (connections with `config.store_audio` on). 404 when none was stored.",
+    description = "The audio Cupel kept for one of the caller's Pocket recordings (connections with `config.store_audio` on). 404 when none was stored.",
     params(("recording_id" = String, Path), AudioQuery),
     responses((status = 200, description = "The audio bytes", content_type = "audio/mp4", body = String), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),

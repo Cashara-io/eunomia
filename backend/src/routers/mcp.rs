@@ -38,7 +38,7 @@ const SUPPORTED_VERSIONS: &[&str] = &["2025-11-25", "2025-06-18", "2025-03-26"];
 const DEFAULT_VERSION: &str = "2025-06-18";
 const SESSION_HEADER: &str = "mcp-session-id";
 
-const INSTRUCTIONS: &str = "Eunomia is the user's long-term memory: entities (people, organisations, \
+const INSTRUCTIONS: &str = concat!(crate::product_name!(), " is the user's long-term memory: entities (people, organisations, \
 locations, code) with remembered facts, plus records synced from their connected sources. \
 Use `recall` before answering questions about the user's world, `search`/`get` for raw synced records, \
 and `memory_write` to remember new facts. You are the model: if the server has no OpenAI key, `reflect` \
@@ -54,13 +54,13 @@ the latte price by 30 cents?\", \"what if Truck 7 never arrives?\"), build the c
 run `scenario_run` with the approved metrics: the server computes them before and after and saves nothing; show it with \
 `show_view` `view` \"scenario\". To map a source's records or an \
 uploaded CSV onto the ontology, run `ontology_automap`; once an owner approved a CSV's kind and properties, \
-`document_import_rows` imports its rows.";
+`document_import_rows` imports its rows.");
 
 /// The memory skill is also served as a prompt and a resource: `instructions` reach only the
 /// clients that read them, and Claude Code offers MCP prompts as slash commands.
 const SKILL_PROMPT: &str = "eunomia-memory";
 const SKILL_URI: &str = "eunomia://skill";
-const SKILL_DESCRIPTION: &str = "The user's Eunomia memory skill: when to recall and what to remember.";
+const SKILL_DESCRIPTION: &str = concat!("The user's ", crate::product_name!(), " memory skill: when to recall and what to remember.");
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/mcp", post(handle).head(upload_preflight).get(method_not_allowed).delete(method_not_allowed))
@@ -95,7 +95,7 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
         }
     let Some((user, granted)) = gate_user(authn) else {
         let presented = headers.contains_key(header::AUTHORIZATION);
-        let err = AppError::unauthorized("missing or invalid access token: connect with OAuth or create a personal API token on the Eunomia dashboard");
+        let err = AppError::unauthorized(concat!("missing or invalid access token: connect with OAuth or create a personal API token on the ", crate::product_name!(), " dashboard"));
         return ([(header::WWW_AUTHENTICATE, crate::oauth::www_authenticate(&state.settings, presented))], err).into_response();
     };
 
@@ -258,13 +258,13 @@ fn session_has_url_elicitation() -> bool {
 /// carries no credential; the page needs the person's own browser session.
 fn url_elicitation_required(id: Value, pending: &Value) -> Value {
     let label = pending.get("label").and_then(Value::as_str).unwrap_or("A secret");
-    let message = format!("{label}: open this page in Eunomia and paste it there, not in chat. Retry when you have saved it.");
+    let message = format!("{label}: open this page in {} and paste it there, not in chat. Retry when you have saved it.", crate::config::PRODUCT_NAME);
     json!({
         "jsonrpc": "2.0",
         "id": id,
         "error": {
             "code": URL_ELICITATION_REQUIRED,
-            "message": "This request needs a secret from the user, entered in Eunomia.",
+            "message": concat!("This request needs a secret from the user, entered in ", crate::product_name!(), "."),
             "data": {
                 "elicitations": [{
                     "mode": "url",
@@ -344,14 +344,14 @@ async fn handle_message(state: &AppState, user: &User, message: &Value) -> Optio
         "tools/call" => call_tool(state, user, id, &params).await,
         "prompts/list" => {
             let prompts: Vec<Value> = may_read_skill()
-                .then(|| json!({ "name": SKILL_PROMPT, "title": "Eunomia memory", "description": SKILL_DESCRIPTION, "arguments": [] }))
+                .then(|| json!({ "name": SKILL_PROMPT, "title": concat!(crate::product_name!(), " memory"), "description": SKILL_DESCRIPTION, "arguments": [] }))
                 .into_iter()
                 .collect();
             result_response(id, json!({ "prompts": prompts }))
         }
         "resources/list" => {
             let resources: Vec<Value> = may_read_skill()
-                .then(|| json!({ "uri": SKILL_URI, "name": SKILL_PROMPT, "title": "Eunomia memory skill", "description": SKILL_DESCRIPTION, "mimeType": "text/markdown" }))
+                .then(|| json!({ "uri": SKILL_URI, "name": SKILL_PROMPT, "title": concat!(crate::product_name!(), " memory skill"), "description": SKILL_DESCRIPTION, "mimeType": "text/markdown" }))
                 .into_iter()
                 .collect();
             result_response(id, json!({ "resources": resources }))
@@ -406,7 +406,7 @@ fn initialize_result(params: &Value, skill: &str) -> Value {
     json!({
         "protocolVersion": negotiate_version(params.get("protocolVersion").and_then(Value::as_str)),
         "capabilities": { "tools": { "listChanged": false }, "prompts": { "listChanged": false }, "resources": { "listChanged": false } },
-        "serverInfo": { "name": "eunomia", "title": "Eunomia", "version": crate::config::APP_VERSION },
+        "serverInfo": { "name": "eunomia", "title": crate::config::PRODUCT_NAME, "version": crate::config::APP_VERSION },
         "instructions": instructions,
     })
 }
@@ -590,7 +590,7 @@ mod tests {
     #[test]
     fn initialize_advertises_tools_and_echoes_version() {
         let r = initialize_result(&json!({ "protocolVersion": "2025-03-26" }), crate::docs::DEFAULT_SKILL);
-        assert!(r["instructions"].as_str().unwrap().contains("# Eunomia memory"));
+        assert!(r["instructions"].as_str().unwrap().contains("# Cupel memory"));
         assert!(!r["instructions"].as_str().unwrap().contains("name: eunomia-memory"));
         assert_eq!(r["protocolVersion"], "2025-03-26");
         assert!(r["capabilities"]["tools"].is_object());
@@ -606,7 +606,7 @@ mod tests {
         let body = crate::docs::skill_body(crate::docs::DEFAULT_SKILL);
         let p = prompt_result(body);
         assert_eq!(p["messages"][0]["role"], "user");
-        assert!(p["messages"][0]["content"]["text"].as_str().unwrap().starts_with("# Eunomia memory"));
+        assert!(p["messages"][0]["content"]["text"].as_str().unwrap().starts_with("# Cupel memory"));
         let r = resource_result(body);
         assert_eq!(r["contents"][0]["uri"], SKILL_URI);
         assert!(r["contents"][0]["text"].as_str().unwrap().contains("Before you finish"));

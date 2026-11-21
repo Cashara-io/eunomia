@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Moves a self-hosted Eunomia stack from SurrealDB 2.x to 3.x. Idempotent: it
+# Moves a self-hosted Cupel stack from SurrealDB 2.x to 3.x. Idempotent: it
 # exits 0 when the stack already runs 3.x (or the compose file does not pin 3.x).
 # Called by scripts/auto-update.sh before `docker compose up`, by the one-shot `surreal-upgrade`
 # compose service (scripts/surreal-upgrade-service.sh) during `docker compose up`, or run by hand

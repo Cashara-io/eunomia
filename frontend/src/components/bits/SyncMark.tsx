@@ -1,4 +1,4 @@
-// Inspired by React Bits StatusMark (reactbits.dev). Original implementation for Eunomia.
+// Inspired by React Bits StatusMark (reactbits.dev). Original implementation for Cupel.
 // Usage: <SyncMark status={busy ? "running" : ok ? "done" : "idle"} size={14} /> inside a button; keep the button's text label.
 // The check or cross draws only when status changes after mount, so history rows that mount "done" sit still.
 "use client";

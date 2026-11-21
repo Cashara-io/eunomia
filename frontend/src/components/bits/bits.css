@@ -1,4 +1,4 @@
-/* Inspired by React Bits (reactbits.dev). Original implementation for Eunomia.
+/* Inspired by React Bits (reactbits.dev). Original implementation for Cupel.
    Usage: imported by the bits components that need it; never import it from a page.
    Colours come from globals.css tokens only. Reduced motion renders final states. */
 

@@ -7,12 +7,18 @@
   </picture>
 </a>
 
-# Eunomia
+# Cupel
+
+> **Formerly Eunomia.** The product was renamed Cupel. Settings (`EUNOMIA_*`),
+> paths such as `/opt/eunomia` and `.eunomia/`, Docker images and services,
+> database names, API routes, MCP tool names and this repository's address keep
+> their existing names, so an existing install needs no changes and updates in
+> place.
 
 **Shared memory for the AI apps you already use.**
 
 Tell one AI app something once, and every app you connect can remember it.
-Eunomia keeps your people, projects, decisions and documents in one place that
+Cupel keeps your people, projects, decisions and documents in one place that
 you host and own, and lets ChatGPT, Claude, Claude Code, Codex and other AI apps
 look things up there.
 
@@ -35,7 +41,7 @@ curl -fsSL https://www.buildpaperless.com.au/eunomia/install.sh | bash
 
 <div align="center">
 
-It installs Docker if it's missing, starts Eunomia and creates your account.
+It installs Docker if it's missing, starts Cupel and creates your account.
 [Read the installer script](https://www.buildpaperless.com.au/eunomia/install.sh) ·
 [What it does and its options](#install).
 
@@ -50,7 +56,7 @@ It installs Docker if it's missing, starts Eunomia and creates your account.
 
 ## See it in action
 
-[![The Eunomia launch film: memory cards bursting out of the recall bar](docs/images/eunomia-launch-film-poster.jpg)](docs/media/eunomia-launch-film.mp4)
+[![The Cupel launch film: memory cards bursting out of the recall bar](docs/images/eunomia-launch-film-poster.jpg)](docs/media/eunomia-launch-film.mp4)
 
 Watch the launch film (with sound) in [1080p](docs/media/eunomia-launch-film.mp4)
 (27 MB) or [720p](docs/media/eunomia-launch-film-720p.mp4) (4 MB).
@@ -63,13 +69,13 @@ Every release is described on the [releases page](https://github.com/Cashara-io/
 
 ---
 
-# Using Eunomia
+# Using Cupel
 
-This part is for everyone, including people whose admin has already set Eunomia up.
+This part is for everyone, including people whose admin has already set Cupel up.
 
 ## Connect your AI app
 
-1. **Open Eunomia and pick your app on Home.** The choices are:
+1. **Open Cupel and pick your app on Home.** The choices are:
    - **ChatGPT**, the web or desktop app.
    - **Claude Code**, a coding terminal for developers.
    - **Codex**, a coding app or terminal.
@@ -80,13 +86,13 @@ This part is for everyone, including people whose admin has already set Eunomia 
    Codex need one command, and the guide shows how to open a command window on Mac,
    Windows or Linux.
 3. **Sign in and approve.** Your app opens a page that asks **"Allow *app* to use
-   Eunomia?"**. Read what it is asking for, then choose **Allow**.
-4. **Try it.** In a new conversation, ask *"Use Eunomia to look for memories about me."*
+   Cupel?"**. Read what it is asking for, then choose **Allow**.
+4. **Try it.** In a new conversation, ask *"Use Cupel to look for memories about me."*
    On a new account it finds nothing. That's normal: the connection works, there is
    just nothing saved yet.
 
-If ChatGPT can't reach Eunomia, its guide gives you a message to send your admin.
-ChatGPT connects from OpenAI's servers, so Eunomia needs a public `https://` address.
+If ChatGPT can't reach Cupel, its guide gives you a message to send your admin.
+ChatGPT connects from OpenAI's servers, so Cupel needs a public `https://` address.
 To disconnect an app later, go to **Settings → Connected apps**. Stuck? Every guide
 links to **Connection help**.
 
@@ -114,7 +120,7 @@ Your AI app saves to **your personal space** unless you name a space.
 | **Connected sources** | Bring in data from other apps (GitHub, Slack, Notion, Gmail…) |
 | **Help** | The user guides, inside the app |
 | **Settings** | Your account, API tokens, connected apps, and admin pages for admins |
-| **Advanced → AI instructions, Code map** | What Eunomia tells AI apps about using it, and a map of code your agents have described |
+| **Advanced → AI instructions, Code map** | What Cupel tells AI apps about using it, and a map of code your agents have described |
 
 Press **⌘K** (Ctrl K on Windows and Linux) to search everything.
 
@@ -132,8 +138,8 @@ space.
 - **Make a copy** creates a new space with the same memories, with only you in it.
   **Advanced: combine two spaces** (for owners and admins) merges two spaces into a
   new one and leaves both originals unchanged.
-- **Share with another Eunomia.** An owner can create a one-time share code. Someone
-  running their own Eunomia joins with it and keeps a full copy that stays in step
+- **Share with another Cupel.** An owner can create a one-time share code. Someone
+  running their own Cupel joins with it and keeps a full copy that stays in step
   over an encrypted link ([details](docs/peer-vaults.md)).
 
 In the API and in agent tools, a memory space is called a **vault**.
@@ -157,7 +163,7 @@ The full rules, including what an agent token can reach, are in
 - **Connect a source** on **Connected sources**. Built in: GitHub, Linear, Notion,
   Todoist, Slack, Discord, Gmail, Google Calendar, Ed Discussion, PocketAI (meeting
   recordings and transcripts), and personal sources (Stripe, Up Bank, Spotify).
-  Eunomia checks the connection first, shows where items will go, and reports progress.
+  Cupel checks the connection first, shows where items will go, and reports progress.
 - **Disconnect** stops importing and keeps what was already imported. **Remove and
   delete its data** is a separate step that asks you to confirm.
 
@@ -181,7 +187,7 @@ curl -fsSL https://www.buildpaperless.com.au/eunomia/install.sh | bash -s -- --d
 - It installs anything missing (git, curl, openssl, Docker, jq), asking first when it
   runs interactively. It uses Homebrew on macOS (with Colima for Docker) and your
   package manager on Linux.
-- It puts Eunomia in `--dir`, which defaults to `./eunomia` in the current folder.
+- It puts Cupel in `--dir`, which defaults to `./eunomia` in the current folder.
 - It starts the database, backend, web app, updater and nightly backups.
 - It creates your account and saves the password to `.eunomia-credentials`
   (readable only by you).
@@ -194,7 +200,7 @@ Every option, and a manual install without the script, are in
 [Installation](docs/installation.md). Running the installer again is safe.
 
 Then open [localhost:3000](http://localhost:3000). **The first account is the admin.**
-Restart your AI app so it loads Eunomia. For Claude Code, exit and run
+Restart your AI app so it loads Cupel. For Claude Code, exit and run
 `claude --continue`.
 
 | Port | Serves | Reachable from |
@@ -250,7 +256,7 @@ Restart your AI app so it loads Eunomia. For Claude Code, exit and run
 ## AI model
 
 **You don't need one.** Connected AI apps use their own model to read and write
-memories, and Eunomia's search works on text and links. Adding an OpenAI-compatible
+memories, and Cupel's search works on text and links. Adding an OpenAI-compatible
 endpoint in **Settings → AI provider** turns on:
 - search by meaning;
 - automatic extraction of people and facts;
@@ -265,7 +271,7 @@ Local endpoints are allowed by default. Embeddings must have 1,536 dimensions. S
 - **Schedule:** the `backup` service saves an encrypted export of every database
   nightly at 03:00 (set `TZ` in `.env` for local time). It keeps 14 nightly and 8
   weekly copies in the `eunomia-backups` volume.
-- **No failover:** Eunomia is a single machine with no standby copy. You can lose up to
+- **No failover:** Cupel is a single machine with no standby copy. You can lose up to
   a day of changes.
 - **Off-machine copies:** keep `.env` (it holds `ENCRYPTION_KEY` and
   `BACKUP_ENCRYPTION_KEY`) and copies of the backups somewhere else. Without
@@ -284,7 +290,7 @@ and the backups on this machine.** Details are in
 
 ## Updating
 
-**Settings → Updates → Update now.** Only admins see it. Eunomia checks for a new
+**Settings → Updates → Update now.** Only admins see it. Cupel checks for a new
 release every 10 minutes. It restarts on the new release's prebuilt images in a few
 seconds and runs any database changes itself.
 
@@ -308,7 +314,7 @@ cd .. && rm -rf ~/eunomia
 
 Then remove the `eunomia` entry from each AI app's MCP settings. The file for each app
 is listed in [AI agents & MCP](docs/agents.md). For Claude Code, also remove:
-- the two Eunomia hooks in `~/.claude/settings.json`;
+- the two Cupel hooks in `~/.claude/settings.json`;
 - `~/.claude/skills/eunomia-memory`;
 - `~/.config/eunomia`.
 
@@ -318,7 +324,7 @@ is listed in [AI agents & MCP](docs/agents.md). For Claude Code, also remove:
 
 ## How it works
 
-![Eunomia architecture: browser and agents reach the Rust API; job workers sync apps and enrich records; both use SurrealDB's control and per-org databases](docs/diagrams/architecture.svg)
+![Cupel architecture: browser and agents reach the Rust API; job workers sync apps and enrich records; both use SurrealDB's control and per-org databases](docs/diagrams/architecture.svg)
 
 - **Stack:** a Rust backend, a Next.js web app and SurrealDB 3.
 - **Data:** each organisation has its own database, reached with its own database user.
@@ -334,7 +340,7 @@ See the [architecture](docs/architecture.md) and the
 
 ## Connect agents and clients
 
-- **MCP:** `<your Eunomia URL>/mcp`, using a personal access token or MCP OAuth 2.1.
+- **MCP:** `<your Cupel URL>/mcp`, using a personal access token or MCP OAuth 2.1.
 - **REST:** `POST /api/tools/:name` with the same token. Both share one tool registry.
 - **Install script:** supports Claude Code, Codex, Hermes, Gemini CLI, Cursor, Windsurf,
   OpenCode, VS Code and Claude Desktop (Claude Desktop needs Node).
@@ -379,7 +385,7 @@ code and a trace id ([Errors](docs/errors.md), [Debugging](docs/debugging.md),
 | [Connectors](docs/connectors.md) | Source credentials, sync and routing |
 | [Deployment](docs/deployment.md) | HTTPS, settings, SSO, updates and backups |
 | [Password managers](docs/password-managers.md) | 1Password and Bitwarden references, secret requests |
-| [Sharing with another Eunomia](docs/peer-vaults.md) | Share codes and keeping copies in step |
+| [Sharing with another Cupel](docs/peer-vaults.md) | Share codes and keeping copies in step |
 | [Projects](docs/projects.md) | `npm create eunomia`: one space and shared skills per repo |
 | [Architecture](docs/architecture.md) | Tenancy, jobs, ingestion, retrieval and access checks |
 

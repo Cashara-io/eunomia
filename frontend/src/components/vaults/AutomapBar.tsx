@@ -1,6 +1,6 @@
 "use client";
 
-// Auto-map: Eunomia profiles the fields of the space's connected records, or one uploaded CSV, and the
+// Auto-map: Cupel profiles the fields of the space's connected records, or one uploaded CSV, and the
 // server's model proposes kinds, properties and links. Every link was checked against the values first,
 // so each one says how much of it matched. An owner still decides each proposal in the list below.
 import { useState } from "react";

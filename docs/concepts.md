@@ -40,9 +40,9 @@ the vector cloud, and the facts extracted from it are written there. Another
 member's records carry their owner's key in their id (`<owner>:github:...`), so
 ids stay unambiguous in a shared vault.
 
-A vault can also be shared with a **different Eunomia install** (a teammate's, another
+A vault can also be shared with a **different Cupel install** (a teammate's, another
 computer of yours) by a one-time share code: each install keeps a full copy and they stay in step
-by themselves. See [sharing with another Eunomia](peer-vaults.md).
+by themselves. See [sharing with another Cupel](peer-vaults.md).
 
 ## Entities and memories
 

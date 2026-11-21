@@ -1,11 +1,11 @@
-# Installing Eunomia
+# Installing Cupel
 
 Moved to [docs/installation.md](docs/installation.md). Agents should read its
 "Installing as an AI agent" section.
 
 ## Backups
 
-A self-hosted Eunomia is one node. There is no high availability: if the
+A self-hosted Cupel is one node. There is no high availability: if the
 machine or its disk dies, you are down until you restore. The data you can lose
 equals the backup interval (nightly backups mean up to about 24 hours).
 

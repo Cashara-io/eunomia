@@ -13,13 +13,14 @@ import AuthShell, { LABEL, RevealToggle } from "../login/AuthShell";
 import { OrDivider, SsoButton, useOidcError, useSignIn } from "../login/Sso";
 import SecondStep from "../login/SecondStep";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const MISMATCH = "Passwords don't match.";
 const EMAIL_TAKEN = "auth.email_taken";
 
 /** Known register failures in plain words. Validation messages (password length, email shape) are already plain. */
 const PLAIN: Record<string, string> = {
   "auth.password_disabled": "This server signs people in with a company account, not a password. Use the sign-in button above.",
-  "tenant.provisioning_disabled": "New accounts can't be created on this server. Ask your Eunomia admin to invite you.",
+  "tenant.provisioning_disabled": `New accounts can't be created on this server. Ask your ${PRODUCT_NAME} admin to invite you.`,
   "rate.limited": "Too many attempts. Wait a minute, then try again.",
   internal: "Something went wrong on the server. Try again in a moment.",
 };
@@ -128,7 +129,7 @@ export default function RegisterPage() {
         <div className="mb-3">
           <h1 className="connect-title">Create your account</h1>
           <p className="mt-3 text-reading" style={{ color: "var(--ink-dim)" }}>
-            {mode === "oidc" ? `Sign in with your ${provider} account and Eunomia creates yours.` : "Your Eunomia account. You will use the same email and password to approve your AI apps later."}
+            {mode === "oidc" ? `Sign in with your ${provider} account and ${PRODUCT_NAME} creates yours.` : `Your ${PRODUCT_NAME} account. You will use the same email and password to approve your AI apps later.`}
           </p>
         </div>
 
