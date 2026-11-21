@@ -1,4 +1,4 @@
-//! Data-subject rights: a full export of what Eunomia holds about one person, and a verified
+//! Data-subject rights: a full export of what Cupel holds about one person, and a verified
 //! erasure of that person. Design, the inventory of where a person's data lives and what each step
 //! does with it: docs/privacy/subject-rights.md.
 //!

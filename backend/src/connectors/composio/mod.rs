@@ -1,4 +1,4 @@
-//! Client for Composio's consumer MCP service. No Eunomia platform key or managed entity.
+//! Client for Composio's consumer MCP service. No Cupel platform key or managed entity.
 pub mod oauth;
 
 pub mod mcp;

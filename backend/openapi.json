@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Eunomia API",
+    "title": "Cupel API",
     "description": "",
     "license": {
       "name": ""
@@ -3664,7 +3664,7 @@
           "connectors"
         ],
         "summary": "A Pocket recording's stored audio",
-        "description": "The audio Eunomia kept for one of the caller's Pocket recordings (connections with `config.store_audio` on). 404 when none was stored.",
+        "description": "The audio Cupel kept for one of the caller's Pocket recordings (connections with `config.store_audio` on). 404 when none was stored.",
         "operationId": "getPocketaiAudio",
         "parameters": [
           {
@@ -7437,7 +7437,7 @@
         "tags": [
           "peer"
         ],
-        "summary": "For another Eunomia: which instance answers at this address",
+        "summary": "For another Cupel: which instance answers at this address",
         "operationId": "peerHello",
         "parameters": [
           {
@@ -7481,7 +7481,7 @@
         "tags": [
           "peer"
         ],
-        "summary": "For another Eunomia: redeem a share code (the request carries a MAC keyed by the code's secret)",
+        "summary": "For another Cupel: redeem a share code (the request carries a MAC keyed by the code's secret)",
         "operationId": "peerJoin",
         "parameters": [
           {
@@ -7536,7 +7536,7 @@
         "tags": [
           "peer"
         ],
-        "summary": "For another Eunomia: one sealed request on a link (exchange, verify, leave), one sealed answer",
+        "summary": "For another Cupel: one sealed request on a link (exchange, verify, leave), one sealed answer",
         "description": "Body `{link, ts, nonce, data}`: `data` is AES-256-GCM under the link key, with `POST|path|link|ts|nonce` as associated data. Refused outside a 5 minute clock window or for a nonce already seen.",
         "operationId": "peerExchange",
         "parameters": [
@@ -7600,8 +7600,8 @@
         "tags": [
           "vaults"
         ],
-        "summary": "Join a vault another Eunomia shared, with its share code",
-        "description": "Finds the first address in the code that answers as the right instance (LAN first), proves knowledge of the code's secret, and makes a new vault holding this Eunomia's copy. The first sync runs before this returns.",
+        "summary": "Join a vault another Cupel shared, with its share code",
+        "description": "Finds the first address in the code that answers as the right instance (LAN first), proves knowledge of the code's secret, and makes a new vault holding this Cupel's copy. The first sync runs before this returns.",
         "operationId": "joinSharedVault",
         "requestBody": {
           "content": {
@@ -7650,7 +7650,7 @@
         "tags": [
           "vaults"
         ],
-        "summary": "Stop sharing with one other Eunomia (owner only); both sides keep their copy",
+        "summary": "Stop sharing with one other Cupel (owner only); both sides keep their copy",
         "operationId": "stopVaultPeer",
         "parameters": [
           {
@@ -7699,7 +7699,7 @@
         "tags": [
           "vaults"
         ],
-        "summary": "Sync a shared vault with the other Eunomia now",
+        "summary": "Sync a shared vault with the other Cupel now",
         "operationId": "syncVaultPeer",
         "parameters": [
           {
@@ -7913,7 +7913,7 @@
         "tags": [
           "secrets"
         ],
-        "summary": "Secrets Eunomia holds that you filled or manage (never a value)",
+        "summary": "Secrets Cupel holds that you filled or manage (never a value)",
         "operationId": "listHeldSecrets",
         "responses": {
           "200": {
@@ -8139,7 +8139,7 @@
         "tags": [
           "secrets"
         ],
-        "summary": "The password manager kinds Eunomia supports, with their stability (Bitwarden Secrets Manager is a preview)",
+        "summary": "The password manager kinds Cupel supports, with their stability (Bitwarden Secrets Manager is a preview)",
         "operationId": "listSecretKinds",
         "responses": {
           "200": {
@@ -11350,7 +11350,7 @@
         "tags": [
           "vaults"
         ],
-        "summary": "The other Eunomias a vault is shared with, their sync status, and unused share codes",
+        "summary": "The other Cupel instances a vault is shared with, their sync status, and unused share codes",
         "operationId": "listVaultPeers",
         "parameters": [
           {
@@ -11399,7 +11399,7 @@
         "tags": [
           "vaults"
         ],
-        "summary": "Make a one-time code to share a vault with another Eunomia (owner only)",
+        "summary": "Make a one-time code to share a vault with another Cupel (owner only)",
         "description": "The code carries this instance's addresses (LAN first), a share id and a secret. It works once and expires (default 7 days). Only the secret's ciphertext is kept here.",
         "operationId": "createVaultShareCode",
         "parameters": [
@@ -16128,7 +16128,7 @@
           },
           "vault": {
             "$ref": "#/components/schemas/VaultOut",
-            "description": "The new vault holding this Eunomia's copy."
+            "description": "The new vault holding this Cupel's copy."
           }
         }
       },
@@ -16147,7 +16147,7 @@
               "string",
               "null"
             ],
-            "description": "How the other Eunomia will name this one (default: `EUNOMIA_INSTANCE_NAME`, else your email)."
+            "description": "How the other Cupel will name this one (default: `EUNOMIA_INSTANCE_NAME`, else your email)."
           }
         }
       },
@@ -17976,7 +17976,7 @@
           },
           "direction": {
             "type": "string",
-            "description": "`host`: this Eunomia holds the original and shares it out; `guest`: this is a copy of another's."
+            "description": "`host`: this Cupel holds the original and shares it out; `guest`: this is a copy of another's."
           },
           "id": {
             "type": "string",
@@ -18007,7 +18007,7 @@
           },
           "peer_fingerprint": {
             "type": "string",
-            "description": "The other Eunomia's fingerprint."
+            "description": "The other Cupel's fingerprint."
           },
           "peer_name": {
             "type": "string"
@@ -18055,7 +18055,7 @@
             "items": {
               "$ref": "#/components/schemas/PeerOut"
             },
-            "description": "Other Eunomias this vault is shared with (or copied from)."
+            "description": "Other Cupel instances this vault is shared with (or copied from)."
           },
           "vault": {
             "type": "string"
@@ -20003,7 +20003,7 @@
           },
           "code": {
             "type": "string",
-            "description": "Send this to the person running the other Eunomia. It works once."
+            "description": "Send this to the person running the other Cupel. It works once."
           },
           "expires_at": {
             "type": "string"
@@ -20033,7 +20033,7 @@
           },
           "role": {
             "type": "string",
-            "description": "`read` by default. Explicit `edit` lets the other Eunomia add and change.",
+            "description": "`read` by default. Explicit `edit` lets the other Cupel add and change.",
             "default": "read"
           }
         }

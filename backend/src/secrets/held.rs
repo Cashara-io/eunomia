@@ -1,4 +1,4 @@
-//! Secrets Eunomia holds itself (docs/architecture/specs/secret-requests.md): a value a person pasted into
+//! Secrets Cupel holds itself (docs/architecture/specs/secret-requests.md): a value a person pasted into
 //! a secret request's pop-up, or one a transform derived from others. Stored only as `enc:v1:` ciphertext
 //! (`connectors/crypto.rs`) in `vault_secret`, addressed by a handle `eu://<vault key>/<name>`, and never
 //! returned by anything: [`for_use`] decrypts one for the broker's resolution or a transform, and nothing

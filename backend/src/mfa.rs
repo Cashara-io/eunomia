@@ -51,7 +51,7 @@ pub const STEP_UP_SECS: i64 = 600;
 pub const ENROL_TTL_SECS: i64 = 900;
 /// Recovery codes made at enrolment and on every regeneration.
 pub const RECOVERY_CODES: usize = 10;
-const ISSUER: &str = "Eunomia";
+const ISSUER: &str = crate::config::PRODUCT_NAME;
 /// 160 bits, what RFC 4226 recommends.
 const SECRET_BYTES: usize = 20;
 /// Crockford-style base32 without i, l, o, u: easy to read back and type.
@@ -802,7 +802,7 @@ mod tests {
     #[test]
     fn the_enrolment_uri_names_the_issuer_and_account() {
         let e = enrolment(&new_secret(), "a:b@example.com").unwrap();
-        assert!(e.otpauth_uri.starts_with("otpauth://totp/Eunomia:"), "{}", e.otpauth_uri);
+        assert!(e.otpauth_uri.starts_with("otpauth://totp/Cupel:"), "{}", e.otpauth_uri);
         assert!(e.otpauth_uri.contains(&format!("secret={}", e.secret)));
         assert!(e.qr_svg.starts_with("<?xml") && e.qr_svg.contains("<svg") && !e.qr_svg.contains("<script"));
     }

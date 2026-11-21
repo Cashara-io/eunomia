@@ -99,7 +99,7 @@ pub async fn collect(state: &AppState) -> AppResult<Vec<(String, String)>> {
         "server_setting_values": "[redacted]", "feature_flags": {"provisioning": cfg!(feature = "provisioning"), "secrets_helper_enabled": state.settings.secrets_helper_enabled, "documents_enabled": !state.settings.documents_backend.is_empty()},
         "model_endpoint_host": super::host(&state.settings.openai_base_url), "notes": notes});
     let ready = crate::ready_problem(state).await.is_none();
-    Ok(vec![super::json_file("summary.json", summary.clone()), ("summary.md".into(), format!("# Eunomia diagnostics\n\n```json\n{}\n```\n", super::json_text(summary))),
+    Ok(vec![super::json_file("summary.json", summary.clone()), ("summary.md".into(), format!(concat!("# ", crate::product_name!(), " diagnostics\n\n```json\n{}\n```\n"), super::json_text(summary))),
         super::json_file("connectors.json", json!({"connections": connections, "history_note": "Up to 20 runs per connection, from the latest 2000 syncs in this process. History resets on restart. Last sync checkpoint and counts are persisted."})),
         super::json_file("health.json", json!({"healthz": crate::healthz().await.0, "readyz": {"ok": ready}, "health_note": "This version exposes /healthz and /readyz, not /health", "recent_job_failures": failures, "embedding_backlog": backlog, "embedding_jobs": embedding_jobs}))])
 }

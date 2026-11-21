@@ -1,5 +1,20 @@
 use std::env;
 
+/// What the product is called to a person: UI, mail, MCP identity, OpenAPI, prompts and errors.
+/// The next rename is this one line. A macro, so that `concat!` and `const` strings can use it
+/// (`concat!(crate::product_name!(), " has no model")`); `PRODUCT_NAME` is the same text for
+/// runtime code. Identifiers that installs depend on (`EUNOMIA_*` settings, the `eunomia` MCP
+/// server key, paths, image and database names, routes, tool names) do not use it and stay as
+/// they are.
+#[macro_export]
+macro_rules! product_name {
+    () => {
+        "Cupel"
+    };
+}
+
+pub const PRODUCT_NAME: &str = product_name!();
+
 /// Release tag baked in at image build time (see backend/Dockerfile).
 pub const APP_VERSION: &str = match option_env!("APP_VERSION") {
     Some(v) if !v.is_empty() => v,

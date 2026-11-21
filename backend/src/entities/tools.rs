@@ -231,8 +231,8 @@ pub struct ConsolidateOut {
     pub note: Option<String>,
 }
 
-const NO_MODEL_NOTE: &str = "Eunomia has no model configured, so nothing was consolidated. Do it yourself: read the \
-entity with `entities_get`, then record the updated belief with `memory_write` (type `observation`).";
+const NO_MODEL_NOTE: &str = concat!(crate::product_name!(), " has no model configured, so nothing was consolidated. Do it yourself: read the \
+entity with `entities_get`, then record the updated belief with `memory_write` (type `observation`).");
 
 /// Consolidate one entity's raw facts into its observation (`subject_id`
 /// given), or every entity for `owner` that has new unconsolidated raw facts

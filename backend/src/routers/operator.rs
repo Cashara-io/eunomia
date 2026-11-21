@@ -1,4 +1,4 @@
-//! The operator API (`operator.rs`): `/api/operator/v1/...`, for the billing service of a hosted Eunomia.
+//! The operator API (`operator.rs`): `/api/operator/v1/...`, for the billing service of a hosted Cupel.
 //!
 //! Mounted only while `EUNOMIA_OPERATOR_TOKEN` is set (`lib.rs`); with it unset there is no such route and
 //! the answer is 404. The gate (`gate::operator_gate`) lets through only a request that carries that token,

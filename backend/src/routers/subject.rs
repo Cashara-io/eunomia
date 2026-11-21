@@ -1,4 +1,4 @@
-//! Data-subject rights over HTTP (docs/privacy/subject-rights.md): the full export of what Eunomia
+//! Data-subject rights over HTTP (docs/privacy/subject-rights.md): the full export of what Cupel
 //! holds about a person and their verified erasure. The person exports and erases their own account
 //! (Settings > Data); a server operator erases any account (Settings > People), cancels an erasure that
 //! has not started deleting and lifts holds; a workspace admin exports this workspace's data about a

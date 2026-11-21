@@ -3,7 +3,7 @@
 //! and `bws://<secret-id>` (ours: a Bitwarden Secrets Manager secret by its UUID). In tool arguments a
 //! reference is an object with exactly one key, `{"$secret": "<reference>"}`. The sidecar parses the same
 //! grammar (`secrets-helper/src/refs.ts`); keep the two in step. A third scheme, `eu://<vault key>/<name>`,
-//! is a handle to a secret Eunomia holds itself (docs/architecture/specs/secret-requests.md); it never
+//! is a handle to a secret Cupel holds itself (docs/architecture/specs/secret-requests.md); it never
 //! goes to the sidecar, so the sidecar does not parse it.
 
 use serde_json::Value;
@@ -19,7 +19,7 @@ const MAX_LEN: usize = 1024;
 pub enum Reference {
     Op { vault: String, item: String, section: Option<String>, field: String, attribute: Option<String> },
     Bws { id: String },
-    /// A secret Eunomia holds (`vault_secret`): the vault's record key and the secret's name.
+    /// A secret Cupel holds (`vault_secret`): the vault's record key and the secret's name.
     Eu { vault: String, name: String },
 }
 

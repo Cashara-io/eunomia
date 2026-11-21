@@ -56,7 +56,7 @@ pub enum AuditCategory {
     /// Admin rights granted or taken back, accounts suspended or restored, other people's API tokens revoked,
     /// organisation invitations sent, resent, withdrawn, accepted or refused.
     Admin,
-    /// Spaces shared with another Eunomia: share codes, joins, links stopped. These copy data off the server.
+    /// Spaces shared with another Cupel: share codes, joins, links stopped. These copy data off the server.
     Sharing,
     /// Server settings: HTTPS, updates, the AI provider.
     Server,
@@ -203,7 +203,7 @@ fn kv<'a>(detail: &'a str, key: &str) -> Option<&'a str> {
 }
 
 /// The value of the last `from=` in `detail`, read to the end of the line: the names it carries
-/// (spaces, another Eunomia) may hold spaces.
+/// (spaces, another Cupel) may hold spaces.
 fn from_rest(detail: &str) -> Option<&str> {
     rest_of(detail, "from")
 }
@@ -294,8 +294,8 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "vault.clone" => format!("Copied {} into a new space, {space}", from_rest(detail).unwrap_or("a space")),
         "vault.merge" => format!("Merged {} into a new space, {space}", from_rest(detail).unwrap_or("two spaces")),
         "peer.share_code" => match kv(detail, "role") {
-            Some("read") => format!("Made a code that lets another Eunomia copy {space} (read only)"),
-            _ => format!("Made a code that lets another Eunomia copy and edit {space}"),
+            Some("read") => format!("Made a code that lets another {} copy {space} (read only)", crate::config::PRODUCT_NAME),
+            _ => format!("Made a code that lets another {} copy and edit {space}", crate::config::PRODUCT_NAME),
         },
         "peer.share_code_withdraw" => format!("Withdrew an unused share code for {space}"),
         "peer.joined" => match kv(detail, "role") {
@@ -484,12 +484,14 @@ fn reason_words(action: &str, outcome: &str) -> String {
     .into()
 }
 
-/// The other Eunomia a sharing event names, quoted; `start` puts it at the head of a sentence
+/// The other Cupel a sharing event names, quoted; `start` puts it at the head of a sentence
 /// (capitalized, and closed with a comma when it carries a name).
 fn peer(detail: &str, start: bool) -> String {
-    let lead = if start { "Another Eunomia" } else { "another Eunomia" };
+    let lead = if start { concat!("Another ", crate::product_name!()) } else { concat!("another ", crate::product_name!()) };
     match from_rest(detail) {
-        Some(n) if !n.eq_ignore_ascii_case("another eunomia") => format!("{lead}, \u{201c}{n}\u{201d}{}", if start { "," } else { "" }),
+        // "another Eunomia" is what installs wrote into the ledger before the product was renamed; it is
+        // a stand-in for "no name", like "another Cupel" now
+        Some(n) if !n.eq_ignore_ascii_case("another eunomia") && !n.eq_ignore_ascii_case(concat!("another ", crate::product_name!())) => format!("{lead}, \u{201c}{n}\u{201d}{}", if start { "," } else { "" }),
         _ => lead.to_string(),
     }
 }
@@ -509,7 +511,7 @@ fn via_words(actor_kind: &str) -> &'static str {
         "token" => "API token",
         "oauth" => "app",
         "system" => "system",
-        "peer" => "another Eunomia",
+        "peer" => concat!("another ", crate::product_name!()),
         _ => "",
     }
 }
@@ -1218,7 +1220,7 @@ mod tests {
         assert_eq!(describe("vault.delete", "x", "", true, &n), "Deleted the space x");
         assert_eq!(describe("vault.member_remove", "x", "email=a@b.c", false, &n), "Couldn't remove a@b.c from x");
         assert_eq!(describe("vault.invite", "Team", "email=a@b.c role=member", false, &n), "Couldn't invite a@b.c to Team");
-        assert_eq!(describe("peer.left", "Team", "", false, &n), "Another Eunomia stopped syncing Team (it keeps its copy) (didn't go through)");
+        assert_eq!(describe("peer.left", "Team", "", false, &n), "Another Cupel stopped syncing Team (it keeps its copy) (didn't go through)");
         assert_eq!(reason_words("vault.invite", "validation.invalid"), "Already a member or invited, or no account has that email");
         assert_eq!(why_words("email=a@b.c role=member why=no_account"), Some("No account has that email yet"));
         assert_eq!(why_words("email=a@b.c why=already"), Some("Already a member, or already invited"));
@@ -1258,14 +1260,16 @@ mod tests {
         assert_eq!(d("vault.decline", "Team", ""), "Declined the invitation to Team");
         assert_eq!(d("vault.clone", "Team (copy)", "from=Team"), "Copied Team into a new space, Team (copy)");
         assert_eq!(d("vault.merge", "A + B", "from=A and B"), "Merged A and B into a new space, A + B");
-        assert_eq!(d("peer.share_code", "Team", "role=read"), "Made a code that lets another Eunomia copy Team (read only)");
-        assert_eq!(d("peer.share_code", "Team", "role=edit"), "Made a code that lets another Eunomia copy and edit Team");
+        assert_eq!(d("peer.share_code", "Team", "role=read"), "Made a code that lets another Cupel copy Team (read only)");
+        assert_eq!(d("peer.share_code", "Team", "role=edit"), "Made a code that lets another Cupel copy and edit Team");
         assert_eq!(d("peer.share_code_withdraw", "Team", ""), "Withdrew an unused share code for Team");
-        assert_eq!(d("peer.joined", "Team", "role=read from=Lab box"), "Another Eunomia, \u{201c}Lab box\u{201d}, joined Team and got a copy (read only)");
-        assert_eq!(d("peer.joined", "Team", "role=edit from=another Eunomia"), "Another Eunomia joined Team and got a copy it can edit");
-        assert_eq!(d("peer.join", "Team", "role=edit from=Office"), "Joined Team, shared from another Eunomia, \u{201c}Office\u{201d}");
-        assert_eq!(d("peer.stop", "Team", "from=Office"), "Stopped sharing Team with another Eunomia, \u{201c}Office\u{201d}");
-        assert_eq!(d("peer.left", "Team", "from=Office"), "Another Eunomia, \u{201c}Office\u{201d}, stopped syncing Team (it keeps its copy)");
+        assert_eq!(d("peer.joined", "Team", "role=read from=Lab box"), "Another Cupel, \u{201c}Lab box\u{201d}, joined Team and got a copy (read only)");
+        assert_eq!(d("peer.joined", "Team", "role=edit from=another Cupel"), "Another Cupel joined Team and got a copy it can edit");
+        // rows written before the rename name the other side "another Eunomia"
+        assert_eq!(d("peer.joined", "Team", "role=edit from=another Eunomia"), "Another Cupel joined Team and got a copy it can edit");
+        assert_eq!(d("peer.join", "Team", "role=edit from=Office"), "Joined Team, shared from another Cupel, \u{201c}Office\u{201d}");
+        assert_eq!(d("peer.stop", "Team", "from=Office"), "Stopped sharing Team with another Cupel, \u{201c}Office\u{201d}");
+        assert_eq!(d("peer.left", "Team", "from=Office"), "Another Cupel, \u{201c}Office\u{201d}, stopped syncing Team (it keeps its copy)");
         assert_eq!(d("server.https", "", "domain=mem.example.com"), "Turned on HTTPS for mem.example.com");
         assert_eq!(d("server.https", "", "off"), "Turned off HTTPS");
         assert_eq!(d("server.update", "", ""), "Started a server update");
@@ -1276,7 +1280,7 @@ mod tests {
             // "Changes" leaves out sign-ins only, so it shows every one of these
             assert!(!AuditCategory::Changes.filter().2.contains(&action));
         }
-        assert_eq!(via_words("peer"), "another Eunomia");
+        assert_eq!(via_words("peer"), "another Cupel");
     }
 
     #[test]

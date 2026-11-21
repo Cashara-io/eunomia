@@ -972,7 +972,7 @@ mod tests {
 
     #[test]
     fn search_terms_drop_filler_and_keep_content_words() {
-        assert_eq!(search_terms("How do updates work in Eunomia?"), vec!["updates", "work", "eunomia"]);
+        assert_eq!(search_terms("How do updates work in Cupel?"), vec!["updates", "work", "cupel"]);
         assert_eq!(search_terms("What does Ada like?"), vec!["ada"]);
         assert_eq!(search_terms("the the THE"), Vec::<String>::new());
         assert_eq!(search_terms("v1.2.0 release notes"), vec!["v1", "2", "0", "release", "notes"]);

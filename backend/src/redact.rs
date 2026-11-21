@@ -1,4 +1,4 @@
-//! Secret redaction for text an agent asks Eunomia to keep (memories, skills). Each secret of a known
+//! Secret redaction for text an agent asks Cupel to keep (memories, skills). Each secret of a known
 //! shape is replaced by `[redacted: <kind>]` and reported back by kind and count, never by value, so the
 //! write still succeeds and the agent learns what was dropped. Known shapes only, no entropy guessing:
 //! ordinary prose, record ids, git SHAs and UUIDs pass through untouched.

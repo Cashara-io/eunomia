@@ -12,7 +12,7 @@ pub const DOCS: &[Doc] = &[
     Doc { slug: "quickstart", title: "Quickstart", body: include_str!("../../docs/quickstart.md") },
     Doc { slug: "installation", title: "Installation", body: include_str!("../../docs/installation.md") },
     Doc { slug: "agents", title: "Connecting AI apps", body: include_str!("../../docs/agents.md") },
-    Doc { slug: "concepts", title: "How Eunomia works", body: include_str!("../../docs/concepts.md") },
+    Doc { slug: "concepts", title: concat!("How ", crate::product_name!(), " works"), body: include_str!("../../docs/concepts.md") },
     Doc { slug: "connectors", title: "Connectors", body: include_str!("../../docs/connectors.md") },
     Doc { slug: "documents", title: "Documents", body: include_str!("../../docs/documents.md") },
     Doc { slug: "deployment", title: "Deployment", body: include_str!("../../docs/deployment.md") },
@@ -59,7 +59,7 @@ mod tests {
     fn skill_defaults_and_strips_frontmatter() {
         assert!(effective_skill("  ").starts_with("---\nname: eunomia-memory"));
         assert_eq!(effective_skill("# mine"), "# mine");
-        assert!(skill_body(DEFAULT_SKILL).starts_with("# Eunomia memory"));
+        assert!(skill_body(DEFAULT_SKILL).starts_with("# Cupel memory"));
         assert_eq!(skill_body("no frontmatter"), "no frontmatter");
         assert_eq!(skill_body("---\nname: x\n---\n\nbody"), "body");
     }

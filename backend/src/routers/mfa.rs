@@ -189,7 +189,7 @@ async fn link_after_second_step(state: &AppState, c: &mfa::Challenge, issuer: &s
         Err(e) if matches!(e.code, ErrorCode::DbDuplicate | ErrorCode::AuthEmailTaken) => {
             let owner = models_user::user_by_identity(&state.control, issuer, subject).await?;
             if owner.map(|u| u.id) != Some(c.user.clone()) {
-                return Err(AppError::coded(ErrorCode::AuthForbidden, "That single sign-on account is already linked to another Eunomia account."));
+                return Err(AppError::coded(ErrorCode::AuthForbidden, concat!("That single sign-on account is already linked to another ", crate::product_name!(), " account.")));
             }
             return Ok(());
         }

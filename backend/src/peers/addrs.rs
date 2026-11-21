@@ -69,7 +69,7 @@ pub fn advertised(public_url: &str) -> Vec<String> {
 }
 
 /// The address a browser on this network used to open the app (`Host` / `X-Forwarded-Host`, e.g.
-/// `192.168.1.20:3000`), as a base URL, when it is a private IPv4 address: another Eunomia on the
+/// `192.168.1.20:3000`), as a base URL, when it is a private IPv4 address: another Cupel on the
 /// same network can reach this one there too. `None` for a domain name, a public or loopback address.
 pub fn browser_lan_addr(host: &str) -> Option<String> {
     let host = host.split(',').next()?.trim();

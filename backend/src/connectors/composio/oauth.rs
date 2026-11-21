@@ -222,7 +222,7 @@ impl OAuthClient {
         Ok(())
     }
 
-    /// Register only Eunomia's callback, derived from its configured public origin by the caller.
+    /// Register only Cupel's callback, derived from its configured public origin by the caller.
     pub async fn begin(&self, redirect_uri: &str) -> AppResult<(Pending, String)> {
         let redirect = Url::parse(redirect_uri).map_err(|_| failure())?;
         if !redirect.username().is_empty()
@@ -244,7 +244,7 @@ impl OAuthClient {
             .json(
                 self.request(reqwest::Method::POST, self.endpoint(&metadata.registration_endpoint)?).await?
                     .json(&json!({
-                        "client_name": "Eunomia",
+                        "client_name": crate::config::PRODUCT_NAME,
                         "redirect_uris": [redirect_uri],
                         "grant_types": ["authorization_code", "refresh_token"],
                         "response_types": ["code"],

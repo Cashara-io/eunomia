@@ -177,7 +177,7 @@ pub async fn prepare(state: &OrgState, user: &User, tool: &str, args: &Value) ->
         items.iter_mut().for_each(|i| i.fail(outcome::DENIED, format!("the tool {tool} does not take secrets")));
     }
 
-    // an eu:// handle: a secret Eunomia holds, checked and decrypted here (no sidecar)
+    // an eu:// handle: a secret Cupel holds, checked and decrypted here (no sidecar)
     for item in items.iter_mut().filter(|i| i.outcome == outcome::OK && i.eu.is_some()) {
         let (vault, name) = item.eu.clone().unwrap_or_default();
         match super::held::for_use(&state.db, &state.settings.encryption_key, &user.id, &who, tool, &vault, &name).await {
@@ -229,7 +229,7 @@ pub async fn prepare(state: &OrgState, user: &User, tool: &str, args: &Value) ->
     if items.iter().all(|i| i.outcome == outcome::OK) {
         let client = Client::from_settings(&state.settings);
         // the `secrets` profile is off: the password-manager references fail now, no provider token
-        // decrypted, no network call. An eu:// handle (held by Eunomia, enc:v1:) needs no sidecar, so a
+        // decrypted, no network call. An eu:// handle (held by Cupel, enc:v1:) needs no sidecar, so a
         // call of eu:// handles only still runs.
         if !client.enabled() && items.iter().any(|i| i.row.is_some()) {
             let off = Unreachable::disabled();

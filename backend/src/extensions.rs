@@ -1,6 +1,6 @@
 //! Extensions, phase 1 (docs/extensions.md): a registry of a user's own scripts, each with a webhook
 //! inbox that buffers deliveries until the script claims them in batches. The script runs wherever
-//! the user runs it and talks to Eunomia over HTTP; nothing here executes user code.
+//! the user runs it and talks to Cupel over HTTP; nothing here executes user code.
 //!
 //! This file is the service: secrets and signatures, the buffer (deliver, claim, ack, nack) and
 //! housekeeping. The HTTP surface is `routers/extensions.rs`.

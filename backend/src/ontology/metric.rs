@@ -1292,7 +1292,8 @@ async fn approved_names(db: &OrgDb, vault: &RecordId) -> AppResult<Vec<String>> 
 
 fn unapproved(name: &str, kind: &str) -> AppError {
     AppError::bad_request(format!(
-        "the metric {name:?} on {kind:?} is proposed, not approved: a vault owner approves it in the Eunomia app (the vault's Kinds and links). To try it before that, pass allow_unapproved: true; the result then says it is unapproved"
+        "the metric {name:?} on {kind:?} is proposed, not approved: a vault owner approves it in the {product} app (the vault's Kinds and links). To try it before that, pass allow_unapproved: true; the result then says it is unapproved",
+        product = crate::config::PRODUCT_NAME
     ))
 }
 

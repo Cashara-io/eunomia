@@ -657,7 +657,7 @@ async fn resolution_counts(State(state): State<AppState>, user: User, Query(q): 
     get,
     path = "/api/secrets/kinds",
     tag = "secrets",
-    summary = "The password manager kinds Eunomia supports, with their stability (Bitwarden Secrets Manager is a preview)",
+    summary = "The password manager kinds Cupel supports, with their stability (Bitwarden Secrets Manager is a preview)",
     responses((status = 200, body = Vec<Kind>), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]

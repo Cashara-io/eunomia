@@ -78,8 +78,8 @@ struct ReflectModel {
     cited: Vec<i64>,
 }
 
-const RECALL_ONLY_INSTRUCTIONS: &str = "Eunomia has no model configured, so you answer. Use ONLY the numbered memories below, \
-cite them by index like [1], and say so plainly if they don't contain enough to answer.";
+const RECALL_ONLY_INSTRUCTIONS: &str = concat!(crate::product_name!(), " has no model configured, so you answer. Use ONLY the numbered memories below, \
+cite them by index like [1], and say so plainly if they don't contain enough to answer.");
 
 /// No server-side model: hand the recalled memories to the caller (the MCP
 /// agent is the model) with the same answer-from-memories-only contract the

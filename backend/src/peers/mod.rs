@@ -1,5 +1,5 @@
 //! Peer vaults (docs/peer-vaults.md, issues #108 and #134): one vault shared between two separate
-//! Eunomia instances, each keeping a full copy, kept in step over an encrypted, authenticated exchange
+//! Cupel instances, each keeping a full copy, kept in step over an encrypted, authenticated exchange
 //! of the vault's change log (`changes.rs`).
 //!
 //! * The owner makes a one-time **share code** ([`create_share`]): the instance's addresses, a share
@@ -76,7 +76,7 @@ pub fn decode_code(code: &str) -> AppResult<CodeBody> {
     let raw = crypto::unb64(rest).ok_or_else(bad)?;
     let body: CodeBody = serde_json::from_slice(&raw).map_err(|_| bad())?;
     if body.v != 1 {
-        return Err(AppError::bad_request("This share code was made by a newer Eunomia. Update this Eunomia and try again."));
+        return Err(AppError::bad_request(concat!("This share code was made by a newer ", crate::product_name!(), ". Update this ", crate::product_name!(), " and try again.")));
     }
     if crypto::unb64(&body.secret).is_none_or(|s| s.len() != 32) || body.share.is_empty() || body.inst.is_empty() {
         return Err(bad());
@@ -231,7 +231,7 @@ fn ts(d: &Option<Datetime>) -> Option<String> {
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ShareCodeOut {
     pub id: String,
-    /// Send this to the person running the other Eunomia. It works once.
+    /// Send this to the person running the other Cupel. It works once.
     pub code: String,
     pub role: String,
     pub expires_at: String,
@@ -250,7 +250,7 @@ pub async fn create_share(state: &OrgState, user: &RecordId, vault: &RecordId, r
     }
     if addrs.is_empty() {
         return Err(AppError::bad_request(
-            "Eunomia couldn't work out how another computer would reach this one. Open Eunomia using this computer's network address (for example http://192.168.1.20:3000) instead of localhost, then try again. Running Eunomia on a server? See docs/peer-vaults.md.",
+            concat!(crate::product_name!(), " couldn't work out how another computer would reach this one. Open ", crate::product_name!(), " using this computer's network address (for example http://192.168.1.20:3000) instead of localhost, then try again. Running ", crate::product_name!(), " on a server? See docs/peer-vaults.md."),
         ));
     }
     let hours = hours.unwrap_or(DEFAULT_EXPIRY_HOURS).clamp(1, MAX_EXPIRY_HOURS);
@@ -523,14 +523,14 @@ async fn accept_join_checked(state: &OrgState, mut req: JoinRequest, mut malform
         .bind(("addr", None::<String>))
         .await?
         .check()?;
-    let guest = if req.guest_name.trim().is_empty() { "another Eunomia" } else { req.guest_name.trim() };
+    let guest = if req.guest_name.trim().is_empty() { concat!("another ", crate::product_name!()) } else { req.guest_name.trim() };
     audit_from_peer(state, &share.created_by, &req.guest_instance, "peer.joined", &vault_name, &format!("role={} from={guest}", share.role)).await;
     let mut out = JoinResponse { link, nonce_h, vault_name, role: share.role, host_instance, host_name: instance_name(), mac: String::new() };
     out.mac = crypto::mac(&secret, &refs(&out.parts(&req)));
     Ok(out)
 }
 
-/// A ledger row for something another Eunomia did here (redeemed a code, left a link): it counts
+/// A ledger row for something another Cupel did here (redeemed a code, left a link): it counts
 /// against `user`, who made the code, so it shows in that workspace's log; the actor is the peer.
 pub(crate) async fn audit_from_peer(state: &OrgState, user: &RecordId, peer_instance: &str, action: &str, space: &str, detail: &str) {
     let actor = authz::Actor { kind: "peer", id: peer_instance.to_string() };
@@ -541,7 +541,7 @@ pub(crate) async fn audit_from_peer(state: &OrgState, user: &RecordId, peer_inst
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct JoinOut {
-    /// The new vault holding this Eunomia's copy.
+    /// The new vault holding this Cupel's copy.
     pub vault: crate::vaults::service::VaultOut,
     pub link: PeerOut,
 }
@@ -582,13 +582,13 @@ pub async fn join(state: &OrgState, user: &RecordId, code: &str, my_addrs: Vec<S
     let body = decode_code(code)?;
     let me = instance_id(&state.db).await?;
     if body.inst == me {
-        return Err(AppError::bad_request("This share code was made on this same Eunomia. Use it on the other Eunomia instead."));
+        return Err(AppError::bad_request(concat!("This share code was made on this same ", crate::product_name!(), ". Use it on the other ", crate::product_name!(), " instead.")));
     }
     let candidates = addrs::sanitize(&body.addrs);
     let Some(addr) = probe(&candidates, &body.org, &body.inst).await else {
         return Err(AppError::new(
             axum::http::StatusCode::BAD_GATEWAY,
-            "Couldn't reach the other Eunomia at any of the addresses in the code. Check that it is running and on the same network, then try again.",
+            concat!("Couldn't reach the other ", crate::product_name!(), " at any of the addresses in the code. Check that it is running and on the same network, then try again."),
         ));
     };
     let secret = crypto::unb64(&body.secret).ok_or_else(|| AppError::bad_request("bad share code"))?;
@@ -606,20 +606,20 @@ pub async fn join(state: &OrgState, user: &RecordId, code: &str, my_addrs: Vec<S
     let url = format!("{addr}/api/peer/v1/{}/join", body.org);
     let reply = net::post(&url, serde_json::to_string(&req).expect("join serializes"), net::CALL_TIMEOUT)
         .await
-        .map_err(|e| AppError::new(axum::http::StatusCode::BAD_GATEWAY, "The other Eunomia stopped answering while joining. Try again.").with_source(e))?;
+        .map_err(|e| AppError::new(axum::http::StatusCode::BAD_GATEWAY, concat!("The other ", crate::product_name!(), " stopped answering while joining. Try again.")).with_source(e))?;
     if reply.status == 403 {
-        return Err(AppError::bad_request("The other Eunomia says this code isn't valid any more (it works once and expires). Ask for a new one."));
+        return Err(AppError::bad_request(concat!("The other ", crate::product_name!(), " says this code isn't valid any more (it works once and expires). Ask for a new one.")));
     }
     if reply.status != 200 {
-        return Err(AppError::new(axum::http::StatusCode::BAD_GATEWAY, format!("The other Eunomia refused to join (HTTP {}). Try again.", reply.status)));
+        return Err(AppError::new(axum::http::StatusCode::BAD_GATEWAY, format!(concat!("The other ", crate::product_name!(), " refused to join (HTTP {}). Try again."), reply.status)));
     }
-    let resp: JoinResponse = serde_json::from_slice(&reply.body).map_err(|_| AppError::new(axum::http::StatusCode::BAD_GATEWAY, "The other Eunomia sent an answer this one can't read."))?;
+    let resp: JoinResponse = serde_json::from_slice(&reply.body).map_err(|_| AppError::new(axum::http::StatusCode::BAD_GATEWAY, concat!("The other ", crate::product_name!(), " sent an answer this one can't read.")))?;
     // the host proves it knows the secret too: an address answering in its place cannot
     if resp.host_instance != body.inst || !valid_key(&resp.link) || !crypto::verify_mac(&secret, &refs(&resp.parts(&req)), &resp.mac) {
-        return Err(AppError::new(axum::http::StatusCode::BAD_GATEWAY, "The answer didn't prove it came from the Eunomia that made the code, so nothing was joined."));
+        return Err(AppError::new(axum::http::StatusCode::BAD_GATEWAY, concat!("The answer didn't prove it came from the ", crate::product_name!(), " that made the code, so nothing was joined.")));
     }
     if resp.role != ROLE_EDIT && resp.role != ROLE_READ {
-        return Err(AppError::new(axum::http::StatusCode::BAD_GATEWAY, "The other Eunomia sent an unknown role."));
+        return Err(AppError::new(axum::http::StatusCode::BAD_GATEWAY, concat!("The other ", crate::product_name!(), " sent an unknown role.")));
     }
     let key = crypto::link_key(&secret, &resp.link, &req.nonce_g, &resp.nonce_h);
     let vault_label = if resp.vault_name.trim().is_empty() { body.vault.clone() } else { resp.vault_name.clone() };
@@ -627,7 +627,7 @@ pub async fn join(state: &OrgState, user: &RecordId, code: &str, my_addrs: Vec<S
     let vault = crate::vaults::service::create_vault(&state.db, &state.control, user, &vname, "org").await?;
     let vault_id = crate::rid::parse(&vault.id).map_err(|_| AppError::internal("vault id did not round-trip"))?;
     let peer_name = if resp.host_name.trim().is_empty() {
-        url::Url::parse(&addr).ok().and_then(|u| u.host_str().map(|h| format!("Eunomia at {h}"))).unwrap_or_else(|| "The other Eunomia".into())
+        url::Url::parse(&addr).ok().and_then(|u| u.host_str().map(|h| format!("{} at {h}", crate::config::PRODUCT_NAME))).unwrap_or_else(|| concat!("The other ", crate::product_name!()).into())
     } else {
         resp.host_name.clone()
     };
@@ -662,12 +662,12 @@ pub async fn join(state: &OrgState, user: &RecordId, code: &str, my_addrs: Vec<S
 pub struct PeerOut {
     /// The link id.
     pub id: String,
-    /// `host`: this Eunomia holds the original and shares it out; `guest`: this is a copy of another's.
+    /// `host`: this Cupel holds the original and shares it out; `guest`: this is a copy of another's.
     pub direction: String,
     /// What the guest may do: `edit` or `read`.
     pub role: String,
     pub peer_name: String,
-    /// The other Eunomia's fingerprint.
+    /// The other Cupel's fingerprint.
     pub peer_fingerprint: String,
     /// `up_to_date`, `syncing`, `unreachable`, `integrity_problem` or `revoked`.
     pub status: String,
@@ -725,7 +725,7 @@ pub struct PeersOut {
     pub vault: String,
     /// This instance's fingerprint.
     pub fingerprint: String,
-    /// Other Eunomias this vault is shared with (or copied from).
+    /// Other Cupel instances this vault is shared with (or copied from).
     pub links: Vec<PeerOut>,
     /// Codes made for this vault and not used yet (owners only; empty for members).
     pub codes: Vec<PendingCodeOut>,

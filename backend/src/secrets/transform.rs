@@ -326,7 +326,7 @@ pub async fn run(state: &crate::state::OrgState, user: &RecordId, args: Value) -
         let parsed = match super::reference::parse(text) {
             Ok(super::reference::Reference::Eu { vault, name }) => (vault, name),
             Ok(_) => {
-                refused.get_or_insert(format!("the input {input:?} is not an eu:// handle: transforms work only on secrets Eunomia holds"));
+                refused.get_or_insert(format!("the input {input:?} is not an eu:// handle: transforms work only on secrets {} holds", crate::config::PRODUCT_NAME));
                 continue;
             }
             Err(m) => {

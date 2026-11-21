@@ -1,4 +1,4 @@
-//! The `subject_export` job: what Eunomia holds about one person, as a zip archive with a manifest.
+//! The `subject_export` job: what Cupel holds about one person, as a zip archive with a manifest.
 //! Who may have which archive (docs/privacy/subject-rights.md):
 //!
 //! - **The person's own export** (`scope = self`): everything about them in every workspace they

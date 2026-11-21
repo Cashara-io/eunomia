@@ -1,4 +1,4 @@
-//! Secret requests and the secrets Eunomia holds (docs/architecture/specs/secret-requests.md): the routes
+//! Secret requests and the secrets Cupel holds (docs/architecture/specs/secret-requests.md): the routes
 //! the pop-up and the Connectors page use. Account-level (`gate.rs`, `/api/secrets/...`), so a
 //! vault-restricted token never gets here; filling, declining, replacing and deleting also need a browser
 //! session, so an agent's own credential can never answer its own request. No route returns a value.
@@ -142,7 +142,7 @@ async fn decline_request(State(state): State<AppState>, user: User, Path(id): Pa
     get,
     path = "/api/secrets/held",
     tag = "secrets",
-    summary = "Secrets Eunomia holds that you filled or manage (never a value)",
+    summary = "Secrets Cupel holds that you filled or manage (never a value)",
     responses((status = 200, body = Vec<HeldOut>), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
