@@ -117,28 +117,52 @@ async fn attempt(state: &AppState, registry: &Registry, cfg: &WorkerConfig, job:
         let err = JobError::permanent(ErrorCode::JobNoHandler, format!("no handler for job kind {:?}", job.kind));
         return finish(state, cfg, job, Err(err)).await;
     };
+    // a job queued before its organisation was suspended waits for the resume (claim skips new ones)
+    if super::paused_by_plan(&state.control, &state.plans, job).await {
+        return pause(state, cfg, job).await;
+    }
     let work = AssertUnwindSafe(crate::authz::as_system(async { handler(state.clone(), job.clone()).await })).catch_unwind();
     let outcome = tokio::select! {
-        r = work => Some(r),
-        _ = keep_lease(state, cfg, job) => None,
+        r = work => Ok(r),
+        stopped = keep_lease(state, cfg, job) => Err(stopped),
     };
     match outcome {
-        None => tracing::warn!("job lease lost; abandoning this attempt"), // another worker owns it now
-        Some(Ok(r)) => finish(state, cfg, job, r).await,
-        Some(Err(_)) => {
+        Err(Stopped::LeaseLost) => tracing::warn!("job lease lost; abandoning this attempt"), // another worker owns it now
+        Err(Stopped::Paused) => pause(state, cfg, job).await,
+        Ok(Ok(r)) => finish(state, cfg, job, r).await,
+        Ok(Err(_)) => {
             let err = JobError::retryable(ErrorCode::JobPanicked, "job handler panicked");
             finish(state, cfg, job, Err(err)).await
         }
     }
 }
 
-/// Heartbeats the lease; returns only when it is lost, which cancels the handler.
-async fn keep_lease(state: &AppState, cfg: &WorkerConfig, job: &Job) {
+/// How long a paused job waits before it is looked at again (the claim skips it while the organisation is suspended anyway).
+const PAUSE_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+
+async fn pause(state: &AppState, cfg: &WorkerConfig, job: &Job) {
+    tracing::info!(name: "diagnostics.job_paused", "job paused: its organisation is suspended");
+    if let Err(e) = super::defer_paused(&state.control, job, &cfg.id, PAUSE_DELAY).await {
+        tracing::warn!(error = %e.message, "pausing a job failed; the lease will expire and it will be claimed again");
+    }
+}
+
+enum Stopped {
+    LeaseLost,
+    /// The job's organisation was suspended while it ran.
+    Paused,
+}
+
+/// Heartbeats the lease; returns only when it is lost, or the organisation was suspended, which cancels the handler.
+async fn keep_lease(state: &AppState, cfg: &WorkerConfig, job: &Job) -> Stopped {
     loop {
         tokio::time::sleep(cfg.lease / 3).await;
+        if super::paused_by_plan(&state.control, &state.plans, job).await {
+            return Stopped::Paused;
+        }
         match super::heartbeat(&state.control, job, &cfg.id, cfg.lease).await {
             Ok(true) => {}
-            Ok(false) => return,
+            Ok(false) => return Stopped::LeaseLost,
             Err(e) => tracing::warn!(error = %e.message, "job heartbeat failed"), // the lease may still hold; try again
         }
     }

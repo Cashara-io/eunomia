@@ -40,6 +40,15 @@ pub enum ErrorCode {
     AuthResetExpired,
     EmailUnavailable,
     OrgProtectedMember,
+    OrgSuspended,
+    OrgSeatLimit,
+    OperatorOrgNotFound,
+    OperatorOwnerInOtherOrg,
+    OperatorOwnerReserved,
+    OperatorAtCapacity,
+    OperatorReferenceReused,
+    OperatorSeatsInUse,
+    OperatorOwnerClaimed,
     RateLimited,
     TenantDenied,
     TenantNotFound,
@@ -116,6 +125,15 @@ impl ErrorCode {
         ErrorCode::AuthResetExpired,
         ErrorCode::EmailUnavailable,
         ErrorCode::OrgProtectedMember,
+        ErrorCode::OrgSuspended,
+        ErrorCode::OrgSeatLimit,
+        ErrorCode::OperatorOrgNotFound,
+        ErrorCode::OperatorOwnerInOtherOrg,
+        ErrorCode::OperatorOwnerReserved,
+        ErrorCode::OperatorAtCapacity,
+        ErrorCode::OperatorReferenceReused,
+        ErrorCode::OperatorSeatsInUse,
+        ErrorCode::OperatorOwnerClaimed,
         ErrorCode::RateLimited,
         ErrorCode::TenantDenied,
         ErrorCode::TenantNotFound,
@@ -192,6 +210,15 @@ impl ErrorCode {
             ErrorCode::AuthResetExpired => "auth.reset_expired",
             ErrorCode::EmailUnavailable => "email.unavailable",
             ErrorCode::OrgProtectedMember => "org.protected_member",
+            ErrorCode::OrgSuspended => "org.suspended",
+            ErrorCode::OrgSeatLimit => "org.seat_limit",
+            ErrorCode::OperatorOrgNotFound => "operator.org_not_found",
+            ErrorCode::OperatorOwnerInOtherOrg => "operator.owner_in_other_org",
+            ErrorCode::OperatorOwnerReserved => "operator.owner_email_reserved",
+            ErrorCode::OperatorAtCapacity => "operator.at_capacity",
+            ErrorCode::OperatorReferenceReused => "operator.reference_reused",
+            ErrorCode::OperatorSeatsInUse => "operator.seats_in_use",
+            ErrorCode::OperatorOwnerClaimed => "operator.owner_claimed",
             ErrorCode::RateLimited => "rate.limited",
             ErrorCode::TenantDenied => "tenant.denied",
             ErrorCode::TenantNotFound => "tenant.not_found",
@@ -249,6 +276,7 @@ impl ErrorCode {
             ErrorCode::AuthUnauthorized | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthMfaRequired | ErrorCode::AuthMfaInvalid | ErrorCode::AuthMfaChallengeExpired => StatusCode::UNAUTHORIZED,
             ErrorCode::AuthStepUpRequired | ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled
             | ErrorCode::OrgProtectedMember
+            | ErrorCode::OrgSuspended
             | ErrorCode::SecretHostDenied
             | ErrorCode::SecretOutboundBlocked
             | ErrorCode::AccessReviewSelf => StatusCode::FORBIDDEN,
@@ -261,7 +289,8 @@ impl ErrorCode {
             ErrorCode::ChangesResync | ErrorCode::InvitationExpired | ErrorCode::AuthResetExpired => StatusCode::GONE,
             ErrorCode::InvitationNotFound => StatusCode::NOT_FOUND,
             ErrorCode::InvitationEmailMismatch => StatusCode::FORBIDDEN,
-            ErrorCode::InvitationOtherOrg | ErrorCode::InvitationExists => StatusCode::CONFLICT,
+            ErrorCode::InvitationOtherOrg | ErrorCode::InvitationExists | ErrorCode::OrgSeatLimit | ErrorCode::OperatorOwnerInOtherOrg | ErrorCode::OperatorAtCapacity | ErrorCode::OperatorReferenceReused
+            | ErrorCode::OperatorSeatsInUse | ErrorCode::OperatorOwnerClaimed => StatusCode::CONFLICT,
             ErrorCode::TenantProvisioningDisabled => StatusCode::NOT_IMPLEMENTED,
             ErrorCode::AuthResetInvalid => StatusCode::BAD_REQUEST,
             ErrorCode::AuthMfaUnreadable | ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision
@@ -280,8 +309,9 @@ impl ErrorCode {
             | ErrorCode::TenantNotFound
             | ErrorCode::ResourceNotFound
             | ErrorCode::DocumentNotFound
+            | ErrorCode::OperatorOrgNotFound
             | ErrorCode::AccessReviewNotFound => StatusCode::NOT_FOUND,
-            ErrorCode::ConnectorNotConnected | ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected => StatusCode::BAD_REQUEST,
+            ErrorCode::ConnectorNotConnected | ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected | ErrorCode::OperatorOwnerReserved => StatusCode::BAD_REQUEST,
             ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked | ErrorCode::Internal => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
@@ -422,6 +452,10 @@ impl From<surrealdb::Error> for AppError {
         let (code, message) = match &err {
             _ if raw.contains("ontology schema upgrade pending") => (ErrorCode::TenantSchemaBehind, "This space is upgrading. Try again shortly."),
             _ if raw.contains("ontology.stale_revision") => (ErrorCode::OntologyStaleRevision, "This definition changed since you read it. Fetch the latest definition, review the changes and retry with its current revision."),
+            // the sentinels the plan statements THROW (store/plan.rs); callers that know the numbers give a fuller message
+            _ if raw.contains("org.seat_limit") => (ErrorCode::OrgSeatLimit, "This workspace has no free seat."),
+            _ if raw.contains("operator.at_capacity") => (ErrorCode::OperatorAtCapacity, "This server is at its limit of organisations."),
+            _ if raw.contains("operator.seats_in_use") => (ErrorCode::OperatorSeatsInUse, "The organisation uses more seats than that."),
             _ if crate::tx::is_conflict(&err) => (ErrorCode::DbConflict, "The write conflicted with another; retry it."),
             _ if lower.contains(crate::store::CROSSING_MARK) => (ErrorCode::TenantDenied, "Internal server error."),
             _ if err.is_not_allowed() => (ErrorCode::TenantDenied, "Internal server error."),
@@ -462,6 +496,8 @@ mod tests {
                 | ErrorCode::AuthScope | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::RateLimited
                 | ErrorCode::AuthMfaRequired | ErrorCode::AuthMfaInvalid | ErrorCode::AuthMfaChallengeExpired | ErrorCode::AuthStepUpRequired | ErrorCode::AuthMfaUnreadable
                 | ErrorCode::InvitationNotFound | ErrorCode::InvitationExpired | ErrorCode::InvitationEmailMismatch | ErrorCode::InvitationOtherOrg | ErrorCode::InvitationExists | ErrorCode::OrgProtectedMember
+                | ErrorCode::OrgSuspended | ErrorCode::OrgSeatLimit | ErrorCode::OperatorOrgNotFound | ErrorCode::OperatorOwnerInOtherOrg | ErrorCode::OperatorOwnerReserved
+                | ErrorCode::OperatorAtCapacity | ErrorCode::OperatorReferenceReused | ErrorCode::OperatorSeatsInUse | ErrorCode::OperatorOwnerClaimed
                 | ErrorCode::AuthResetInvalid | ErrorCode::AuthResetExpired | ErrorCode::EmailUnavailable
                 | ErrorCode::TenantDenied | ErrorCode::TenantNotFound | ErrorCode::TenantSchemaBehind
                 | ErrorCode::TenantProvisioningDisabled | ErrorCode::VaultNotFound | ErrorCode::VaultForbidden | ErrorCode::VaultNameTaken | ErrorCode::EntityNotFound

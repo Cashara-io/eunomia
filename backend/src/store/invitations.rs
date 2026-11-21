@@ -18,12 +18,26 @@ pub const CONTROL_ALL: &[&ControlStmt] = &[
 ];
 
 /// A new open invitation. The unique `slot` (`<org>/<email>`) refuses a second open one for the same
-/// email in the same org, even when two admins race.
-pub const CREATE: ControlStmt = ControlStmt::new(
+/// email in the same org, even when two admins race. When the org has a seat limit the seats in use are
+/// checked in the same transaction (`org.seat_limit`; see `store/plan.rs`).
+pub const CREATE: ControlStmt = ControlStmt::at(
     "invitations.create",
-    "CREATE org_invitation SET org = $org, email = $email, role = $role, token_hash = $hash, invited_by = $by, \
-     expires_at = time::now() + <duration>$ttl, slot = string::concat(<string>$org, '/', $email) \
-     RETURN id, email, role, created_at, sent_at, expires_at, false AS expired, invited_by.email AS invited_by",
+    concat!(
+        "BEGIN TRANSACTION; \
+         LET $limit = (SELECT VALUE seat_limit FROM org WHERE id = $org)[0]; \
+         IF $limit != NONE { \
+             UPDATE $org SET seat_guard = (seat_guard ?? 0) + 1 RETURN NONE; \
+             LET $used = ",
+        super::plan::used!(),
+        "; \
+             IF $used >= $limit { THROW 'org.seat_limit' }; \
+         }; \
+         CREATE org_invitation SET org = $org, email = $email, role = $role, token_hash = $hash, invited_by = $by, \
+         expires_at = time::now() + <duration>$ttl, slot = string::concat(<string>$org, '/', $email) \
+         RETURN id, email, role, created_at, sent_at, expires_at, false AS expired, invited_by.email AS invited_by; \
+         COMMIT TRANSACTION;"
+    ),
+    3, // BEGIN 0, LET 1, IF 2, CREATE 3
 );
 
 /// The org's open invitations (expired ones too, so they can be resent), newest first.
@@ -33,12 +47,28 @@ pub const LIST: ControlStmt = ControlStmt::new(
      FROM org_invitation WHERE org = $org AND accepted_at IS NONE AND revoked_at IS NONE ORDER BY created_at DESC",
 );
 
-/// A new token and a new expiry for one of the org's open invitations. The old token stops working.
-pub const RESEND: ControlStmt = ControlStmt::new(
+/// A new token and a new expiry for one of the org's open invitations. The old token stops working. An
+/// invitation that had expired holds no seat, and resending it takes one again, so the seat limit is
+/// checked in the same transaction (`org.seat_limit`).
+pub const RESEND: ControlStmt = ControlStmt::at(
     "invitations.resend",
-    "UPDATE org_invitation SET token_hash = $hash, sent_at = time::now(), expires_at = time::now() + <duration>$ttl \
-     WHERE id = $id AND org = $org AND role IN $roles AND accepted_at IS NONE AND revoked_at IS NONE \
-     RETURN id, email, role, created_at, sent_at, expires_at, false AS expired, invited_by.email AS invited_by",
+    concat!(
+        "BEGIN TRANSACTION; \
+         LET $limit = (SELECT VALUE seat_limit FROM org WHERE id = $org)[0]; \
+         LET $lapsed = array::len((SELECT id FROM org_invitation WHERE id = $id AND org = $org AND accepted_at IS NONE AND revoked_at IS NONE AND expires_at <= time::now())) > 0; \
+         IF $limit != NONE AND $lapsed { \
+             UPDATE $org SET seat_guard = (seat_guard ?? 0) + 1 RETURN NONE; \
+             LET $used = ",
+        super::plan::used!(),
+        "; \
+             IF $used >= $limit { THROW 'org.seat_limit' }; \
+         }; \
+         UPDATE org_invitation SET token_hash = $hash, sent_at = time::now(), expires_at = time::now() + <duration>$ttl \
+         WHERE id = $id AND org = $org AND role IN $roles AND accepted_at IS NONE AND revoked_at IS NONE \
+         RETURN id, email, role, created_at, sent_at, expires_at, false AS expired, invited_by.email AS invited_by; \
+         COMMIT TRANSACTION;"
+    ),
+    4, // BEGIN 0, LET 1, LET 2, IF 3, UPDATE 4
 );
 
 /// Withdraws one of the org's open invitations and frees its slot for a new one.
@@ -67,17 +97,34 @@ pub const ROLE_OF: ControlStmt = ControlStmt::new(
 /// `$join` (already a member), an admin invitation makes a member an admin; an owner stays the owner. Two
 /// accepts of one token cannot both pass the first step, and `membership_unique` (user, org) backs it
 /// up; a lost race is a commit conflict that the caller retries into `invitation.unavailable`.
+/// An `owner` invitation (the claim of an organisation made through the operator API) takes the org's
+/// owner slot, so there is one owner whatever races. Joining takes a seat: when the org has a limit,
+/// the seats in use (this invitation no longer counted, the new member not yet) must leave one
+/// (`org.seat_limit`).
 pub const CLAIM: ControlStmt = ControlStmt::at(
     "invitations.claim",
-    "BEGIN TRANSACTION; \
-     LET $inv = (UPDATE org_invitation SET accepted_at = time::now(), accepted_by = $user, slot = string::concat('closed:', <string>id) \
-        WHERE id = $id AND token_hash = $hash AND email = $email AND accepted_at IS NONE AND revoked_at IS NONE AND expires_at > time::now() RETURN AFTER); \
-     IF array::len($inv) = 0 { THROW 'invitation.unavailable' }; \
-     LET $org = $inv[0].org; \
-     IF $join { CREATE membership SET user = $user, org = $org, role = $inv[0].role, slot = string::concat(<string>$org, '/', <string>$user); }; \
-     IF !$join AND $inv[0].role = 'admin' { UPDATE membership SET role = 'admin' WHERE user = $user AND org = $org AND role = 'member'; }; \
-     RETURN $org; \
-     COMMIT TRANSACTION;",
+    concat!(
+        "BEGIN TRANSACTION; \
+         LET $inv = (UPDATE org_invitation SET accepted_at = time::now(), accepted_by = $user, slot = string::concat('closed:', <string>id) \
+            WHERE id = $id AND token_hash = $hash AND email = $email AND accepted_at IS NONE AND revoked_at IS NONE AND expires_at > time::now() RETURN AFTER); \
+         IF array::len($inv) = 0 { THROW 'invitation.unavailable' }; \
+         LET $org = $inv[0].org; \
+         IF $join { \
+             LET $limit = (SELECT VALUE seat_limit FROM org WHERE id = $org)[0]; \
+             IF $limit != NONE { \
+                 UPDATE $org SET seat_guard = (seat_guard ?? 0) + 1 RETURN NONE; \
+                 LET $used = ",
+        super::plan::used!(),
+        "; \
+                 IF $used + 1 > $limit { THROW 'org.seat_limit' }; \
+             }; \
+             CREATE membership SET user = $user, org = $org, role = $inv[0].role, \
+                 slot = IF $inv[0].role = 'owner' THEN string::concat(<string>$org, '/owner') ELSE string::concat(<string>$org, '/', <string>$user) END; \
+         }; \
+         IF !$join AND $inv[0].role = 'admin' { UPDATE membership SET role = 'admin' WHERE user = $user AND org = $org AND role = 'member'; }; \
+         RETURN $org; \
+         COMMIT TRANSACTION;"
+    ),
     6, // BEGIN 0, LET 1, IF 2, LET 3, IF 4, IF 5, RETURN 6
 );
 

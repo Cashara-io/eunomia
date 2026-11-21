@@ -560,7 +560,7 @@ async fn receive(State(state): State<AppState>, Path(key): Path<String>, request
     let (owner, id) = svc::parse_hook_key(&key).ok_or_else(unauthorized)?;
     let org = crate::models_user::org_of(&state.control, &owner).await.map_err(|_| unauthorized())?;
     // a suspended owner's extensions take nothing in (and look like any other refusal)
-    if crate::models_user::is_suspended(&state.control, &owner).await.unwrap_or(true) {
+    if crate::models_user::is_suspended(&state.control, &owner).await.unwrap_or(true) || crate::plan::user_org_suspended(&state.control, &state.plans, &owner).await {
         return Err(unauthorized());
     }
     let org = state.org(&org).await?;

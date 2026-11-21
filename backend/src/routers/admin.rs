@@ -70,6 +70,8 @@ const ADMIN_ACTIONS: &[&str] = &[
     "subject.legal_hold", "subject.legal_hold_lift", "subject.erase_request", "subject.erase", "subject.export_request_admin",
     "subject.export_download_admin", "org.owner_transfer", "subject.erase_cancel",
     "org.invite", "org.invite_resend", "org.invite_revoke", "org.invite_accept", "org.invite_expired",
+    "operator.org_create", "operator.org_update", "operator.org_suspend", "operator.org_resume", "operator.owner_claim_resend",
+    "operator.org_list", "operator.org_get", "operator.capacity",
 ];
 
 impl AuditCategory {
@@ -1014,12 +1016,17 @@ async fn set_suspended(
             return Err(AppError::bad_request("The workspace needs at least one admin. Make someone else an admin first."));
         }
     }
-    store::control::USER_SET_SUSPENDED
-        .on(&state.control)
-        .bind(("id", target.clone()))
-        .bind(("suspended", body.suspended))
-        .await?
-        .check()?;
+    if body.suspended {
+        store::control::USER_SET_SUSPENDED
+            .on(&state.control)
+            .bind(("id", target.clone()))
+            .bind(("suspended", true))
+            .await?
+            .check()?;
+    } else {
+        // restoring takes a seat back: refused with `org.seat_limit` when the organisation is full
+        crate::plan::restore_member(&state, &user.org, &target).await?;
+    }
     if body.suspended {
         // every browser session ends now; tokens and app connections are refused while suspended (`load_user`)
         store::control::AUTH_SESSION_REVOKE_OWNER.on(&state.control).bind(("owner", target.clone())).await?.check()?;

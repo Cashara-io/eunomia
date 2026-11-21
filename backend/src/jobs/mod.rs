@@ -284,8 +284,36 @@ pub async fn claim(db: &ControlDb, worker: &str, n: usize, lease: Duration, owne
     Ok(rows)
 }
 
-/// Index of the claiming UPDATE in the CLAIM response: 3.x gives BEGIN and each LET a slot too.
-const CLAIM_RESULT: usize = 4;
+/// Index of the claiming UPDATE in the CLAIM response: 3.x gives BEGIN and each LET a slot too (BEGIN, `$full`, `$paused`,
+/// `$expired`, `$ready`, then the UPDATE).
+const CLAIM_RESULT: usize = 5;
+
+/// Job kinds that keep running for a suspended organisation: a schema migration is not the organisation's
+/// work, and a person's own data export and erasure are their right (docs/deployment.md). Everything else
+/// waits until the organisation is resumed. The same list is in `store::jobs::CLAIM`.
+pub const PAUSE_EXEMPT: &[&str] = &[kind::MIGRATE_TENANT, kind::SUBJECT_EXPORT, kind::SUBJECT_ERASE];
+
+/// Whether `job` must wait because the organisation of the member it runs for is suspended. A job whose
+/// owner has no organisation is not paused (its handler decides, as before).
+pub async fn paused_by_plan(control: &ControlDb, plans: &crate::plan::PlanCache, job: &Job) -> bool {
+    if PAUSE_EXEMPT.contains(&job.kind.as_str()) {
+        return false;
+    }
+    let Ok(org) = crate::models_user::org_of(control, &job.owner).await else { return false };
+    plans.get(control, &org).await.map(|p| p.suspended()).unwrap_or(false)
+}
+
+/// Hands a running job back to the queue, to be claimed again after `delay` (its organisation is suspended).
+pub async fn defer_paused(db: &ControlDb, job: &Job, worker: &str, delay: Duration) -> AppResult<()> {
+    q::DEFER_PAUSED
+        .on(db)
+        .bind(("id", job.id.clone()))
+        .bind(("worker", worker.to_string()))
+        .bind(("delay", format!("{}ms", delay.as_millis())))
+        .await?
+        .check()?;
+    Ok(())
+}
 
 /// Extend the lease. `false` means it was lost (expired and reclaimed, or the job was released).
 pub async fn heartbeat(db: &ControlDb, job: &Job, worker: &str, lease: Duration) -> AppResult<bool> {

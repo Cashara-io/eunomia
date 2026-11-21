@@ -50,6 +50,10 @@ pub enum Class {
     /// Account-level (settings, tokens, connectors, chat, export): needs the
     /// scope and is closed to vault-restricted tokens.
     Account(&'static str),
+    /// `/api/operator/v1/...`: the hosted service's operator API. Authenticated by the operator token and nothing
+    /// else (no session, API token or OAuth token), with a limit of its own. The routes exist only while
+    /// `EUNOMIA_OPERATOR_TOKEN` is set.
+    Operator,
     /// Not an `/api` route (for example OAuth endpoints): authenticate if a
     /// credential is present, never require one.
     Optional,
@@ -74,6 +78,8 @@ pub fn explicit_class(method: &Method, path: &str) -> Option<Class> {
         ["api", "invitations", "lookup"] => AuthAttempt,
         ["api", "invitations", "accept"] => Account(scopes::VAULTS_ADMIN),
         ["api", "org", ..] => Account(scopes::VAULTS_ADMIN),
+        // the billing service's interface: its own token, its own limit (see `operator_gate`)
+        ["api", "operator", ..] => Operator,
         // the browser leaves for the provider (a redirect, nothing to guess) and comes back (a code exchange: limited per client address like login)
         ["api", "auth", "oidc", "start"] => Public,
         ["api", "auth", "oidc", "callback"] => AuthAttempt,
@@ -219,6 +225,7 @@ pub async fn gate(State(g): State<Gate>, mut req: Request, next: Next) -> Respon
     req.extensions_mut().insert(ForwardedHttps(https));
     match class {
         Class::Public => return next.run(req).await,
+        Class::Operator => return operator_gate(&g, req, next).await,
         Class::Webhook => {
             if let Err(wait) = g.limiter.check(&format!("webhook:{}", client_ip(&req, &g.trusted())), g.limits.webhook_per_min) {
                 return rate_limited(wait);
@@ -283,6 +290,14 @@ pub async fn gate(State(g): State<Gate>, mut req: Request, next: Next) -> Respon
         return rate_limited(wait);
     }
 
+    // A suspended organisation's members reach only their own account routes (plan.rs). One check, here, for
+    // every authenticated route, so a route added later cannot forget it.
+    if matches!(class, Class::Mcp | Class::Any | Class::Vault(_) | Class::Account(_))
+        && let Err(e) = crate::plan::enforce(&g.state, &authn.user.org, req.method(), req.uri().path()).await
+    {
+        return reject(&g, class, e);
+    }
+
     let denied = match class {
         Class::Vault(s) if !authn.caller.allows(s) => Some(format!("this token does not have the {s} scope")),
         Class::Account(s) if !authn.caller.allows(s) => Some(format!("this token does not have the {s} scope")),
@@ -305,6 +320,35 @@ pub async fn gate(State(g): State<Gate>, mut req: Request, next: Next) -> Respon
     req.extensions_mut().insert(meter(&g, &authn));
     req.extensions_mut().insert(authn);
     crate::ontology::activity::ACTOR_NAME.scope(actor_name, authz::with_caller(caller, next.run(req))).await
+}
+
+/// Set by the gate on a request that presented the operator token: the operator routes only answer to it.
+#[derive(Debug, Clone, Copy)]
+pub struct OperatorCall;
+
+/// The operator API's gate. With no `EUNOMIA_OPERATOR_TOKEN` the routes are not mounted and this lets the
+/// request fall through to the 404. Otherwise the bearer token must be the operator token (compared in
+/// constant time); a session cookie, an API token or an OAuth token is just a wrong token. A wrong one is
+/// throttled per client address like any failed credential and leaves an `auth.failed` row holding only a
+/// hash of what was presented, never the token itself.
+async fn operator_gate(g: &Gate, mut req: Request, next: Next) -> Response {
+    let Some(configured) = g.state.settings.hosted.operator_token.as_deref() else {
+        return next.run(req).await;
+    };
+    let ip = client_ip(&req, &g.trusted());
+    let target = format!("{} {}", req.method(), req.uri().path());
+    if !auth::bearer_token(req.headers()).is_some_and(|given| crate::plan::operator_token_matches(configured, given)) {
+        if let Err(wait) = g.limiter.check(&format!("auth:{ip}"), g.limits.auth_per_min) {
+            return rate_limited(wait);
+        }
+        audit_auth_failed(g, req.headers(), &target, ErrorCode::AuthUnauthorized).await;
+        return AppError::unauthorized("Not authenticated.").into_response();
+    }
+    if let Err(wait) = g.limiter.check("operator-api", g.limits.operator_per_min) {
+        return rate_limited(wait);
+    }
+    req.extensions_mut().insert(OperatorCall);
+    next.run(req).await
 }
 
 /// One `auth.failed` row per presented credential per minute: a client replaying a bad token
@@ -427,6 +471,9 @@ mod tests {
         assert_eq!(class(Method::GET, "/api/tools"), Public);
         assert_eq!(class(Method::POST, "/api/tools/recall"), Any);
         assert_eq!(class(Method::GET, "/api/something-new"), Account(scopes::VAULTS_ADMIN));
+        assert_eq!(class(Method::POST, "/api/operator/v1/orgs"), Operator);
+        assert_eq!(class(Method::GET, "/api/operator/v1/capacity"), Operator);
+        assert_eq!(class(Method::GET, "/api/org/plan"), Account(scopes::VAULTS_ADMIN));
         assert_eq!(class(Method::GET, "/.well-known/oauth-authorization-server"), Optional);
         assert_eq!(class(Method::POST, "/mcp"), Mcp);
     }

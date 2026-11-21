@@ -28,9 +28,11 @@ pub mod migrate;
 pub mod models_user;
 pub mod oauth;
 pub mod oidc;
+pub mod operator;
 pub mod ontology;
 pub mod openapi;
 pub mod peers;
+pub mod plan;
 pub mod pool;
 pub mod provisioning;
 pub mod recovery;
@@ -81,7 +83,7 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, HeaderName::from_static("traceparent")])
         .expose_headers([HeaderName::from_static("x-trace-id"), HeaderName::from_static("x-diagnostics-capped")]);
 
-    let api = axum::Router::new()
+    let mut api = axum::Router::new()
         .route("/openapi.json", axum::routing::get(openapi::openapi_json))
         .merge(routers::auth::router())
         .merge(routers::mfa::router())
@@ -116,6 +118,10 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
         .merge(routers::secret_requests::router())
         .merge(routers::oauth::router())
         .merge(routers::oidc::router());
+    // the operator API exists only on a server that has an operator token (a hosted service)
+    if state.settings.hosted.operator_token.is_some() {
+        api = api.merge(routers::operator::router());
+    }
 
     // Browser-based MCP clients (for example MCP Inspector) run on any origin and
     // authenticate with a bearer token only, so these routes answer CORS for any

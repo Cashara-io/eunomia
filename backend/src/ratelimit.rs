@@ -23,6 +23,8 @@ pub struct RateConfig {
     pub refresh_per_min: u32,
     /// Source webhook deliveries per minute per client address (`RATE_LIMIT_WEBHOOK_PER_MIN`).
     pub webhook_per_min: u32,
+    /// Operator API calls per minute, in all (`RATE_LIMIT_OPERATOR_PER_MIN`): one caller, the billing service.
+    pub operator_per_min: u32,
     /// Peers whose `X-Forwarded-For` is believed (`TRUSTED_PROXIES`).
     pub trusted_proxies: Vec<Cidr>,
     /// Hostnames in `TRUSTED_PROXIES` (the compose service `frontend`), resolved by the gate.
@@ -161,7 +163,7 @@ pub fn forwarded_https(peer: Option<IpAddr>, forwarded_proto: Option<&str>, trus
 
 impl Default for RateConfig {
     fn default() -> Self {
-        RateConfig { user_per_min: 1200, token_per_min: 600, auth_per_min: 20, refresh_per_min: 300, webhook_per_min: 120, trusted_proxies: parse_cidrs(DEFAULT_TRUSTED_PROXIES), trusted_hosts: Vec::new() }
+        RateConfig { user_per_min: 1200, token_per_min: 600, auth_per_min: 20, refresh_per_min: 300, webhook_per_min: 120, operator_per_min: 300, trusted_proxies: parse_cidrs(DEFAULT_TRUSTED_PROXIES), trusted_hosts: Vec::new() }
     }
 }
 
@@ -176,6 +178,7 @@ impl RateConfig {
             auth_per_min: get("RATE_LIMIT_AUTH_PER_MIN", d.auth_per_min),
             refresh_per_min: get("RATE_LIMIT_REFRESH_PER_MIN", d.refresh_per_min),
             webhook_per_min: get("RATE_LIMIT_WEBHOOK_PER_MIN", d.webhook_per_min),
+            operator_per_min: get("RATE_LIMIT_OPERATOR_PER_MIN", d.operator_per_min),
             // unset or blank: the defaults; any value with no valid range (say `none`) trusts nobody
             trusted_proxies: match std::env::var("TRUSTED_PROXIES") {
                 Ok(v) if !v.trim().is_empty() => parse_trusted(&v).0,
