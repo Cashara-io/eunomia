@@ -668,7 +668,7 @@ async fn mcp_clients_with_url_elicitation_get_the_url_mode_error_and_others_the_
 
 // ---- the secrets helper off ------------------------------------------------------------------------
 
-/// The `secrets` compose profile off: secrets Eunomia holds (eu://, `enc:v1:` in the backend) need no
+/// The `secrets` compose profile off: secrets Cupel holds (eu://, `enc:v1:` in the backend) need no
 /// sidecar, so a request, its fill, a transform and an outbound call all still work; an op:// reference
 /// in the same server answers secret.unavailable / helper_disabled, and the activity log carries the code.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

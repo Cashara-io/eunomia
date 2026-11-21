@@ -59,7 +59,7 @@ async fn installer_and_hooks_work_with_name_only_tokens_through_the_real_gate() 
     let session = Command::new(bash()).arg(&hook).arg("session").env_clear()
         .env("PATH", std::env::var("PATH").unwrap()).env("HOME", home.path()).output().await.unwrap();
     assert!(session.status.success());
-    assert!(String::from_utf8(session.stdout).unwrap().contains("Eunomia"), "session injects skill");
+    assert!(String::from_utf8(session.stdout).unwrap().contains("Cupel"), "session injects skill");
     let mut prompt = Command::new(bash()).arg(&hook).arg("prompt").env_clear()
         .env("PATH", std::env::var("PATH").unwrap()).env("HOME", home.path())
         .stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).spawn().unwrap();

@@ -91,7 +91,7 @@ fn echo_field_names_are_allowed_in_computed_rows_and_stored_payloads() {
 // These need a second instance, a filled secret, or a model. The malformed-argument walk above
 // still covers their failure shapes. Keep exclusions named so adding a tool cannot silently skip it.
 const SUCCESS_EXCLUSIONS: &[(&str, &str)] = &[
-    ("vault_join_shared", "requires a second listening Eunomia instance and a signed share code"),
+    ("vault_join_shared", "requires a second listening Cupel instance and a signed share code"),
     ("vault_peer_sync", "requires an established peer link to a second instance"),
     ("secret_request", "requires an interactive tool invocation context and user consent"),
     ("secret_request_status", "requires an interactive secret request"),

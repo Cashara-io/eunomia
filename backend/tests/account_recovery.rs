@@ -490,7 +490,7 @@ async fn a_mail_server_that_fails_leaves_the_invitation_and_says_so() {
     let smtp = MailBackend::from_vars(|k| match k {
         "SMTP_HOST" => Some("127.0.0.1".into()),
         "SMTP_PORT" => Some("1".into()),
-        "SMTP_FROM" => Some("Eunomia <no-reply@example.com>".into()),
+        "SMTP_FROM" => Some("Cupel <no-reply@example.com>".into()),
         "SMTP_TLS" => Some("none".into()),
         _ => None,
     })

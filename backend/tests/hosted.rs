@@ -1,4 +1,4 @@
-//! A hosted Eunomia: organisations made, sized, paused and resumed by an outside billing service through the
+//! A hosted Cupel: organisations made, sized, paused and resumed by an outside billing service through the
 //! operator API (`operator.rs`), plans and seats (`plan.rs`), and suspension enforced at the gate. See
 //! docs/deployment.md, "Running a hosted service".
 //!

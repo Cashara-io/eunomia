@@ -72,7 +72,7 @@ async fn enrol_sign_in_with_a_code_refuse_replay_and_spend_recovery_codes_once()
 
     // a secret shown but not confirmed changes nothing: sign-in still needs only the password
     let ((_, shown), _) = post(&app, "/api/auth/mfa/enrol", json!({ "password": common::PASSWORD }), Some(&cookie)).await;
-    assert!(shown["otpauth_uri"].as_str().unwrap().starts_with("otpauth://totp/Eunomia:tester%40example.com?"), "{shown}");
+    assert!(shown["otpauth_uri"].as_str().unwrap().starts_with("otpauth://totp/Cupel:tester%40example.com?"), "{shown}");
     assert!(shown["qr_svg"].as_str().unwrap().contains("<svg"));
     let ((_, body), _) = login(&app, &app.user.email).await;
     assert!(body.get("mfa_required").is_none(), "unconfirmed enrolment does not switch MFA on: {body}");
