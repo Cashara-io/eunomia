@@ -15,6 +15,7 @@ import AppChoices from "@/components/connect/AppChoices";
 import InvitationBanner from "@/components/vaults/InvitationBanner";
 import type { AppId } from "@/components/connect/apps";
 
+import { PRODUCT_NAME, PRODUCT_WORDMARK } from "@/lib/brand";
 const STEP_LABELS = ["Connect your AI app", "OpenAI key"];
 
 export default function OnboardingPage() {
@@ -110,7 +111,7 @@ export default function OnboardingPage() {
       <header className="flex items-center justify-between">
         <span className="inline-flex items-center gap-2 text-[20px] font-semibold tracking-[-0.03em]">
           <EunomiaMark size={24} />
-          eunomia
+          {PRODUCT_WORDMARK}
         </span>
         <div className="flex items-center gap-1">
           {me && (
@@ -157,7 +158,7 @@ export default function OnboardingPage() {
                 <div className="flex flex-col gap-2">
                   <h1 className="connect-title">Connect your AI app</h1>
                   <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
-                    Choose an AI app to connect to your Eunomia memory. You can also do this later from Home.
+                    Choose an AI app to connect to your {PRODUCT_NAME} memory. You can also do this later from Home.
                   </p>
                 </div>
                 <AppChoices onPick={pickApp} disabled={busy} />
@@ -189,7 +190,7 @@ export default function OnboardingPage() {
                   <h1 className="connect-title">Add an OpenAI key</h1>
                   <p className="text-[16px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
                     Optional. Your AI app already works without a key. A key adds search by meaning and Chat inside
-                    Eunomia. You can add it later in Settings.
+                    {PRODUCT_NAME}. You can add it later in Settings.
                   </p>
                   <div className="flex flex-col gap-1.5">
                     <label htmlFor="base-url" className="text-[14px] font-semibold">

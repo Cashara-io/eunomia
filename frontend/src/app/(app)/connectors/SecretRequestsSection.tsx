@@ -17,7 +17,7 @@ const STATUS_COLOUR: Record<string, string> = { pending: "var(--warning)", fille
 
 /**
  * Settings, Connectors: secrets agents asked for (docs/secret-requests.md). Requests waiting or answered,
- * and the secrets Eunomia holds for agents, by handle: replace or delete them, never read them.
+ * and the secrets Cupel holds for agents, by handle: replace or delete them, never read them.
  */
 export default function SecretRequestsSection() {
   return (

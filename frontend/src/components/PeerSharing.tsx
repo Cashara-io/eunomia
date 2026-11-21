@@ -1,7 +1,7 @@
 "use client";
 
-// Sharing a memory space with another Eunomia (docs/peer-vaults.md), in plain words: a one-time code
-// to send, the other Eunomias this space is shared with and how syncing is going, and a dialog to
+// Sharing a memory space with another Cupel (docs/peer-vaults.md), in plain words: a one-time code
+// to send, the other Cupel instances this space is shared with and how syncing is going, and a dialog to
 // join a space someone else shared.
 import { useEffect, useId, useRef, useState } from "react";
 import { ArrowClockwiseIcon, LinkBreakIcon, SignInIcon, XIcon } from "@phosphor-icons/react/ssr";
@@ -23,6 +23,7 @@ import {
   type ShareCode,
 } from "@/lib/queries/peers";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const ICON = { size: 16, weight: "duotone", "aria-hidden": true } as const;
 
 const ROLE_WORDS: Record<PeerRole, string> = { edit: "Can add and change", read: "Can only read" };
@@ -51,8 +52,8 @@ function statusWords(link: PeerLink): [StatusTone, string] {
       return ["info", "Syncing…"];
     case "unreachable":
       return link.direction === "guest"
-        ? ["warning", "Can't reach the other Eunomia, will keep trying"]
-        : ["warning", "Haven't heard from the other Eunomia lately"];
+        ? ["warning", `Can't reach the other ${PRODUCT_NAME}, will keep trying`]
+        : ["warning", `Haven't heard from the other ${PRODUCT_NAME} lately`];
     case "integrity_problem":
       return ["critical", "A change failed its integrity check"];
     case "revoked":
@@ -74,20 +75,20 @@ function PeerRow({ link, isOwner, vaultId, vaultName }: { link: PeerLink; isOwne
   const [error, setError] = useState<Failure | null>(null);
   const [tone, words] = statusWords(link);
   const synced = ago(link.last_sync_at);
-  const name = link.peer_name || "The other Eunomia";
+  const name = link.peer_name || `The other ${PRODUCT_NAME}`;
   const guest = link.direction === "guest";
 
   return (
     <li className="flex flex-col gap-2 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <span className="text-reading font-medium [overflow-wrap:anywhere]">{name}</span>
-        <span className="text-caption font-mono" style={{ color: "var(--ink-dim)" }} title="This Eunomia's ID, to compare with what it shows">
+        <span className="text-caption font-mono" style={{ color: "var(--ink-dim)" }} title={`This ${PRODUCT_NAME}'s ID, to compare with what it shows`}>
           ID {link.peer_fingerprint}
         </span>
       </div>
       <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
         {guest ? `This space is a copy from ${name}.` : `${name} has a copy of this space.`} {ROLE_WORDS[link.role]}.
-        {guest && link.role === "read" && " Changes made here stay on this Eunomia."}
+        {guest && link.role === "read" && ` Changes made here stay on this ${PRODUCT_NAME}.`}
       </p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <StatusLabel tone={tone}>{words}</StatusLabel>
@@ -146,7 +147,7 @@ function PeerRow({ link, isOwner, vaultId, vaultName }: { link: PeerLink; isOwne
   );
 }
 
-/** "Share with another Eunomia", for the selected space's detail. Folded away until it is in use. */
+/** "Share with another Cupel", for the selected space's detail. Folded away until it is in use. */
 export default function PeerSharing({ vault }: { vault: { id: string; name: string; role: string } }) {
   const isOwner = vault.role === "owner";
   const peers = useVaultPeers(vault.id);
@@ -166,26 +167,26 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
 
   return (
     <Disclosure
-      title="Share with another Eunomia"
+      title={`Share with another ${PRODUCT_NAME}`}
       hint={
         links.length > 0
-          ? `Shared with ${links.length === 1 ? "1 other Eunomia" : `${links.length} other Eunomias`}.`
+          ? `Shared with ${links.length === 1 ? `1 other ${PRODUCT_NAME}` : `${links.length} other ${PRODUCT_NAME} instances`}.`
           : codes.length > 0
             ? "A share code is waiting to be used."
-            : "Keep a copy of this space on someone else's Eunomia, kept in step."
+            : `Keep a copy of this space on someone else's ${PRODUCT_NAME}, kept in step.`
       }
     >
       <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
         {isOwner
           ? role === "read"
-            ? "The other Eunomia gets a full copy of this space that stays in step with changes made here. It can read but not change anything."
-            : "The other Eunomia gets a full copy of this space, and changes made on either side travel both ways."
-          : "The other Eunomia keeps a full copy of this space in step with this one."}{" "}
+            ? `The other ${PRODUCT_NAME} gets a full copy of this space that stays in step with changes made here. It can read but not change anything.`
+            : `The other ${PRODUCT_NAME} gets a full copy of this space, and changes made on either side travel both ways.`
+          : `The other ${PRODUCT_NAME} keeps a full copy of this space in step with this one.`}{" "}
         Documents aren&apos;t shared yet.
       </p>
 
       {links.length > 0 && (
-        <ul className="hairline-rows" aria-label="Eunomias this space is shared with">
+        <ul className="hairline-rows" aria-label={`${PRODUCT_NAME} instances this space is shared with`}>
           {links.map((l) => (
             <PeerRow key={l.id} link={l} isOwner={isOwner} vaultId={vault.id} vaultName={vault.name} />
           ))}
@@ -196,7 +197,7 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
       {isOwner && (
         <div className="flex flex-col gap-2 pt-1">
           <label htmlFor={roleId} className="text-detail font-medium">
-            What the other Eunomia can do
+            What the other {PRODUCT_NAME} can do
           </label>
           <div className="flex flex-wrap items-center gap-2">
             <Select
@@ -247,10 +248,10 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
                 <CopyButton value={made.code} label="Copy" size="sm" />
               </div>
               <p className="text-detail">
-                Send this code to the person running the other Eunomia. It works once and expires on {day(made.expires_at)}.
+                Send this code to the person running the other {PRODUCT_NAME}. It works once and expires on {day(made.expires_at)}.
               </p>
               <p className="text-caption" style={{ color: "var(--ink-dim)" }}>
-                This Eunomia&apos;s ID is <span className="font-mono">{made.fingerprint}</span>. The other side will show it after joining.
+                This {PRODUCT_NAME}&apos;s ID is <span className="font-mono">{made.fingerprint}</span>. The other side will show it after joining.
               </p>
             </div>
           )}
@@ -278,7 +279,7 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
   );
 }
 
-/** "Connect to another Eunomia…": a quiet text action and a dialog to paste a share code into.
+/** "Connect to another Cupel…": a quiet text action and a dialog to paste a share code into.
  * Not the same as a team invitation, which arrives under Pending invitations. */
 export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => void }) {
   const join = useJoinShared();
@@ -318,7 +319,7 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
         onClick={() => setOpen(true)}
       >
         <SignInIcon {...ICON} />
-        Connect to another Eunomia…
+        Connect to another {PRODUCT_NAME}…
       </button>
       <dialog
         ref={ref}
@@ -345,16 +346,16 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
           }}
         >
           <h2 id={titleId} className="text-heading font-semibold leading-tight tracking-[-0.01em]">
-            Connect to another Eunomia
+            Connect to another {PRODUCT_NAME}
           </h2>
           {joined ? (
             <p className="text-body" role="status">
-              Joined. “{joined}” is now in your spaces, and it will stay in step with the other Eunomia by itself.
+              Joined. “{joined}” is now in your spaces, and it will stay in step with the other {PRODUCT_NAME} by itself.
             </p>
           ) : (
             <>
               <p className="text-body leading-relaxed">
-                Paste the share code someone running another Eunomia sent you. This Eunomia makes a new space with a full copy and keeps it in step. Invitations from people on this Eunomia appear on the Memory spaces page instead.
+                Paste the share code someone running another {PRODUCT_NAME} sent you. This {PRODUCT_NAME} makes a new space with a full copy and keeps it in step. Invitations from people on this {PRODUCT_NAME} appear on the Memory spaces page instead.
               </p>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor={codeId} className="text-body font-medium">
@@ -373,7 +374,7 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
               </div>
               {join.isPending && (
                 <p className="text-detail" role="status">
-                  Connecting to the other Eunomia…
+                  Connecting to the other {PRODUCT_NAME}…
                 </p>
               )}
               {join.isError && <ErrorLine error={failure(join.error, "Couldn't join.")} />}

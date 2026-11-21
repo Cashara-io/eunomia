@@ -12,6 +12,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import Tooltip from "@/components/bits/Tooltip";
 import { useSettings, useUpdateSettings } from "@/lib/queries/settings";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n/;
 const REFRESH = "./scripts/connect-agents.sh --token <token>";
 
@@ -67,7 +68,7 @@ export default function SkillPage() {
       <PageHeader
         icon={BrainIcon} tone="personal"
         title="AI instructions"
-        intro="How your AI apps use memory: these instructions tell every connected AI app when to look things up in Eunomia and what to save. Edit them here; new sessions pick up your changes."
+        intro={`How your AI apps use memory: these instructions tell every connected AI app when to look things up in ${PRODUCT_NAME} and what to save. Edit them here; new sessions pick up your changes.`}
       />
 
       <section className="min-w-0 flex flex-col gap-3" aria-label="Instructions">
@@ -222,7 +223,7 @@ export default function SkillPage() {
       <section className="flex flex-col gap-2">
         <h2 className="text-body font-medium">Refresh file copies</h2>
         <p className="text-body leading-relaxed" style={{ color: "var(--ink-dim)" }}>
-          Only needed for the file copies. Run this from the Eunomia install folder with a token from{" "}
+          Only needed for the file copies. Run this from the {PRODUCT_NAME} install folder with a token from{" "}
           <Link href="/settings?tab=tokens" className="link">
             Settings, API tokens
           </Link>

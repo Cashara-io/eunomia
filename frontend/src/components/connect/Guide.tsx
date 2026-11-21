@@ -8,7 +8,8 @@ import PageHeader from "@/components/ui/PageHeader";
 import { appById, appForConnection, connectionFor, type AiApp, type AppId, type Connection } from "./apps";
 import { useConnections } from "./useConnections";
 
-export const EXAMPLE_QUESTION = "Use Eunomia to look for memories about me.";
+import { PRODUCT_NAME } from "@/lib/brand";
+export const EXAMPLE_QUESTION = `Use ${PRODUCT_NAME} to look for memories about me.`;
 
 /** "Connect your AI app / ChatGPT": the way back to Home, then where you are. */
 export function Trail({ here }: { here: string }) {
@@ -136,7 +137,7 @@ export function isPrivateHost(host: string): boolean {
 
 type CheckState = { status: "idle" | "checking" | "not-yet" | "failed" };
 
-/** Step 4's buttons: ask Eunomia whether the app has really signed in. Success
+/** Step 4's buttons: ask Cupel whether the app has really signed in. Success
  * only comes from the server (an approved sign-in, or a token the app used). */
 export function CheckConnection({ app, onConfirmed }: { app: AiApp; onConfirmed: (c: Connection) => void }) {
   const { recheck } = useConnections();
@@ -164,12 +165,12 @@ export function CheckConnection({ app, onConfirmed }: { app: AiApp; onConfirmed:
       <div aria-live="polite">
         {state.status === "not-yet" && (
           <p className="soft-panel px-4 py-3 text-body leading-relaxed">
-            <strong>Not connected yet.</strong> Eunomia has not seen a sign-in from {app.name}. Finish step 3 (sign in and choose Allow), then check again.
+            <strong>Not connected yet.</strong> {PRODUCT_NAME} has not seen a sign-in from {app.name}. Finish step 3 (sign in and choose Allow), then check again.
           </p>
         )}
         {state.status === "failed" && (
           <p className="text-body" style={{ color: "var(--critical)" }}>
-            Could not reach Eunomia to check. Reload the page, then try again.
+            Could not reach {PRODUCT_NAME} to check. Reload the page, then try again.
           </p>
         )}
       </div>
@@ -183,7 +184,7 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
   const app = appForConnection(connection);
   const where =
     app.id === "chatgpt"
-      ? "In ChatGPT, start a new chat, type @ and choose Eunomia, then paste the question."
+      ? `In ChatGPT, start a new chat, type @ and choose ${PRODUCT_NAME}, then paste the question.`
       : app.id === "other"
         ? `In ${connection.name}, start a new conversation and paste the question.`
         : `Start a new ${app.name} session and paste the question.`;
@@ -195,7 +196,7 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
           Your AI app is connected
         </h2>
         <p className="text-reading">
-          Eunomia has confirmed {connection.via === "sign-in" ? "your sign-in" : "that this app is using its key"}. Your app can now use the memories you approved.
+          {PRODUCT_NAME} has confirmed {connection.via === "sign-in" ? "your sign-in" : "that this app is using its key"}. Your app can now use the memories you approved.
         </p>
         <div className="soft-panel px-5 py-4 flex flex-col gap-1.5">
           <p className="text-reading font-medium">
@@ -210,7 +211,7 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
           <CopyButton value={EXAMPLE_QUESTION} label="Copy example question" size="sm" />
         </div>
         <Note>
-          {where} To save your first memory, ask your AI app to remember something (if it has permission to save), or add one from People &amp; topics in Eunomia.
+          {where} To save your first memory, ask your AI app to remember something (if it has permission to save), or add one from People &amp; topics in {PRODUCT_NAME}.
         </Note>
         <div className="flex flex-wrap gap-2">
           {app.openUrl ? (

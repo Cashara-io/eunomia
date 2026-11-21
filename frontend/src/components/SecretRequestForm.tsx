@@ -8,6 +8,7 @@ import { useVaults } from "@/lib/queries/vaults";
 import { relativeTime } from "@/lib/connectorMeta";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const PLACEMENTS = [
   { value: "header", label: "Headers" },
   { value: "query", label: "Query string" },
@@ -18,7 +19,7 @@ const CHANNEL: Record<string, string> = { mcp: "MCP", rest: "API", chat: "web ch
 
 /** Who asked, as the person can recognise it: the token's or app's name, the channel, the session. */
 export function askedBy(r: RequestOut): string {
-  const who = r.client_name || (r.actor_kind === "token" ? "a personal access token" : r.actor_kind === "oauth" ? "a connected app" : "you, in Eunomia");
+  const who = r.client_name || (r.actor_kind === "token" ? "a personal access token" : r.actor_kind === "oauth" ? "a connected app" : `you, in ${PRODUCT_NAME}`);
   const via = CHANNEL[r.channel] ?? r.channel;
   return via ? `${who} (${via})` : who;
 }
@@ -221,7 +222,7 @@ export default function SecretRequestForm({ request, onDone, onLater }: { reques
       )}
 
       <p className="text-caption" style={{ color: "var(--ink-faint)" }}>
-        Eunomia never asks for a secret in chat or on another site. Paste it only on this page.
+        {PRODUCT_NAME} never asks for a secret in chat or on another site. Paste it only on this page.
       </p>
 
       {error && <ErrorLine error={error} />}

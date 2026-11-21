@@ -9,6 +9,7 @@ import "./globals.css";
 import "blobatar/motion.css";
 import Providers from "@/components/Providers";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const geist = GeistSans;
 const geistMono = GeistMono;
 
@@ -24,17 +25,17 @@ export async function generateMetadata(): Promise<Metadata> {
           null,
         request?.get("x-forwarded-proto")?.split(",")[0]?.trim() ?? null,
       ),
-    title: "Eunomia",
+    title: PRODUCT_NAME,
     openGraph: {
       type: "website",
       locale: "en_AU",
-      siteName: "Eunomia",
-      title: "Eunomia",
+      siteName: PRODUCT_NAME,
+      title: PRODUCT_NAME,
       description: "Shared memory for the AI apps you already use",
     },
     twitter: {
       card: "summary_large_image",
-      title: "Eunomia",
+      title: PRODUCT_NAME,
       description: "Shared memory for the AI apps you already use",
     },
     description: "Shared memory for the AI apps you already use",

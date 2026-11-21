@@ -17,6 +17,7 @@ import {
 } from "@/lib/queries/mfa";
 import { ICON, PanelHead, StatusLine } from "./shared";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 type Mode = "idle" | "password" | "enrol" | "codes" | "regenerate" | "disable";
 
 export function MfaSection() {
@@ -66,7 +67,7 @@ export function MfaSection() {
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-5">
         <PanelHead title="Two-step verification" status={<StatusLine tone={tone}>{words}</StatusLine>}>
-          After your password, Eunomia asks for a code from an authenticator app on your phone, so a stolen password alone can&apos;t sign in.
+          After your password, {PRODUCT_NAME} asks for a code from an authenticator app on your phone, so a stolen password alone can&apos;t sign in.
         </PanelHead>
         {statusQuery.isError && <ErrorLine error={failure(statusQuery.error, "Could not load your two-step verification.", " Reload the page to try again.")} />}
 

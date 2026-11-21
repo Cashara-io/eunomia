@@ -536,7 +536,7 @@ export default function VaultsPage() {
   // Open on the first shared space: that is where the people are.
   const selected = vaults?.find((v) => v.id === selectedId) ?? org[0] ?? personal.find((v) => v.is_default) ?? personal[0] ?? null;
 
-  // Joining another Eunomia and combining spaces are for admins and people who run a shared space.
+  // Joining another Cupel and combining spaces are for admins and people who run a shared space.
   const canManage = isAdmin || org.some((v) => v.role === "owner");
 
   const wide = useWide();
@@ -641,7 +641,7 @@ export default function VaultsPage() {
       </div>
 
       {showList && (
-        // Anyone who can create a space can accept one shared from another Eunomia; combining
+        // Anyone who can create a space can accept one shared from another Cupel; combining
         // spaces stays with admins and owners.
         <div className="flex flex-col gap-2 items-start pt-2" style={{ borderTop: "1px solid var(--border)" }}>
           <JoinSharedSpace onJoined={(id) => open(id)} />

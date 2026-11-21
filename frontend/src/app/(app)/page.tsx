@@ -27,6 +27,7 @@ import { AppMark, appForConnection, type Connection } from "@/components/connect
 import { useConnections } from "@/components/connect/useConnections";
 import { FAILURE_ALERT_THRESHOLD, isLiveSource, sourceHealth, sourceLabel } from "@/lib/sourceState";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 /** Compact age: "now", "4m", "3h", "2d". */
 function age(iso: string | null | undefined): string {
   if (!iso) return "–";
@@ -309,7 +310,7 @@ function ConnectAnother({ none = false, fromSources = false }: { none?: boolean;
     <section className="flex flex-col gap-4" aria-label={none ? "Connect an AI app" : "Connect another AI app"}>
       {none && (
         <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
-          No AI app has used Eunomia yet. What you see here was added by you or your teammates{fromSources ? " and your connected sources" : ""}.
+          No AI app has used {PRODUCT_NAME} yet. What you see here was added by you or your teammates{fromSources ? " and your connected sources" : ""}.
         </p>
       )}
       <button
@@ -375,7 +376,7 @@ function ConnectedPanel({ connections }: { connections: Connection[] }) {
           </h2>
           <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
             {app.id === "chatgpt" && connections.length === 1
-              ? "Choose Eunomia in your next ChatGPT conversation."
+              ? `Choose ${PRODUCT_NAME} in your next ChatGPT conversation.`
               : "Ask any of them to look for memories about you to try it."}
           </p>
         </div>
@@ -446,7 +447,7 @@ export default function HomePage() {
     connections === null ? (
       <LoadingSkeleton label="Checking your connected apps" layout="overview" />
     ) : !connectedApps && hasData ? (
-      // Someone already working in Eunomia gets one honest line, not the first-run card.
+      // Someone already working in Cupel gets one honest line, not the first-run card.
       <ConnectAnother none fromSources={liveSources.length > 0} />
     ) : !connectedApps ? (
       <AppPicker />

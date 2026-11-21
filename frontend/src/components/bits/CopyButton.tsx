@@ -1,4 +1,4 @@
-// Inspired by React Bits SpringCheck (reactbits.dev). Original implementation for Eunomia.
+// Inspired by React Bits SpringCheck (reactbits.dev). Original implementation for Cupel.
 // Usage: <CopyButton value={token} /> (icon only, name "Copy") or <CopyButton value={() => cmd} label="Copy command" size="sm" className="btn-primary" />.
 // Names flip to "Copied" for 1.5s after a successful write; size="icon" puts the name in aria-label, size="sm" shows it as text.
 "use client";

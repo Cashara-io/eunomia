@@ -1,4 +1,4 @@
-// Original Eunomia artwork, derived from EunomiaMark.tsx and DESIGN.md. No network or next/og.
+// Original Cupel artwork, derived from EunomiaMark.tsx and DESIGN.md. No network or next/og.
 import sharp from "sharp";
 import { writeFile } from "node:fs/promises";
 const app = new URL("../src/app/", import.meta.url);
@@ -57,7 +57,7 @@ const fontfile = new URL(
   import.meta.url,
 ).pathname;
 const title = await sharp({
-  text: { text: '<span foreground="#171717">Eunomia</span>', font: "Geist Medium 104", fontfile, rgba: true },
+  text: { text: '<span foreground="#171717">Cupel</span>', font: "Geist Medium 104", fontfile, rgba: true },
 })
   .png()
   .toBuffer();

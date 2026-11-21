@@ -11,6 +11,7 @@ import { relativeTime } from "@/lib/connectorMeta";
 import { API_URL } from "@/lib/api";
 import { LIVE_POLL_MS } from "@/lib/queries/client";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const labels: Record<string, string> = { googledrive: "Google Drive", gmail: "Gmail", googlecalendar: "Google Calendar", timelinesai: "Personal WhatsApp (TimelinesAI)", whatsapp: "WhatsApp Business", github: "Obsidian via GitHub" };
 const selection = z.object({ toolkit: z.string(), account: z.string(), folder: z.string().default(""), repo: z.string().default(""), reference: z.string().default("main"), phone_number_id: z.string().default("") });
 const statusSchema = z.object({ connected: z.boolean(), account: z.string(), accounts: z.array(z.object({ toolkit: z.string(), id: z.string(), label: z.string(), status: z.string() })), apps: z.array(selection), vault: z.string().nullable(), enabled: z.boolean(), health: z.string().nullable() });
@@ -59,7 +60,7 @@ export default function ComposioCard() {
   function update(index: number, patch: Partial<Selection>) { setApps(chosen.map((s, i) => i === index ? { ...s, ...patch } : s)); }
   return <section className="ledger" aria-labelledby="composio-heading">
     <div className="px-5 py-4 flex flex-wrap items-center gap-3 border-b">
-      <div className="flex-1"><h2 id="composio-heading" className="section-title">Composio</h2><p className="label mt-1">Connect your own account, then choose the apps Eunomia can read.</p></div>
+      <div className="flex-1"><h2 id="composio-heading" className="section-title">Composio</h2><p className="label mt-1">Connect your own account, then choose the apps {PRODUCT_NAME} can read.</p></div>
       {data?.connected ? <><span className="text-[13px]">Signed in as {data.account}</span><button className="btn btn-sm" disabled={busy} onClick={() => act(async () => { const result = z.object({ message: z.string() }).parse(await request("disconnect", {})); setMessage(result.message); setApps(null); await status.refetch(); })}>Disconnect</button></> : <button className="btn btn-primary" disabled={busy || status.isPending} onClick={() => act(async () => { const { url } = z.object({ url: z.string().url() }).parse(await request("begin", {})); window.location.assign(url); })}>Connect Composio</button>}
     </div>
     {data?.connected && <div className="px-5 py-4 flex flex-col gap-4">
@@ -78,7 +79,7 @@ export default function ComposioCard() {
       {source?.sync_status.last_report?.warnings?.map((warning, index) => <p className="label" key={`${index}:${warning}`}>{warning}</p>)}
       <p className="label">{health.label}. Last completed sync: {relativeTime(source?.sync_status.last_ok ?? null)}. {source?.sync_status.last_error || source?.sync_status.last_report?.message}</p>
       <p className="label">Drive: text, Markdown, JSON, CSV and PDF, plus Docs and Sheets exports. Folder selection reads direct children. Calendar reads your primary calendar. Personal WhatsApp needs a separate TimelinesAI service and reads text messages. WhatsApp Business reads delivery history, not a personal inbox or message bodies. Obsidian reads Markdown already pushed to GitHub, with front matter and wikilinks. A Drive folder can also hold exported vault files.</p>
-      <p className="label">Disconnect deletes local tokens. If Composio does not offer remote revocation, remove Eunomia&apos;s session in Composio too. Imported records stay in Eunomia.</p>
+      <p className="label">Disconnect deletes local tokens. If Composio does not offer remote revocation, remove {PRODUCT_NAME}&apos;s session in Composio too. Imported records stay in {PRODUCT_NAME}.</p>
     </div>}
     {(error || status.error || data?.health) && <p role="alert" className="px-5 py-3" style={{ color: "var(--critical)" }}>{error || status.error?.message || data?.health}</p>}
     {message && <p role="status" className="px-5 py-3 label">{message}</p>}

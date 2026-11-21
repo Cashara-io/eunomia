@@ -16,6 +16,7 @@ import CopyButton from "@/components/bits/CopyButton";
 import DecryptReveal from "@/components/bits/DecryptReveal";
 import { isPrivateHost, useMcpAddress } from "@/components/connect/Guide";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const CLIENTS = [
   { id: "claude", label: "Claude Code", token: "Claude Code" },
   { id: "codex", label: "Codex", token: "Codex" },
@@ -183,7 +184,7 @@ export default function ConnectAgents({ onToken, initialClient }: { onToken?: ()
                 <Step n={2} title="Run this in a terminal">
                   {token ? <Code label="Command" value={claudeCodeCommand(mcpUrl, token)} /> : <Pending />}
                   <Hint>
-                    <Mono>--scope user</Mono> makes Eunomia available in every project.
+                    <Mono>--scope user</Mono> makes {PRODUCT_NAME} available in every project.
                   </Hint>
                 </Step>
                 <Step n={3} title="Check it">
@@ -224,7 +225,7 @@ export default function ConnectAgents({ onToken, initialClient }: { onToken?: ()
         {local && (
           <Hint>
             <Mono>{host}</Mono> only works for agents on this {host === "localhost" || host.startsWith("127.") ? "computer" : "network"}.
-            For agents elsewhere, give Eunomia a public address under{" "}
+            For agents elsewhere, give {PRODUCT_NAME} a public address under{" "}
             <Link href="/settings?tab=https" className="link">
               Settings, HTTPS
             </Link>

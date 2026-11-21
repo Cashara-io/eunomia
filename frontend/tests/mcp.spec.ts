@@ -238,7 +238,7 @@ test.describe("MCP server", () => {
     const resource = await (
       await rpc(request, token, { jsonrpc: "2.0", id: 4, method: "resources/read", params: { uri: "eunomia://skill" } })
     ).json();
-    expect(resource.result.contents[0].text).toContain("# Eunomia memory");
+    expect(resource.result.contents[0].text).toContain("# Cupel memory");
 
     // the essentials ride in the tool descriptions too, for clients that ignore all of the above
     const tools = (await (await rpc(request, token, { jsonrpc: "2.0", id: 5, method: "tools/list" })).json()).result.tools;

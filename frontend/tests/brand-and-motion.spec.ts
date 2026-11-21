@@ -140,7 +140,7 @@ test("brand icon files, manifest and social metadata are served", async ({
   const manifestResponse = await request.get("/manifest.webmanifest");
   expect(manifestResponse.ok()).toBeTruthy();
   const manifest = await manifestResponse.json();
-  expect(manifest.name).toBe("Eunomia");
+  expect(manifest.name).toBe("Cupel");
   expect(manifest.icons).toEqual([
     { src: "/icon1.png", sizes: "192x192", type: "image/png", purpose: "any" },
     { src: "/icon2.png", sizes: "512x512", type: "image/png", purpose: "any" },
@@ -200,7 +200,7 @@ test("brand icon files, manifest and social metadata are served", async ({
   }
   await expect(page.locator('meta[property="og:title"]')).toHaveAttribute(
     "content",
-    "Eunomia",
+    "Cupel",
   );
   await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute(
     "content",
@@ -423,7 +423,7 @@ test("icon proof sheet shows native, 2x and 4x sizes in light and dark chrome", 
     ${frames.map(({ label, size, src }) => `<div class="tab-row"><h3>${label}</h3>${[1, 2, 4].map((scale) => `
       <div><p>${scale}x, ${size * scale}px</p><div class="strip"><div class="tab">
       <img alt="${label}, ${theme}, ${scale}x" style="color-scheme:${theme}" width="${size * scale}" height="${size * scale}" src="${src}">
-      <span>Eunomia</span><span class="close">×</span></div><span class="plus">+</span></div></div>`).join("")}</div>`).join("")}</section>`).join("");
+      <span>Cupel</span><span class="close">×</span></div><span class="plus">+</span></div></div>`).join("")}</div>`).join("")}</section>`).join("");
   const tiles = [];
   for (const [label, path, size, kind] of [
     ["Apple touch", "/apple-icon.png", 180, "ios"],
@@ -437,7 +437,7 @@ test("icon proof sheet shows native, 2x and 4x sizes in light and dark chrome", 
       <div><p>${scale}x, ${size * scale}px</p><div class="wallpaper"><div class="tile ${kind}" style="width:${size * scale}px;height:${size * scale}px">
       <img alt="${label} ${size}px, ${scale}x" width="${size * scale}" height="${size * scale}" src="${src}">
       ${kind === "maskable" ? '<div class="safe-zone"></div>' : ""}</div>
-      ${kind === "ios" ? '<p class="app-name">Eunomia</p>' : ""}</div>
+      ${kind === "ios" ? '<p class="app-name">Cupel</p>' : ""}</div>
       ${kind === "maskable" && scale === 1 ? `<p>Circle mask at native size</p><img class="circle-mask" alt="Maskable icon with circular crop" width="${size}" height="${size}" src="${src}">` : ""}
       </div>`).join("")}</div></section>`);
   }
@@ -456,7 +456,7 @@ test("icon proof sheet shows native, 2x and 4x sizes in light and dark chrome", 
     .tile{position:relative;overflow:hidden}.ios{border-radius:22.37%;box-shadow:0 3px 10px #0004}.app-name{color:#fff;text-align:center}
     .safe-zone{position:absolute;width:80%;height:80%;top:10%;left:10%;border:3px dashed #17171788;border-radius:50%}
     .circle-mask{border-radius:50%}
-  </style></head><body><h1>Eunomia square icons, v2</h1><p class="intro">Native size, 2x and 4x. Raster enlargements use nearest-neighbour pixels. SVG responds to each tab strip's colour scheme. Home tiles use opaque off-white artwork. Dashed circle is the maskable 80% safe zone.</p>
+  </style></head><body><h1>Cupel square icons, v2</h1><p class="intro">Native size, 2x and 4x. Raster enlargements use nearest-neighbour pixels. SVG responds to each tab strip's colour scheme. Home tiles use opaque off-white artwork. Dashed circle is the maskable 80% safe zone.</p>
   <div class="themes">${tabs}</div>${tiles.join("")}</body></html>`;
   await page.setViewportSize({ width: 4000, height: 1000 });
   await page.setContent(html);

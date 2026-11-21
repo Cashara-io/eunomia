@@ -21,6 +21,7 @@ import {
   useMcpAddress,
 } from "@/components/connect/Guide";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 // Commands verified against docs/agents.md ("Sign in with OAuth", Claude Code, Codex, ChatGPT).
 const claudeCommand = (url: string) => `claude mcp add --transport http --scope user eunomia ${url}`;
 const codexCommand = (url: string) => `codex mcp add eunomia --url ${url}\ncodex mcp login eunomia`;
@@ -48,7 +49,7 @@ function LocalNote({ url }: { url: string }) {
           .
         </>
       ) : (
-        "To connect an app on another computer, ask your Eunomia admin for a public address."
+        `To connect an app on another computer, ask your ${PRODUCT_NAME} admin for a public address.`
       )}
     </Note>
   );
@@ -59,13 +60,13 @@ function NotReachable({ url }: { url: string }) {
   const isAdmin = useMe().data?.is_admin ?? false;
   const address = url.replace(/\/mcp$/, "");
   const message =
-    `Hi, I'd like to connect ChatGPT to our Eunomia server, but ChatGPT can't reach it yet. ` +
-    `ChatGPT connects from OpenAI's servers, so Eunomia needs a public https:// address (it is ${address} right now). ` +
-    `An admin can turn on HTTPS in Eunomia's settings, or put the server behind a public https:// address another way. Thanks!`;
+    `Hi, I'd like to connect ChatGPT to our ${PRODUCT_NAME} server, but ChatGPT can't reach it yet. ` +
+    `ChatGPT connects from OpenAI's servers, so ${PRODUCT_NAME} needs a public https:// address (it is ${address} right now). ` +
+    `An admin can turn on HTTPS in ${PRODUCT_NAME}'s settings, or put the server behind a public https:// address another way. Thanks!`;
   return (
     <section className="flex flex-col gap-4 py-2" aria-labelledby="unreachable-title">
       <h2 id="unreachable-title" className="text-heading font-semibold leading-snug">
-        Your Eunomia admin needs to make this server reachable from the internet first
+        Your {PRODUCT_NAME} admin needs to make this server reachable from the internet first
       </h2>
       <p className="text-reading leading-relaxed">
         ChatGPT connects from OpenAI&apos;s servers, so it can&apos;t reach <Kbd>{address}</Kbd>. Once the server has a public <Kbd>https://</Kbd> address,
@@ -98,7 +99,7 @@ function TokenFallback({ initial }: { initial: "claude" | "codex" | "other" }) {
     <details>
       <summary className="cursor-pointer text-reading font-semibold min-h-11 flex items-center">Advanced: use an API token</summary>
       <div className="pt-3 flex flex-col gap-3">
-        <Note>Use this only if your app cannot open the Eunomia sign-in page. The token is shown once; you can revoke it any time under Settings, API tokens.</Note>
+        <Note>Use this only if your app cannot open the {PRODUCT_NAME} sign-in page. The token is shown once; you can revoke it any time under Settings, API tokens.</Note>
         <ConnectAgents initialClient={initial} />
       </div>
     </details>
@@ -110,7 +111,7 @@ function ChatGptGuide({ app, url, onConfirmed }: { app: AiApp; url: string; onCo
   return (
     <GuideFrame
       id="chatgpt"
-      intro={reachableFromInternet(url) ? "Use ChatGPT on the web for setup. Keep this page open beside it. Your Eunomia address is ready to copy below." : null}
+      intro={reachableFromInternet(url) ? `Use ChatGPT on the web for setup. Keep this page open beside it. Your ${PRODUCT_NAME} address is ready to copy below.` : null}
     >
       {!reachableFromInternet(url) ? (
         <NotReachable url={url} />
@@ -122,27 +123,27 @@ function ChatGptGuide({ app, url, onConfirmed }: { app: AiApp; url: string; onCo
             Open ChatGPT Plugins
           </a>
         </GuideStep>
-        <GuideStep n={2} title="Add Eunomia with these details">
+        <GuideStep n={2} title={`Add ${PRODUCT_NAME} with these details`}>
           <dl className="soft-panel grid grid-cols-[minmax(0,140px)_minmax(0,1fr)] gap-x-4 gap-y-2.5 px-5 py-4 text-body">
             <dt style={{ color: "var(--ink-dim)" }}>Name</dt>
-            <dd>Eunomia</dd>
+            <dd>{PRODUCT_NAME}</dd>
             <dt style={{ color: "var(--ink-dim)" }}>Server URL</dt>
             <dd className="font-mono [overflow-wrap:anywhere]">{url}</dd>
             <dt style={{ color: "var(--ink-dim)" }}>Authentication</dt>
-            <dd>Sign in with Eunomia (ChatGPT may call this OAuth)</dd>
+            <dd>Sign in with {PRODUCT_NAME} (ChatGPT may call this OAuth)</dd>
           </dl>
           <CopyButton value={url} label="Copy server URL" size="sm" className="self-start" />
           <Note>Review the warning, select I understand and want to continue, then choose Create as a plugin. There is nothing else to paste.</Note>
         </GuideStep>
         <GuideStep n={3} title="Approve access, then install">
           <p>
-            When the Eunomia sign-in page opens, use the same email and password you use here. Review what ChatGPT is asking for and choose Allow. Back in
-            ChatGPT, find Eunomia in your personal plugins and choose Install.
+            When the {PRODUCT_NAME} sign-in page opens, use the same email and password you use here. Review what ChatGPT is asking for and choose Allow. Back in
+            ChatGPT, find {PRODUCT_NAME} in your personal plugins and choose Install.
           </p>
         </GuideStep>
-        <GuideStep n={4} title="Use Eunomia in a new chat">
+        <GuideStep n={4} title={`Use ${PRODUCT_NAME} in a new chat`}>
           <p>
-            Start a new ChatGPT conversation. Type <Kbd>@</Kbd> and choose Eunomia before asking your question, for example: &ldquo;{EXAMPLE_QUESTION}&rdquo;
+            Start a new ChatGPT conversation. Type <Kbd>@</Kbd> and choose {PRODUCT_NAME} before asking your question, for example: &ldquo;{EXAMPLE_QUESTION}&rdquo;
           </p>
           <CheckConnection app={app} onConfirmed={onConfirmed} />
           <aside className="soft-panel px-5 py-4 flex flex-col gap-2 mt-2" aria-labelledby="no-custom">
@@ -175,7 +176,7 @@ function TerminalGuide({ app, url, onConfirmed }: { app: AiApp; url: string; onC
         <GuideStep n={2} title="Copy and run this command">
           <Note>
             Copy the command, paste it into that window, and press Enter.
-            {claude ? " It adds Eunomia to Claude Code for all your projects." : " The second line starts sign-in."}
+            {claude ? ` It adds ${PRODUCT_NAME} to Claude Code for all your projects.` : " The second line starts sign-in."}
           </Note>
           <CommandBlock value={claude ? claudeCommand(url) : codexCommand(url)} />
           <LocalNote url={url} />
@@ -184,7 +185,7 @@ function TerminalGuide({ app, url, onConfirmed }: { app: AiApp; url: string; onC
           {claude ? (
             <>
               <p>
-                Open Claude Code and type <Kbd>/mcp</Kbd>. Select eunomia and follow the sign-in prompt to open your browser. Use your Eunomia email and
+                Open Claude Code and type <Kbd>/mcp</Kbd>. Select eunomia and follow the sign-in prompt to open your browser. Use your {PRODUCT_NAME} email and
                 password, review the permissions, and choose Allow.
               </p>
               <Note>If eunomia is not listed, make sure the command in step 2 finished without an error. Connection help shows what to do if it did not.</Note>
@@ -192,7 +193,7 @@ function TerminalGuide({ app, url, onConfirmed }: { app: AiApp; url: string; onC
           ) : (
             <>
               <p>
-                Codex asks you to sign in. Follow its prompt to open the browser. Use your Eunomia email and password, review the permissions, and choose
+                Codex asks you to sign in. Follow its prompt to open the browser. Use your {PRODUCT_NAME} email and password, review the permissions, and choose
                 Allow.
               </p>
               <Note>
@@ -214,24 +215,24 @@ function TerminalGuide({ app, url, onConfirmed }: { app: AiApp; url: string; onC
 }
 
 function OtherGuide({ app, url, onConfirmed }: { app: AiApp; url: string; onConfirmed: (c: Connection) => void }) {
-  const details = `Name: Eunomia\nServer URL: ${url}\nAuthentication: OAuth (sign in with Eunomia)`;
+  const details = `Name: ${PRODUCT_NAME}\nServer URL: ${url}\nAuthentication: OAuth (sign in with ${PRODUCT_NAME})`;
   return (
     <GuideFrame
       id="other"
-      intro="Some AI apps can connect to Eunomia from their settings. If your app does not show a connection option, ask its support team or the person who installed Eunomia."
+      intro={`Some AI apps can connect to ${PRODUCT_NAME} from their settings. If your app does not show a connection option, ask its support team or the person who installed ${PRODUCT_NAME}.`}
     >
       <ol className="flex flex-col" style={{ borderTop: "1px solid var(--border)" }}>
         <GuideStep n={1} title="Find the connection option in your app">
           <p>Look for an option to add a connector, server or custom connection in the app&apos;s settings (often called Add MCP server). The wording depends on the app.</p>
         </GuideStep>
-        <GuideStep n={2} title="Enter Eunomia’s address and sign in">
+        <GuideStep n={2} title={`Enter ${PRODUCT_NAME}’s address and sign in`}>
           <p>
-            Use <Kbd>{url}</Kbd>. If asked how to sign in, choose OAuth (sign in through the browser). Use your Eunomia email and password when the sign-in page opens.
+            Use <Kbd>{url}</Kbd>. If asked how to sign in, choose OAuth (sign in through the browser). Use your {PRODUCT_NAME} email and password when the sign-in page opens.
           </p>
           <LocalNote url={url} />
         </GuideStep>
         <GuideStep n={3} title="Approve and start a new conversation">
-          <p>Review the requested access and choose Allow. Follow your app&apos;s instructions to turn on Eunomia in a new conversation.</p>
+          <p>Review the requested access and choose Allow. Follow your app&apos;s instructions to turn on {PRODUCT_NAME} in a new conversation.</p>
           <CopyButton value={details} label="Copy connection details" size="sm" className="btn-primary self-start" />
           <CheckConnection app={app} onConfirmed={onConfirmed} />
         </GuideStep>

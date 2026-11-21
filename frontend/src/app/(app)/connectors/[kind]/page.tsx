@@ -20,6 +20,7 @@ import { ConnectorTile, kindForSource, relativeTime } from "@/lib/connectorMeta"
 import PocketAudioPlayer from "@/components/pocket/PocketAudioPlayer";
 import { formatMoney } from "@/lib/numbers";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const DATE_KEY = /(_at|date|time)$/i;
 const MONEY_KEY = /(amount|balance|price|cost|total|spent|fee)/i;
 const DURATION_KEY = /duration/i;
@@ -236,7 +237,7 @@ function DeleteData({ row, kind }: { row: SourceRow; kind: ConnectorKind }) {
         Imported items
       </h2>
       <p className="text-body max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
-        Remove everything Eunomia brought in from {row.label}. The connection stays, so later updates bring in new items only.
+        Remove everything {PRODUCT_NAME} brought in from {row.label}. The connection stays, so later updates bring in new items only.
       </p>
       <button
         type="button"
@@ -261,7 +262,7 @@ function DeleteData({ row, kind }: { row: SourceRow; kind: ConnectorKind }) {
         onCancel={() => setOpen(false)}
       >
         <p>
-          This permanently deletes the {row.record_count.toLocaleString()} {row.label} records Eunomia has imported, their links, and every fact and
+          This permanently deletes the {row.record_count.toLocaleString()} {row.label} records {PRODUCT_NAME} has imported, their links, and every fact and
           relation learned from them. Your AI apps will no longer find them. This can&apos;t be undone.
         </p>
         <p style={{ color: "var(--ink-dim)" }}>The connection itself stays, so later updates bring in new items only.</p>
@@ -422,7 +423,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
           title={row.account ? `${row.label}: ${row.account}` : row.label}
           intro={
             row.connected
-              ? `Items Eunomia has imported from ${row.account ? `${row.label} (${row.account})` : row.label}. They update on their own; use Sync now to fetch the latest straight away.`
+              ? `Items ${PRODUCT_NAME} has imported from ${row.account ? `${row.label} (${row.account})` : row.label}. They update on their own; use Sync now to fetch the latest straight away.`
               : orphaned
                 ? "This source is no longer connected. The items it imported are kept and can still be found."
                 : "Example data with no live connection."
@@ -475,7 +476,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
 
       {row.sync_status.last_report?.status === "partial" && (
         <p role="status" className="text-body" style={{ color: "var(--warning)" }}>
-          {row.sync_status.last_report.message}. Eunomia will continue automatically.
+          {row.sync_status.last_report.message}. {PRODUCT_NAME} will continue automatically.
         </p>
       )}
       {row.sync_status.last_report?.warnings?.map((warning) => (

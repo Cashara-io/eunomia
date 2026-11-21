@@ -9,6 +9,7 @@ import { downloadAuditExport, useVerifyAudit, useWorkspaceAudit } from "@/lib/qu
 import type { AuditCategory, AuditVerification } from "@/lib/gen";
 import { PanelHead, StatusLine, TableSkeleton, relativeTime } from "./shared";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 const PAGE = 50;
 
 // Sign-ins are routine and drown out the rest: the log opens on changes, sign-ins are one click away.
@@ -302,9 +303,9 @@ function WorkspaceLog() {
   const rows: LogRow[] = (page?.results ?? []).map((r) => ({
     id: r.id,
     at: r.created_at ?? null,
-    // another Eunomia acting on a share code: the sentence names it, so the actor is just "Another Eunomia"
-    who: r.via === "another Eunomia" ? "Another Eunomia" : r.actor_email || (r.via === "system" ? "Eunomia" : "Unknown"),
-    whoNote: r.via && r.via !== "system" && r.via !== "another Eunomia" ? `with an ${r.via}` : undefined,
+    // another Cupel acting on a share code: the sentence names it, so the actor is just "Another Cupel"
+    who: r.via === `another ${PRODUCT_NAME}` ? `Another ${PRODUCT_NAME}` : r.actor_email || (r.via === "system" ? PRODUCT_NAME : "Unknown"),
+    whoNote: r.via && r.via !== "system" && r.via !== `another ${PRODUCT_NAME}` ? `with an ${r.via}` : undefined,
     what: r.summary,
     failed: r.ok ? undefined : r.result,
     reason: r.ok ? undefined : r.reason || undefined,

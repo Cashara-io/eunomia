@@ -6,7 +6,8 @@ import { useState } from "react";
 import { useHttpsStatus, useRequestHttps } from "@/lib/queries/settings";
 import { PanelHead, StatusLine, type Tone } from "./shared";
 
-const INTRO = "Serve Eunomia at your own domain with a free certificate that renews itself.";
+import { PRODUCT_NAME } from "@/lib/brand";
+const INTRO = `Serve ${PRODUCT_NAME} at your own domain with a free certificate that renews itself.`;
 
 export function HttpsSection() {
   const statusQuery = useHttpsStatus();

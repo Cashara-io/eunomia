@@ -108,7 +108,7 @@ test("Bitwarden Secrets Manager is marked Preview, with its note; the 1Password 
   await page.goto("/connectors");
   const bw = page.getByTestId("pm-bitwarden_sm");
   await expect(bw.getByTestId("preview-badge")).toHaveText("Preview");
-  await expect(bw.getByTestId("preview-note")).toContainText("Preview: Eunomia's own Bitwarden client is tested against a mock");
+  await expect(bw.getByTestId("preview-note")).toContainText("Preview: Cupel's own Bitwarden client is tested against a mock");
   for (const k of ["onepassword_connect", "onepassword_service_account"]) {
     await expect(page.getByTestId(`pm-${k}`).getByTestId("preview-badge")).toHaveCount(0);
   }

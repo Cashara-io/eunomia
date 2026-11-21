@@ -22,6 +22,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import RoutingSection from "./RoutingSection";
 import PocketAudioSetting from "@/components/pocket/PocketAudioSetting";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 // Presets for the sync-interval select, in seconds.
 const SYNC_INTERVAL_PRESETS = [
   { value: 300, label: "5 minutes" },
@@ -126,7 +127,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
   const deleteConnector = useDeleteConnector();
   const [name, setName] = useState<string | null>(null);
   const [nameError, setNameError] = useState("");
-  const loadError = connectorsQuery.isError ? failure(connectorsQuery.error, "Could not load this connector.", " Reload the page once Eunomia is reachable.") : null;
+  const loadError = connectorsQuery.isError ? failure(connectorsQuery.error, "Could not load this connector.", ` Reload the page once ${PRODUCT_NAME} is reachable.`) : null;
   const updateConnector = useUpdateConnector();
   const testConnector = useTestConnector();
   const updateSettings = useUpdateSettings();
@@ -245,9 +246,9 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
             : r.status === "offline"
               ? { state: "failed", text: "You're offline, so nothing was synced. Try again when you have a connection" }
               : r.status === "queued"
-                ? { state: "done", text: "Update queued. It starts as soon as Eunomia is free; items appear when it finishes" }
+                ? { state: "done", text: `Update queued. It starts as soon as ${PRODUCT_NAME} is free; items appear when it finishes` }
                 : r.status === "partial"
-                  ? { state: "partial", text: `${r.message ?? "Import in progress"}. Eunomia will continue automatically` }
+                  ? { state: "partial", text: `${r.message ?? "Import in progress"}. ${PRODUCT_NAME} will continue automatically` }
                   : { state: "done", text: `Synced: ${r.written ?? 0} new or changed, ${r.skipped ?? 0} unchanged` },
       );
     } catch (e) {
@@ -376,7 +377,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                 1. Get your connection key
               </h2>
               <p className="text-body" style={{ color: "var(--ink-dim)" }}>
-                {meta.label} gives you a key that lets Eunomia read your items. It is stored encrypted and only sent to {meta.label}.
+                {meta.label} gives you a key that lets {PRODUCT_NAME} read your items. It is stored encrypted and only sent to {meta.label}.
               </p>
               {meta.help && (
                 <>
@@ -500,7 +501,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
             </h2>
             <p className="text-body" style={{ color: "var(--ink-dim)" }}>
               After saving, choose Test connection to check that {meta.label} accepts your details.
-              {sourceKey ? " Then choose Sync now to bring in your items. You can leave this page while Eunomia imports them." : ""}
+              {sourceKey ? ` Then choose Sync now to bring in your items. You can leave this page while ${PRODUCT_NAME} imports them.` : ""}
             </p>
             <div className="flex items-center gap-3 flex-wrap">
               <button type="button" onClick={test} disabled={testing || !(connected || isDemo)} className="btn" title={connected || isDemo ? undefined : "Save credentials first"}>
@@ -560,7 +561,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                 <label htmlFor="sync-interval" className="flex flex-col gap-0.5 text-body font-medium">
                   Sync interval
                   <span className="text-detail font-normal" style={{ color: "var(--ink-dim)" }}>
-                    How often Eunomia checks {meta.label} for new items.
+                    How often {PRODUCT_NAME} checks {meta.label} for new items.
                   </span>
                 </label>
                 <div className="flex items-center gap-2">
@@ -591,7 +592,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                 Disconnected
               </h2>
               <p className="text-body" style={{ color: "var(--ink-dim)" }}>
-                Eunomia isn&apos;t importing from {meta.label} right now. Everything it already brought in is still here.
+                {PRODUCT_NAME} isn&apos;t importing from {meta.label} right now. Everything it already brought in is still here.
               </p>
               <button type="button" className="btn btn-primary self-start" disabled={disconnecting} onClick={reconnect}>
                 Connect again
@@ -637,7 +638,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                 onConfirm={disconnect}
                 onCancel={() => setConfirmDisconnect(false)}
               >
-                <p>Eunomia stops importing from {meta.label}. Items already imported stay in your memory, and you can connect again at any time.</p>
+                <p>{PRODUCT_NAME} stops importing from {meta.label}. Items already imported stay in your memory, and you can connect again at any time.</p>
               </ConfirmDialog>
               <ConfirmDialog
                 open={confirmRemove}

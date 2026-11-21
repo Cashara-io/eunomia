@@ -7,6 +7,7 @@ import { bootstrapQuery } from "@/lib/queries/auth";
 import { nextPath } from "@/lib/nextPath";
 import type { Failure } from "@/components/ErrorLine";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 /** How this install lets people in, from the public bootstrap endpoint. `pending` until it answers; a failed
  * request falls back to the password form (the server still refuses what it has turned off). */
 export function useSignIn() {
@@ -28,7 +29,7 @@ function oidcMessage(code: string, provider: string): string | null {
     case "token":
       return `${provider} sent a sign-in this server could not verify. Try again.`;
     case "no_email":
-      return `${provider} did not share an email address, which Eunomia needs to find your account.`;
+      return `${provider} did not share an email address, which ${PRODUCT_NAME} needs to find your account.`;
     case "email_unverified":
       return `An account with this email already exists, and ${provider} has not verified the address. Sign in with your password, or verify the address with ${provider}.`;
     case "invitation":

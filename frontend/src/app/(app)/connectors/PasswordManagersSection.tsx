@@ -27,6 +27,7 @@ import ConfirmButton from "@/components/ConfirmButton";
 import Select from "@/components/Select";
 import { ICON } from "../settings/shared";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 /**
  * How each kind is set up here (its form fields), in the order shown. Names, stability and the preview
  * note come from the API (`GET /api/secrets/kinds`, one source of truth in the backend); `name` is only
@@ -94,7 +95,7 @@ export default function PasswordManagersSection() {
           Password managers
         </h2>
         <p className="text-detail mt-1 max-w-[66ch]" style={{ color: "var(--ink-dim)" }}>
-          Let tools use secrets kept in your own 1Password or Bitwarden Secrets Manager. Eunomia stores only references such as <code className="font-mono">op://Ops/Square/access_token</code>, resolves them for one tool call at a
+          Let tools use secrets kept in your own 1Password or Bitwarden Secrets Manager. {PRODUCT_NAME} stores only references such as <code className="font-mono">op://Ops/Square/access_token</code>, resolves them for one tool call at a
           time, and logs every use. Values are never stored.
         </p>
       </div>
@@ -441,9 +442,9 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
   async function save() {
     if (!draft) return;
     setError(null);
-    // eu:// handles are secrets Eunomia holds (no password manager, no reference to register)
+    // eu:// handles are secrets Cupel holds (no password manager, no reference to register)
     if (draft.reference.trim().toLowerCase().startsWith("eu://")) {
-      setError({ message: "An eu:// handle is a secret Eunomia holds, not a password manager reference. It needs no reference: find it under Held secrets." });
+      setError({ message: `An eu:// handle is a secret ${PRODUCT_NAME} holds, not a password manager reference. It needs no reference: find it under Held secrets.` });
       return;
     }
     const body = {

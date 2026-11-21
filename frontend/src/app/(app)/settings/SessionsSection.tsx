@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useMe, useRevokeSession, useSessions } from "@/lib/queries/auth";
 import { ICON, relativeTime, PanelHead, RevokeButton, TableSkeleton } from "./shared";
 
+import { PRODUCT_NAME } from "@/lib/brand";
 export function SessionsSection() {
   const sessionsQuery = useSessions();
   const sessions = sessionsQuery.data ?? (sessionsQuery.isError ? [] : null);
@@ -24,7 +25,7 @@ export function SessionsSection() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PanelHead title="Active sessions">The browsers where you are signed in to Eunomia. Revoking one signs that browser out immediately.</PanelHead>
+      <PanelHead title="Active sessions">The browsers where you are signed in to {PRODUCT_NAME}. Revoking one signs that browser out immediately.</PanelHead>
       {me?.oidc_provider && (
         <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--ink-dim)" }}>
           <KeyIcon {...ICON} className="shrink-0" aria-hidden />
