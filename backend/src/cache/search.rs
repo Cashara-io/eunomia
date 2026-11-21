@@ -628,7 +628,7 @@ pub(crate) async fn semantic_ids(
     filter: &RecordFilter,
     limit: usize,
 ) -> AppResult<Vec<RecordId>> {
-    let vec = crate::embeddings::service::embed(db, settings, &[q.to_string()], Some(scope.owner()))
+    let vec = crate::embeddings::service::embed(db, settings, &[q.to_string()], scope.owner())
         .await?
         .into_iter()
         .next()

@@ -10,7 +10,7 @@ Owned by the lead. One line per reserved migration number (docs/architecture/nex
 
 Tenant set: 0044 is the audit chain's access reviews (compliance PR03); 0045 is subject export and erasure (compliance PR08); 0046 is fact dates (#249). Next free: 0047.
 
-Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension to user records (PR #162); 0009 is enforced MFA (compliance PR04); 0010 is the audit chain (compliance PR03); 0011 is subject erasure (compliance PR08); 0012 is organisation invitations (#247); 0013 is account recovery by email (Hosted: email and recovery); 0014 is the organisation admin policy (Hosted: organisation admin); 0015 is the organisation plan and the operator API (Hosted: plans and operator API). Next free: 0016.
+Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension to user records (PR #162); 0009 is enforced MFA (compliance PR04); 0010 is the audit chain (compliance PR03); 0011 is subject erasure (compliance PR08); 0012 is organisation invitations (#247); 0013 is account recovery by email (Hosted: email and recovery); 0014 is the organisation admin policy (Hosted: organisation admin); 0015 is the organisation plan and the operator API (Hosted: plans and operator API); 0016 is model spend, the organisation's own key and the AI switch (Hosted: AI metering). Next free: 0017.
 
 | set | number | name | lane | PR | state |
 |---|---|---|---|---|---|
@@ -48,3 +48,4 @@ Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension t
 | control | 0013 | account_recovery | Hosted: email and recovery | | locked |
 | control | 0014 | org_admin_policy | Hosted: organisation admin |  | locked |
 | control | 0015 | org_plan | Hosted: plans and operator API |  | locked |
+| control | 0016 | ai_usage | Hosted: AI metering |  | locked |

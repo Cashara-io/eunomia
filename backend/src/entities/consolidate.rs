@@ -43,7 +43,6 @@ use crate::tx::with_retry_dup;
 
 use super::service::observation_rid;
 
-use crate::embeddings::provider;
 
 use super::extract::app_settings_row;
 
@@ -133,28 +132,15 @@ async fn call_llm(
     current_belief: Option<&str>,
     facts: &[String],
 ) -> AppResult<String> {
-    let p = provider::resolve(db, settings, owner).await?;
+    let grant = crate::ai::grant(db, settings, owner, crate::ai::Purpose::Consolidation).await?;
 
     let body = json!({
-        "model": provider::chat_model(&p).await,
+        "model": grant.chat_model().await,
         "response_format": {"type": "json_object"},
         "messages": [{"role": "user", "content": build_prompt(mission, current_belief, facts)}],
     });
 
-    let resp = p
-        .client()
-        .await?
-        .post(p.url("chat/completions"))
-        .bearer_auth(p.bearer())
-        .json(&body)
-        .timeout(Duration::from_secs(30))
-        .send()
-        .await
-        .map_err(|e| AppError::internal(e.to_string()))?
-        .error_for_status()
-        .map_err(|e| AppError::internal(e.to_string()))?;
-
-    let v: Value = resp.json().await.map_err(|e| AppError::internal(e.to_string()))?;
+    let v: Value = grant.complete(body, Duration::from_secs(30)).await?;
     let content = v
         .pointer("/choices/0/message/content")
         .and_then(|c| c.as_str())

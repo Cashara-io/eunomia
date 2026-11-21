@@ -45,18 +45,24 @@ pub const ENQUEUE: ControlStmt = ControlStmt::new(
 /// `ready` and is claimed after the organisation is resumed, so nothing queued is lost. The kinds in the
 /// literal never pause (a schema migration, a person's own data export and erasure): `PAUSE_EXEMPT` in
 /// `jobs/mod.rs`, which a test keeps equal to this list.
+/// The jobs that call a model (`ai::MODEL_JOB_KINDS`, kept equal to the second literal by a test) are also left
+/// alone for a member of an organisation on hold (`org_ai.hold_until`, set by a worker that paused one of its
+/// jobs because the organisation may not call a model: AI switched off, or the month's allowance used up).
 pub const CLAIM: ControlStmt = ControlStmt::new(
     "jobs.claim",
     "BEGIN TRANSACTION; \
      LET $full = (SELECT VALUE owner FROM (SELECT owner, count() AS n FROM job \
          WHERE status = 'running' AND locked_until >= time::now() GROUP BY owner) WHERE n >= $cap); \
      LET $paused = (SELECT VALUE user FROM membership WHERE org IN (SELECT VALUE id FROM org WHERE status = 'suspended')); \
+     LET $ai_held = (SELECT VALUE user FROM membership WHERE org IN (SELECT VALUE org FROM org_ai WHERE hold_until > time::now())); \
      LET $expired = (SELECT VALUE id FROM job WHERE status = 'running' AND locked_until < time::now() \
          AND attempts < max_attempts AND owner NOT IN $full \
-         AND (kind IN ['migrate_tenant', 'subject_export', 'subject_erase'] OR owner NOT IN $paused) LIMIT $n); \
+         AND (kind IN ['migrate_tenant', 'subject_export', 'subject_erase'] OR owner NOT IN $paused) \
+         AND (kind NOT IN ['embed', 'extract', 'consolidate', 'supersede'] OR owner NOT IN $ai_held) LIMIT $n); \
      LET $ready = (SELECT VALUE id FROM job WHERE status = 'ready' AND run_at <= time::now() \
          AND owner NOT IN $full \
-         AND (kind IN ['migrate_tenant', 'subject_export', 'subject_erase'] OR owner NOT IN $paused) LIMIT $n); \
+         AND (kind IN ['migrate_tenant', 'subject_export', 'subject_erase'] OR owner NOT IN $paused) \
+         AND (kind NOT IN ['embed', 'extract', 'consolidate', 'supersede'] OR owner NOT IN $ai_held) LIMIT $n); \
      UPDATE array::slice(array::concat($expired, $ready), 0, $n) \
          SET status = 'running', locked_by = $worker, locked_until = time::now() + <duration>$lease, \
              attempts += 1, updated_at = time::now() \

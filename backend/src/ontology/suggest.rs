@@ -17,7 +17,7 @@ use super::{
 };
 use crate::authz::Action;
 use crate::config::Settings;
-use crate::embeddings::provider::{self, Provider};
+use crate::ai::{self, Grant, Purpose, Refusal};
 use crate::error::{AppError, AppResult};
 use crate::pool::OrgDb;
 use crate::store::ontology as q;
@@ -135,11 +135,16 @@ fn has_word(haystack: &str, needle: &str) -> bool {
 pub async fn suggest(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_id: Option<&RecordId>) -> AppResult<SuggestOut> {
     let vault = resolve(db, owner, vault_id, Action::WriteMemories).await?;
     let profile = view(db, &vault).await?;
-    let p = provider::resolve(db, settings, owner).await?;
     let profile_only = |profile, note| SuggestOut::ProfileOnly { profile, hint: HINT.to_string(), note };
-    if settings.embeddings_backend != "openai" || !p.configured() {
+    if settings.embeddings_backend != "openai" {
         return Ok(profile_only(profile, None));
     }
+    let grant = match ai::authorize(db, settings, owner, Purpose::Ontology).await? {
+        Ok(g) => g,
+        Err(Refusal::NotConfigured) => return Ok(profile_only(profile, None)),
+        // AI is off or the allowance is used up: the profile is still useful, and the note says why there is no more
+        Err(refused) => return Ok(profile_only(profile, Some(refused.into_error().message))),
+    };
     let facts = facts_by_kind(db, &vault).await?;
     let evidence: HashMap<String, String> = profile
         .kinds
@@ -152,7 +157,7 @@ pub async fn suggest(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_id
         })
         .collect();
     let evidence_of = |kind: &str| evidence.get(kind).map(String::as_str).unwrap_or_default();
-    let answer = match ask(&p, &profile, &facts).await {
+    let answer = match ask(&grant, &profile, &facts).await {
         Ok(a) => a,
         Err(e) => {
             tracing::warn!("ontology suggest: model call failed, returning the profile: {}", e.message);
@@ -234,37 +239,23 @@ fn render_profile(profile: &OntologyOut, facts: &HashMap<String, Vec<String>>) -
     json!({"kinds": kinds, "links": links}).to_string().replace('<', "\\u003c")
 }
 
-async fn ask(p: &Provider, profile: &OntologyOut, facts: &HashMap<String, Vec<String>>) -> AppResult<ModelAnswer> {
+async fn ask(grant: &Grant, profile: &OntologyOut, facts: &HashMap<String, Vec<String>>) -> AppResult<ModelAnswer> {
     let user = format!("<profile>\n{}\n</profile>", render_profile(profile, facts));
-    serde_json::from_value(chat_json(p, SYSTEM_PROMPT, &user).await?).map_err(|e| AppError::internal(format!("model did not return the expected JSON: {e}")))
+    serde_json::from_value(chat_json(grant, SYSTEM_PROMPT, &user).await?).map_err(|e| AppError::internal(format!("model did not return the expected JSON: {e}")))
 }
 
 /// One JSON-mode chat completion: `system` as trusted instructions, `user` as the data. The parsed
 /// answer, or why not.
-pub(super) async fn chat_json(p: &Provider, system: &str, user: &str) -> AppResult<Value> {
+pub(super) async fn chat_json(grant: &Grant, system: &str, user: &str) -> AppResult<Value> {
     let body = json!({
-        "model": provider::chat_model(p).await,
+        "model": grant.chat_model().await,
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
     });
-    let v: Value = p
-        .client()
-        .await?
-        .post(p.url("chat/completions"))
-        .bearer_auth(p.bearer())
-        .json(&body)
-        .timeout(Duration::from_secs(90))
-        .send()
-        .await
-        .map_err(|e| AppError::internal(format!("chat completion request failed: {e}")))?
-        .error_for_status()
-        .map_err(|e| AppError::internal(format!("chat completion failed: {e}")))?
-        .json()
-        .await
-        .map_err(|e| AppError::internal(format!("invalid chat completion response: {e}")))?;
+    let v: Value = grant.complete(body, Duration::from_secs(90)).await?;
     let content = v.pointer("/choices/0/message/content").and_then(Value::as_str).ok_or_else(|| AppError::internal("chat completion returned no content"))?;
     serde_json::from_str(content).map_err(|e| AppError::internal(format!("model did not return valid JSON: {e}")))
 }

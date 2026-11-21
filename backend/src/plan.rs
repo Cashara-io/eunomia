@@ -266,6 +266,9 @@ pub struct PlanStatus {
     pub trial_ends_at: Option<Datetime>,
     /// Where the owner goes to add seats or pay (`EUNOMIA_BILLING_URL`); null when not configured or unmanaged.
     pub manage_url: Option<String>,
+    /// Model use: whether AI is on, whether the organisation has its own key, and this month's use of the
+    /// allowance as a percentage and a state. Present for every organisation, managed or not.
+    pub ai: crate::ai::orgcfg::AiStatus,
 }
 
 /// Seats in use by `org` (active members plus pending invitations).
@@ -277,8 +280,9 @@ pub async fn seats_in_use(control: &ControlDb, org: &RecordId) -> AppResult<i64>
 /// The plan status of the caller's own organisation. Any member may read it.
 pub async fn status_for(state: &AppState, user: &User) -> AppResult<PlanStatus> {
     let p = read(&state.control, &user.org.record()).await?;
+    let ai = crate::ai::orgcfg::status_for_members(state, &user.org).await?;
     if !p.managed() {
-        return Ok(PlanStatus { plan: None, status: None, seat_limit: None, seats_in_use: None, trial_ends_at: None, manage_url: None });
+        return Ok(PlanStatus { plan: None, status: None, seat_limit: None, seats_in_use: None, trial_ends_at: None, manage_url: None, ai });
     }
     Ok(PlanStatus {
         status: Some(if p.suspended() { "suspended" } else { "active" }.to_string()),
@@ -287,6 +291,7 @@ pub async fn status_for(state: &AppState, user: &User) -> AppResult<PlanStatus> 
         plan: p.plan,
         seat_limit: p.seat_limit,
         trial_ends_at: p.trial_ends_at,
+        ai,
     })
 }
 

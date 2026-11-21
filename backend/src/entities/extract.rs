@@ -29,7 +29,6 @@ use crate::rid::RecordIdExt;
 use crate::config::Settings;
 use crate::pool::OrgDb;
 use crate::store;
-use crate::embeddings::provider;
 use crate::error::{AppError, AppResult};
 use crate::store::entities as q;
 
@@ -297,28 +296,15 @@ pub(crate) async fn app_settings_row(db: &OrgDb, owner: &RecordId) -> AppResult<
 }
 
 async fn call_llm(db: &OrgDb, settings: &Settings, owner: &RecordId, prompt: String) -> AppResult<ExtractionData> {
-    let p = provider::resolve(db, settings, owner).await?;
+    let grant = crate::ai::grant(db, settings, owner, crate::ai::Purpose::Extraction).await?;
 
     let body = json!({
-        "model": provider::chat_model(&p).await,
+        "model": grant.chat_model().await,
         "response_format": {"type": "json_object"},
         "messages": [{"role": "user", "content": prompt}],
     });
 
-    let resp = p
-        .client()
-        .await?
-        .post(p.url("chat/completions"))
-        .bearer_auth(p.bearer())
-        .json(&body)
-        .timeout(Duration::from_secs(30))
-        .send()
-        .await
-        .map_err(|e| AppError::internal(e.to_string()))?
-        .error_for_status()
-        .map_err(|e| AppError::internal(e.to_string()))?;
-
-    let v: Value = resp.json().await.map_err(|e| AppError::internal(e.to_string()))?;
+    let v: Value = grant.complete(body, Duration::from_secs(30)).await?;
     let content = v
         .pointer("/choices/0/message/content")
         .and_then(|c| c.as_str())

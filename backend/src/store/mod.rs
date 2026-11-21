@@ -20,6 +20,7 @@ use crate::db::Db;
 use crate::pool::{ControlDb, OrgDb};
 
 pub mod access_reviews;
+pub mod ai;
 pub mod app;
 pub mod capsules;
 pub mod cache;
@@ -290,7 +291,7 @@ fn surface_root_cause(mut res: surrealdb::IndexedResults) -> surrealdb::Result<s
 /// Tables that live in the control database. Everything else a statement names is an org table.
 pub const CONTROL_TABLES: &[&str] = &[
     "user", "identity", "org", "membership", "tenant", "api_token", "session", "oauth_client", "oauth_code", "oauth_grant", "oauth_token", "audit_event", "tool_usage", "job",
-    "job_leader", "failure_capsule", "mfa_recovery_code", "mfa_challenge", "instance_setting", "audit_head", "audit_checkpoint", "erasure", "erasure_lock", "org_invitation",
+    "job_leader", "failure_capsule", "mfa_recovery_code", "mfa_challenge", "instance_setting", "audit_head", "audit_checkpoint", "erasure", "erasure_lock", "org_invitation", "org_ai", "ai_usage", "ai_price",
 ];
 
 /// Tables that live in an org database.
@@ -374,5 +375,5 @@ pub fn all() -> Vec<&'static Stmt> {
 
 /// Every static control statement.
 pub fn all_control() -> Vec<&'static ControlStmt> {
-    [diagnostics::CONTROL_ALL, control::ALL, tenant::ALL, capsules::ALL, jobs::CONTROL_ALL, secret_requests::CONTROL_ALL, subject::CONTROL_ALL, invitations::CONTROL_ALL, recovery::CONTROL_ALL, org_admin::CONTROL_ALL, plan::CONTROL_ALL].concat()
+    [diagnostics::CONTROL_ALL, control::ALL, tenant::ALL, capsules::ALL, jobs::CONTROL_ALL, secret_requests::CONTROL_ALL, subject::CONTROL_ALL, invitations::CONTROL_ALL, recovery::CONTROL_ALL, org_admin::CONTROL_ALL, plan::CONTROL_ALL, ai::CONTROL_ALL].concat()
 }

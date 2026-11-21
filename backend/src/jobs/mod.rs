@@ -285,8 +285,8 @@ pub async fn claim(db: &ControlDb, worker: &str, n: usize, lease: Duration, owne
 }
 
 /// Index of the claiming UPDATE in the CLAIM response: 3.x gives BEGIN and each LET a slot too (BEGIN, `$full`, `$paused`,
-/// `$expired`, `$ready`, then the UPDATE).
-const CLAIM_RESULT: usize = 5;
+/// `$ai_held`, `$expired`, `$ready`, then the UPDATE).
+const CLAIM_RESULT: usize = 6;
 
 /// Job kinds that keep running for a suspended organisation: a schema migration is not the organisation's
 /// work, and a person's own data export and erasure are their right (docs/deployment.md). Everything else

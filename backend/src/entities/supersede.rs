@@ -28,7 +28,7 @@ use serde_json::{json, Value};
 use surrealdb::types::{Datetime, RecordId, SurrealValue};
 
 use crate::config::Settings;
-use crate::embeddings::{provider, service as embeddings};
+use crate::embeddings::service as embeddings;
 use crate::error::{AppError, AppResult};
 use crate::pool::OrgDb;
 use crate::rid::RecordIdExt;
@@ -131,27 +131,13 @@ fn pick(pairs: &[Value], facts: &[(String, String, bool)], ids: &[RecordId]) -> 
 }
 
 async fn call_llm(db: &OrgDb, settings: &Settings, owner: &RecordId, prompt: String) -> AppResult<Vec<Value>> {
-    let p = provider::resolve(db, settings, owner).await?;
+    let grant = crate::ai::grant(db, settings, owner, crate::ai::Purpose::Supersede).await?;
     let body = json!({
-        "model": provider::chat_model(&p).await,
+        "model": grant.chat_model().await,
         "response_format": {"type": "json_object"},
         "messages": [{"role": "user", "content": prompt}],
     });
-    let v: Value = p
-        .client()
-        .await?
-        .post(p.url("chat/completions"))
-        .bearer_auth(p.bearer())
-        .json(&body)
-        .timeout(Duration::from_secs(30))
-        .send()
-        .await
-        .map_err(|e| AppError::internal(e.to_string()))?
-        .error_for_status()
-        .map_err(|e| AppError::internal(e.to_string()))?
-        .json()
-        .await
-        .map_err(|e| AppError::internal(e.to_string()))?;
+    let v: Value = grant.complete(body, Duration::from_secs(30)).await?;
     let content = v.pointer("/choices/0/message/content").and_then(|c| c.as_str()).unwrap_or("{}");
     let parsed: Value = serde_json::from_str(content).unwrap_or_default();
     Ok(parsed.get("superseded").and_then(|s| s.as_array()).cloned().unwrap_or_default())
@@ -209,7 +195,7 @@ async fn embed_missing(db: &OrgDb, settings: &Settings, owner: &RecordId, subjec
         return Ok(());
     }
     let texts: Vec<String> = missing.iter().map(|r| r.text.clone()).collect();
-    let vectors = embeddings::embed(db, settings, &texts, Some(owner)).await?;
+    let vectors = embeddings::embed(db, settings, &texts, owner).await?;
     for (r, vector) in missing.iter().zip(vectors) {
         if vector.len() != embeddings::dim() {
             continue;
@@ -231,7 +217,7 @@ async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &Record
     let spec = embeddings::spec_for(db, settings, owner).await?.tag();
     embed_missing(db, settings, owner, subject, new, &spec).await?;
     let texts: Vec<String> = new_rows.iter().map(|r| r.text.clone()).collect();
-    let vectors = embeddings::embed(db, settings, &texts, Some(owner)).await?;
+    let vectors = embeddings::embed(db, settings, &texts, owner).await?;
     // Only live facts close in meaning to a new fact are candidates: one fact can't make an unrelated one untrue.
     let mut older: Vec<FactRow> = Vec::new();
     for (n, vector) in new_rows.iter().zip(vectors) {

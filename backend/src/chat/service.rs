@@ -36,7 +36,6 @@ use tokio::sync::mpsc;
 
 use crate::config::Settings;
 use super::tree::{self, ChatNode};
-use crate::embeddings::provider;
 use crate::pool::OrgDb;
 use crate::store;
 use crate::error::{AppError, AppResult, ErrorCode};
@@ -211,19 +210,6 @@ fn as_untrusted_data(json_text: &str) -> String {
     format!("<untrusted-data>\n{}\n</untrusted-data>", json_text.replace('<', "\\u003c"))
 }
 
-/// OpenAI isn't available for real calls (stub embeddings backend, or no
-/// usable base_url/key combination) -- raised so the router can turn it
-/// into a clear user-facing error instead of a generic failure.
-#[derive(Debug, Clone)]
-pub struct ChatNotConfigured(pub String);
-
-impl std::fmt::Display for ChatNotConfigured {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-impl std::error::Error for ChatNotConfigured {}
-
 /// One streamed step of `send_stream` -- serializes as `{"type": ..., ...}`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type")]
@@ -252,19 +238,19 @@ pub enum ChatEvent {
     Error { message: String, code: String, trace_id: String },
 }
 
-/// Raises `ChatNotConfigured` if there's no usable OpenAI base_url/key for
-/// `owner` -- called up front by the router (so a misconfigured chat fails
-/// as a clean 400 before a streaming response is started) and again inside
-/// `send_stream` (so direct callers get the same guarantee).
-pub async fn ensure_configured(db: &OrgDb, settings: &Settings, owner: &RecordId) -> Result<(), ChatNotConfigured> {
+/// Why the chat cannot answer for `owner` right now, as the error to show: no usable provider (`400`), the
+/// organisation switched AI off (`ai.disabled`) or used up its allowance (`ai.allowance_used`). Called up front by
+/// the router (so a refused chat fails as a clean error before a streaming response is started) and again
+/// inside `send_stream` (so direct callers get the same guarantee).
+pub async fn ensure_configured(db: &OrgDb, settings: &Settings, owner: &RecordId) -> Result<(), AppError> {
     if settings.embeddings_backend == "stub" {
-        return Err(ChatNotConfigured("OpenAI API key not configured -- add one in Settings".to_string()));
+        return Err(crate::ai::Refusal::NotConfigured.into_error());
     }
-    let p = provider::resolve(db, settings, owner).await.map_err(|e| ChatNotConfigured(e.message))?;
-    if !p.configured() {
-        return Err(ChatNotConfigured("OpenAI API key not configured -- add one in Settings".to_string()));
+    match crate::ai::route(db, settings, owner).await?.availability(crate::ai::Purpose::Chat).await? {
+        crate::ai::Availability::Ready => Ok(()),
+        crate::ai::Availability::NotConfigured => Err(crate::ai::Refusal::NotConfigured.into_error()),
+        crate::ai::Availability::Refused(r) => Err(r.into_error()),
     }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -549,6 +535,9 @@ fn openai_tools() -> Vec<Value> {
 struct StreamChunk {
     #[serde(default)]
     choices: Vec<StreamChoice>,
+    /// The final chunk of a stream that was asked for usage (`stream_options`); `null` before it.
+    #[serde(default)]
+    usage: Option<Value>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -563,6 +552,13 @@ struct StreamDelta {
     content: Option<String>,
     #[serde(default)]
     tool_calls: Option<Vec<ToolCallDelta>>,
+}
+
+impl StreamDelta {
+    /// Bytes of tool-call text this delta carries (names and arguments): output the model is billed for.
+    fn tool_call_bytes(&self) -> usize {
+        self.tool_calls.iter().flatten().filter_map(|t| t.function.as_ref()).map(|f| f.name.as_ref().map_or(0, String::len) + f.arguments.as_ref().map_or(0, String::len)).sum()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -678,9 +674,7 @@ type Failed = (ErrorCode, String);
 
 /// One streamed model call of the chat loop.
 struct ModelCall<'a> {
-    client: &'a reqwest::Client,
-    url: &'a str,
-    bearer: &'a str,
+    grant: &'a crate::ai::Grant,
     model: &'a str,
     tools: &'a [Value],
     messages: &'a [Value],
@@ -691,9 +685,10 @@ struct ModelCall<'a> {
 
 impl ModelCall<'_> {
     /// Sends the call (once more without reasoning when the model refuses tools while reasoning) and
-    /// buffers the whole stream for prose validation. Returns text and tool calls.
+    /// buffers the whole stream for prose validation. Returns text and tool calls. The call is made, and
+    /// counted, by the grant (`ai`): when the allowance cannot cover it, this is the error and nothing is sent.
     async fn run(&self, reasoning_off: &mut bool) -> Result<(String, BTreeMap<usize, ToolCallAcc>), Failed> {
-        let resp = loop {
+        let mut streaming = loop {
             if self.tx.is_closed() { return Err((ErrorCode::Internal, "Chat disconnected".into())); }
             let mut body = json!({ "model": self.model, "messages": self.messages, "stream": true });
             if !self.tools.is_empty() { body["tools"] = json!(self.tools); }
@@ -701,34 +696,28 @@ impl ModelCall<'_> {
             if *reasoning_off {
                 body["reasoning_effort"] = json!("none");
             }
-            let resp = self
-                .client
-                .post(self.url)
-                .bearer_auth(self.bearer)
-                .json(&body)
-                .send()
-                .await
-                .map_err(|e| (ErrorCode::Internal, format!("OpenAI request failed: {e}")))?;
-            if resp.status().is_success() {
-                break resp;
+            match self.grant.stream_chat(body).await {
+                Ok(s) => break s,
+                Err(crate::ai::StreamError::Http { status, body: text }) => {
+                    if refuses_tools_while_reasoning(status, &text) && !*reasoning_off {
+                        *reasoning_off = true;
+                        continue;
+                    }
+                    return Err((ErrorCode::Internal, format!("OpenAI request failed ({status}): {text}")));
+                }
+                Err(crate::ai::StreamError::Other(e)) => return Err((e.code, e.message)),
             }
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            if refuses_tools_while_reasoning(status, &text) && !*reasoning_off {
-                *reasoning_off = true;
-                continue;
-            }
-            return Err((ErrorCode::Internal, format!("OpenAI request failed ({status}): {text}")));
         };
 
-        let mut byte_stream = resp.bytes_stream();
+        let mut byte_stream = std::pin::pin!(streaming.take_body().bytes_stream());
         let mut buf = String::new();
         let mut content = String::new();
         let mut tool_calls_acc: BTreeMap<usize, ToolCallAcc> = BTreeMap::new();
+        let mut usage: Option<Value> = None;
 
         while let Some(chunk) = byte_stream.next().await {
             let chunk = chunk.map_err(|e| (ErrorCode::Internal, format!("OpenAI stream error: {e}")))?;
-            buf.push_str(&String::from_utf8_lossy(&chunk));
+            buf.push_str(&String::from_utf8_lossy(chunk.as_ref()));
 
             while let Some(pos) = buf.find("\n\n") {
                 let event: String = buf.drain(..pos + 2).collect();
@@ -737,9 +726,14 @@ impl ModelCall<'_> {
                         continue;
                     }
                     let Ok(parsed) = serde_json::from_str::<StreamChunk>(payload) else { continue };
+                    if parsed.usage.as_ref().is_some_and(|u| !u.is_null()) {
+                        usage = parsed.usage.clone();
+                    }
                     for choice in &parsed.choices {
                         // Buffer all text until its complete numeric spans can be checked.
+                        let before = content.len();
                         apply_delta(&mut content, &mut tool_calls_acc, &choice.delta);
+                        streaming.note_output(content.len() - before + choice.delta.tool_call_bytes());
                         #[cfg(any(test, feature = "test-support"))]
                         if choice.delta.content.is_some() {
                             crate::sources::mock::chat_write_checkpoint(self.thread_id, "answer_chunk").await;
@@ -748,6 +742,7 @@ impl ModelCall<'_> {
                 }
             }
         }
+        streaming.done(usage.as_ref());
         Ok((content, tool_calls_acc))
     }
 }
@@ -764,7 +759,9 @@ async fn run_send(
     let db = &state.db;
     let settings = &state.settings;
 
-    ensure_configured(db, settings, owner).await.map_err(|e| (ErrorCode::ValidationInvalid, e.0))?;
+    // up front, so a refused chat stores nothing: a clear error (`ai.disabled`, `ai.allowance_used`), not a half turn
+    ensure_configured(db, settings, owner).await.map_err(|e| (e.code, e.message))?;
+    let grant = crate::ai::grant(db, settings, owner, crate::ai::Purpose::Chat).await.map_err(|e| (e.code, e.message))?;
 
     let existing_rows = rows_for_thread(db, owner, thread_id).await.map_err(|e| (e.code, e.message))?;
     let is_first_message = existing_rows.is_empty();
@@ -786,13 +783,10 @@ async fn run_send(
     }
     said.row("user", user_message);
 
-    let p = provider::resolve(db, settings, owner).await.map_err(|e| (e.code, e.message))?;
     let tools = openai_tools();
     let mut tool_calls_made: Vec<String> = Vec::new();
 
-    let client = p.client().await.map_err(|e| (e.code, e.message))?;
-    let url = p.url("chat/completions");
-    let model = provider::chat_model(&p).await;
+    let model = grant.chat_model().await;
 
     let mut prose = crate::views::ui::prose::ChatProse::default();
     prose.text(user_message);
@@ -806,7 +800,7 @@ async fn run_send(
         let offered = if final_turn { &[][..] } else { tools.as_slice() };
         #[cfg(any(test, feature = "test-support"))]
         if final_turn { crate::sources::mock::chat_write_checkpoint(thread_id, "final_request").await; }
-        let call = ModelCall { client: &client, url: &url, bearer: p.bearer(), model: &model, tools: offered, messages: &messages, tx,
+        let call = ModelCall { grant: &grant, model: &model, tools: offered, messages: &messages, tx,
             #[cfg(any(test, feature = "test-support"))]
             thread_id,
         };

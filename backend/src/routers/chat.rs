@@ -155,9 +155,7 @@ async fn send_message(
     if service::get_thread(&state.db, &user.id, &rid).await?.is_none() {
         return Err(AppError::coded(ErrorCode::ChatThreadNotFound, "not found"));
     }
-    service::ensure_configured(&state.db, &state.settings, &user.id)
-        .await
-        .map_err(|e| AppError::bad_request(e.0))?;
+    service::ensure_configured(&state.db, &state.settings, &user.id).await?;
 
     let (tx, rx) = mpsc::channel::<ChatEvent>(EVENT_CHANNEL_CAPACITY);
     let state_for_task = state.clone();

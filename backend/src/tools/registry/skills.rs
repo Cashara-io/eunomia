@@ -134,7 +134,7 @@ async fn embed_skill(state: &OrgState, owner: &RecordId, skill: &Skill) -> bool 
     let run = async {
         let spec = embeddings::spec_for(&state.db, &state.settings, owner).await?.tag();
         let text = format!("{}\n{}", skill.name, skill.description);
-        let vector = embeddings::embed(&state.db, &state.settings, &[text], Some(owner)).await?.into_iter().next().unwrap_or_default();
+        let vector = embeddings::embed(&state.db, &state.settings, &[text], owner).await?.into_iter().next().unwrap_or_default();
         if vector.len() != embeddings::dim() {
             return Err(AppError::internal(format!("embedding has dimension {}", vector.len())));
         }
@@ -246,7 +246,7 @@ async fn query_vector(state: &OrgState, owner: &RecordId, query: &str) -> Option
     }
     let run = async {
         let spec = embeddings::spec_for(&state.db, &state.settings, owner).await?.tag();
-        let vector = embeddings::embed(&state.db, &state.settings, &[query.to_string()], Some(owner)).await?.into_iter().next().unwrap_or_default();
+        let vector = embeddings::embed(&state.db, &state.settings, &[query.to_string()], owner).await?.into_iter().next().unwrap_or_default();
         AppResult::Ok((vector.len() == embeddings::dim()).then_some((vector, spec)))
     };
     match run.await {

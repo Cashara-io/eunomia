@@ -94,6 +94,7 @@ pub fn spec() -> utoipa::openapi::OpenApi {
         routers::audit_chain::Doc::openapi(),
         routers::access_reviews::Doc::openapi(),
         routers::org::Doc::openapi(),
+        routers::org_ai::Doc::openapi(),
         routers::org_admin::Doc::openapi(),
         routers::operator::Doc::openapi(),
         routers::audit::Doc::openapi(),

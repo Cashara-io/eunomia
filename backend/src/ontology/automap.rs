@@ -350,18 +350,22 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
     let scope = Scope::of(db, owner, &vault).await?;
     let profiles: Vec<RecordTypeProfile> = samples.iter().map(profile::profile).collect();
     let keys = key_matches(state, &scope, &samples, &profiles).await?;
-    let p = crate::embeddings::provider::resolve(db, settings, owner).await?;
     let profile_only = |profiles, keys, note| AutomapOut::ProfileOnly { profiles, key_matches: keys, hint: HINT.to_string(), note };
     if samples.is_empty() {
         return Ok(profile_only(profiles, keys, Some("no records to profile: connect a source, or upload a CSV".into())));
     }
-    if settings.embeddings_backend != "openai" || !p.configured() {
+    if settings.embeddings_backend != "openai" {
         return Ok(profile_only(profiles, keys, None));
     }
+    let grant = match crate::ai::authorize(db, settings, owner, crate::ai::Purpose::Ontology).await? {
+        Ok(g) => g,
+        Err(crate::ai::Refusal::NotConfigured) => return Ok(profile_only(profiles, keys, None)),
+        Err(refused) => return Ok(profile_only(profiles, keys, Some(refused.into_error().message))),
+    };
     let ontology = view(db, &vault).await?;
     let data = json!({"profiles": profiles, "key_matches": keys, "ontology": render_ontology(&ontology)}).to_string().replace('<', "\\u003c");
     let user = format!("<profiles>\n{data}\n</profiles>");
-    let answer = match chat_json(&p, SYSTEM_PROMPT, &user).await {
+    let answer = match chat_json(&grant, SYSTEM_PROMPT, &user).await {
         Ok(a) => a,
         Err(e) => {
             tracing::warn!("ontology automap: model call failed, returning the profiles: {}", e.message);
