@@ -1912,7 +1912,7 @@ export type InviteRequest = {
 export type JoinOut = {
     link: PeerOut;
     /**
-     * The new vault holding this Eunomia's copy.
+     * The new vault holding this Cupel's copy.
      */
     vault: VaultOut;
 };
@@ -1923,7 +1923,7 @@ export type JoinRequestBody = {
      */
     code: string;
     /**
-     * How the other Eunomia will name this one (default: `EUNOMIA_INSTANCE_NAME`, else your email).
+     * How the other Cupel will name this one (default: `EUNOMIA_INSTANCE_NAME`, else your email).
      */
     name?: string | null;
 };
@@ -2694,7 +2694,7 @@ export type PeerOut = {
      */
     digests_match?: boolean | null;
     /**
-     * `host`: this Eunomia holds the original and shares it out; `guest`: this is a copy of another's.
+     * `host`: this Cupel holds the original and shares it out; `guest`: this is a copy of another's.
      */
     direction: string;
     /**
@@ -2711,7 +2711,7 @@ export type PeerOut = {
     } | null;
     last_sync_at?: string | null;
     /**
-     * The other Eunomia's fingerprint.
+     * The other Cupel's fingerprint.
      */
     peer_fingerprint: string;
     peer_name: string;
@@ -2739,7 +2739,7 @@ export type PeersOut = {
      */
     fingerprint: string;
     /**
-     * Other Eunomias this vault is shared with (or copied from).
+     * Other Cupel instances this vault is shared with (or copied from).
      */
     links: Array<PeerOut>;
     vault: string;
@@ -3588,7 +3588,7 @@ export type ShareCodeOut = {
      */
     addresses: Array<string>;
     /**
-     * Send this to the person running the other Eunomia. It works once.
+     * Send this to the person running the other Cupel. It works once.
      */
     code: string;
     expires_at: string;
@@ -3606,7 +3606,7 @@ export type ShareCodeRequest = {
      */
     expires_in_hours?: number | null;
     /**
-     * `read` by default. Explicit `edit` lets the other Eunomia add and change.
+     * `read` by default. Explicit `edit` lets the other Cupel add and change.
      */
     role?: string;
 };
