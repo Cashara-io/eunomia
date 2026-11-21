@@ -752,6 +752,14 @@ expression: first
           "index": "UNIQUE",
           "name": "user_email_unique",
           "table": "user"
+        },
+        {
+          "cols": [
+            "reset_token_hash"
+          ],
+          "index": "",
+          "name": "user_reset_token_idx",
+          "table": "user"
         }
       ]
     }
