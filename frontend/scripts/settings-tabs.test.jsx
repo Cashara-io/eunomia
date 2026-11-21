@@ -3,6 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 // The Settings page for each kind of person: which tabs they see. The sections themselves are stubbed (this
 // is about who sees what, not what each tab shows).
+// These module mocks replace the modules for the whole test process, so `package.json` runs this file in a
+// `bun test` of its own: in one process with the other files, whichever loaded after it got a `next/navigation`
+// with only the two hooks below.
 let me = {};
 mock.module("next/navigation", () => ({ useRouter: () => ({ replace() {} }), useSearchParams: () => new URLSearchParams("") }));
 mock.module("../src/lib/queries/auth", () => ({ useMe: () => ({ data: me }) }));
