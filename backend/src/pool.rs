@@ -146,6 +146,8 @@ pub struct OrgDb {
     org: OrgId,
     schema_version: i64,
     opened_at: Instant,
+    /// What this process knows of the organisation's model use (`ai/`): every model call asks it first.
+    ai: Arc<crate::ai::hub::Hub>,
 }
 
 impl ControlDb {
@@ -177,6 +179,11 @@ impl OrgDb {
 
     pub fn org(&self) -> OrgId {
         self.org
+    }
+
+    /// The process's model-use hub (settings, spend, counters), shared by every handle of this pool.
+    pub fn ai(&self) -> &Arc<crate::ai::hub::Hub> {
+        &self.ai
     }
 
     #[cfg(feature = "test-support")]
@@ -261,6 +268,8 @@ struct Inner {
     /// Orgs not served, and why: their database applied a migration numbered above one it lacks
     /// (`provisioning::Provisioner::find_migration_gaps`, checked at boot).
     blocked: Mutex<HashMap<OrgId, String>>,
+    /// Model use of every organisation this process serves (`ai/`).
+    ai: Arc<crate::ai::hub::Hub>,
 }
 
 /// Per-org connection cache with an LRU cap. `for_org` is the only way to get an [`OrgDb`].
@@ -280,6 +289,7 @@ struct TenantRow {
 impl Pool {
     pub(crate) fn new(templates: Vec<Db>, control: ControlDb, settings: &Settings) -> Self {
         let cap = std::env::var("EUNOMIA_ORG_POOL_CAP").ok().and_then(|v| v.parse().ok()).filter(|n| *n > 0).unwrap_or(256);
+        let ai = Arc::new(crate::ai::hub::Hub::new(control.clone()));
         Pool(Arc::new(Inner {
             templates,
             control,
@@ -292,7 +302,13 @@ impl Pool {
             #[cfg(feature = "test-support")]
             shared: Mutex::new(None),
             blocked: Mutex::new(HashMap::new()),
+            ai,
         }))
+    }
+
+    /// The process's model-use hub.
+    pub fn ai(&self) -> &Arc<crate::ai::hub::Hub> {
+        &self.0.ai
     }
 
     /// Stops serving `org` (`tenant.schema_behind` with `why`) until [`Pool::unblock`].
@@ -330,7 +346,7 @@ impl Pool {
             let route = self.route(org).await?;
             self.0.signins.fetch_add(1, Ordering::Relaxed);
             let sessions = sessions_for(&self.0.templates, &self.0.ns, &route).await?;
-            let db = OrgDb { raw: Arc::new(sessions), org: *org, schema_version: route.schema_version, opened_at: Instant::now() };
+            let db = OrgDb { raw: Arc::new(sessions), org: *org, schema_version: route.schema_version, opened_at: Instant::now(), ai: self.0.ai.clone() };
             self.insert(db.clone());
             Ok(db)
         }
@@ -422,6 +438,6 @@ impl Pool {
     #[cfg(feature = "test-support")]
     pub async fn test_session(&self, org: OrgId, db: &str, user: &str, pass: &str) -> AppResult<OrgDb> {
         let route = Route { db: db.into(), user: user.into(), pass: pass.into(), schema_version: crate::migrate::LATEST_TENANT as i64 };
-        Ok(OrgDb { raw: Arc::new(sessions_for(&self.0.templates[..1], &self.0.ns, &route).await?), org, schema_version: route.schema_version, opened_at: Instant::now() })
+        Ok(OrgDb { raw: Arc::new(sessions_for(&self.0.templates[..1], &self.0.ns, &route).await?), org, schema_version: route.schema_version, opened_at: Instant::now(), ai: self.0.ai.clone() })
     }
 }

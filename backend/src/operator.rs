@@ -120,6 +120,16 @@ fn valid_seats(n: i64) -> AppResult<i64> {
     }
 }
 
+/// A monthly allowance in US dollars, as micro-dollars. Zero is allowed (no model use on our key at all).
+fn valid_allowance(usd: f64) -> AppResult<i64> {
+    if !usd.is_finite() || !(0.0..=MAX_ALLOWANCE_USD).contains(&usd) {
+        return Err(invalid(format!("`ai_allowance_usd` must be between 0 and {MAX_ALLOWANCE_USD} US dollars.")));
+    }
+    Ok((usd * 1_000_000.0).round() as i64)
+}
+
+const MAX_ALLOWANCE_USD: f64 = 1_000_000.0;
+
 fn valid_ref(r: &str) -> AppResult<String> {
     let r = r.trim();
     if r.is_empty() || r.chars().count() > MAX_REF_LEN || r.chars().any(char::is_control) {
@@ -156,6 +166,49 @@ pub struct Seats {
     pub in_use: i64,
 }
 
+/// Model spend of one organisation this month, as the billing service needs it. Never a key.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct AiSummary {
+    /// The calendar month (UTC) the figures are for, `2026-11`.
+    pub month: String,
+    /// What the server's key cost this organisation this month, in US dollars, from the price table.
+    pub cost_usd: f64,
+    /// The monthly allowance on the server's key, in US dollars; null: unlimited.
+    pub allowance_usd: Option<f64>,
+    /// Share of the allowance used (0 to 100); null when there is no allowance.
+    pub used_percent: Option<i64>,
+    /// The allowance is used up: model calls on the server's key are refused until it renews or is raised.
+    pub allowance_used_up: bool,
+    /// An owner or admin has not switched AI off. When false, no model is called for this organisation.
+    pub ai_enabled: bool,
+    /// The organisation has set a provider key of its own: its model use costs this server nothing.
+    pub own_key: bool,
+    /// This month's counters by purpose, model and whose key paid; only on a single organisation (`GET`), empty in lists.
+    pub usage: Vec<AiUsageLine>,
+}
+
+/// One counter: what a purpose and model used this month, on whose key.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct AiUsageLine {
+    /// `extraction`, `embedding`, `chat`, `reflect`, `consolidation`, `supersede` or `ontology`.
+    pub purpose: String,
+    pub model: String,
+    /// `server` (our key: costed), `org` (the organisation's own key) or `user` (a person's own key): the last two
+    /// are counted for visibility and cost nothing.
+    pub source: String,
+    pub calls: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    /// How many of the calls had their tokens counted here instead of reported by the provider.
+    pub estimated_calls: i64,
+    /// US dollars at the price table of the time of each call; 0 for a key that is not ours.
+    pub cost_usd: f64,
+}
+
+pub(crate) fn usd(micros: i64) -> f64 {
+    (micros as f64) / 1_000_000.0
+}
+
 /// One organisation as the operator sees it. Control-database metadata only.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct OrgSummary {
@@ -186,6 +239,8 @@ pub struct OrgSummary {
     pub owner_claim_expires_at: Option<Datetime>,
     #[schema(value_type = String)]
     pub created_at: Datetime,
+    /// This month's model spend, the allowance, and whether the organisation has its own key or has switched AI off.
+    pub ai: AiSummary,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -223,6 +278,28 @@ struct CountRow {
 }
 
 #[derive(Deserialize, SurrealValue)]
+struct SpendRow {
+    org: RecordId,
+    #[serde(default)]
+    #[surreal(default)]
+    n: Option<i64>,
+}
+
+#[derive(Deserialize, SurrealValue)]
+struct AiConfigRow {
+    org: RecordId,
+    #[serde(default)]
+    #[surreal(default)]
+    enabled: Option<bool>,
+    #[serde(default)]
+    #[surreal(default)]
+    allowance_micros: Option<i64>,
+    #[serde(default)]
+    #[surreal(default)]
+    own_key: Option<bool>,
+}
+
+#[derive(Deserialize, SurrealValue)]
 struct OwnerRow {
     org: RecordId,
     #[serde(default)]
@@ -253,6 +330,12 @@ async fn summarise(state: &AppState, rows: Vec<OrgRow>) -> AppResult<Vec<OrgSumm
     let active = counts(&q::ACTIVE_BY_ORG).await?;
     let suspended = counts(&q::SUSPENDED_BY_ORG).await?;
     let pending = counts(&q::PENDING_BY_ORG).await?;
+    // this process's own unwritten counters first, so the figures below include them
+    let hub = state.pool.ai();
+    let _ = hub.flush().await;
+    let month = hub.month();
+    let spend: Vec<SpendRow> = store::ai::SPEND_MONTH_FOR_ORGS.on(&state.control).bind(("orgs", ids.clone())).bind(("month", month.clone())).await?.take(0)?;
+    let configs: Vec<AiConfigRow> = store::ai::CONFIGS_BY_ORG.on(&state.control).bind(("orgs", ids.clone())).await?.take(0)?;
     let owners: Vec<OwnerRow> = q::OWNERS.on(&state.control).bind(("orgs", ids.clone())).await?.take(0)?;
     let claims: Vec<ClaimRow> = q::OWNER_CLAIMS.on(&state.control).bind(("orgs", ids.clone())).await?.take(0)?;
     Ok(rows
@@ -263,6 +346,10 @@ async fn summarise(state: &AppState, rows: Vec<OrgRow>) -> AppResult<Vec<OrgSumm
             let owner = owners.iter().find(|o| o.org.to_string() == key);
             let claim = claims.iter().find(|c| c.org.to_string() == key);
             let (active, pending) = (n(&active), n(&pending));
+            let cost = spend.iter().find(|s| s.org.to_string() == key).and_then(|s| s.n).unwrap_or(0);
+            let cfg = configs.iter().find(|c| c.org.to_string() == key);
+            let allowance = cfg.and_then(|c| c.allowance_micros);
+            let view = crate::ai::orgcfg::usage_view(cost, allowance);
             OrgSummary {
                 id: crate::rid::key_string(&r.id.key).unwrap_or_default(),
                 name: r.name,
@@ -278,6 +365,16 @@ async fn summarise(state: &AppState, rows: Vec<OrgRow>) -> AppResult<Vec<OrgSumm
                 owner_claimed: owner.is_some(),
                 owner_claim_expires_at: if owner.is_some() { None } else { claim.map(|c| c.expires_at) },
                 created_at: r.created_at,
+                ai: AiSummary {
+                    month: month.clone(),
+                    cost_usd: usd(cost),
+                    allowance_usd: allowance.map(usd),
+                    used_percent: view.percent,
+                    allowance_used_up: view.state.as_deref() == Some("used_up"),
+                    ai_enabled: cfg.and_then(|c| c.enabled).unwrap_or(true),
+                    own_key: cfg.and_then(|c| c.own_key).unwrap_or(false),
+                    usage: Vec::new(),
+                },
             }
         })
         .collect())
@@ -290,7 +387,33 @@ async fn row_of(state: &AppState, org: &OrgId) -> AppResult<Option<OrgRow>> {
 
 async fn summary_of(state: &AppState, org: &OrgId) -> AppResult<OrgSummary> {
     let row = row_of(state, org).await?.ok_or_else(org_not_found)?;
-    Ok(summarise(state, vec![row]).await?.remove(0))
+    let mut summary = summarise(state, vec![row]).await?.remove(0);
+    #[derive(Deserialize, SurrealValue)]
+    struct Line {
+        purpose: String,
+        model: String,
+        source: String,
+        calls: i64,
+        input_tokens: i64,
+        output_tokens: i64,
+        estimated_calls: i64,
+        cost_micros: i64,
+    }
+    let lines: Vec<Line> = store::ai::USAGE_MONTH.on(&state.control).bind(("org", org.record())).bind(("month", summary.ai.month.clone())).await?.take(0)?;
+    summary.ai.usage = lines
+        .into_iter()
+        .map(|l| AiUsageLine {
+            purpose: l.purpose,
+            model: l.model,
+            source: l.source,
+            calls: l.calls,
+            input_tokens: l.input_tokens,
+            output_tokens: l.output_tokens,
+            estimated_calls: l.estimated_calls,
+            cost_usd: usd(l.cost_micros),
+        })
+        .collect();
+    Ok(summary)
 }
 
 // ---------------------------------------------------------------- routes
@@ -338,13 +461,45 @@ pub struct Capacity {
     pub max_organisations: Option<u32>,
     /// Creating another organisation is refused (`operator.at_capacity`).
     pub at_capacity: bool,
+    /// Model spend this month across every organisation, so the billing service can alert on it.
+    pub ai: AiTotals,
+}
+
+/// Model spend on the server's key this month across organisations.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct AiTotals {
+    /// The calendar month (UTC), `2026-11`.
+    pub month: String,
+    /// Metered cost of the server's key across every organisation, in US dollars.
+    pub cost_usd: f64,
+    /// Organisations that have an allowance.
+    pub organisations_with_allowance: i64,
+    /// Of those, how many have used it up.
+    pub organisations_used_up: i64,
 }
 
 pub async fn capacity(state: &AppState) -> AppResult<Capacity> {
     audited(state, "operator.capacity", "", String::new(), async {
         let organisations = org_count(state).await?;
         let max = state.settings.hosted.max_orgs;
-        Ok(Capacity { organisations, max_organisations: max, at_capacity: max.is_some_and(|m| organisations >= i64::from(m)) })
+        let hub = state.pool.ai();
+        let _ = hub.flush().await;
+        let month = hub.month();
+        let spend: Vec<SpendRow> = store::ai::SPEND_MONTH_BY_ORG.on(&state.control).bind(("month", month.clone())).await?.take(0)?;
+        #[derive(Deserialize, SurrealValue)]
+        struct Allowance {
+            org: RecordId,
+            allowance_micros: i64,
+        }
+        let allowances: Vec<Allowance> = store::ai::ALLOWANCES.on(&state.control).await?.take(0)?;
+        let used = |org: &RecordId| spend.iter().find(|s| &s.org == org).and_then(|s| s.n).unwrap_or(0);
+        let ai = AiTotals {
+            month,
+            cost_usd: usd(spend.iter().filter_map(|s| s.n).sum()),
+            organisations_with_allowance: allowances.len() as i64,
+            organisations_used_up: allowances.iter().filter(|a| used(&a.org) >= a.allowance_micros).count() as i64,
+        };
+        Ok(Capacity { organisations, max_organisations: max, at_capacity: max.is_some_and(|m| organisations >= i64::from(m)), ai })
     })
     .await
 }
@@ -366,6 +521,11 @@ pub struct CreateOrg {
     /// The billing service's own id for this purchase. The same reference is the same organisation: a retried
     /// call returns it and never makes a second one.
     pub external_ref: String,
+    /// The monthly allowance of model spend on the server's key, in US dollars (calendar month, UTC). Omit or
+    /// `null`: unlimited. When it is used up, model calls on the server's key stop until next month unless the
+    /// organisation adds a key of its own.
+    #[serde(default)]
+    pub ai_allowance_usd: Option<f64>,
 }
 
 /// The result of creating an organisation.
@@ -418,7 +578,7 @@ fn in_other_org() -> AppError {
 /// Makes (or finds) the organisation `external_ref` names, provisions its database and makes the owner claim.
 pub async fn create(state: &AppState, req: CreateOrg) -> AppResult<CreateOrgResult> {
     let target = format!("ref:{}", req.external_ref.chars().take(MAX_REF_LEN).collect::<String>());
-    let detail = format!("plan={} seats={} owner={}", req.plan.as_str(), req.seat_limit, req.owner_email.trim().to_lowercase());
+    let detail = format!("plan={} seats={} owner={} ai_allowance_usd={}", req.plan.as_str(), req.seat_limit, req.owner_email.trim().to_lowercase(), req.ai_allowance_usd.map_or("-".to_string(), |a| a.to_string()));
     audited(state, "operator.org_create", &target, detail, create_inner(state, req)).await
 }
 
@@ -428,6 +588,7 @@ async fn create_inner(state: &AppState, req: CreateOrg) -> AppResult<CreateOrgRe
     let external_ref = valid_ref(&req.external_ref)?;
     let owner = models_user::normalize_new_email(&req.owner_email)?;
     owner_not_allowed(&owner)?;
+    let allowance = req.ai_allowance_usd.map(valid_allowance).transpose()?;
     let org = org_for_ref(&external_ref);
     // deciding and inserting the record: one create per reference at a time in this process (not while the database
     // is provisioned or a mail is sent); across processes the derived id and the insert-if-absent keep it to one organisation
@@ -470,6 +631,13 @@ async fn create_inner(state: &AppState, req: CreateOrg) -> AppResult<CreateOrgRe
     }
     created
     };
+
+    // the allowance: with the record on a first call, and on a retry only where the first call never got that far
+    if let Some(micros) = allowance
+        && (created || state.pool.ai().org_config(&org).await.map(|c| c.allowance_micros.is_none()).unwrap_or(true))
+    {
+        crate::ai::orgcfg::set_allowance(state, &org, Some(micros)).await?;
+    }
 
     // the organisation's database; a ready one is left alone (provisioning it again would reset its name)
     if let Err(e) = state.pool.for_org(&org).await {
@@ -577,12 +745,17 @@ pub struct UpdateOrg {
     #[serde(default, deserialize_with = "sent")]
     #[schema(value_type = Option<String>)]
     pub trial_ends_at: Option<Option<DateTime<Utc>>>,
+    /// A new monthly allowance of model spend on the server's key in US dollars, or `null` for unlimited. Raising
+    /// it lets model work that was waiting for lack of allowance continue within seconds.
+    #[serde(default, deserialize_with = "sent")]
+    #[schema(value_type = Option<f64>)]
+    pub ai_allowance_usd: Option<Option<f64>>,
 }
 
 pub async fn update(state: &AppState, id: &str, req: UpdateOrg) -> AppResult<OrgSummary> {
     let target = format!("org:{}", id.trim());
     let detail = format!(
-        "name={} plan={} seat_limit={} trial_ends_at={}",
+        "name={} plan={} seat_limit={} trial_ends_at={} ai_allowance_usd={}",
         req.name.is_some(),
         req.plan.map_or("-", PlanName::as_str),
         match req.seat_limit {
@@ -594,6 +767,11 @@ pub async fn update(state: &AppState, id: &str, req: UpdateOrg) -> AppResult<Org
             None => "-".to_string(),
             Some(None) => "cleared".to_string(),
             Some(Some(t)) => t.to_rfc3339(),
+        },
+        match req.ai_allowance_usd {
+            None => "-".to_string(),
+            Some(None) => "none".to_string(),
+            Some(Some(a)) => a.to_string(),
         }
     );
     audited(state, "operator.org_update", &target, detail, update_inner(state, id, req)).await
@@ -606,6 +784,7 @@ async fn update_inner(state: &AppState, id: &str, req: UpdateOrg) -> AppResult<O
         Some(Some(n)) => Some(Some(valid_seats(n)?)),
         other => other,
     };
+    let allowance = req.ai_allowance_usd.map(|a| a.map(valid_allowance).transpose()).transpose()?;
     row_of(state, &org).await?.ok_or_else(org_not_found)?;
     // one seat-taking change at a time in this process; across processes the seat guard decides
     let _one = crate::tx::lock(&format!("seats:{}", org.key())).await;
@@ -636,6 +815,9 @@ async fn update_inner(state: &AppState, id: &str, req: UpdateOrg) -> AppResult<O
             ));
         }
         return Err(e);
+    }
+    if let Some(a) = allowance {
+        crate::ai::orgcfg::set_allowance(state, &org, a).await?;
     }
     summary_of(state, &org).await
 }
@@ -711,4 +893,98 @@ pub async fn resend_claim(state: &AppState, id: &str) -> AppResult<ClaimResent> 
 /// The plan state the members' endpoint reads, for tests and callers that hold an organisation id.
 pub async fn plan_of(state: &AppState, org: &OrgId) -> AppResult<PlanState> {
     plan::read(&state.control, &org.record()).await
+}
+
+// ---------------------------------------------------------------- the price table
+
+/// One model's price and where it comes from.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct PriceRow {
+    pub input_per_million_usd: f64,
+    pub output_per_million_usd: f64,
+    /// `default` (built into the server) or `operator` (set with `PUT /api/operator/v1/ai/prices`).
+    pub source: String,
+}
+
+/// The price table in force.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct PriceTableOut {
+    /// By model name.
+    pub prices: std::collections::BTreeMap<String, PriceRow>,
+    /// What a model that is in neither the operator's table nor the defaults is counted at. Deliberately high, so an
+    /// unknown model can never be free; price it to bring it down.
+    pub fallback: crate::ai::prices::Price,
+}
+
+pub async fn get_prices(state: &AppState) -> AppResult<PriceTableOut> {
+    audited(state, "operator.ai_prices_get", "", String::new(), async { prices_out(state).await }).await
+}
+
+async fn prices_out(state: &AppState) -> AppResult<PriceTableOut> {
+    let table = state.pool.ai().price_table().await;
+    let overrides = table.overrides().clone();
+    let prices = table
+        .effective()
+        .into_iter()
+        .map(|(model, p)| {
+            let source = if overrides.contains_key(&model) { "operator" } else { "default" };
+            (model, PriceRow { input_per_million_usd: p.input_per_million_usd, output_per_million_usd: p.output_per_million_usd, source: source.to_string() })
+        })
+        .collect();
+    Ok(PriceTableOut { prices, fallback: crate::ai::prices::FALLBACK })
+}
+
+/// Prices to set. A model with `null` goes back to its default (or the fallback).
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PricesUpdate {
+    /// Model name to its price, or `null` to remove the operator's price for it.
+    #[schema(value_type = Object)]
+    pub prices: std::collections::BTreeMap<String, Option<crate::ai::prices::Price>>,
+}
+
+const MAX_PRICE_ROWS: usize = 200;
+
+pub async fn set_prices(state: &AppState, req: PricesUpdate) -> AppResult<PriceTableOut> {
+    let detail = format!("models={}", req.prices.keys().take(20).cloned().collect::<Vec<_>>().join(","));
+    audited(state, "operator.ai_prices_set", "", detail, async {
+        if req.prices.is_empty() || req.prices.len() > MAX_PRICE_ROWS {
+            return Err(invalid(format!("send between 1 and {MAX_PRICE_ROWS} models.")));
+        }
+        for (model, price) in &req.prices {
+            let m = model.trim();
+            if m.is_empty() || m.chars().count() > 100 || m.chars().any(char::is_control) || m != model {
+                return Err(invalid("a model name is 1 to 100 printable characters, with no spaces at the ends."));
+            }
+            if let Some(p) = price
+                && !p.valid()
+            {
+                return Err(invalid(format!("the price of `{m}` must be between 0 and 10000 US dollars per million tokens, for input and for output.")));
+            }
+        }
+        for (model, price) in &req.prices {
+            let id = RecordId::new("ai_price", crate::tx::stable_key('p', model));
+            match price {
+                Some(p) => {
+                    crate::tx::with_retry(|| async {
+                        store::ai::PRICE_SET
+                            .on(&state.control)
+                            .bind(("id", id.clone()))
+                            .bind(("model", model.clone()))
+                            .bind(("input", p.input_per_million_usd))
+                            .bind(("output", p.output_per_million_usd))
+                            .await?
+                            .check()
+                    })
+                    .await?;
+                }
+                None => {
+                    store::ai::PRICE_DELETE.on(&state.control).bind(("model", model.clone())).await?.check()?;
+                }
+            }
+        }
+        state.pool.ai().forget_prices();
+        prices_out(state).await
+    })
+    .await
 }

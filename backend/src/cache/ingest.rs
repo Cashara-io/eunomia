@@ -56,7 +56,7 @@ async fn embed_record(db: &OrgDb, settings: &Settings, owner: &RecordId, rec: &s
     if text.is_empty() {
         return Ok(());
     }
-    let vec = crate::embeddings::service::embed(db, settings, &[text], Some(owner))
+    let vec = crate::embeddings::service::embed(db, settings, &[text], owner)
         .await?
         .into_iter()
         .next()

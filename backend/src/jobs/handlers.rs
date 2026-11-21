@@ -69,6 +69,21 @@ async fn sync(state: AppState, job: Job) -> Result<(), JobError> {
     Ok(())
 }
 
+/// Whether the model work of `job` can run now. `Ok(false)`: nothing is configured, so the job finishes cleanly
+/// as it always did. A refusal (the organisation switched AI off, or used up its allowance with no key of its
+/// own to go on with) is an error the worker recognises (`ai::Refusal::is_hold`): the job is handed back to the
+/// queue without using an attempt and runs when the reason passes.
+async fn ready(db: &crate::pool::OrgDb, state: &OrgState, job: &Job, purpose: crate::ai::Purpose, skipped: &str) -> Result<bool, JobError> {
+    match embeddings::readiness(db, &state.settings, &job.owner, purpose).await? {
+        crate::ai::Availability::Ready => Ok(true),
+        crate::ai::Availability::NotConfigured => {
+            tracing::info!("{skipped}");
+            Ok(false)
+        }
+        crate::ai::Availability::Refused(why) => Err(JobError::from(why.into_error())),
+    }
+}
+
 const EMBED_BATCH: i64 = 50;
 /// Per run; the reconciler enqueues again while a backlog remains.
 const EMBED_BATCHES: usize = 10;
@@ -83,8 +98,7 @@ async fn embed(state: AppState, job: Job) -> Result<(), JobError> {
         body_text: String,
     }
     let db = &state.db;
-    if !embeddings::available(db, &state.settings, &job.owner).await {
-        tracing::info!("embed skipped: no embeddings key configured");
+    if !ready(db, &state, &job, crate::ai::Purpose::Embedding, "embed skipped: no embeddings key configured").await? {
         return Ok(());
     }
     for _ in 0..EMBED_BATCHES {
@@ -99,7 +113,7 @@ async fn embed(state: AppState, job: Job) -> Result<(), JobError> {
             break;
         }
         let texts: Vec<String> = rows.iter().map(|r| format!("{}\n{}", r.title, r.body_text).trim().to_string()).collect();
-        let vectors = embeddings::embed(db, &state.settings, &texts, Some(&job.owner)).await?;
+        let vectors = embeddings::embed(db, &state.settings, &texts, &job.owner).await?;
         for (row, vector) in rows.iter().zip(vectors) {
             if vector.len() != embeddings::dim() {
                 return Err(JobError::permanent(ErrorCode::Internal, format!("embedding for {} has dimension {}", row.id.to_string(), vector.len())));
@@ -128,8 +142,7 @@ async fn extract_record(state: AppState, job: Job) -> Result<(), JobError> {
     let state = org_state(&state, &job).await?;
     let db = &state.db;
     let record_id = payload_str(&job, "record")?;
-    if !embeddings::chat_available(db, &state.settings, &job.owner).await {
-        tracing::info!(record = record_id, "extract skipped: no LLM key configured");
+    if !ready(db, &state, &job, crate::ai::Purpose::Extraction, "extract skipped: no LLM key configured").await? {
         return Ok(());
     }
     let Some(rec) = search::get_own(db, &job.owner, record_id).await? else { return Ok(()) };
@@ -231,8 +244,7 @@ async fn consolidate_subject(state: AppState, job: Job) -> Result<(), JobError> 
     let state = org_state(&state, &job).await?;
     let db = &state.db;
     let subject = payload_str(&job, "subject")?;
-    if !embeddings::chat_available(db, &state.settings, &job.owner).await {
-        tracing::info!(subject, "consolidate skipped: no LLM key configured");
+    if !ready(db, &state, &job, crate::ai::Purpose::Consolidation, "consolidate skipped: no LLM key configured").await? {
         return Ok(());
     }
     let subject: RecordId = crate::rid::parse(subject).map_err(|_| JobError::permanent(ErrorCode::ValidationInvalid, "bad subject id"))?;
@@ -250,6 +262,7 @@ async fn supersede(state: AppState, job: Job) -> Result<(), JobError> {
         payload_str(&job, field).and_then(|v| crate::rid::parse(v).map_err(|_| JobError::permanent(ErrorCode::ValidationInvalid, format!("bad {field} id"))))
     };
     let (subject, memory) = (parse("subject")?, parse("memory")?);
+    ready(&state.db, &state, &job, crate::ai::Purpose::Supersede, "supersede skipped: no LLM key configured").await?;
     crate::entities::supersede::check(&state.db, &state.settings, &job.owner, &subject, &[memory]).await;
     Ok(())
 }

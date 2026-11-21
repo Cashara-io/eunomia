@@ -339,11 +339,41 @@ A suspended organisation's members get `org.suspended` (403) for every request t
 
 The web app shows a suspended workspace as one full-page state instead of a wall of failed requests: what happened, and for the owner a button to `manage_url` when there is one. Settings > People shows seats in use against the limit, with a link to `manage_url`, and the seat-limit refusal in words.
 
+### Model spend and the AI switch
+
+On a hosted server the model calls (extracting facts from what people save, embedding, in-app chat, `reflect`, consolidation, supersede checks, ontology helpers) are made with **your** provider key, so they are the one cost a customer can drive without limit. Cupel meters them per organisation, caps them with a monthly allowance, and lets an organisation bring its own key or switch AI off. A self-hosted install that sets none of this behaves exactly as before: no allowance, the server's key, AI on.
+
+**One decision point.** Every call goes through `backend/src/ai/`, which answers, for this organisation and this person, right now: may a model be called, and with whose key. Order of precedence: **the person's own key or endpoint** (Settings > Model, as before); **the organisation's own provider** (Settings > Organisation, new); **the server's key**, if the organisation has allowance left. A call site cannot skip it: a provider handle can make no request outside that module, and `no_model_call_outside_the_ai_module` (`tests/store.rs`) fails if another file names a provider endpoint or reads the server's key.
+
+**Metering.** A call on the server's key adds its input and output tokens and its cost to a counter per organisation, day, purpose (`extraction`, `embedding`, `chat`, `reflect`, `consolidation`, `supersede`, `ontology`) and model (`ai_usage`, control migration 0016; counters, not a row per call, and no prompt text). Calls on a person's or the organisation's own key are counted as calls and tokens with cost 0, and never count against the allowance. Tokens are what the provider reports. Where it reports none (a stream from a server that ignores `stream_options`, an embeddings response without `usage`) they are **counted here, conservatively**: one token per three bytes of what was sent and of what came back (English averages four bytes a token, so typical text is overcounted by about a third), and the counter's `estimated_calls` says how many calls were counted this way. A call cancelled or timed out after the request left is counted at that estimate, since the provider may have billed it; a request the provider refused (an error status) is not counted.
+
+**Prices** are per million input and output tokens in US dollars and are data: `GET` and `PUT /api/operator/v1/ai/prices` (the operator token) set them with no deploy, applying on every replica within 30 seconds. Defaults ship for `gpt-4o-mini` ($0.15 / $0.60), `gpt-4o`, `gpt-4.1` and its mini and nano, and the three embedding models; a dated snapshot (`gpt-4o-mini-2024-07-18`) uses its family's price. **A model in neither table is counted at a deliberately high fallback ($30 / $60) and logged once as a warning**, so an unknown model can never be free. Costs already counted keep the price they were counted at.
+
+**Recording does not add a database round trip to a call.** Finished calls add to an in-memory counter; a background task writes the counters every 5 seconds (and at once when an organisation is within 5% of its allowance, and on an orderly shutdown), one upsert per counter. **What a crash can lose is the calls that finished in the last 5 seconds on that process**, plus anything that accumulated while the control database refused writes (kept in memory and retried, lost only if the process dies meanwhile); a call still running when the process died is not counted. The loss makes the organisation look slightly cheaper than it was for the rest of the month. Test: `usage_is_written_in_batches_and_a_crash_loses_at_most_one_interval`.
+
+**The allowance.** The billing service sets `ai_allowance_usd` when it creates an organisation and when it updates one (`null` or absent: unlimited, which is every self-hosted organisation); it counts per calendar month, UTC. A call on the server's key is admitted only if `spend read from the database + spend not yet written + the worst cases of the calls in flight + this call's worst case` fits the allowance. A call's worst case is the input it is sending (estimated as above) plus the most output it may produce (4,096 tokens, which Cupel sends to api.openai.com as `max_completion_tokens` on an organisation with an allowance), at the model's price; when the call ends its reservation is replaced by what it really cost. **Bound on overshoot:** within one process none, unless a provider bills more than the reservation (it ignored the output cap, or the input was underestimated), and then the excess of each admitted call, at most the allowance divided by the smallest reservation (about 2,460 micro-dollars for gpt-4o-mini) calls at once; across `R` replicas, additionally what the other `R - 1` spend in one write interval (5 seconds) plus one read interval (2 seconds), which close to the cap shrinks because every admission within 5% of the allowance first reads the database. Tests: `the_cap_holds_under_concurrency_and_the_overshoot_is_bounded` (16 concurrent calls, room for 4: exactly 4 are admitted and the rest never reach the provider; and a provider that bills double the reservation overshoots by no more than the admitted calls' own cost).
+
+**When it is used up.**
+
+| Feature | What happens |
+|---|---|
+| In-app chat | `402 ai.allowance_used`, before anything is stored or streamed (`ai.disabled`, 403, when AI is off). The chat page says so and, for an owner or admin, links to Settings > Organisation. A reply already streaming when it runs out ends with an `error` event carrying the same code. |
+| Recall, search | The semantic arm is skipped; keyword, graph and temporal retrieval answer as when no key is set. |
+| `reflect`, ontology suggest, auto-map, coverage | They return what they return without a model (the recalled memories, the profile, a words-only match) with a note saying why. |
+| Saving, reading, keyword search | Unchanged. |
+| Extraction, embedding, consolidation, supersede (jobs) | **Pause without loss.** The same mechanism as a suspension: the claim leaves the organisation's model jobs alone, a job already claimed is handed back without using an attempt (also when a call is refused part-way), and nothing is dropped. They resume by themselves when the month rolls over, the allowance is raised, a key is added, or AI is switched on, within a minute (a worker marks the organisation `hold_until` for 60 seconds at a time; raising the allowance, adding a key or switching AI on clears it at once on that replica). Sync and the rest of the queue keep running; synced records are stored without vectors and embedded when work resumes. |
+
+**The organisation's own key.** An owner or admin sets one provider for the whole organisation in Settings > Organisation (`PUT /api/org/ai/provider`: base URL, API key, chat model, embedding model; `DELETE` removes it). The key is stored encrypted like a person's own key, never returned by any API (only `key_set`), and logged nowhere; the base URL is checked exactly as a person's is (`ALLOW_PRIVATE_LLM_URL`, link-local and stack-internal hosts refused, redirects not followed). **Changing the embedding model or endpoint follows the per-person behaviour, not a refusal:** vectors carry the provider and model they were made with, a query only meets vectors made with its own, and the embed job re-embeds what is stale in the background on the organisation's key; the one refusal is a model whose vectors the index cannot hold (on api.openai.com only the 1536-dimension models). A person's own key still comes before the organisation's. With a key of its own the organisation never uses the allowance, and a used-up allowance no longer stops it. We suggest `ALLOW_PRIVATE_LLM_URL=0` on a hosted server.
+
+**The AI switch (capability C31).** An owner or admin can switch AI off for the whole organisation (`PUT /api/org/ai/enabled`, `org.ai_switch` in the organisation's audit log). It is checked first and binds **every key, a member's own included**: no call reaches any model provider for that organisation's data (`tests/ai_metering.rs`, `with_ai_switched_off_no_call_reaches_any_provider_with_any_key_and_features_degrade` drives every entry point and counts what the stub provider saw). Features with a path without a model take it; the others answer `ai.disabled` (403); background model work waits and resumes when it is switched on. A change applies at once on the replica that handled it and within 3 seconds on the others; a call already sent when it is flipped completes.
+
+**What the billing service and members see.** The operator's `OrgSummary` gains `ai`: this month's metered cost, the allowance, the share used, whether it is used up, whether the switch is off, whether the organisation has a key of its own (never the key), and on a single organisation (`GET`) the month's counters by purpose, model and whose key paid. `GET /api/operator/v1/capacity` gives the month's total across organisations and how many have used their allowance up, so you can alert on it. `GET /api/org/plan` (every member) gains `ai`: `enabled`, `own_key`, and `usage` as a `percent` and a `state` (`ok`, `nearly_used` from 80%, `used_up`; null with no allowance), never a price or an amount. Owners and admins read more in `GET /api/org/ai` (the provider without its key, whose key serves by default, and this month's call counts by whose key paid).
+
 ### The operator API
 
 Base path `/api/operator/v1`, JSON, `Authorization: Bearer <EUNOMIA_OPERATOR_TOKEN>`. The document is in the OpenAPI description under the tag `operator`. A wrong or missing token, and any other kind of credential, is 401 `auth.unauthorized`; **the routes do not exist (404) while the token is unset**. Errors are the usual problem+json with a stable `code` ([errors.md](errors.md)). It reads and writes the control database only: organisation records, membership and invitation counts. It never reads anything from an organisation's own database (memories, documents, chat), which a test checks by planting a canary there.
 
-**Every call is on the instance ledger** (Settings > Audit log for the server's operators, and `GET /api/admin/audit`), as actor `operator` with id `operator-api`, with the action (`operator.org_create`, `operator.org_list`, `operator.org_get`, `operator.org_update`, `operator.org_suspend`, `operator.org_resume`, `operator.owner_claim_resend`, `operator.capacity`), its target (`ref:<external_ref>` for a create, `org:<id>` otherwise), its outcome (`ok` or the error code) and the request's parameters (plan, seats, the owner's email, the suspension reason). A call refused by the gate (a wrong token) leaves an `auth.failed` row holding a hash of what was presented; a call refused by the rate limit is not recorded.
+**Every call is on the instance ledger** (Settings > Audit log for the server's operators, and `GET /api/admin/audit`), as actor `operator` with id `operator-api`, with the action (`operator.org_create`, `operator.org_list`, `operator.org_get`, `operator.org_update`, `operator.org_suspend`, `operator.org_resume`, `operator.owner_claim_resend`, `operator.capacity`, `operator.ai_prices_get`, `operator.ai_prices_set`), its target (`ref:<external_ref>` for a create, `org:<id>` otherwise), its outcome (`ok` or the error code) and the request's parameters (plan, seats, the owner's email, the suspension reason). A call refused by the gate (a wrong token) leaves an `auth.failed` row holding a hash of what was presented; a call refused by the rate limit is not recorded.
 
 An organisation as the API shows it (`OrgSummary`), in every response below:
 
@@ -362,9 +392,13 @@ An organisation as the API shows it (`OrgSummary`), in every response below:
   "owner_email": "owner@acme.example",
   "owner_claimed": true,
   "owner_claim_expires_at": null,
-  "created_at": "2026-11-21T03:12:44Z"
+  "created_at": "2026-11-21T03:12:44Z",
+  "ai": { "month": "2026-11", "cost_usd": 3.21, "allowance_usd": 10.0, "used_percent": 32, "allowance_used_up": false,
+          "ai_enabled": true, "own_key": false, "usage": [] }
 }
 ```
+
+`ai` is this month's model spend on the server's key and the allowance (see [Model spend and the AI switch](#model-spend-and-the-ai-switch)); `usage` (the month's counters by purpose, model and whose key paid) is filled on a single organisation only.
 
 #### Create an organisation: `POST /orgs`
 
@@ -373,7 +407,7 @@ Provisions the organisation's database and makes a **single-use, expiring (7 day
 ```http
 POST /api/operator/v1/orgs
 { "name": "Acme Ltd", "owner_email": "owner@acme.example", "plan": "team", "seat_limit": 10,
-  "trial_ends_at": "2026-12-05T00:00:00Z", "external_ref": "sub_1Nxyz" }
+  "trial_ends_at": "2026-12-05T00:00:00Z", "external_ref": "sub_1Nxyz", "ai_allowance_usd": 10.0 }
 ```
 ```json
 {
@@ -390,7 +424,7 @@ POST /api/operator/v1/orgs
 - The **claim** is an organisation invitation of kind `owner` (the existing invitation machinery, with no inviting account). The person who opens `claim_link` sees the new workspace's name, creates their account (a password, or single sign-on, with two-step verification rules applying as for any sign-up; `SIGNUP=invite` does not matter) and becomes the organisation's one owner. The link works once; only a sha256 of its token is stored, and the token is in no log or audit row.
 - `email_enabled` says whether this server sends email; `emailed` says whether the mail server accepted the owner's copy. When `emailed` is false, deliver `claim_link` yourself.
 - **A retry** with the same `external_ref` and owner returns the same organisation with `created: false`; it has no `claim_link` (the link is shown once, when it is made: after a lost reply, call the resend route). A retry that finds a half-made organisation (a crash between steps) finishes it.
-- `name`: 1 to 80 characters, no `@`. `seat_limit`: 1 to 1,000,000. `trial_ends_at` is optional.
+- `name`: 1 to 80 characters, no `@`. `seat_limit`: 1 to 1,000,000. `trial_ends_at` is optional. `ai_allowance_usd` is optional (0 to 1,000,000 US dollars a month; absent: unlimited).
 - Refused: `operator.owner_in_other_org` (409: the email already has an account; an account belongs to exactly one organisation, so use another email), `operator.owner_email_reserved` (400: an address in `EUNOMIA_ADMIN_EMAILS` can never be made an owner this way), `operator.reference_reused` (409: that reference belongs to an organisation with another owner), `operator.at_capacity` (409: `EUNOMIA_MAX_ORGS` reached; a retry of an existing organisation is not refused), `validation.invalid` (400).
 
 #### List and get: `GET /orgs`, `GET /orgs/{org_id}`
@@ -406,7 +440,7 @@ GET /api/operator/v1/orgs?limit=50&offset=0
 
 #### Update: `PATCH /orgs/{org_id}`
 
-Only the fields you send change: `name`, `plan`, `seat_limit` (a number, or `null` for no limit), `trial_ends_at` (a time, or `null` to clear).
+Only the fields you send change: `name`, `plan`, `seat_limit` (a number, or `null` for no limit), `trial_ends_at` (a time, or `null` to clear), `ai_allowance_usd` (a number of US dollars a month, or `null` for unlimited; raising it releases model work that was waiting).
 
 ```http
 PATCH /api/operator/v1/orgs/6f1c2f0a3b9d4c5e8a7b1d2e3f4a5b6c

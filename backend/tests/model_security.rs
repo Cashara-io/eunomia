@@ -20,7 +20,7 @@ async fn embedder() -> Mock {
 }
 
 async fn embed(app: &TestApp, text: &str) -> eunomia_backend::error::AppResult<Vec<Vec<f32>>> {
-    embeddings::embed(&app.db().await, &app.state.settings, &[text.to_string()], Some(&app.user.id)).await
+    embeddings::embed(&app.db().await, &app.state.settings, &[text.to_string()], &app.user.id).await
 }
 
 async fn save(app: &TestApp, body: Value) -> (u16, Value) {

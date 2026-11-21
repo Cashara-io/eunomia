@@ -16,6 +16,11 @@ concurrency:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    # Line tables only. Full debug info for about a hundred statically linked test binaries no longer fits the
+    # runner's disk: the build failed at the link step with no log left behind. Backtraces keep file and line.
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
     defaults:
       run:
         working-directory: backend
@@ -45,11 +50,20 @@ jobs:
 
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo nextest run
+      # what was left when the build or the tests stopped: a full disk leaves no other trace
+      - name: Disk left
+        if: always()
+        run: df -h /
       # No separate `cargo build --release`: the e2e job builds the release image.
 
   # The same suite under the hardened server settings, in parallel with `backend`.
   backend-hardened:
     runs-on: ubuntu-latest
+    # Line tables only. Full debug info for about a hundred statically linked test binaries no longer fits the
+    # runner's disk: the build failed at the link step with no log left behind. Backtraces keep file and line.
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
     defaults:
       run:
         working-directory: backend

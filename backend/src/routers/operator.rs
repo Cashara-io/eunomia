@@ -13,7 +13,7 @@ use axum::{
 use serde::Deserialize;
 
 use crate::error::{AppError, AppResult};
-use crate::operator::{self, Capacity, ClaimResent, CreateOrg, CreateOrgResult, OrgList, OrgSummary, SuspendOrg, UpdateOrg};
+use crate::operator::{self, Capacity, ClaimResent, CreateOrg, CreateOrgResult, OrgList, OrgSummary, PriceTableOut, PricesUpdate, SuspendOrg, UpdateOrg};
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -24,6 +24,7 @@ pub fn router() -> Router<AppState> {
         .route("/operator/v1/orgs/{org_id}/resume", post(resume_org))
         .route("/operator/v1/orgs/{org_id}/owner-claim/resend", post(resend_claim))
         .route("/operator/v1/capacity", get(get_capacity))
+        .route("/operator/v1/ai/prices", get(get_prices).put(put_prices))
 }
 
 /// Proof that the gate saw the operator token on this request.
@@ -51,7 +52,7 @@ struct ListQuery {
     post,
     path = "/api/operator/v1/orgs",
     tag = "operator",
-    summary = "Create an organisation for a buyer, with its owner claim (idempotent on external_ref)",
+    summary = "Create an organisation for a buyer, with its owner claim and optional AI allowance (idempotent on external_ref)",
     description = "Provisions the organisation's database and makes a single-use owner claim for `owner_email`: whoever opens `claim_link` creates their account (password or single sign-on) and becomes the organisation's owner. The same `external_ref` is the same organisation, so a retried call returns it and never makes a second one (`created: false`, and no link: resend the claim). When this server sends email the link is also emailed to the owner; `emailed` says whether the mail server accepted it. \
                    Refused: an owner email that already has an account (`operator.owner_in_other_org`), an address in `EUNOMIA_ADMIN_EMAILS` (`operator.owner_email_reserved`), the same reference with a different owner (`operator.reference_reused`), and a full server (`operator.at_capacity`).",
     request_body = CreateOrg,
@@ -67,7 +68,7 @@ async fn create_org(_: OperatorAuth, State(state): State<AppState>, Json(body): 
     get,
     path = "/api/operator/v1/orgs",
     tag = "operator",
-    summary = "List organisations with plan state, seat usage and owner",
+    summary = "List organisations with plan state, seat usage, owner and this month's model spend",
     description = "Control-database metadata only: this API never reads anything from an organisation's own database.",
     params(ListQuery),
     responses((status = 200, body = OrgList), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
@@ -82,7 +83,7 @@ async fn list_orgs(_: OperatorAuth, State(state): State<AppState>, Query(q): Que
     get,
     path = "/api/operator/v1/orgs/{org_id}",
     tag = "operator",
-    summary = "One organisation: plan state, seat usage, owner and whether it was claimed",
+    summary = "One organisation: plan state, seat usage, owner, whether it was claimed, and this month's model usage by purpose and model",
     params(("org_id" = String, Path, description = "The organisation id")),
     responses((status = 200, body = OrgSummary), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("operator" = [])),
@@ -96,7 +97,7 @@ async fn get_org(_: OperatorAuth, State(state): State<AppState>, Path(org_id): P
     patch,
     path = "/api/operator/v1/orgs/{org_id}",
     tag = "operator",
-    summary = "Change an organisation's plan, seat limit, trial end or name",
+    summary = "Change an organisation's plan, seat limit, trial end, name or monthly AI allowance",
     description = "Only the fields you send change. `seat_limit` and `trial_ends_at` take `null` to clear them. Lowering the seat limit below the seats in use (active members plus pending invitations) is refused with `operator.seats_in_use`, so the billing service can tell the customer to remove people first.",
     params(("org_id" = String, Path, description = "The organisation id")),
     request_body = UpdateOrg,
@@ -158,7 +159,7 @@ async fn resend_claim(_: OperatorAuth, State(state): State<AppState>, Path(org_i
     get,
     path = "/api/operator/v1/capacity",
     tag = "operator",
-    summary = "How many organisations exist and the limit (`EUNOMIA_MAX_ORGS`)",
+    summary = "How many organisations exist and the limit (`EUNOMIA_MAX_ORGS`), and this month's model spend across them",
     responses((status = 200, body = Capacity), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("operator" = [])),
 )]
@@ -166,6 +167,35 @@ async fn get_capacity(_: OperatorAuth, State(state): State<AppState>) -> AppResu
     Ok(Json(operator::capacity(&state).await?))
 }
 
+#[utoipa::path(
+    operation_id = "operatorGetAiPrices",
+    get,
+    path = "/api/operator/v1/ai/prices",
+    tag = "operator",
+    summary = "The model price table in force: the defaults and the operator's rows",
+    description = "Prices are US dollars per million input and output tokens. A model in neither the operator's rows nor the defaults is counted at `fallback`, which is deliberately high.",
+    responses((status = 200, body = PriceTableOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("operator" = [])),
+)]
+async fn get_prices(_: OperatorAuth, State(state): State<AppState>) -> AppResult<Json<PriceTableOut>> {
+    Ok(Json(operator::get_prices(&state).await?))
+}
+
+#[utoipa::path(
+    operation_id = "operatorSetAiPrices",
+    put,
+    path = "/api/operator/v1/ai/prices",
+    tag = "operator",
+    summary = "Set or remove model prices, with no deploy",
+    description = "Only the models you send change; a model with `null` goes back to its default. Applies to every replica within 30 seconds. Costs already metered keep the price they were counted at.",
+    request_body = PricesUpdate,
+    responses((status = 200, body = PriceTableOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("operator" = [])),
+)]
+async fn put_prices(_: OperatorAuth, State(state): State<AppState>, Json(body): Json<PricesUpdate>) -> AppResult<Json<PriceTableOut>> {
+    Ok(Json(operator::set_prices(&state, body).await?))
+}
+
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(create_org, list_orgs, get_org, update_org, suspend_org, resume_org, resend_claim, get_capacity))]
+#[openapi(paths(create_org, list_orgs, get_org, update_org, suspend_org, resume_org, resend_claim, get_capacity, get_prices, put_prices))]
 pub struct Doc;

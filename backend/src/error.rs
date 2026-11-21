@@ -42,6 +42,8 @@ pub enum ErrorCode {
     OrgProtectedMember,
     OrgSuspended,
     OrgSeatLimit,
+    AiDisabled,
+    AiAllowanceUsed,
     OperatorOrgNotFound,
     OperatorOwnerInOtherOrg,
     OperatorOwnerReserved,
@@ -127,6 +129,8 @@ impl ErrorCode {
         ErrorCode::OrgProtectedMember,
         ErrorCode::OrgSuspended,
         ErrorCode::OrgSeatLimit,
+        ErrorCode::AiDisabled,
+        ErrorCode::AiAllowanceUsed,
         ErrorCode::OperatorOrgNotFound,
         ErrorCode::OperatorOwnerInOtherOrg,
         ErrorCode::OperatorOwnerReserved,
@@ -212,6 +216,8 @@ impl ErrorCode {
             ErrorCode::OrgProtectedMember => "org.protected_member",
             ErrorCode::OrgSuspended => "org.suspended",
             ErrorCode::OrgSeatLimit => "org.seat_limit",
+            ErrorCode::AiDisabled => "ai.disabled",
+            ErrorCode::AiAllowanceUsed => "ai.allowance_used",
             ErrorCode::OperatorOrgNotFound => "operator.org_not_found",
             ErrorCode::OperatorOwnerInOtherOrg => "operator.owner_in_other_org",
             ErrorCode::OperatorOwnerReserved => "operator.owner_email_reserved",
@@ -277,10 +283,12 @@ impl ErrorCode {
             ErrorCode::AuthStepUpRequired | ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled
             | ErrorCode::OrgProtectedMember
             | ErrorCode::OrgSuspended
+            | ErrorCode::AiDisabled
             | ErrorCode::SecretHostDenied
             | ErrorCode::SecretOutboundBlocked
             | ErrorCode::AccessReviewSelf => StatusCode::FORBIDDEN,
             ErrorCode::SecretOutboundFailed => StatusCode::BAD_GATEWAY,
+            ErrorCode::AiAllowanceUsed => StatusCode::PAYMENT_REQUIRED,
             ErrorCode::SecretRequestClosed => StatusCode::CONFLICT,
             ErrorCode::RateLimited | ErrorCode::ExtensionBufferFull => StatusCode::TOO_MANY_REQUESTS,
             ErrorCode::TenantSchemaBehind | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable | ErrorCode::EmailUnavailable => StatusCode::SERVICE_UNAVAILABLE,
@@ -496,7 +504,7 @@ mod tests {
                 | ErrorCode::AuthScope | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::RateLimited
                 | ErrorCode::AuthMfaRequired | ErrorCode::AuthMfaInvalid | ErrorCode::AuthMfaChallengeExpired | ErrorCode::AuthStepUpRequired | ErrorCode::AuthMfaUnreadable
                 | ErrorCode::InvitationNotFound | ErrorCode::InvitationExpired | ErrorCode::InvitationEmailMismatch | ErrorCode::InvitationOtherOrg | ErrorCode::InvitationExists | ErrorCode::OrgProtectedMember
-                | ErrorCode::OrgSuspended | ErrorCode::OrgSeatLimit | ErrorCode::OperatorOrgNotFound | ErrorCode::OperatorOwnerInOtherOrg | ErrorCode::OperatorOwnerReserved
+                | ErrorCode::OrgSuspended | ErrorCode::OrgSeatLimit | ErrorCode::AiDisabled | ErrorCode::AiAllowanceUsed | ErrorCode::OperatorOrgNotFound | ErrorCode::OperatorOwnerInOtherOrg | ErrorCode::OperatorOwnerReserved
                 | ErrorCode::OperatorAtCapacity | ErrorCode::OperatorReferenceReused | ErrorCode::OperatorSeatsInUse | ErrorCode::OperatorOwnerClaimed
                 | ErrorCode::AuthResetInvalid | ErrorCode::AuthResetExpired | ErrorCode::EmailUnavailable
                 | ErrorCode::TenantDenied | ErrorCode::TenantNotFound | ErrorCode::TenantSchemaBehind

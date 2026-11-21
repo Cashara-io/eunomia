@@ -221,7 +221,7 @@ async fn load_space(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_ids
 
     let semantic = if embeddings::available(db, settings, owner).await {
         let texts: Vec<String> = items.iter().filter(|i| i.stored.is_none()).map(|i| i.text.clone()).collect();
-        match embeddings::embed(db, settings, &texts, Some(owner)).await {
+        match embeddings::embed(db, settings, &texts, owner).await {
             Ok(vecs) => {
                 let mut fresh = vecs.into_iter();
                 Some(items.iter().map(|i| i.stored.clone().or_else(|| fresh.next()).unwrap_or_default()).collect::<Vec<_>>())

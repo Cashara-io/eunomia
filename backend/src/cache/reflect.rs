@@ -14,7 +14,6 @@ use crate::cache::recall::{self, RecallItem};
 use crate::config::Settings;
 use crate::pool::OrgDb;
 use crate::error::{AppError, AppResult};
-use crate::embeddings::provider::{self, Provider};
 
 /// Trusted instructions, sent as the system message. The memories go in the
 /// user message inside `<memories>`, as data: they include third-party text
@@ -130,17 +129,18 @@ pub async fn reflect(
     } else if items.is_empty() {
         json!({ "answer": "No relevant memories found.", "citations": [] })
     } else {
-        let p = provider::resolve(db, settings, owner).await?;
-        if settings.embeddings_backend != "openai" || !p.configured() {
-            recall_only(query, &items, None, &incomplete)
-        } else {
-            match synthesize(query, &items, &p, &incomplete).await {
+        let granted = if settings.embeddings_backend == "openai" { crate::ai::authorize(db, settings, owner, crate::ai::Purpose::Reflect).await? } else { Err(crate::ai::Refusal::NotConfigured) };
+        match granted {
+            Err(crate::ai::Refusal::NotConfigured) => recall_only(query, &items, None, &incomplete),
+            // a refusal is not a failure: the agent gets the recalled memories and is told why there is no synthesis
+            Err(refused) => recall_only(query, &items, Some(&refused.into_error().message), &incomplete),
+            Ok(grant) => match synthesize(query, &items, &grant, &incomplete).await {
                 Ok(v) => v,
                 Err(e) => {
                     tracing::warn!("reflect: model call failed, returning recalled memories: {}", e.message);
                     recall_only(query, &items, Some(&format!("server model call failed: {}", e.message)), &incomplete)
                 }
-            }
+            },
         }
     };
     if !incomplete.is_empty() {
@@ -160,35 +160,26 @@ something is unknown or does not exist only because it is missing here.",
     })
 }
 
-async fn synthesize(query: &str, items: &[RecallItem], p: &Provider, incomplete: &[String]) -> AppResult<Value> {
+async fn synthesize(query: &str, items: &[RecallItem], grant: &crate::ai::Grant, incomplete: &[String]) -> AppResult<Value> {
     let mut prompt = build_prompt(query, &render_memories(items));
     if let Some(note) = incomplete_note(incomplete) {
         prompt.push_str("\n\n");
         prompt.push_str(&note);
     }
 
-    let client = p.client().await?;
-    let model = provider::chat_model(p).await;
-    let resp = client
-        .post(p.url("chat/completions"))
-        .bearer_auth(p.bearer())
-        .json(&json!({
-            "model": model,
-            "response_format": {"type": "json_object"},
-            "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
-        }))
-        .send()
-        .await
-        .map_err(|e| AppError::internal(format!("chat completion request failed: {e}")))?;
+    let model = grant.chat_model().await;
+    let v = grant
+        .complete(
+            json!({
+                "model": model,
+                "response_format": {"type": "json_object"},
+                "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
+            }),
+            std::time::Duration::from_secs(120),
+        )
+        .await?;
 
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(AppError::internal(format!("chat completion HTTP {status}: {body}")));
-    }
-
-    let parsed: ChatResponse =
-        resp.json().await.map_err(|e| AppError::internal(format!("invalid chat completion response: {e}")))?;
+    let parsed: ChatResponse = serde_json::from_value(v).map_err(|e| AppError::internal(format!("invalid chat completion response: {e}")))?;
     let content = parsed
         .choices
         .into_iter()

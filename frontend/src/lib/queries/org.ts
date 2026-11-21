@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   acceptOrgInvitation,
   createOrgInvitation,
+  deleteOrgAiProvider,
   getOrg,
+  getOrgAi,
   getOrgPlan,
   getOrgSeats,
   listOrgInvitations,
@@ -10,8 +12,11 @@ import {
   renameOrg,
   resendOrgInvitation,
   revokeOrgInvitation,
+  setOrgAiEnabled,
+  setOrgAiProvider,
   setOrgSecurity,
   type OrgInviteRole,
+  type ProviderUpdate,
   type OrgOut,
 } from "@/lib/gen";
 import { call } from "./client";
@@ -21,6 +26,7 @@ export const orgKeys = {
   invitations: () => [...orgKeys.all, "invitations"] as const,
   seats: () => [...orgKeys.all, "seats"] as const,
   plan: () => [...orgKeys.all, "plan"] as const,
+  ai: () => [...orgKeys.all, "ai"] as const,
   settings: () => [...orgKeys.all, "settings"] as const,
   lookup: (token: string) => [...orgKeys.all, "lookup", token] as const,
 };
@@ -99,3 +105,16 @@ export const useSetOrgSecurity = () =>
   useOrgSettingsMutation(({ require_mfa, mfa_code }: { require_mfa: boolean; mfa_code?: string }) =>
     call(setOrgSecurity({ body: { require_mfa, ...(mfa_code ? { mfa_code } : {}) } }))
   );
+
+/** The organisation's AI settings, this month's use of its allowance (a state and a percentage, never an amount) and
+ * whose key pays (owner or admin). The key itself is never returned: only whether one is set. */
+export const useOrgAi = (enabled = true) => useQuery({ queryKey: orgKeys.ai(), queryFn: () => call(getOrgAi()), enabled, staleTime: 15_000 });
+
+/** Set the organisation's own provider: endpoint, key and models. Only the fields sent change; a key of "" removes it. */
+export const useSetOrgAiProvider = () => useOrgMutation((body: ProviderUpdate) => call(setOrgAiProvider({ body })));
+
+/** Remove the organisation's own provider: model use goes back to the server's key and allowance. */
+export const useDeleteOrgAiProvider = () => useOrgMutation(() => call(deleteOrgAiProvider()));
+
+/** Switch AI on or off for the whole organisation. */
+export const useSetOrgAiEnabled = () => useOrgMutation((enabled: boolean) => call(setOrgAiEnabled({ body: { enabled } })));

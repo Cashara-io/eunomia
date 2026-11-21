@@ -29,6 +29,7 @@ async fn main() {
         }
     };
 
+    let state_for_ai = state.clone();
     // every process, leader or not, drains its own audit replay queue and seals what it wrote (docs/audit-chain.md)
     eunomia_backend::audit::chain::start_drain();
     let (stop, stopped) = watch::channel(false);
@@ -52,6 +53,10 @@ async fn main() {
     // Tell the job loops to finish or release their leases, and give them the grace period.
     let _ = stop.send(true);
     let _ = tokio::time::timeout(cfg.grace + Duration::from_secs(5), futures::future::join_all(background)).await;
+    // model usage counted since the last write: written now, so an orderly stop loses none of it (`ai::hub`)
+    if let Err(e) = state_for_ai.pool.ai().flush().await {
+        tracing::warn!(error = %e.message, "model usage not written at shutdown");
+    }
     // audit events this process could not write yet: one last try before it exits
     eunomia_backend::audit::chain::shutdown_flush(Duration::from_secs(10)).await;
 }

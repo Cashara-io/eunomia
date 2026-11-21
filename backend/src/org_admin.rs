@@ -18,7 +18,7 @@
 //!
 //! Every capability is one function that takes the caller (and the target) and every route calls it:
 //! [`may_administer_members`], [`may_act_on_member`], [`may_read_org_audit`], [`may_run_access_reviews`],
-//! [`may_set_org_mfa_policy`], [`may_rename_org`]. A route never compares a role itself. The rule for
+//! [`may_set_org_mfa_policy`], [`may_manage_org_ai`], [`may_rename_org`]. A route never compares a role itself. The rule for
 //! acting on a member is the pure [`decide`], which the people list also uses to say which buttons a
 //! viewer gets, so the list and the route cannot disagree.
 //!
@@ -117,6 +117,12 @@ pub async fn may_run_access_reviews(control: &ControlDb, user: &User) -> AppResu
 /// May read and set the caller's own organisation's "require two-step verification" policy.
 pub async fn may_set_org_mfa_policy(control: &ControlDb, user: &User) -> AppResult<OrgAuthority> {
     standing(control, user).await?.ok_or_else(|| forbidden("set its security policy"))
+}
+
+/// May set the caller's own organisation's AI provider key and switch AI on or off for it: its owner or admin
+/// (or an instance admin in their own organisation).
+pub async fn may_manage_org_ai(control: &ControlDb, user: &User) -> AppResult<OrgAuthority> {
+    standing(control, user).await?.ok_or_else(|| forbidden("manage its AI settings"))
 }
 
 /// May rename the caller's own organisation: its owner (an instance admin is the owner of the install's one

@@ -22,7 +22,7 @@ async fn racing_embeds_of_one_text_never_fail_on_the_cache() {
         let mut callers = tokio::task::JoinSet::new();
         for _ in 0..2 {
             let (db, settings, owner, texts) = (org.db.clone(), org.settings.clone(), app.user.id.clone(), texts.clone());
-            callers.spawn(async move { embeddings::embed(&db, &settings, &texts, Some(&owner)).await });
+            callers.spawn(async move { embeddings::embed(&db, &settings, &texts, &owner).await });
         }
         while let Some(done) = callers.join_next().await {
             match done.unwrap() {

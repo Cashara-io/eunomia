@@ -246,6 +246,125 @@ export type AdminChange = {
 export type Agg = 'sum' | 'count' | 'avg' | 'min' | 'max' | 'count_distinct' | 'median' | 'ratio';
 
 /**
+ * What the plan status tells every member about model use.
+ */
+export type AiStatus = {
+    /**
+     * An owner or admin has not switched AI off. When false, no model is used on this workspace's content.
+     */
+    enabled: boolean;
+    /**
+     * The organisation has its own provider key, so its model use does not count against the allowance.
+     */
+    own_key: boolean;
+    /**
+     * This month's use of the allowance: a percentage and a state, no amounts.
+     */
+    usage: AiUsage;
+};
+
+/**
+ * Model spend of one organisation this month, as the billing service needs it. Never a key.
+ */
+export type AiSummary = {
+    /**
+     * An owner or admin has not switched AI off. When false, no model is called for this organisation.
+     */
+    ai_enabled: boolean;
+    /**
+     * The monthly allowance on the server's key, in US dollars; null: unlimited.
+     */
+    allowance_usd?: number | null;
+    /**
+     * The allowance is used up: model calls on the server's key are refused until it renews or is raised.
+     */
+    allowance_used_up: boolean;
+    /**
+     * What the server's key cost this organisation this month, in US dollars, from the price table.
+     */
+    cost_usd: number;
+    /**
+     * The calendar month (UTC) the figures are for, `2026-11`.
+     */
+    month: string;
+    /**
+     * The organisation has set a provider key of its own: its model use costs this server nothing.
+     */
+    own_key: boolean;
+    /**
+     * This month's counters by purpose, model and whose key paid; only on a single organisation (`GET`), empty in lists.
+     */
+    usage: Array<AiUsageLine>;
+    /**
+     * Share of the allowance used (0 to 100); null when there is no allowance.
+     */
+    used_percent?: number | null;
+};
+
+/**
+ * Model spend on the server's key this month across organisations.
+ */
+export type AiTotals = {
+    /**
+     * Metered cost of the server's key across every organisation, in US dollars.
+     */
+    cost_usd: number;
+    /**
+     * The calendar month (UTC), `2026-11`.
+     */
+    month: string;
+    /**
+     * Of those, how many have used it up.
+     */
+    organisations_used_up: number;
+    /**
+     * Organisations that have an allowance.
+     */
+    organisations_with_allowance: number;
+};
+
+/**
+ * This month's use of the allowance in words and a percentage: what members see. No prices, no amounts.
+ */
+export type AiUsage = {
+    /**
+     * Share of this month's allowance used, 0 to 100; null when there is no allowance.
+     */
+    percent?: number | null;
+    /**
+     * `ok`, `nearly_used` (80% or more) or `used_up`; null when the organisation has no allowance (unlimited).
+     */
+    state?: string | null;
+};
+
+/**
+ * One counter: what a purpose and model used this month, on whose key.
+ */
+export type AiUsageLine = {
+    calls: number;
+    /**
+     * US dollars at the price table of the time of each call; 0 for a key that is not ours.
+     */
+    cost_usd: number;
+    /**
+     * How many of the calls had their tokens counted here instead of reported by the provider.
+     */
+    estimated_calls: number;
+    input_tokens: number;
+    model: string;
+    output_tokens: number;
+    /**
+     * `extraction`, `embedding`, `chat`, `reflect`, `consolidation`, `supersede` or `ontology`.
+     */
+    purpose: string;
+    /**
+     * `server` (our key: costed), `org` (the organisation's own key) or `user` (a person's own key): the last two
+     * are counted for visibility and cost nothing.
+     */
+    source: string;
+};
+
+/**
  * A link column's value that names two or more entities in the vault: skipped, never guessed, until a
  * person merges them (`entity_merge`) or the column is mapped another way.
  */
@@ -548,9 +667,31 @@ export type Callback = {
 };
 
 /**
+ * Calls counted this month by whose key paid (no amounts).
+ */
+export type CallsBySource = {
+    /**
+     * On the organisation's own key.
+     */
+    organisation: number;
+    /**
+     * On people's own keys.
+     */
+    personal: number;
+    /**
+     * On the server's key (counted against the allowance).
+     */
+    server: number;
+};
+
+/**
  * How many organisations this server holds and how many it may.
  */
 export type Capacity = {
+    /**
+     * Model spend this month across every organisation, so the billing service can alert on it.
+     */
+    ai: AiTotals;
     /**
      * Creating another organisation is refused (`operator.at_capacity`).
      */
@@ -958,6 +1099,12 @@ export type CreateBody = {
 
 export type CreateOrg = {
     /**
+     * The monthly allowance of model spend on the server's key, in US dollars (calendar month, UTC). Omit or
+     * `null`: unlimited. When it is used up, model calls on the server's key stop until next month unless the
+     * organisation adds a key of its own.
+     */
+    ai_allowance_usd?: number | null;
+    /**
      * The billing service's own id for this purchase. The same reference is the same organisation: a retried
      * call returns it and never makes a second one.
      */
@@ -1125,6 +1272,14 @@ export type DocumentOut = {
      * The vault (memory space) the document is in.
      */
     vault: string;
+};
+
+export type EnabledBody = {
+    /**
+     * `false` switches AI off for the whole organisation: no model is called for its content with any key,
+     * a member's own included.
+     */
+    enabled: boolean;
 };
 
 export type EnrolIn = {
@@ -2493,6 +2648,23 @@ export type OntologyOut = {
 
 export type Op = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in';
 
+export type OrgAiView = {
+    /**
+     * Calls this month, by whose key paid.
+     */
+    calls: CallsBySource;
+    /**
+     * AI is on. When off, no model is called for this workspace's content with any key.
+     */
+    enabled: boolean;
+    provider: OrgProviderView;
+    /**
+     * Whose key the workspace's model use goes on by default: `off`, `organisation_key` or `server_key`.
+     */
+    serving: string;
+    usage: AiUsage;
+};
+
 /**
  * An open invitation, as an org admin sees it. Never carries the token.
  */
@@ -2601,6 +2773,29 @@ export type OrgOut = {
     your_role: string;
 };
 
+export type OrgProviderView = {
+    /**
+     * The endpoint ("" = the server's).
+     */
+    base_url: string;
+    /**
+     * "" = automatic.
+     */
+    chat_model: string;
+    /**
+     * "" = the default.
+     */
+    embedding_model: string;
+    /**
+     * A key is stored. It is never returned.
+     */
+    key_set: boolean;
+    /**
+     * The organisation has a provider of its own (a key or an endpoint).
+     */
+    set: boolean;
+};
+
 /**
  * The roles a role change may give.
  */
@@ -2625,6 +2820,10 @@ export type OrgSeats = {
  * One organisation as the operator sees it. Control-database metadata only.
  */
 export type OrgSummary = {
+    /**
+     * This month's model spend, the allowance, and whether the organisation has its own key or has switched AI off.
+     */
+    ai: AiSummary;
     created_at: string;
     /**
      * The reference the billing service gave when it created the organisation.
@@ -2870,6 +3069,11 @@ export type PlanName = 'trial' | 'team' | 'enterprise';
  */
 export type PlanStatus = {
     /**
+     * Model use: whether AI is on, whether the organisation has its own key, and this month's use of the
+     * allowance as a percentage and a state. Present for every organisation, managed or not.
+     */
+    ai: AiStatus;
+    /**
      * Where the owner goes to add seats or pay (`EUNOMIA_BILLING_URL`); null when not configured or unmanaged.
      */
     manage_url?: string | null;
@@ -2916,6 +3120,61 @@ export type PolicyChange = {
      * `true` requires two-step verification of every member of this organisation who signs in with a password.
      */
     require_mfa: boolean;
+};
+
+/**
+ * US dollars per million tokens.
+ */
+export type Price = {
+    /**
+     * Per million input (prompt) tokens.
+     */
+    input_per_million_usd: number;
+    /**
+     * Per million output (completion) tokens; 0 for an embedding model.
+     */
+    output_per_million_usd: number;
+};
+
+/**
+ * One model's price and where it comes from.
+ */
+export type PriceRow = {
+    input_per_million_usd: number;
+    output_per_million_usd: number;
+    /**
+     * `default` (built into the server) or `operator` (set with `PUT /api/operator/v1/ai/prices`).
+     */
+    source: string;
+};
+
+/**
+ * The price table in force.
+ */
+export type PriceTableOut = {
+    /**
+     * What a model that is in neither the operator's table nor the defaults is counted at. Deliberately high, so an
+     * unknown model can never be free; price it to bring it down.
+     */
+    fallback: Price;
+    /**
+     * By model name.
+     */
+    prices: {
+        [key: string]: PriceRow;
+    };
+};
+
+/**
+ * Prices to set. A model with `null` goes back to its default (or the fallback).
+ */
+export type PricesUpdate = {
+    /**
+     * Model name to its price, or `null` to remove the operator's price for it.
+     */
+    prices: {
+        [key: string]: unknown;
+    };
 };
 
 /**
@@ -3111,6 +3370,23 @@ export type ProviderOut = {
      * `user:...`
      */
     updated_by: string;
+};
+
+/**
+ * What an owner or admin sends to set the organisation's provider. A field left out keeps its value; an
+ * `api_key` of "" removes the key.
+ */
+export type ProviderUpdate = {
+    /**
+     * The key. Stored encrypted, never returned.
+     */
+    api_key?: string | null;
+    /**
+     * The endpoint, `https://...` ("" = the server's). Checked like a person's own base URL.
+     */
+    base_url?: string | null;
+    chat_model?: string | null;
+    embedding_model?: string | null;
 };
 
 export type ReadinessOut = {
@@ -3973,6 +4249,11 @@ export type UpdateAck = {
 };
 
 export type UpdateOrg = {
+    /**
+     * A new monthly allowance of model spend on the server's key in US dollars, or `null` for unlimited. Raising
+     * it lets model work that was waiting for lack of allowance continue within seconds.
+     */
+    ai_allowance_usd?: number | null;
     /**
      * A new name (1 to 80 characters, no `@`).
      */
@@ -7545,6 +7826,50 @@ export type GetOpenapiResponses = {
 
 export type GetOpenapiResponse = GetOpenapiResponses[keyof GetOpenapiResponses];
 
+export type OperatorGetAiPricesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/operator/v1/ai/prices';
+};
+
+export type OperatorGetAiPricesErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorGetAiPricesError = OperatorGetAiPricesErrors[keyof OperatorGetAiPricesErrors];
+
+export type OperatorGetAiPricesResponses = {
+    200: PriceTableOut;
+};
+
+export type OperatorGetAiPricesResponse = OperatorGetAiPricesResponses[keyof OperatorGetAiPricesResponses];
+
+export type OperatorSetAiPricesData = {
+    body: PricesUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/operator/v1/ai/prices';
+};
+
+export type OperatorSetAiPricesErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorSetAiPricesError = OperatorSetAiPricesErrors[keyof OperatorSetAiPricesErrors];
+
+export type OperatorSetAiPricesResponses = {
+    200: PriceTableOut;
+};
+
+export type OperatorSetAiPricesResponse = OperatorSetAiPricesResponses[keyof OperatorSetAiPricesResponses];
+
 export type OperatorGetCapacityData = {
     body?: never;
     path?: never;
@@ -7754,6 +8079,94 @@ export type OperatorSuspendOrgResponses = {
 };
 
 export type OperatorSuspendOrgResponse = OperatorSuspendOrgResponses[keyof OperatorSuspendOrgResponses];
+
+export type GetOrgAiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/org/ai';
+};
+
+export type GetOrgAiErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetOrgAiError = GetOrgAiErrors[keyof GetOrgAiErrors];
+
+export type GetOrgAiResponses = {
+    200: OrgAiView;
+};
+
+export type GetOrgAiResponse = GetOrgAiResponses[keyof GetOrgAiResponses];
+
+export type SetOrgAiEnabledData = {
+    body: EnabledBody;
+    path?: never;
+    query?: never;
+    url: '/api/org/ai/enabled';
+};
+
+export type SetOrgAiEnabledErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetOrgAiEnabledError = SetOrgAiEnabledErrors[keyof SetOrgAiEnabledErrors];
+
+export type SetOrgAiEnabledResponses = {
+    200: OrgAiView;
+};
+
+export type SetOrgAiEnabledResponse = SetOrgAiEnabledResponses[keyof SetOrgAiEnabledResponses];
+
+export type DeleteOrgAiProviderData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/org/ai/provider';
+};
+
+export type DeleteOrgAiProviderErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DeleteOrgAiProviderError = DeleteOrgAiProviderErrors[keyof DeleteOrgAiProviderErrors];
+
+export type DeleteOrgAiProviderResponses = {
+    200: OrgAiView;
+};
+
+export type DeleteOrgAiProviderResponse = DeleteOrgAiProviderResponses[keyof DeleteOrgAiProviderResponses];
+
+export type SetOrgAiProviderData = {
+    body: ProviderUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/org/ai/provider';
+};
+
+export type SetOrgAiProviderErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetOrgAiProviderError = SetOrgAiProviderErrors[keyof SetOrgAiProviderErrors];
+
+export type SetOrgAiProviderResponses = {
+    200: OrgAiView;
+};
+
+export type SetOrgAiProviderResponse = SetOrgAiProviderResponses[keyof SetOrgAiProviderResponses];
 
 export type ListOrgInvitationsData = {
     body?: never;

@@ -617,7 +617,7 @@ async fn query_vector(db: &OrgDb, settings: &Settings, owner: &RecordId, query: 
             return AppResult::Ok(None);
         }
         let spec = embeddings::spec_for(db, settings, owner).await?.tag();
-        let vector = embeddings::embed(db, settings, &[query.to_string()], Some(owner)).await?.into_iter().next().unwrap_or_default();
+        let vector = embeddings::embed(db, settings, &[query.to_string()], owner).await?.into_iter().next().unwrap_or_default();
         Ok((vector.len() == embeddings::dim()).then_some(QueryVector { vector, spec }))
     };
     match tokio::time::timeout(deadline(), fut).await {

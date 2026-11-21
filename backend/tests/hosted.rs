@@ -207,7 +207,9 @@ async fn the_operator_routes_do_not_exist_without_a_token() {
     // nothing else changed: an organisation with no plan answers with nulls and an unlimited seat count
     let me = person(&app, "tester@example.com", None).await;
     let plan = plan_of(&app, &me).await;
-    assert!(plan.as_object().unwrap().values().all(Value::is_null), "{plan}");
+    // every plan field is null; the `ai` block (model use) says AI is on with no allowance and no key of its own
+    assert!(plan.as_object().unwrap().iter().all(|(k, v)| k == "ai" || v.is_null()), "{plan}");
+    assert_eq!(plan["ai"], json!({ "enabled": true, "own_key": false, "usage": { "state": null, "percent": null } }), "{plan}");
     for i in 0..6 {
         let (status, body) = invite(&app, &me, &format!("free{i}@example.com")).await;
         assert_eq!(status, StatusCode::OK, "unlimited: {body}");
@@ -1042,7 +1044,9 @@ async fn an_install_with_none_of_the_settings_behaves_as_it_always_did() {
     assert_eq!(memory_write(&app, &me, "Ada likes tea").await.0, StatusCode::OK);
     assert_eq!(mcp(&app, &me).await.0, StatusCode::OK);
     let plan = plan_of(&app, &me).await;
-    assert!(plan.as_object().unwrap().values().all(Value::is_null), "{plan}");
+    // every plan field is null; the `ai` block (model use) says AI is on with no allowance and no key of its own
+    assert!(plan.as_object().unwrap().iter().all(|(k, v)| k == "ai" || v.is_null()), "{plan}");
+    assert_eq!(plan["ai"], json!({ "enabled": true, "own_key": false, "usage": { "state": null, "percent": null } }), "{plan}");
     // an organisation invitation still makes an admin or member, with its old statements
     let joined = join(&app, &me, "friend@example.com").await;
     assert_eq!(memory_write(&app, &joined, "Bea likes tea").await.0, StatusCode::OK);

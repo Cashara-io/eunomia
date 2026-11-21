@@ -24,11 +24,11 @@ use std::collections::HashMap;
 
 use hmac::{Hmac, Mac};
 use serde::Deserialize;
-use serde_json::json;
 use sha2::{Digest, Sha256};
 use surrealdb::types::RecordId;
 
 use super::provider::{self, Provider};
+use crate::ai::{self, Availability, Grant, Purpose};
 use crate::config::Settings;
 use crate::error::{AppError, AppResult};
 use crate::pool::OrgDb;
@@ -83,7 +83,11 @@ impl EmbedSpec {
 
 /// The model `p`'s owner selected ("" = [`DEFAULT_MODEL`]).
 pub fn model_for(p: &Provider) -> &str {
-    let m = p.embedding_model.trim();
+    model_named(&p.embedding_model)
+}
+
+fn model_named(selected: &str) -> &str {
+    let m = selected.trim();
     if m.is_empty() { DEFAULT_MODEL } else { m }
 }
 
@@ -106,12 +110,6 @@ pub fn check_model(base_url: &str, model: &str) -> Result<(), String> {
 struct EmbeddingDatum {
     index: usize,
     embedding: Vec<f32>,
-}
-
-#[derive(Debug, Deserialize)]
-struct EmbeddingsResponse {
-    #[serde(default)]
-    data: Vec<EmbeddingDatum>,
 }
 
 /// One vector per input, in input order: exactly `n` items, every index in
@@ -143,31 +141,11 @@ fn order_response(data: Vec<EmbeddingDatum>, n: usize) -> Result<Vec<Vec<f32>>, 
 
 /// Calls `{base_url}/embeddings`, batched `BATCH` at a time. Every batch is
 /// validated before anything is returned.
-async fn embed_openai(texts: &[String], p: &Provider, model: &str) -> AppResult<Vec<Vec<f32>>> {
-    let client = p.client().await?;
-    let url = p.url("embeddings");
-
+async fn embed_openai(texts: &[String], grant: &Grant, model: &str) -> AppResult<Vec<Vec<f32>>> {
     let mut out = Vec::with_capacity(texts.len());
     for chunk in texts.chunks(BATCH) {
-        let resp = client
-            .post(&url)
-            .bearer_auth(p.bearer())
-            .json(&json!({ "model": model, "input": chunk }))
-            .send()
-            .await
-            .map_err(|e| AppError::internal(format!("OpenAI embeddings request failed: {e}")))?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            return Err(AppError::internal(format!("OpenAI embeddings HTTP {status}: {body}")));
-        }
-
-        let parsed: EmbeddingsResponse = resp
-            .json()
-            .await
-            .map_err(|e| AppError::internal(format!("invalid OpenAI embeddings response: {e}")))?;
-        out.extend(order_response(parsed.data, chunk.len()).map_err(AppError::internal)?);
+        let data: Vec<EmbeddingDatum> = grant.embeddings(model, chunk).await?;
+        out.extend(order_response(data, chunk.len()).map_err(AppError::internal)?);
     }
     Ok(out)
 }
@@ -178,8 +156,9 @@ pub async fn spec_for(db: &OrgDb, settings: &Settings, owner: &RecordId) -> AppR
     if settings.embeddings_backend != "openai" {
         return Ok(EmbedSpec { origin: "stub".to_string(), model: "stub".to_string() });
     }
-    let p = provider::resolve(db, settings, owner).await?;
-    Ok(EmbedSpec { origin: p.base_url.trim_end_matches('/').to_string(), model: model_for(&p).to_string() })
+    let route = ai::route(db, settings, owner).await?;
+    let p = route.provider();
+    Ok(EmbedSpec { origin: p.base_url.trim_end_matches('/').to_string(), model: model_for(p).to_string() })
 }
 
 pub fn dim() -> usize {
@@ -210,7 +189,7 @@ pub async fn embed_memory_backlog(db: &OrgDb, settings: &Settings, owner: &Recor
         return Ok(0);
     }
     let texts: Vec<String> = rows.iter().map(|r| r.text.clone()).collect();
-    let vectors = embed(db, settings, &texts, Some(owner)).await?;
+    let vectors = embed(db, settings, &texts, owner).await?;
     for (row, vector) in rows.iter().zip(vectors) {
         if vector.len() != DIM {
             return Err(AppError::internal(format!("embedding for {} has dimension {}", row.id.to_string(), vector.len())));
@@ -238,27 +217,30 @@ pub async fn set_memory_embedding(db: &OrgDb, id: &RecordId, vector: Vec<f32>, s
     Ok(())
 }
 
-/// Whether embeddings can run for `owner` right now. Without them the
-/// semantic arm of search/recall is skipped and the connected MCP agent is
-/// the model: keyword + graph + temporal retrieval still work, and the agent
-/// does any synthesis itself.
+/// Whether embeddings can run for `owner` right now: a provider is configured, the organisation has not
+/// switched AI off, and the server's key (if it is the one that would be used) has allowance left. Without them
+/// the semantic arm of search/recall is skipped and the connected MCP agent is the model: keyword + graph +
+/// temporal retrieval still work, and the agent does any synthesis itself.
 pub async fn available(db: &OrgDb, settings: &Settings, owner: &RecordId) -> bool {
     if settings.embeddings_backend != "openai" {
         return true; // "stub": hermetic tests
     }
-    match provider::resolve(db, settings, owner).await {
-        Ok(p) => p.configured(),
-        Err(e) => {
-            tracing::warn!("model provider unavailable for {}: {}", owner.to_string(), e.message);
-            false
-        }
-    }
+    ai::available(db, settings, owner, Purpose::Embedding).await
 }
 
-/// Whether the server can run its own chat completions for `owner`
-/// (reflect / observation consolidation); if not, the MCP agent does it.
+/// Whether the server can run its own chat completions for `owner` (reflect / observation consolidation); if
+/// not, the MCP agent does it.
 pub async fn chat_available(db: &OrgDb, settings: &Settings, owner: &RecordId) -> bool {
-    settings.embeddings_backend == "openai" && available(db, settings, owner).await
+    settings.embeddings_backend == "openai" && ai::available(db, settings, owner, Purpose::Extraction).await
+}
+
+/// [`available`] for background work that must not be lost: why not, when a refusal (AI off, allowance used up) is
+/// the reason, so the job can wait for it to pass.
+pub async fn readiness(db: &OrgDb, settings: &Settings, owner: &RecordId, purpose: Purpose) -> AppResult<Availability> {
+    if settings.embeddings_backend != "openai" {
+        return Ok(if purpose == Purpose::Embedding { Availability::Ready } else { Availability::NotConfigured });
+    }
+    ai::readiness(db, settings, owner, purpose).await
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -271,21 +253,18 @@ struct EmbedCacheRow {
 /// seen before under the same [`EmbedSpec`]. Nothing is cached unless the
 /// whole response validated.
 ///
-/// `owner`, if given, resolves that user's provider and model; owner-less
-/// call sites use the server's provider.
-pub async fn embed(db: &OrgDb, settings: &Settings, texts: &[String], owner: Option<&RecordId>) -> AppResult<Vec<Vec<f32>>> {
+/// `owner`'s provider and model are used, through the decision point (`ai`): a refusal (AI switched off for the
+/// organisation, allowance used up) is the error, and no call is made.
+pub async fn embed(db: &OrgDb, settings: &Settings, texts: &[String], owner: &RecordId) -> AppResult<Vec<Vec<f32>>> {
     if texts.is_empty() {
         return Ok(Vec::new());
     }
 
-    let (spec, prov) = if settings.embeddings_backend == "openai" {
-        let p = match owner {
-            Some(o) => provider::resolve(db, settings, o).await?,
-            None => provider::server(settings),
-        };
-        let model = model_for(&p).to_string();
-        check_model(&p.base_url, &model).map_err(AppError::bad_request)?;
-        (EmbedSpec { origin: p.base_url.trim_end_matches('/').to_string(), model }, Some(p))
+    let (spec, grant) = if settings.embeddings_backend == "openai" {
+        let grant = ai::grant(db, settings, owner, Purpose::Embedding).await?;
+        let model = model_named(grant.embedding_model()).to_string();
+        check_model(grant.base_url(), &model).map_err(AppError::bad_request)?;
+        (EmbedSpec { origin: grant.base_url().trim_end_matches('/').to_string(), model }, Some(grant))
     } else {
         (EmbedSpec { origin: "stub".to_string(), model: "stub".to_string() }, None)
     };
@@ -298,8 +277,8 @@ pub async fn embed(db: &OrgDb, settings: &Settings, texts: &[String], owner: Opt
     let missing_idx: Vec<usize> = keys.iter().enumerate().filter(|(_, k)| !cached.contains_key(*k)).map(|(i, _)| i).collect();
     if !missing_idx.is_empty() {
         let fresh_texts: Vec<String> = missing_idx.iter().map(|&i| texts[i].clone()).collect();
-        let vecs = match &prov {
-            Some(p) => embed_openai(&fresh_texts, p, &spec.model).await?,
+        let vecs = match &grant {
+            Some(g) => embed_openai(&fresh_texts, g, &spec.model).await?,
             None => embed_stub(&fresh_texts),
         };
 

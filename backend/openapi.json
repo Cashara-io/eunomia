@@ -6775,12 +6775,94 @@
         ]
       }
     },
+    "/api/operator/v1/ai/prices": {
+      "get": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "The model price table in force: the defaults and the operator's rows",
+        "description": "Prices are US dollars per million input and output tokens. A model in neither the operator's rows nor the defaults is counted at `fallback`, which is deliberately high.",
+        "operationId": "operatorGetAiPrices",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceTableOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operator": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "Set or remove model prices, with no deploy",
+        "description": "Only the models you send change; a model with `null` goes back to its default. Applies to every replica within 30 seconds. Costs already metered keep the price they were counted at.",
+        "operationId": "operatorSetAiPrices",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PricesUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceTableOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operator": []
+          }
+        ]
+      }
+    },
     "/api/operator/v1/capacity": {
       "get": {
         "tags": [
           "operator"
         ],
-        "summary": "How many organisations exist and the limit (`EUNOMIA_MAX_ORGS`)",
+        "summary": "How many organisations exist and the limit (`EUNOMIA_MAX_ORGS`), and this month's model spend across them",
         "operationId": "operatorGetCapacity",
         "responses": {
           "200": {
@@ -6816,7 +6898,7 @@
         "tags": [
           "operator"
         ],
-        "summary": "List organisations with plan state, seat usage and owner",
+        "summary": "List organisations with plan state, seat usage, owner and this month's model spend",
         "description": "Control-database metadata only: this API never reads anything from an organisation's own database.",
         "operationId": "operatorListOrgs",
         "parameters": [
@@ -6873,7 +6955,7 @@
         "tags": [
           "operator"
         ],
-        "summary": "Create an organisation for a buyer, with its owner claim (idempotent on external_ref)",
+        "summary": "Create an organisation for a buyer, with its owner claim and optional AI allowance (idempotent on external_ref)",
         "description": "Provisions the organisation's database and makes a single-use owner claim for `owner_email`: whoever opens `claim_link` creates their account (password or single sign-on) and becomes the organisation's owner. The same `external_ref` is the same organisation, so a retried call returns it and never makes a second one (`created: false`, and no link: resend the claim). When this server sends email the link is also emailed to the owner; `emailed` says whether the mail server accepted it. Refused: an owner email that already has an account (`operator.owner_in_other_org`), an address in `EUNOMIA_ADMIN_EMAILS` (`operator.owner_email_reserved`), the same reference with a different owner (`operator.reference_reused`), and a full server (`operator.at_capacity`).",
         "operationId": "operatorCreateOrg",
         "requestBody": {
@@ -6920,7 +7002,7 @@
         "tags": [
           "operator"
         ],
-        "summary": "One organisation: plan state, seat usage, owner and whether it was claimed",
+        "summary": "One organisation: plan state, seat usage, owner, whether it was claimed, and this month's model usage by purpose and model",
         "operationId": "operatorGetOrg",
         "parameters": [
           {
@@ -6965,7 +7047,7 @@
         "tags": [
           "operator"
         ],
-        "summary": "Change an organisation's plan, seat limit, trial end or name",
+        "summary": "Change an organisation's plan, seat limit, trial end, name or monthly AI allowance",
         "description": "Only the fields you send change. `seat_limit` and `trial_ends_at` take `null` to clear them. Lowering the seat limit below the seats in use (active members plus pending invitations) is refused with `operator.seats_in_use`, so the billing service can tell the customer to remove people first.",
         "operationId": "operatorUpdateOrg",
         "parameters": [
@@ -7168,6 +7250,175 @@
         "security": [
           {
             "operator": []
+          }
+        ]
+      }
+    },
+    "/api/org/ai": {
+      "get": {
+        "tags": [
+          "org"
+        ],
+        "summary": "Your organisation's AI settings, this month's use of its allowance, and whose key pays (owner or admin)",
+        "description": "Whether AI is on, the organisation's own provider (never its key: `key_set` says whether one is stored), whose key model use goes on by default, this month's use of the allowance as a percentage and a state (no prices or amounts), and this month's call counts by whose key paid.",
+        "operationId": "getOrgAi",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgAiView"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/org/ai/enabled": {
+      "put": {
+        "tags": [
+          "org"
+        ],
+        "summary": "Switch AI on or off for the whole organisation (owner or admin, browser session)",
+        "description": "While off, no call is made to any model provider for this organisation's content, with any key, a member's own included. Features that have a path without a model (saving, reading, keyword search) keep working; the others answer `ai.disabled` (403); background model work waits and resumes when AI is switched on. Audited as `org.ai_switch`.",
+        "operationId": "setOrgAiEnabled",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnabledBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgAiView"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/org/ai/provider": {
+      "put": {
+        "tags": [
+          "org"
+        ],
+        "summary": "Set the organisation's own AI provider: endpoint, key and models (owner or admin, browser session)",
+        "description": "With a provider of its own the organisation's model use goes to that provider, never on the server's key, so it never counts against the monthly allowance and continues when the allowance is used up. A person's own key still comes first. Only the fields you send change; an `api_key` of \"\" removes the key. The endpoint is checked like a person's own base URL (`ALLOW_PRIVATE_LLM_URL`). The key is stored encrypted and never returned. Changing the endpoint or the embedding model makes stored vectors stale: the embed job re-embeds them in the background, on this key. Audited as `org.ai_provider` (the host and what happened to the key, never the key).",
+        "operationId": "setOrgAiProvider",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgAiView"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "org"
+        ],
+        "summary": "Remove the organisation's own AI provider and key (owner or admin, browser session)",
+        "description": "Model use goes back to the server's key and its allowance.",
+        "operationId": "deleteOrgAiProvider",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgAiView"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
           }
         ]
       }
@@ -12184,6 +12435,188 @@
           "ratio"
         ]
       },
+      "AiStatus": {
+        "type": "object",
+        "description": "What the plan status tells every member about model use.",
+        "required": [
+          "enabled",
+          "own_key",
+          "usage"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "An owner or admin has not switched AI off. When false, no model is used on this workspace's content."
+          },
+          "own_key": {
+            "type": "boolean",
+            "description": "The organisation has its own provider key, so its model use does not count against the allowance."
+          },
+          "usage": {
+            "$ref": "#/components/schemas/AiUsage",
+            "description": "This month's use of the allowance: a percentage and a state, no amounts."
+          }
+        }
+      },
+      "AiSummary": {
+        "type": "object",
+        "description": "Model spend of one organisation this month, as the billing service needs it. Never a key.",
+        "required": [
+          "month",
+          "cost_usd",
+          "allowance_used_up",
+          "ai_enabled",
+          "own_key",
+          "usage"
+        ],
+        "properties": {
+          "ai_enabled": {
+            "type": "boolean",
+            "description": "An owner or admin has not switched AI off. When false, no model is called for this organisation."
+          },
+          "allowance_usd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "The monthly allowance on the server's key, in US dollars; null: unlimited."
+          },
+          "allowance_used_up": {
+            "type": "boolean",
+            "description": "The allowance is used up: model calls on the server's key are refused until it renews or is raised."
+          },
+          "cost_usd": {
+            "type": "number",
+            "format": "double",
+            "description": "What the server's key cost this organisation this month, in US dollars, from the price table."
+          },
+          "month": {
+            "type": "string",
+            "description": "The calendar month (UTC) the figures are for, `2026-11`."
+          },
+          "own_key": {
+            "type": "boolean",
+            "description": "The organisation has set a provider key of its own: its model use costs this server nothing."
+          },
+          "usage": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiUsageLine"
+            },
+            "description": "This month's counters by purpose, model and whose key paid; only on a single organisation (`GET`), empty in lists."
+          },
+          "used_percent": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Share of the allowance used (0 to 100); null when there is no allowance."
+          }
+        }
+      },
+      "AiTotals": {
+        "type": "object",
+        "description": "Model spend on the server's key this month across organisations.",
+        "required": [
+          "month",
+          "cost_usd",
+          "organisations_with_allowance",
+          "organisations_used_up"
+        ],
+        "properties": {
+          "cost_usd": {
+            "type": "number",
+            "format": "double",
+            "description": "Metered cost of the server's key across every organisation, in US dollars."
+          },
+          "month": {
+            "type": "string",
+            "description": "The calendar month (UTC), `2026-11`."
+          },
+          "organisations_used_up": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Of those, how many have used it up."
+          },
+          "organisations_with_allowance": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Organisations that have an allowance."
+          }
+        }
+      },
+      "AiUsage": {
+        "type": "object",
+        "description": "This month's use of the allowance in words and a percentage: what members see. No prices, no amounts.",
+        "properties": {
+          "percent": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Share of this month's allowance used, 0 to 100; null when there is no allowance."
+          },
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`ok`, `nearly_used` (80% or more) or `used_up`; null when the organisation has no allowance (unlimited)."
+          }
+        }
+      },
+      "AiUsageLine": {
+        "type": "object",
+        "description": "One counter: what a purpose and model used this month, on whose key.",
+        "required": [
+          "purpose",
+          "model",
+          "source",
+          "calls",
+          "input_tokens",
+          "output_tokens",
+          "estimated_calls",
+          "cost_usd"
+        ],
+        "properties": {
+          "calls": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "cost_usd": {
+            "type": "number",
+            "format": "double",
+            "description": "US dollars at the price table of the time of each call; 0 for a key that is not ours."
+          },
+          "estimated_calls": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many of the calls had their tokens counted here instead of reported by the provider."
+          },
+          "input_tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "model": {
+            "type": "string"
+          },
+          "output_tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "purpose": {
+            "type": "string",
+            "description": "`extraction`, `embedding`, `chat`, `reflect`, `consolidation`, `supersede` or `ontology`."
+          },
+          "source": {
+            "type": "string",
+            "description": "`server` (our key: costed), `org` (the organisation's own key) or `user` (a person's own key): the last two\nare counted for visibility and cost nothing."
+          }
+        }
+      },
       "AmbiguousTarget": {
         "type": "object",
         "description": "A link column's value that names two or more entities in the vault: skipped, never guessed, until a\nperson merges them (`entity_merge`) or the column is mapped another way.",
@@ -12952,14 +13385,45 @@
           }
         }
       },
+      "CallsBySource": {
+        "type": "object",
+        "description": "Calls counted this month by whose key paid (no amounts).",
+        "required": [
+          "server",
+          "organisation",
+          "personal"
+        ],
+        "properties": {
+          "organisation": {
+            "type": "integer",
+            "format": "int64",
+            "description": "On the organisation's own key."
+          },
+          "personal": {
+            "type": "integer",
+            "format": "int64",
+            "description": "On people's own keys."
+          },
+          "server": {
+            "type": "integer",
+            "format": "int64",
+            "description": "On the server's key (counted against the allowance)."
+          }
+        }
+      },
       "Capacity": {
         "type": "object",
         "description": "How many organisations this server holds and how many it may.",
         "required": [
           "organisations",
-          "at_capacity"
+          "at_capacity",
+          "ai"
         ],
         "properties": {
+          "ai": {
+            "$ref": "#/components/schemas/AiTotals",
+            "description": "Model spend this month across every organisation, so the billing service can alert on it."
+          },
           "at_capacity": {
             "type": "boolean",
             "description": "Creating another organisation is refused (`operator.at_capacity`)."
@@ -14065,6 +14529,14 @@
           "external_ref"
         ],
         "properties": {
+          "ai_allowance_usd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "The monthly allowance of model spend on the server's key, in US dollars (calendar month, UTC). Omit or\n`null`: unlimited. When it is used up, model calls on the server's key stop until next month unless the\norganisation adds a key of its own."
+          },
           "external_ref": {
             "type": "string",
             "description": "The billing service's own id for this purchase. The same reference is the same organisation: a retried\ncall returns it and never makes a second one."
@@ -14411,6 +14883,19 @@
             "description": "The vault (memory space) the document is in."
           }
         }
+      },
+      "EnabledBody": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "`false` switches AI off for the whole organisation: no model is called for its content with any key,\na member's own included."
+          }
+        },
+        "additionalProperties": false
       },
       "EnrolIn": {
         "type": "object",
@@ -17609,6 +18094,36 @@
           "in"
         ]
       },
+      "OrgAiView": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "provider",
+          "serving",
+          "usage",
+          "calls"
+        ],
+        "properties": {
+          "calls": {
+            "$ref": "#/components/schemas/CallsBySource",
+            "description": "Calls this month, by whose key paid."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "AI is on. When off, no model is called for this workspace's content with any key."
+          },
+          "provider": {
+            "$ref": "#/components/schemas/OrgProviderView"
+          },
+          "serving": {
+            "type": "string",
+            "description": "Whose key the workspace's model use goes on by default: `off`, `organisation_key` or `server_key`."
+          },
+          "usage": {
+            "$ref": "#/components/schemas/AiUsage"
+          }
+        }
+      },
       "OrgInvitation": {
         "type": "object",
         "description": "An open invitation, as an org admin sees it. Never carries the token.",
@@ -17786,6 +18301,38 @@
           }
         }
       },
+      "OrgProviderView": {
+        "type": "object",
+        "required": [
+          "set",
+          "base_url",
+          "key_set",
+          "chat_model",
+          "embedding_model"
+        ],
+        "properties": {
+          "base_url": {
+            "type": "string",
+            "description": "The endpoint (\"\" = the server's)."
+          },
+          "chat_model": {
+            "type": "string",
+            "description": "\"\" = automatic."
+          },
+          "embedding_model": {
+            "type": "string",
+            "description": "\"\" = the default."
+          },
+          "key_set": {
+            "type": "boolean",
+            "description": "A key is stored. It is never returned."
+          },
+          "set": {
+            "type": "boolean",
+            "description": "The organisation has a provider of its own (a key or an endpoint)."
+          }
+        }
+      },
       "OrgRoleChoice": {
         "type": "string",
         "description": "The roles a role change may give.",
@@ -17828,9 +18375,14 @@
           "status",
           "seats",
           "owner_claimed",
-          "created_at"
+          "created_at",
+          "ai"
         ],
         "properties": {
+          "ai": {
+            "$ref": "#/components/schemas/AiSummary",
+            "description": "This month's model spend, the allowance, and whether the organisation has its own key or has switched AI off."
+          },
           "created_at": {
             "type": "string"
           },
@@ -18327,7 +18879,14 @@
       "PlanStatus": {
         "type": "object",
         "description": "What the plan means for the people in an organisation.",
+        "required": [
+          "ai"
+        ],
         "properties": {
+          "ai": {
+            "$ref": "#/components/schemas/AiStatus",
+            "description": "Model use: whether AI is on, whether the organisation has its own key, and this month's use of the\nallowance as a percentage and a state. Present for every organisation, managed or not."
+          },
           "manage_url": {
             "type": [
               "string",
@@ -18435,6 +18994,87 @@
             "description": "`true` requires two-step verification of every member of this organisation who signs in with a password."
           }
         }
+      },
+      "Price": {
+        "type": "object",
+        "description": "US dollars per million tokens.",
+        "required": [
+          "input_per_million_usd",
+          "output_per_million_usd"
+        ],
+        "properties": {
+          "input_per_million_usd": {
+            "type": "number",
+            "format": "double",
+            "description": "Per million input (prompt) tokens."
+          },
+          "output_per_million_usd": {
+            "type": "number",
+            "format": "double",
+            "description": "Per million output (completion) tokens; 0 for an embedding model."
+          }
+        }
+      },
+      "PriceRow": {
+        "type": "object",
+        "description": "One model's price and where it comes from.",
+        "required": [
+          "input_per_million_usd",
+          "output_per_million_usd",
+          "source"
+        ],
+        "properties": {
+          "input_per_million_usd": {
+            "type": "number",
+            "format": "double"
+          },
+          "output_per_million_usd": {
+            "type": "number",
+            "format": "double"
+          },
+          "source": {
+            "type": "string",
+            "description": "`default` (built into the server) or `operator` (set with `PUT /api/operator/v1/ai/prices`)."
+          }
+        }
+      },
+      "PriceTableOut": {
+        "type": "object",
+        "description": "The price table in force.",
+        "required": [
+          "prices",
+          "fallback"
+        ],
+        "properties": {
+          "fallback": {
+            "$ref": "#/components/schemas/Price",
+            "description": "What a model that is in neither the operator's table nor the defaults is counted at. Deliberately high, so an\nunknown model can never be free; price it to bring it down."
+          },
+          "prices": {
+            "type": "object",
+            "description": "By model name.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PriceRow"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PricesUpdate": {
+        "type": "object",
+        "description": "Prices to set. A model with `null` goes back to its default (or the fallback).",
+        "required": [
+          "prices"
+        ],
+        "properties": {
+          "prices": {
+            "type": "object",
+            "description": "Model name to its price, or `null` to remove the operator's price for it."
+          }
+        },
+        "additionalProperties": false
       },
       "Problem": {
         "type": "object",
@@ -18924,6 +19564,39 @@
             "description": "`user:...`"
           }
         }
+      },
+      "ProviderUpdate": {
+        "type": "object",
+        "description": "What an owner or admin sends to set the organisation's provider. A field left out keeps its value; an\n`api_key` of \"\" removes the key.",
+        "properties": {
+          "api_key": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The key. Stored encrypted, never returned."
+          },
+          "base_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The endpoint, `https://...` (\"\" = the server's). Checked like a person's own base URL."
+          },
+          "chat_model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "embedding_model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
       },
       "ReadinessOut": {
         "type": "object",
@@ -21002,6 +21675,14 @@
       "UpdateOrg": {
         "type": "object",
         "properties": {
+          "ai_allowance_usd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "A new monthly allowance of model spend on the server's key in US dollars, or `null` for unlimited. Raising\nit lets model work that was waiting for lack of allowance continue within seconds."
+          },
           "name": {
             "type": [
               "string",

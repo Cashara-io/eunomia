@@ -261,7 +261,11 @@ async fn validate_update(db: &OrgDb, settings: &Settings, owner: &RecordId, body
 }
 
 async fn respond(state: &crate::state::OrgState, user: &User, row: &AppSettingsRow) -> AppResult<Json<SettingsOut>> {
-    let ready = crate::chat::service::ensure_configured(&state.db, &state.settings, &user.id).await.is_ok();
+    // a refusal (AI switched off, allowance used up) is not "no model": the chat stays reachable so it can say why
+    let ready = match crate::chat::service::ensure_configured(&state.db, &state.settings, &user.id).await {
+        Ok(()) => true,
+        Err(e) => crate::ai::Refusal::is_hold(e.code),
+    };
     Ok(Json(out(row, &state.settings.openai_base_url, ready)))
 }
 
@@ -339,17 +343,6 @@ async fn complete_onboarding(State(state): State<AppState>, user: User) -> AppRe
     Ok(Json(json!({ "ok": true })))
 }
 
-#[derive(Debug, Deserialize)]
-struct ModelsListResponse {
-    #[serde(default)]
-    data: Vec<ModelEntry>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ModelEntry {
-    id: String,
-}
-
 #[derive(Serialize, utoipa::ToSchema)]
 struct ModelsOut {
     models: Vec<String>,
@@ -373,21 +366,16 @@ async fn openai_models(State(state): State<AppState>, user: User) -> AppResult<J
     let state = state.org(&user.org).await?;
     // Generic codes only: upstream error or status text would let a caller probe internal hosts and ports.
     let fail = |code: &str| Json(ModelsOut { models: vec![], error: Some(code.to_string()) });
-    let Ok(p) = provider::resolve(&state.db, &state.settings, &user.id).await else { return Ok(fail("credential_unreadable")) };
-    let Ok(client) = p.client().await else { return Ok(fail("base_url_not_allowed")) };
-    let Ok(resp) = client.get(p.url("models")).bearer_auth(p.bearer()).timeout(std::time::Duration::from_secs(15)).send().await else {
-        return Ok(fail("unreachable"));
+    let grant = match crate::ai::authorize(&state.db, &state.settings, &user.id, crate::ai::Purpose::Models).await {
+        Ok(Ok(g)) => g,
+        // AI switched off for the organisation: nothing is sent to any provider, with any key
+        Ok(Err(crate::ai::Refusal::Disabled)) => return Err(crate::ai::Refusal::Disabled.into_error()),
+        Ok(Err(_)) => return Ok(fail("not_configured")),
+        Err(_) => return Ok(fail("credential_unreadable")),
     };
-    if !resp.status().is_success() {
-        return Ok(fail("upstream_error"));
-    }
-    match resp.json::<ModelsListResponse>().await {
-        Ok(body) => {
-            let mut ids: Vec<String> = body.data.into_iter().map(|m| m.id).collect();
-            ids.sort();
-            Ok(Json(ModelsOut { models: ids, error: None }))
-        }
-        Err(_) => Ok(fail("bad_response")),
+    match grant.list_models(std::time::Duration::from_secs(15)).await {
+        Ok(models) => Ok(Json(ModelsOut { models, error: None })),
+        Err(code) => Ok(fail(code)),
     }
 }
 

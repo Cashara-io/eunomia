@@ -119,7 +119,11 @@ async fn attempt(state: &AppState, registry: &Registry, cfg: &WorkerConfig, job:
     };
     // a job queued before its organisation was suspended waits for the resume (claim skips new ones)
     if super::paused_by_plan(&state.control, &state.plans, job).await {
-        return pause(state, cfg, job).await;
+        return pause(state, cfg, job, "its organisation is suspended").await;
+    }
+    // the organisation may not call a model now (AI off, allowance used up): the same wait as for a suspension
+    if crate::ai::job_hold(state, job).await {
+        return pause(state, cfg, job, "its organisation may not call a model now (AI switched off, or this month's allowance used up)").await;
     }
     let work = AssertUnwindSafe(crate::authz::as_system(async { handler(state.clone(), job.clone()).await })).catch_unwind();
     let outcome = tokio::select! {
@@ -128,7 +132,14 @@ async fn attempt(state: &AppState, registry: &Registry, cfg: &WorkerConfig, job:
     };
     match outcome {
         Err(Stopped::LeaseLost) => tracing::warn!("job lease lost; abandoning this attempt"), // another worker owns it now
-        Err(Stopped::Paused) => pause(state, cfg, job).await,
+        Err(Stopped::Paused) => pause(state, cfg, job, "its organisation is suspended").await,
+        // refused part-way (the allowance ran out, AI was switched off): wait, do not burn an attempt
+        Ok(Ok(Err(e))) if crate::ai::Refusal::is_hold(e.code) => {
+            if let Ok(org) = crate::models_user::org_of(&state.control, &job.owner).await {
+                state.pool.ai().mark_hold(&org).await;
+            }
+            pause(state, cfg, job, "its organisation may not call a model now (AI switched off, or this month's allowance used up)").await
+        }
         Ok(Ok(r)) => finish(state, cfg, job, r).await,
         Ok(Err(_)) => {
             let err = JobError::retryable(ErrorCode::JobPanicked, "job handler panicked");
@@ -140,8 +151,8 @@ async fn attempt(state: &AppState, registry: &Registry, cfg: &WorkerConfig, job:
 /// How long a paused job waits before it is looked at again (the claim skips it while the organisation is suspended anyway).
 const PAUSE_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
 
-async fn pause(state: &AppState, cfg: &WorkerConfig, job: &Job) {
-    tracing::info!(name: "diagnostics.job_paused", "job paused: its organisation is suspended");
+async fn pause(state: &AppState, cfg: &WorkerConfig, job: &Job, why: &str) {
+    tracing::info!(name: "diagnostics.job_paused", why, "job paused");
     if let Err(e) = super::defer_paused(&state.control, job, &cfg.id, PAUSE_DELAY).await {
         tracing::warn!(error = %e.message, "pausing a job failed; the lease will expire and it will be claimed again");
     }

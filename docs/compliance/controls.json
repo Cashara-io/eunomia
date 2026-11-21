@@ -2587,17 +2587,18 @@
     {
       "id": "C31",
       "name": "Per-org AI kill switch across all AI entry points",
-      "status": "Missing",
+      "status": "Partial",
       "owner": "shared",
       "track": [
         "code",
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Missing. No org AI stop policy found. E24.",
+      "finding": "Partial. An owner or admin can switch AI off for their own organisation (PUT /api/org/ai/enabled, audited as org.ai_switch). Every model call now goes through one decision point (backend/src/ai/) that checks the switch first and binds every key, a member's own included; a provider handle can make no request outside that module and a source gate fails if another file names a provider endpoint. Interactive features answer ai.disabled (403) or take their non-model path; queued and running background model jobs wait without using attempts and resume when it is switched on. Not met: a call already sent when the switch is flipped completes, and another replica sees the change within 3 seconds (cached settings), so the acceptance check 'across replicas' holds to that bound only; there is no instance-wide kill switch (the operator can only suspend an organisation); effects are not re-checked at commit time. E24.",
       "evidence": [
         "EV-C31-1",
-        "EV-C31-2"
+        "EV-C31-2",
+        "EV-C31-3"
       ],
       "mappings": [
         {
@@ -9526,6 +9527,58 @@
         "Re-inspection of source at the refreshed snapshot; the product tests named in references were read, not run, for this catalogue change."
       ],
       "summary": "Missing. Settings has component controls but no joined status or evidence pack. E24."
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "EV-C31-3",
+      "capability_id": "C31",
+      "kind": "source-inspection",
+      "owner": "Eunomia",
+      "source": "Eunomia",
+      "operation": "unknown",
+      "implementation": "Partial",
+      "captured_on": "2026-11-21",
+      "subject": {
+        "repository": "Cashara-io/eunomia",
+        "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
+        "scope": "Source inspection of the hosted AI metering change (control migration 0016) on top of the refreshed snapshot; no deployed installation assessed."
+      },
+      "references": [
+        {
+          "path": "backend/src/ai/mod.rs",
+          "line_start": 1,
+          "line_end": 30,
+          "inventory_id": "E24",
+          "summary": "One decision point for every model call: the organisation's AI switch is checked first and applies to every key, a person's own included; a Grant is the only value that can reach a provider."
+        },
+        {
+          "path": "backend/src/ai/orgcfg.rs",
+          "line_start": 277,
+          "line_end": 296,
+          "inventory_id": "E24",
+          "summary": "Switching AI on or off for the caller's own organisation, owner or admin only, audited as org.ai_switch."
+        },
+        {
+          "path": "backend/src/org_admin.rs",
+          "line_start": 120,
+          "line_end": 126,
+          "inventory_id": "E24",
+          "summary": "The one capability function for managing an organisation's AI settings: owner or admin of their own organisation."
+        },
+        {
+          "path": "backend/tests/ai_metering.rs",
+          "line_start": 800,
+          "line_end": 860,
+          "inventory_id": "E24",
+          "summary": "A test drives every model entry point with AI off, with a member's own key, the organisation's key and the server's key, and counts that no request reached the stub provider; read, not run, for this catalogue change."
+        }
+      ],
+      "limitations": [
+        "Source inspection does not establish deployed settings, runtime effectiveness or audit-period operation.",
+        "A call already sent when the switch is flipped completes; other replicas see the change within 3 seconds.",
+        "The product tests named in references were read, not run, for this catalogue change."
+      ],
+      "summary": "Partial. A per-organisation AI switch exists and binds every key; no instance-wide switch and no commit-time re-check. E24."
     }
   ]
 }
