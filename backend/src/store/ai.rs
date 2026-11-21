@@ -14,6 +14,7 @@ pub const CONTROL_ALL: &[&ControlStmt] = &[
     &HOLD_SET,
     &HOLD_CLEAR,
     &USAGE_ADD,
+    &USAGE_PRUNE,
     &SPEND_MONTH,
     &SPEND_MONTH_BY_ORG,
     &SPEND_MONTH_FOR_ORGS,
@@ -71,12 +72,29 @@ pub const HOLD_SET: ControlStmt = ControlStmt::new(
 pub const HOLD_CLEAR: ControlStmt = ControlStmt::new("ai.hold_clear", "UPDATE org_ai SET hold_until = NONE WHERE org = $org AND hold_until != NONE RETURN NONE");
 
 /// Adds to one counter row (its id is derived from organisation, day, purpose, model and source).
+///
+/// The model name is free text a person chooses (the organisation's own provider settings), so the distinct names
+/// recorded for one organisation on one day are bounded: a model that has no row that day yet, when `$max` other
+/// names already do, is counted in the day's `other` row instead (`$other` is the id the same counter would have with
+/// the model `other`). Everything else about the call is kept, the cost included, so totals never change. The check
+/// and the write share a transaction; two writers for one organisation and day in different processes can each
+/// admit a name past `$max` (a bounded overshoot, never an unbounded one).
 pub const USAGE_ADD: ControlStmt = ControlStmt::new(
     "ai.usage_add",
-    "UPSERT $id SET org = $org, day = $day, month = $month, purpose = $purpose, model = $model, source = $source, \
+    "BEGIN TRANSACTION; \
+     LET $seen = array::len((SELECT id FROM ai_usage WHERE org = $org AND month = $month AND day = $day AND model = $model LIMIT 1)) > 0; \
+     LET $names = array::len((SELECT model FROM ai_usage WHERE org = $org AND month = $month AND day = $day AND model != 'other' GROUP BY model)); \
+     LET $fold = $model != 'other' AND !$seen AND $names >= $max; \
+     LET $target = IF $fold THEN $other ELSE $id END; \
+     UPSERT $target SET org = $org, day = $day, month = $month, purpose = $purpose, model = IF $fold THEN 'other' ELSE $model END, source = $source, \
      calls = (calls ?? 0) + $calls, input_tokens = (input_tokens ?? 0) + $input, output_tokens = (output_tokens ?? 0) + $output, \
-     estimated_calls = (estimated_calls ?? 0) + $estimated, cost_micros = (cost_micros ?? 0) + $cost, updated_at = time::now() RETURN NONE",
+     estimated_calls = (estimated_calls ?? 0) + $estimated, cost_micros = (cost_micros ?? 0) + $cost, updated_at = time::now() RETURN NONE; \
+     COMMIT TRANSACTION;",
 );
+
+/// Retention only: the one place the app deletes `ai_usage` rows (see `ai::hub::Hub::prune_usage`). `$before` is a month
+/// (`2024-11`): rows of any earlier month go. Never a month the allowance or the operator's figures read.
+pub const USAGE_PRUNE: ControlStmt = ControlStmt::new("ai.usage_prune", "DELETE ai_usage WHERE month < $before RETURN NONE");
 
 /// What the server's key cost one organisation in a calendar month.
 pub const SPEND_MONTH: ControlStmt = ControlStmt::new(

@@ -24,6 +24,7 @@ use eunomia_backend::rid::RecordIdExt;
 use serde_json::{json, Value};
 
 const TOKEN: &str = "operator-token-for-tests-0123456789abcdef";
+const NEXT_TOKEN: &str = "next-operator-token-for-tests-0123456789ab";
 const BILLING: &str = "https://billing.example.test/manage";
 
 fn host_env() {
@@ -33,14 +34,14 @@ fn host_env() {
         unsafe {
             std::env::set_var("EUNOMIA_SIGNUP_ORG", "personal");
             std::env::set_var("SIGNUP", "closed");
-            std::env::set_var("EUNOMIA_ADMIN_EMAILS", "op@corp.test");
+            std::env::set_var("EUNOMIA_ADMIN_EMAILS", "op@corp.test,kate@corp.test");
             std::env::set_var("RATE_LIMIT_AUTH_PER_MIN", "1000");
         }
     });
 }
 
 fn hosted() -> HostedConfig {
-    HostedConfig { operator_token: Some(TOKEN.into()), max_orgs: None, billing_url: Some(BILLING.into()) }
+    HostedConfig { operator_token: Some(TOKEN.into()), billing_url: Some(BILLING.into()), ..Default::default() }
 }
 
 async fn host_with(hosted: HostedConfig) -> common::TestApp {
@@ -786,6 +787,46 @@ async fn every_route_refuses_a_suspended_organisations_member_unless_it_is_an_ac
     assert!((5..=12).contains(&allowed), "the allow-list is small: {allowed}");
 }
 
+/// The routes the suspended-workspace page uses (`frontend/src/components/WorkspaceGate.tsx`: the password change, "Your
+/// data" and the notice itself; `frontend/scripts/workspace-suspended.test.jsx` lists the same ones). A member of a
+/// suspended workspace must get through to every one of them, and the one screen action that is not on the list
+/// (the personal-space JSON, `GET /api/export`) is the one the page does not offer.
+#[tokio::test]
+async fn the_routes_the_suspended_page_links_to_are_on_the_allow_list_and_work_for_a_member() {
+    use axum::http::Method;
+    let app = host().await;
+    let (id, owner) = owned_org(&app, "page_1", "pg1@acme.test", 5).await;
+    let member = join(&app, &owner, "pgm@acme.test").await;
+    assert_eq!(op(&app, "POST", &format!("/api/operator/v1/orgs/{id}/suspend"), Some(json!({ "reason": "page" }))).await.0, StatusCode::OK);
+    let used: [(&str, &str, Option<Value>); 8] = [
+        ("GET", "/api/auth/me", None),
+        ("GET", "/api/org/plan", None),
+        ("POST", "/api/account/password", Some(json!({ "current_password": "not-the-password", "new_password": "another-password-1" }))),
+        ("POST", "/api/account/erasure", Some(json!({ "password": "not-the-password" }))),
+        ("GET", "/api/account/activity", None),
+        ("GET", "/api/export/subject", None),
+        ("POST", "/api/export/subject", None),
+        ("GET", "/api/export/subject/subject_export:nothing", None),
+    ];
+    for (m, path, body) in used {
+        let method: Method = m.parse().unwrap();
+        assert!(eunomia_backend::plan::allowed_while_suspended(&method, path), "{m} {path} is not on the allow-list");
+        let ((status, body), _) = common::http(&app.router, m, path, body, Some(&member.bearer), Some(&member.cookie)).await;
+        assert_ne!(code(&body), "org.suspended", "{m} {path} was refused as suspended: {status} {body}");
+    }
+    // the screens really work, not only get past the gate: the plan says suspended, the export starts, the password is checked
+    assert_eq!(plan_of(&app, &member).await["status"], "suspended");
+    let (status, body) = call(&app, &member.cookie, "POST", "/api/export/subject", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = call(&app, &member.cookie, "POST", "/api/account/password", Some(json!({ "current_password": "not-the-password", "new_password": "another-password-1" }))).await;
+    assert!(status.is_client_error() && code(&body) != "org.suspended", "the wrong current password is refused as such: {status} {body}");
+    // signing out is not behind the gate at all
+    assert_eq!(common::http(&app.router, "POST", "/api/auth/logout", None, None, Some(&member.cookie)).await.0 .0, StatusCode::OK);
+    // and the personal-space JSON is refused while suspended, which is why the page does not offer it
+    let (status, body) = call(&app, &owner.cookie, "GET", "/api/export", None).await;
+    assert_eq!((status, code(&body)), (StatusCode::FORBIDDEN, "org.suspended"), "{body}");
+}
+
 #[tokio::test]
 async fn background_work_for_a_suspended_organisation_pauses_and_picks_up_again() {
     let app = host().await;
@@ -965,7 +1006,7 @@ async fn every_operator_call_is_on_the_instance_ledger_and_the_token_is_nowhere(
     assert_eq!(creates[1]["outcome"], "operator.owner_email_reserved", "{:?}", creates[1]);
     assert!(creates[0]["detail"].as_str().unwrap().contains("plan=team seats=3"), "{:?}", creates[0]);
     let suspends = ledger(&app, "operator.org_suspend").await;
-    assert_eq!((suspends[0]["target"].clone(), suspends[0]["detail"].clone()), (json!(format!("org:{id}")), json!("reason=r")), "{:?}", suspends[0]);
+    assert_eq!((suspends[0]["target"].clone(), suspends[0]["detail"].clone()), (json!(format!("org:{id}")), json!("reason=r token=current")), "{:?}", suspends[0]);
     // a call that never reaches a handler (no body, an unknown path, a method the route does not have) is on it too
     let before = ledger(&app, "operator.call").await.len();
     assert_eq!(before, 0, "a call a handler answered has no second row");
@@ -1053,4 +1094,324 @@ async fn an_install_with_none_of_the_settings_behaves_as_it_always_did() {
     // the org record carries no plan fields
     let rows: Vec<Value> = app.control().test_raw().query("SELECT plan, seat_limit, status, suspended_at, trial_ends_at, external_ref, seat_guard FROM org").await.unwrap().take(0).unwrap();
     assert!(rows.iter().all(|r| r.as_object().is_none_or(|o| o.values().all(Value::is_null))), "{rows:?}");
+}
+
+// ------------------------------------------------------------------ who can own a new organisation, asked before the card is charged
+
+/// Percent-encodes a query value.
+fn enc(v: &str) -> String {
+    v.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+}
+
+/// `GET /api/operator/v1/owner-availability?email=...`
+async fn availability(app: &common::TestApp, email: &str) -> (StatusCode, Value) {
+    op(app, "GET", &format!("/api/operator/v1/owner-availability?email={}", enc(email)), None).await
+}
+
+/// What creating an organisation for `email` answers (a new reference every time).
+async fn try_create(app: &common::TestApp, email: &str, external_ref: &str) -> (StatusCode, Value) {
+    op(app, "POST", "/api/operator/v1/orgs", Some(json!({ "name": format!("Org {external_ref}"), "owner_email": email, "plan": "team", "seat_limit": 3, "external_ref": external_ref }))).await
+}
+
+async fn org_count(app: &common::TestApp) -> i64 {
+    op(app, "GET", "/api/operator/v1/capacity", None).await.1["organisations"].as_i64().unwrap()
+}
+
+/// An owner claim made straight in the control database (the operator API will not make a second one for an address).
+async fn raw_claim(app: &common::TestApp, org_id: &str, email: &str, token: &str) {
+    let org = eunomia_backend::pool::OrgId::parse(org_id).expect("an org id").record();
+    app.control()
+        .test_raw()
+        .query("CREATE org_invitation SET org = $org, email = $email, role = 'owner', token_hash = $hash, expires_at = time::now() + 7d, slot = string::concat(<string>$org, '/', $email)")
+        .bind(("org", org))
+        .bind(("email", email.to_string()))
+        .bind(("hash", models_user::hash_token(token)))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+}
+
+#[tokio::test]
+async fn the_availability_answer_is_what_creating_an_organisation_does_for_each_kind_of_address() {
+    let app = host().await;
+    common::register_personal(&app.state, "alice@example.com").await;
+    let made = create_org(&app, "pend_1", "pending@acme.test", 3).await;
+    let before = org_count(&app).await;
+
+    // (the address as typed, the reason it is refused or None, what creating answers)
+    let cases: Vec<(&str, Option<&str>, StatusCode, &str)> = vec![
+        ("fresh@acme.test", None, StatusCode::OK, ""),
+        ("  Fresh2@ACME.test ", None, StatusCode::OK, ""),
+        ("alice@example.com", Some("has_account"), StatusCode::CONFLICT, "operator.owner_in_other_org"),
+        (" ALICE@Example.COM", Some("has_account"), StatusCode::CONFLICT, "operator.owner_in_other_org"),
+        ("op@corp.test", Some("reserved"), StatusCode::BAD_REQUEST, "operator.owner_email_reserved"),
+        ("OP@Corp.Test ", Some("reserved"), StatusCode::BAD_REQUEST, "operator.owner_email_reserved"),
+        // U+212A KELVIN SIGN lowercases to an ASCII `k`: this is `kate@corp.test`, which is listed. Sign-up refuses it as reserved
+        ("\u{212A}ate@corp.test", Some("reserved"), StatusCode::BAD_REQUEST, "operator.owner_email_reserved"),
+        ("kate@\u{212A}orp.test", None, StatusCode::BAD_REQUEST, "validation.invalid"),
+        // a look-alike of an address that is not listed is not an address at all (400), as at sign-up
+        ("\u{212A}ay@acme.test", None, StatusCode::BAD_REQUEST, "validation.invalid"),
+        ("pending@acme.test", Some("pending_claim"), StatusCode::CONFLICT, "operator.owner_claim_pending"),
+        ("PENDING@acme.test", Some("pending_claim"), StatusCode::CONFLICT, "operator.owner_claim_pending"),
+        ("not-an-email", None, StatusCode::BAD_REQUEST, "validation.invalid"),
+    ];
+    for (i, (email, reason, create_status, create_code)) in cases.iter().enumerate() {
+        let (status, answer) = availability(&app, email).await;
+        let (c_status, c_body) = try_create(&app, email, &format!("probe_{i}")).await;
+        assert_eq!(c_status, *create_status, "create {email:?}: {c_body}");
+        if !create_code.is_empty() {
+            assert_eq!(code(&c_body), *create_code, "create {email:?}: {c_body}");
+        }
+        match (reason, *create_status) {
+            // an address that cannot be one: the same 400 from both
+            (None, StatusCode::BAD_REQUEST) => assert_eq!((status, code(&answer)), (StatusCode::BAD_REQUEST, "validation.invalid"), "{email:?}: {answer}"),
+            (None, _) => {
+                assert_eq!((status, &answer), (StatusCode::OK, &json!({ "available": true })), "{email:?}: {answer}");
+                assert!(answer.get("reason").is_none(), "no reason when available: {answer}");
+            }
+            (Some(r), _) => assert_eq!((status, &answer), (StatusCode::OK, &json!({ "available": false, "reason": r })), "{email:?}: {answer}"),
+        }
+    }
+    // only the two free addresses made an organisation
+    assert_eq!(org_count(&app).await, before + 2);
+
+    // a retry of the organisation that holds the pending claim is still a retry, and its claim can be resent
+    assert_eq!(create_org(&app, "pend_1", "pending@acme.test", 3).await["created"], false);
+    let id = made["organisation_id"].as_str().unwrap();
+    assert_eq!(op(&app, "POST", &format!("/api/operator/v1/orgs/{id}/owner-claim/resend"), None).await.0, StatusCode::OK);
+    // an expired claim still holds the address: a resend revives it
+    app.control().test_raw().query("UPDATE org_invitation SET expires_at = time::now() - 1d WHERE email = 'pending@acme.test'").await.unwrap().check().unwrap();
+    assert_eq!(availability(&app, "pending@acme.test").await.1, json!({ "available": false, "reason": "pending_claim" }));
+    // claimed, the address has an account
+    let resent = op(&app, "POST", &format!("/api/operator/v1/orgs/{id}/owner-claim/resend"), None).await.1;
+    claim(&app, resent["claim_link"].as_str().unwrap(), "pending@acme.test").await;
+    assert_eq!(availability(&app, "pending@acme.test").await.1, json!({ "available": false, "reason": "has_account" }));
+}
+
+#[tokio::test]
+async fn what_availability_says_is_what_accepting_a_claim_does() {
+    let app = host().await;
+    // a claim for an address that is listed as an operator's cannot be accepted, whichever way it got made
+    let made = create_org(&app, "acc_1", "acc1@acme.test", 3).await;
+    let id = made["organisation_id"].as_str().unwrap();
+    raw_claim(&app, id, "op@corp.test", "token-for-a-reserved-address").await;
+    let (status, body, _) = accept(&app, "token-for-a-reserved-address", "op@corp.test").await;
+    assert_eq!((status, code(&body)), (StatusCode::FORBIDDEN, "auth.forbidden"), "{body}");
+    assert_eq!(availability(&app, "op@corp.test").await.1["reason"], "reserved");
+
+    // two claims for one address: the first accepted makes the account, and the other can never be accepted. This is
+    // why a pending claim makes an address unavailable
+    let other = create_org(&app, "acc_2", "acc2@acme.test", 3).await;
+    raw_claim(&app, other["organisation_id"].as_str().unwrap(), "acc1@acme.test", "second-claim-for-the-same-address").await;
+    claim(&app, made["claim_link"].as_str().unwrap(), "acc1@acme.test").await;
+    let (status, body, _) = accept(&app, "second-claim-for-the-same-address", "acc1@acme.test").await;
+    assert_eq!((status, code(&body)), (StatusCode::CONFLICT, "auth.email_taken"), "{body}");
+    assert_eq!(availability(&app, "acc1@acme.test").await.1["reason"], "has_account");
+
+    // a free address: creating and accepting both work
+    assert_eq!(availability(&app, "acc3@acme.test").await.1, json!({ "available": true }));
+    let third = create_org(&app, "acc_3", "acc3@acme.test", 3).await;
+    claim(&app, third["claim_link"].as_str().unwrap(), "acc3@acme.test").await;
+}
+
+#[tokio::test]
+async fn a_claim_that_could_no_longer_be_used_is_not_resent_for_a_reserved_address_or_one_another_organisation_holds() {
+    let app = host().await;
+    let a = create_org(&app, "rs_1", "rs1@acme.test", 3).await;
+    let b = create_org(&app, "rs_2", "rs2@acme.test", 3).await;
+    let (a_id, b_id) = (a["organisation_id"].as_str().unwrap(), b["organisation_id"].as_str().unwrap());
+    // org B's claim is for rs1's address too (made out of band), and A's expired: A's resend is refused
+    app.control().test_raw().query("UPDATE org_invitation SET expires_at = time::now() - 1d WHERE email = 'rs1@acme.test'").await.unwrap().check().unwrap();
+    raw_claim(&app, b_id, "rs1@acme.test", "claim-of-b-for-rs1").await;
+    let (status, body) = op(&app, "POST", &format!("/api/operator/v1/orgs/{a_id}/owner-claim/resend"), None).await;
+    assert_eq!((status, code(&body)), (StatusCode::CONFLICT, "operator.owner_claim_pending"), "{body}");
+}
+
+#[tokio::test]
+async fn two_organisations_made_together_for_one_address_do_not_both_get_a_claim() {
+    let app = host().await;
+    let (one, two) = tokio::join!(try_create(&app, "twin@acme.test", "twin_1"), try_create(&app, "twin@acme.test", "twin_2"));
+    let mut statuses = [one.0, two.0];
+    statuses.sort();
+    assert_eq!(statuses, [StatusCode::OK, StatusCode::CONFLICT], "{one:?} {two:?}");
+    let claims: Vec<Value> = app.control().test_raw().query("SELECT org FROM org_invitation WHERE email = 'twin@acme.test'").await.unwrap().take(0).unwrap();
+    assert_eq!(claims.len(), 1, "one claim for the address: {claims:?}");
+}
+
+#[tokio::test]
+async fn availability_and_the_list_filters_answer_only_the_operator_token_and_read_nothing_of_an_organisations_own() {
+    let app = host().await;
+    let (id, owner) = owned_org(&app, "iso_1", "iso1@acme.test", 3).await;
+    let tester = person(&app, "tester@example.com", None).await;
+    let routes = [
+        "/api/operator/v1/owner-availability?email=iso1%40acme.test",
+        "/api/operator/v1/orgs?external_ref=iso_1",
+        "/api/operator/v1/orgs?owner_email=iso1%40acme.test",
+    ];
+    for path in routes {
+        // a member's session, an API token (every scope), both, the server operator's own, an OAuth-looking token, a near miss, nothing
+        for p in [&owner, &tester] {
+            for (bearer, cookie) in [(Some(p.bearer.as_str()), None), (None, Some(p.cookie.as_str())), (Some(p.bearer.as_str()), Some(p.cookie.as_str()))] {
+                let (status, body) = common::http(&app.router, "GET", path, None, bearer, cookie).await.0;
+                assert_eq!((status, code(&body)), (StatusCode::UNAUTHORIZED, "auth.unauthorized"), "{} {path}: {body}", p.email);
+            }
+        }
+        for wrong in ["eun_oat_abcdefabcdefabcdefabcdefabcdefabcdef", &TOKEN[..TOKEN.len() - 1], &format!("{TOKEN}x"), ""] {
+            let (status, body) = common::http(&app.router, "GET", path, None, Some(wrong), None).await.0;
+            assert_eq!((status, code(&body)), (StatusCode::UNAUTHORIZED, "auth.unauthorized"), "{path} {wrong:?}: {body}");
+        }
+        assert_eq!(common::http(&app.router, "GET", path, None, None, None).await.0 .0, StatusCode::UNAUTHORIZED, "{path}");
+        assert_eq!(op(&app, "GET", path, None).await.0, StatusCode::OK, "{path}");
+    }
+    // a refused call told nothing: the same 401 for an address that has an account and one that has not
+    // and nothing in an organisation's own database is in any answer
+    let canary = "CANARY-memory-text-3a9d51";
+    let (status, w) = memory_write(&app, &owner, canary).await;
+    assert_eq!(status, StatusCode::OK, "{w}");
+    let mut seen = Vec::new();
+    for path in routes {
+        seen.push(op(&app, "GET", path, None).await.1);
+    }
+    seen.push(availability(&app, "iso1@acme.test").await.1);
+    seen.push(availability(&app, "nobody@acme.test").await.1);
+    assert!(!serde_json::to_string(&seen).unwrap().contains(canary));
+    let _ = id;
+    // the operator module still opens no organisation database but to ask whether provisioning finished
+    let source = include_str!("../src/operator.rs");
+    assert_eq!(source.matches("for_org(").count(), 1);
+}
+
+#[tokio::test]
+async fn the_availability_route_is_on_the_ledger_without_the_address_and_does_not_exist_without_a_token() {
+    let app = host().await;
+    availability(&app, "ledger-probe@acme.test").await;
+    availability(&app, "op@corp.test").await;
+    let rows = ledger(&app, "operator.owner_availability").await;
+    assert_eq!(rows.len(), 2);
+    for r in &rows {
+        assert_eq!((r["actor_kind"].clone(), r["actor_id"].clone(), r["outcome"].clone(), r["detail"].clone()), (json!("operator"), json!("operator-api"), json!("ok"), json!("token=current")), "{r}");
+    }
+    let dump = serde_json::to_string(&ledger(&app, "operator.owner_availability").await).unwrap();
+    assert!(!dump.contains("ledger-probe") && !dump.contains("corp.test"), "the instance ledger never holds the addresses asked about: {dump}");
+    // a bad address is a refused call, on the ledger with its code
+    assert_eq!(availability(&app, "nope").await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(ledger(&app, "operator.owner_availability").await[2]["outcome"], "validation.invalid");
+    // no email at all is refused before the handler
+    assert!(op(&app, "GET", "/api/operator/v1/owner-availability", None).await.0.is_client_error());
+
+    let bare = host_with(HostedConfig::default()).await;
+    assert_eq!(common::http(&bare.router, "GET", "/api/operator/v1/owner-availability?email=a%40b.test", None, Some(TOKEN), None).await.0 .0, StatusCode::NOT_FOUND);
+}
+
+// ------------------------------------------------------------------ finding an organisation it already made
+
+async fn list_with(app: &common::TestApp, query: &str) -> Value {
+    let (status, body) = op(app, "GET", &format!("/api/operator/v1/orgs?{query}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{query}: {body}");
+    body
+}
+
+fn refs(list: &Value) -> Vec<&str> {
+    list["organisations"].as_array().unwrap().iter().map(|o| o["external_ref"].as_str().unwrap()).collect()
+}
+
+#[tokio::test]
+async fn the_list_can_be_narrowed_to_an_external_reference_and_to_an_owner_email_exactly() {
+    let app = host().await;
+    let (_, _claimed) = owned_org(&app, "find_1", "Find1@Acme.test", 3).await; // owner claimed: found by the account
+    create_org(&app, "find_2", "find2@acme.test", 3).await; // claim still open: found by the address it was sent to
+    create_org(&app, "find_10", "find10@acme.test", 3).await;
+    let all = list_with(&app, "").await;
+    assert!(all["total"].as_i64().unwrap() >= 3);
+
+    // by reference: exact, one at most
+    let one = list_with(&app, "external_ref=find_1").await;
+    assert_eq!((refs(&one), one["total"].as_i64()), (vec!["find_1"], Some(1)), "{one}");
+    assert_eq!(one["organisations"][0]["owner_claimed"], true);
+    let none = list_with(&app, "external_ref=find_").await;
+    assert_eq!((none["organisations"].as_array().unwrap().len(), none["total"].as_i64()), (0, Some(0)), "a prefix is not a match: {none}");
+    assert_eq!(list_with(&app, "external_ref=FIND_1").await["total"], 0, "case matters for a reference");
+    assert_eq!(refs(&list_with(&app, "external_ref=%20find_2%20").await), vec!["find_2"], "the reference is trimmed as on create");
+
+    // by owner: normalised like sign-up, found through the account and through an open claim
+    for q in ["owner_email=find1%40acme.test", "owner_email=FIND1%40ACME.TEST", "owner_email=%20Find1%40Acme.test%20"] {
+        assert_eq!(refs(&list_with(&app, q).await), vec!["find_1"], "{q}");
+    }
+    assert_eq!(refs(&list_with(&app, "owner_email=find2%40acme.test").await), vec!["find_2"]);
+    let none = list_with(&app, "owner_email=find%40acme.test").await;
+    assert_eq!((none["organisations"].as_array().unwrap().len(), none["total"].as_i64()), (0, Some(0)), "{none}");
+    // both: an organisation must match both
+    assert_eq!(refs(&list_with(&app, "external_ref=find_2&owner_email=find2%40acme.test").await), vec!["find_2"]);
+    assert_eq!(list_with(&app, "external_ref=find_2&owner_email=find1%40acme.test").await["total"], 0);
+    // paging applies to the matches, and `total` counts them
+    let page = list_with(&app, "owner_email=find1%40acme.test&limit=1&offset=1").await;
+    assert_eq!((page["organisations"].as_array().unwrap().len(), page["total"].as_i64()), (0, Some(1)), "{page}");
+    // what a hit carries is the ordinary summary
+    let hit = &list_with(&app, "external_ref=find_2").await["organisations"][0];
+    assert_eq!((hit["owner_email"].as_str(), hit["owner_claimed"].as_bool(), hit["plan"].as_str()), (Some("find2@acme.test"), Some(false), Some("team")), "{hit}");
+
+    // a filter that is not a usable value is refused: it is never read as "no filter", which would list everything
+    for bad in ["external_ref=", "external_ref=%20", "owner_email=", "owner_email=not-an-email", "owner_email=%E2%84%AAate%40corp.test"] {
+        let (status, body) = op(&app, "GET", &format!("/api/operator/v1/orgs?{bad}"), None).await;
+        assert_eq!((status, code(&body)), (StatusCode::BAD_REQUEST, "validation.invalid"), "{bad}: {body}");
+    }
+    // an account that owns a personal workspace of its own (no reference, no plan) finds that one, and a member who is
+    // not an owner finds nothing: the filter is about who owns an organisation
+    common::register_personal(&app.state, "plain@example.com").await;
+    let own = list_with(&app, "owner_email=plain%40example.com").await;
+    assert_eq!((own["total"].as_i64(), own["organisations"][0]["external_ref"].is_null(), own["organisations"][0]["plan"].is_null()), (Some(1), true, true), "{own}");
+    let (_, owner) = (0, person(&app, "tester@example.com", None).await);
+    let member = join(&app, &owner, "just-a-member@example.com").await;
+    assert_eq!(list_with(&app, &format!("owner_email={}", enc(&member.email))).await["total"], 0);
+}
+
+// ------------------------------------------------------------------ rotating the operator token
+
+fn two_tokens() -> HostedConfig {
+    HostedConfig { operator_token_next: Some(NEXT_TOKEN.into()), ..hosted() }
+}
+
+#[tokio::test]
+async fn while_a_token_is_being_rotated_either_opens_the_api_and_the_ledger_says_which() {
+    let app = host_with(two_tokens()).await;
+    let with = |token: &'static str, path: &'static str| {
+        let app = &app;
+        async move { common::http(&app.router, "GET", path, None, Some(token), None).await.0 }
+    };
+    let (s1, _) = with(TOKEN, "/api/operator/v1/capacity").await;
+    let (s2, _) = with(NEXT_TOKEN, "/api/operator/v1/capacity").await;
+    assert_eq!((s1, s2), (StatusCode::OK, StatusCode::OK));
+    let (s3, b3) = with(NEXT_TOKEN, "/api/operator/v1/owner-availability?email=x%40acme.test").await;
+    assert_eq!((s3, b3["available"].clone()), (StatusCode::OK, json!(true)));
+    // a call that never reaches a handler is on the ledger with its token too
+    common::http(&app.router, "GET", "/api/operator/v1/nope", None, Some(NEXT_TOKEN), None).await;
+    let rows = ledger(&app, "operator.capacity").await;
+    assert_eq!(rows.iter().map(|r| r["detail"].as_str().unwrap()).collect::<Vec<_>>(), ["token=current", "token=next"], "{rows:?}");
+    assert_eq!(ledger(&app, "operator.owner_availability").await[0]["detail"], "token=next");
+    assert_eq!(ledger(&app, "operator.call").await[0]["detail"], "token=next");
+    // the token is in no row
+    let dump: Vec<Value> = app.control().test_raw().query("SELECT * FROM audit_event").await.unwrap().take(0).unwrap();
+    let dump = serde_json::to_string(&dump).unwrap();
+    assert!(!dump.contains(TOKEN) && !dump.contains(NEXT_TOKEN), "a token is in the audit rows");
+    // anything else is refused, and a member credential still is: the second token opens only the operator routes
+    for wrong in [&NEXT_TOKEN[..NEXT_TOKEN.len() - 1], &format!("{NEXT_TOKEN}x"), &format!("{TOKEN}{NEXT_TOKEN}"), "a-wrong-token-0123456789-0123456789"] {
+        let (status, body) = common::http(&app.router, "GET", "/api/operator/v1/capacity", None, Some(wrong), None).await.0;
+        assert_eq!((status, code(&body)), (StatusCode::UNAUTHORIZED, "auth.unauthorized"), "{wrong}: {body}");
+    }
+    let (status, body) = common::http(&app.router, "GET", "/api/auth/me", None, Some(NEXT_TOKEN), None).await.0;
+    assert_eq!((status, code(&body)), (StatusCode::UNAUTHORIZED, "auth.unauthorized"), "the next token is not a member credential: {body}");
+}
+
+#[tokio::test]
+async fn the_rotation_ends_when_the_old_token_is_removed_and_the_next_one_alone_still_opens_the_api() {
+    // step 3 of the procedure: only the new token is set (as `EUNOMIA_OPERATOR_TOKEN`)
+    let app = host_with(HostedConfig { operator_token: Some(NEXT_TOKEN.into()), ..hosted() }).await;
+    assert_eq!(common::http(&app.router, "GET", "/api/operator/v1/capacity", None, Some(NEXT_TOKEN), None).await.0 .0, StatusCode::OK);
+    assert_eq!(common::http(&app.router, "GET", "/api/operator/v1/capacity", None, Some(TOKEN), None).await.0 .0, StatusCode::UNAUTHORIZED, "the old token no longer opens it");
+    assert_eq!(ledger(&app, "operator.capacity").await[0]["detail"], "token=current");
+    // and a server with only a next token set (a rotation started before the current one was configured) serves the routes
+    let only_next = host_with(HostedConfig { operator_token: None, operator_token_next: Some(NEXT_TOKEN.into()), ..hosted() }).await;
+    assert_eq!(common::http(&only_next.router, "GET", "/api/operator/v1/capacity", None, Some(NEXT_TOKEN), None).await.0 .0, StatusCode::OK);
+    assert_eq!(ledger(&only_next, "operator.capacity").await[0]["detail"], "token=next");
 }

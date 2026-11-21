@@ -3,7 +3,10 @@
 //! `status = "superseded"`. Recall leaves it out; `entities_get` still shows
 //! it, marked. Checked by the chat model whenever new facts arrive -- in a
 //! `supersede` job queued by `memory_write`, and in consolidation (which runs after every sync).
-//! Best-effort like the rest of the enrichment: a failure marks nothing.
+//! Best-effort like the rest of the enrichment: a failure marks nothing. A *refusal* is not a failure
+//! (`ai::Refusal::is_hold`: the organisation switched AI off, or used up its allowance): [`check`] returns it as
+//! the error, so the job that asked is handed back and runs when the reason passes, instead of finishing
+//! without its check.
 //!
 //! Facts are placed by when we were last told them (`asserted_at`, see docs/concepts.md "A fact's two
 //! dates"): an extracted fact by its record's date (never later than its write), a fact a person or
@@ -146,9 +149,13 @@ async fn call_llm(db: &OrgDb, settings: &Settings, owner: &RecordId, prompt: Str
 /// Compares `subject`'s `new` facts with its other live facts, marks the ones
 /// a later fact supersedes, and (if any) makes the subject's observation
 /// stale. Returns the ids marked. No-op without a chat model.
-pub async fn check(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &RecordId, new: &[RecordId]) -> Vec<RecordId> {
-    if new.is_empty() || !enabled(db, settings, owner).await {
-        return Vec::new();
+///
+/// `Err` only for a refusal from the AI decision point (AI switched off for the organisation, allowance used up),
+/// whenever it is made: before the check starts (the job's own up-front look may be seconds old) or by one of its
+/// model calls. Any other failure is logged and marks nothing, as it always did.
+pub async fn check(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &RecordId, new: &[RecordId]) -> AppResult<Vec<RecordId>> {
+    if new.is_empty() || !ready(db, settings, owner).await? {
+        return Ok(Vec::new());
     }
     // The check runs right after the write, beside that write's own background work (its embed_soon),
     // so a commit conflict is likely and says nothing about the facts: run it again. It is safe to
@@ -156,15 +163,35 @@ pub async fn check(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &
     let mut attempt = 1;
     loop {
         match run(db, settings, owner, subject, new).await {
-            Ok(marked) => return marked,
+            Ok(marked) => return Ok(marked),
+            Err(e) if crate::ai::Refusal::is_hold(e.code) => return Err(e),
             Err(e) if e.code == crate::error::ErrorCode::DbConflict && attempt < CHECK_ATTEMPTS => {
                 attempt += 1;
                 tokio::time::sleep(Duration::from_millis(50 * attempt as u64)).await;
             }
             Err(e) => {
                 tracing::warn!("supersede check failed for {}: {}", subject.to_string(), e.message);
-                return Vec::new();
+                return Ok(Vec::new());
             }
+        }
+    }
+}
+
+/// Whether the check can run now. `Ok(false)`: there is no chat model to run it with (a no-op, and not worth a job).
+/// A refusal is the error, so what asked for the check waits instead of dropping it. Anything else that stops the
+/// provider being read is "not now", as [`enabled`] reads it.
+async fn ready(db: &OrgDb, settings: &Settings, owner: &RecordId) -> AppResult<bool> {
+    if settings.embeddings_backend != "openai" {
+        return Ok(false);
+    }
+    match crate::embeddings::service::readiness(db, settings, owner, crate::ai::Purpose::Supersede).await {
+        Ok(crate::ai::Availability::Ready) => Ok(true),
+        Ok(crate::ai::Availability::NotConfigured) => Ok(false),
+        Ok(crate::ai::Availability::Refused(why)) => Err(why.into_error()),
+        Err(e) if crate::ai::Refusal::is_hold(e.code) => Err(e),
+        Err(e) => {
+            tracing::warn!("model provider unavailable for {}: {}", owner.to_string(), e.message);
+            Ok(false)
         }
     }
 }

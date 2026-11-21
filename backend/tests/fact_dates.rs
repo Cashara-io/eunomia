@@ -179,7 +179,7 @@ async fn superseded(app: &TestApp, id: &RecordId) -> bool {
 }
 
 async fn check(app: &TestApp, subject: &RecordId, new: &[RecordId]) -> Vec<RecordId> {
-    common::sys(supersede::check(&app.db().await, &app.state.settings, &app.user.id, subject, new)).await
+    common::sys(supersede::check(&app.db().await, &app.state.settings, &app.user.id, subject, new)).await.expect("the check")
 }
 
 /// The stub model proposes every pair in both directions; only the code decides which may stand.

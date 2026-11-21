@@ -82,7 +82,7 @@ async fn an_edit_made_while_the_model_decides_is_not_hidden_by_that_decision() {
         let (app, ada, new) = (app.clone(), ada.clone(), new.clone());
         tokio::spawn(async move {
             let db = app.db().await;
-            common::sys(supersede::check(&db, &app.state.settings, &app.user.id, &ada, &[new])).await
+            common::sys(supersede::check(&db, &app.state.settings, &app.user.id, &ada, &[new])).await.expect("the check")
         })
     };
     gate.entered.notified().await;

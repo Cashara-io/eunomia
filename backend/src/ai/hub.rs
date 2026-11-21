@@ -53,6 +53,17 @@ pub const SPEND_TTL: Duration = Duration::from_secs(2);
 pub const NEAR_CAP_PERCENT: i64 = 5;
 /// How long the job claim leaves an organisation's model jobs alone after a worker paused one (see `ai::hold`).
 pub const HOLD: Duration = Duration::from_secs(60);
+/// The most distinct model names counted for one organisation on one day. A model past it is counted in a row named
+/// `other` (everything but the name is kept, the cost included). Model names are free text a person chooses, so
+/// without a bound a script could make a row per call.
+pub const MAX_MODELS_PER_DAY: i64 = 20;
+/// The name the overflow is counted under.
+pub const OTHER_MODEL: &str = "other";
+/// How many months before the current one usage rows are kept by default (`AI_USAGE_RETENTION_MONTHS`).
+pub const DEFAULT_RETENTION_MONTHS: u32 = 24;
+/// The fewest months before the current one that are ever pruned into: the previous month is never pruned (the
+/// billing service reads it after the month turns), nor is the current one.
+pub const MIN_RETENTION_MONTHS: u32 = 1;
 /// Organisations kept in each cache; past it the oldest entries go.
 const CAP: usize = 10_000;
 /// Counters kept while the database refuses writes; past it the oldest are dropped and counted in the log.
@@ -119,7 +130,12 @@ pub struct UsageKey {
 
 impl UsageKey {
     fn row_id(&self) -> RecordId {
-        let parts = format!("{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}", self.org.key(), self.day, self.purpose.as_str(), self.model, self.source.as_str());
+        self.row_id_for(&self.model)
+    }
+
+    /// The row this counter has under `model` (its own, or [`OTHER_MODEL`] when the day's names are used up).
+    fn row_id_for(&self, model: &str) -> RecordId {
+        let parts = format!("{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}", self.org.key(), self.day, self.purpose.as_str(), model, self.source.as_str());
         RecordId::new("ai_usage", crate::tx::stable_key('a', &parts))
     }
 }
@@ -525,8 +541,25 @@ impl Hub {
         if batch.is_empty() {
             return Ok(0);
         }
-        let writes = batch.iter().map(|(k, c)| self.write(k, c));
-        let results = futures::future::join_all(writes).await;
+        // counters of different organisations and days are written together; those of one organisation and day one
+        // after another, so the day's bound on model names (`MAX_MODELS_PER_DAY`) sees each write that came before
+        let mut groups: HashMap<(OrgId, String), Vec<usize>> = HashMap::new();
+        for (i, (k, _)) in batch.iter().enumerate() {
+            groups.entry((k.org, k.day.clone())).or_default().push(i);
+        }
+        let batch_ref = &batch;
+        let per_group = groups.into_values().map(|indexes| async move {
+            let mut done = Vec::with_capacity(indexes.len());
+            for i in indexes {
+                done.push((i, self.write(&batch_ref[i].0, &batch_ref[i].1).await));
+            }
+            done
+        });
+        let mut slots: Vec<Option<AppResult<()>>> = batch.iter().map(|_| None).collect();
+        for (i, r) in futures::future::join_all(per_group).await.into_iter().flatten() {
+            slots[i] = Some(r);
+        }
+        let results: Vec<AppResult<()>> = slots.into_iter().map(|r| r.unwrap_or(Ok(()))).collect();
         let mut written = 0;
         let mut first_err = None;
         let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -561,10 +594,13 @@ impl Hub {
 
     async fn write(&self, key: &UsageKey, c: &Counters) -> AppResult<()> {
         let id = key.row_id();
+        let other = key.row_id_for(OTHER_MODEL);
         crate::tx::with_retry(|| async {
             q::USAGE_ADD
                 .on(&self.control)
                 .bind(("id", id.clone()))
+                .bind(("other", other.clone()))
+                .bind(("max", MAX_MODELS_PER_DAY))
                 .bind(("org", key.org.record()))
                 .bind(("day", key.day.clone()))
                 .bind(("month", key.month.clone()))
@@ -617,6 +653,36 @@ impl Hub {
         }
         self.forget_config(org);
     }
+}
+
+impl Hub {
+    // ------------------------------------------------------------------ retention
+
+    /// Deletes the usage rows of months older than `months` before the current one (`months` is raised to
+    /// [`MIN_RETENTION_MONTHS`]; `0` keeps everything). The current month and the one before it are never touched:
+    /// the allowance reads the current month, and the billing service reads the last one after the month turns.
+    /// Returns the month rows before which were deleted, or `None` when nothing was asked to go.
+    pub async fn prune_usage(&self, months: u32) -> AppResult<Option<String>> {
+        if months == 0 {
+            return Ok(None);
+        }
+        let before = retention_cutoff(&self.month(), months.max(MIN_RETENTION_MONTHS));
+        q::USAGE_PRUNE.on(&self.control).bind(("before", before.clone())).await?.check()?;
+        Ok(Some(before))
+    }
+
+    /// [`Self::prune_usage`] for `AI_USAGE_RETENTION_MONTHS` (default [`DEFAULT_RETENTION_MONTHS`]).
+    pub async fn prune_usage_default(&self) -> AppResult<Option<String>> {
+        let months = std::env::var("AI_USAGE_RETENTION_MONTHS").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(DEFAULT_RETENTION_MONTHS);
+        self.prune_usage(months).await
+    }
+}
+
+/// The month `months` before `current` (`2026-11`, 24 -> `2024-11`): rows of an earlier month are past retention.
+pub fn retention_cutoff(current: &str, months: u32) -> String {
+    let (y, m) = current.split_once('-').and_then(|(y, m)| Some((y.parse::<i64>().ok()?, m.parse::<i64>().ok()?))).unwrap_or((1970, 1));
+    let index = y * 12 + (m - 1) - i64::from(months);
+    format!("{:04}-{:02}", index.div_euclid(12), index.rem_euclid(12) + 1)
 }
 
 /// The calendar month a moment falls in, UTC: `2026-11`.

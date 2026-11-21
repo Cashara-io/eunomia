@@ -65,7 +65,7 @@ impl Modify for Security {
         components.add_security_scheme("cookie", SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::new(SESSION_COOKIE))));
         components.add_security_scheme(
             "operator",
-            SecurityScheme::Http(HttpBuilder::new().scheme(HttpAuthScheme::Bearer).description(Some("The operator token (`EUNOMIA_OPERATOR_TOKEN`), for the hosted service's billing system. Not an API token.")).build()),
+            SecurityScheme::Http(HttpBuilder::new().scheme(HttpAuthScheme::Bearer).description(Some("The operator token (`EUNOMIA_OPERATOR_TOKEN`, or `EUNOMIA_OPERATOR_TOKEN_NEXT` while it is being rotated), for the hosted service's billing system. Not an API token.")).build()),
         );
         components.add_security_scheme(
             "bearer",

@@ -119,6 +119,8 @@ services:
       # a hosted service: the billing service's operator API, a cap on organisations and where owners pay (docs/deployment.md);
       # all empty on a self-hosted install, which then has no operator routes and no plans
       - EUNOMIA_OPERATOR_TOKEN=${EUNOMIA_OPERATOR_TOKEN:-}
+      # a second token, valid beside the first while it is rotated (docs/deployment.md, "Rotating the operator token")
+      - EUNOMIA_OPERATOR_TOKEN_NEXT=${EUNOMIA_OPERATOR_TOKEN_NEXT:-}
       - EUNOMIA_MAX_ORGS=${EUNOMIA_MAX_ORGS:-}
       - EUNOMIA_BILLING_URL=${EUNOMIA_BILLING_URL:-}
       - RATE_LIMIT_OPERATOR_PER_MIN=${RATE_LIMIT_OPERATOR_PER_MIN:-300}
@@ -128,6 +130,7 @@ services:
       - EUNOMIA_ALLOW_CONNECTOR_BASE_URL=${EUNOMIA_ALLOW_CONNECTOR_BASE_URL:-0}
       - AUDIT_RETENTION_DAYS=${AUDIT_RETENTION_DAYS:-365}
       - TOOL_USAGE_RETENTION_DAYS=${TOOL_USAGE_RETENTION_DAYS:-90}
+      - AI_USAGE_RETENTION_MONTHS=${AI_USAGE_RETENTION_MONTHS:-24}
       - SESSION_RETENTION_DAYS=${SESSION_RETENTION_DAYS:-7}
       - CHANGE_LOG_RETENTION_DAYS=${CHANGE_LOG_RETENTION_DAYS:-90}
       - CHANGE_LOG_MAX_ROWS=${CHANGE_LOG_MAX_ROWS:-100000}

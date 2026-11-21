@@ -211,8 +211,8 @@ pub async fn consolidate_subject(
     // Facts new since the last consolidation may make earlier ones untrue:
     // those drop out, and the belief is rebuilt without them.
     let new_ids: Vec<RecordId> = raw_rows.iter().filter(|r| !seen.contains(&r.id.to_string())).map(|r| r.id.clone()).collect();
-    let superseded: HashSet<String> =
-        super::supersede::check(db, settings, owner, subject_id, &new_ids).await.iter().map(|r| r.to_string()).collect();
+    // a refusal (AI switched off, allowance used up) is the error: the consolidation waits with its check
+    let superseded: HashSet<String> = super::supersede::check(db, settings, owner, subject_id, &new_ids).await?.iter().map(|r| r.to_string()).collect();
     let raw: Vec<(String, String)> = raw_rows
         .iter()
         .filter(|r| !superseded.contains(&r.id.to_string()))

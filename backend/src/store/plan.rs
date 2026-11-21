@@ -12,6 +12,9 @@ use super::ControlStmt;
 pub const CONTROL_ALL: &[&ControlStmt] = &[
     &GET,
     &LIST,
+    &LIST_COUNT,
+    &OWNED_BY_EMAIL,
+    &OPEN_OWNER_CLAIM_FOR,
     &CREATE_ORG,
     &UPDATE,
     &SUSPEND,
@@ -43,10 +46,42 @@ pub const GET: ControlStmt = ControlStmt::new(
     "SELECT id, name, created_at, plan, seat_limit, status, suspended_at, suspended_reason, trial_ends_at, external_ref FROM org WHERE id = $org",
 );
 
-/// One page of organisations, oldest first.
+/// The filters of the operator's list, as a SurrealQL condition: `$ref` (an exact `external_ref`, NONE: any) and, when
+/// `$by_owner`, only the organisations in `$orgs` (those an owner email stands behind: see [`OWNED_BY_EMAIL`]).
+macro_rules! list_filters {
+    () => {
+        "($ref = NONE OR external_ref = $ref) AND ($by_owner = false OR id IN $orgs)"
+    };
+}
+
+/// One page of organisations, oldest first, narrowed by [`list_filters`].
 pub const LIST: ControlStmt = ControlStmt::new(
     "plan.list",
-    "SELECT id, name, created_at, plan, seat_limit, status, suspended_at, suspended_reason, trial_ends_at, external_ref FROM org ORDER BY created_at, id LIMIT $limit START $start",
+    concat!(
+        "SELECT id, name, created_at, plan, seat_limit, status, suspended_at, suspended_reason, trial_ends_at, external_ref FROM org WHERE ",
+        list_filters!(),
+        " ORDER BY created_at, id LIMIT $limit START $start"
+    ),
+);
+
+/// How many organisations [`LIST`] would return with no paging.
+pub const LIST_COUNT: ControlStmt = ControlStmt::new("plan.list_count", concat!("SELECT count() AS count FROM org WHERE ", list_filters!(), " GROUP ALL"));
+
+/// The organisations `$email` (normalised) is the owner of, or has an owner claim for that is not accepted or withdrawn
+/// (expired or not: a resend revives it): the same two places the list's `owner_email` is read from.
+pub const OWNED_BY_EMAIL: ControlStmt = ControlStmt::new(
+    "plan.owned_by_email",
+    "SELECT VALUE org FROM membership WHERE role = 'owner' AND user.email_lc = $email; \
+     SELECT VALUE org FROM org_invitation WHERE role = 'owner' AND email = $email AND accepted_at IS NONE AND revoked_at IS NONE;",
+);
+
+/// An owner claim for `$email` that is still open (not accepted, not withdrawn, expired or not) in an organisation
+/// other than `$org` (NONE: any). While one exists the address cannot be given to a second organisation: the first
+/// claim to be accepted makes the account, and the other could then never be accepted.
+pub const OPEN_OWNER_CLAIM_FOR: ControlStmt = ControlStmt::new(
+    "plan.open_owner_claim_for",
+    "SELECT org FROM org_invitation WHERE role = 'owner' AND email = $email AND accepted_at IS NONE AND revoked_at IS NONE \
+     AND ($org = NONE OR org != $org) LIMIT 1",
 );
 
 /// Makes the organisation record, once: a second call with the same id (a retried webhook, two replicas) leaves

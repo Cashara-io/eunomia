@@ -121,7 +121,7 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
         .merge(routers::oauth::router())
         .merge(routers::oidc::router());
     // the operator API exists only on a server that has an operator token (a hosted service)
-    if state.settings.hosted.operator_token.is_some() {
+    if state.settings.hosted.operator_enabled() {
         api = api.merge(routers::operator::router());
     }
 

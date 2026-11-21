@@ -16,7 +16,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use axum::http::StatusCode;
-use eunomia_backend::ai::{self, Purpose, Refusal};
+use eunomia_backend::ai::hub::{self, Counters};
+use eunomia_backend::ai::{self, KeySource, Purpose, Refusal};
+use eunomia_backend::entities::supersede;
 use eunomia_backend::config::Settings;
 use eunomia_backend::jobs::worker::{self, Registry};
 use eunomia_backend::jobs::{self, NewJob, WorkerConfig};
@@ -179,7 +181,7 @@ async fn host() -> Host {
     let stub = stub().await;
     let settings = Settings {
         mail: MailBackend::Capture,
-        hosted: HostedConfig { operator_token: Some(TOKEN.into()), max_orgs: None, billing_url: None },
+        hosted: HostedConfig { operator_token: Some(TOKEN.into()), ..Default::default() },
         openai_api_key: Some(SERVER_KEY.into()),
         openai_base_url: stub.base.clone(),
         openai_chat_model: "gpt-4o-mini".into(),
@@ -772,7 +774,7 @@ async fn every_model_entry_point(h: &Host, p: &P) -> Vec<(&'static str, String)>
     let subject = eunomia_backend::rid::parse(&ada).unwrap();
     out.push(("consolidate", common::sys(consolidate::consolidate_subject(&db, settings(&h.app), &u.id, &subject, None)).await.err().map(|e| e.code.as_str().to_string()).unwrap_or_default()));
     let memory = eunomia_backend::rid::parse(w.1["memory"]["id"].as_str().unwrap()).unwrap();
-    out.push(("supersede", format!("{}", common::sys(supersede::check(&db, settings(&h.app), &u.id, &subject, &[memory])).await.len())));
+    out.push(("supersede", common::sys(supersede::check(&db, settings(&h.app), &u.id, &subject, &[memory])).await.map(|marked| marked.len().to_string()).unwrap_or_else(|e| e.code.as_str().to_string())));
     out.push(("reflect", tool("reflect", json!({ "query": "Ada tea" })).await.1["mode"].as_str().unwrap_or("model").to_string()));
     out.push(("ontology_suggest", tool("ontology_suggest", json!({})).await.1["mode"].as_str().unwrap_or("?").to_string()));
     out.push(("ontology_coverage", tool("ontology_coverage", json!({ "question": "lead time of oat milk" })).await.1["mode"].as_str().unwrap_or("?").to_string()));
@@ -824,7 +826,8 @@ async fn with_ai_switched_off_no_call_reaches_any_provider_with_any_key_and_feat
     assert_eq!(by("reflect"), "recall_only");
     assert_eq!(by("ontology_suggest"), "profile_only");
     assert_eq!(by("ontology_coverage"), "words");
-    assert_eq!(by("supersede"), "0");
+    // a refusal is the check's error (the job that asked waits for it), not an empty list
+    assert_eq!(by("supersede"), "ai.disabled");
 
     // switched back on: the provider is called again
     let (status, _) = call(&h.app, &a_owner.cookie, "PUT", "/api/org/ai/enabled", Some(json!({ "enabled": true }))).await;
@@ -1141,4 +1144,283 @@ async fn nothing_configured_behaves_as_it_always_did() {
     let unconfigured = common::TestApp::new().await;
     let r = ai::authorize(&unconfigured.db().await, &unconfigured.state.settings, &unconfigured.user.id, Purpose::Chat).await.unwrap();
     assert_eq!(r.err(), Some(Refusal::NotConfigured));
+}
+
+// ------------------------------------------------------------------ a refused supersede check waits
+
+/// Writes two facts about Ada (the stub's embeddings are all alike, so the old one is a candidate for the new one)
+/// and returns the subject, the old fact and the new fact.
+async fn two_facts(h: &Host, u: &User) -> (surrealdb::types::RecordId, surrealdb::types::RecordId, surrealdb::types::RecordId) {
+    let scopes: Vec<String> = eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect();
+    let token = models_user::create_api_token_with(&h.app.state.control, &u.id, "t", &scopes, None, None).await.unwrap().token;
+    let mut ids = Vec::new();
+    let mut subject = String::new();
+    for text in ["Ada works at Acme", "Ada works at Beta now"] {
+        let (status, w) = common::http(&h.app.router, "POST", "/api/tools/memory_write", Some(json!({ "subject_name": "Ada", "subject_kind": "person", "text": text })), Some(&token), None).await.0;
+        assert_eq!(status, StatusCode::OK, "{w}");
+        subject = w["entity"]["id"].as_str().unwrap().to_string();
+        ids.push(eunomia_backend::rid::parse(w["memory"]["id"].as_str().unwrap()).unwrap());
+    }
+    (eunomia_backend::rid::parse(&subject).unwrap(), ids.remove(0), ids.remove(0))
+}
+
+#[tokio::test]
+async fn a_supersede_check_refused_after_the_jobs_own_look_is_handed_back_and_runs_when_the_allowance_has_room() {
+    let h = host().await;
+    h.app.state.pool.ai().set_hold(Duration::from_millis(100));
+    // 10,000 micro-dollars of allowance with 9,990 spent: the job's up-front look (is there room?) says yes, and the
+    // model call's reservation (its worst case) does not fit
+    let (a_id, a_owner) = owned_org(&h.app, "ss_a", "ssa@acme.test", 3, Some(0.01)).await;
+    let a = user_of(&h.app, &a_owner).await;
+    let (subject, _old, new) = two_facts(&h, &a).await;
+    tokio::time::sleep(Duration::from_millis(800)).await; // the writes' own background embedding finishes
+    spend(&h.app, &a_id, 9_990).await;
+    tokio::time::sleep(Duration::from_millis(2_300)).await; // the process re-reads the month's spend after `SPEND_TTL` (2 s)
+    h.stub.clear();
+    let db = db_of(&h.app, &a).await;
+
+    // the check itself: the refusal is the error (it used to be an empty list, and the job finished without its check)
+    let err = common::sys(supersede::check(&db, settings(&h.app), &a.id, &subject, std::slice::from_ref(&new))).await.expect_err("a refused check is an error");
+    assert_eq!(err.code.as_str(), "ai.allowance_used", "{}", err.message);
+    assert_eq!(h.stub.count("/chat/completions"), 0, "no chat request was made");
+
+    // the job: handed back, no attempt used, nothing failed
+    let (stop, stopped) = tokio::sync::watch::channel(false);
+    let w = tokio::spawn(worker::run(h.app.state.clone(), jobs::handlers::registry(), worker_cfg("w-ss"), stopped));
+    let job = jobs::handlers::supersede_job(a.org, &a.id, &subject, &new);
+    let key = job.key.clone();
+    jobs::enqueue(&h.app.state.control, job).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    let j = job_row(&h.app, &key).await;
+    assert_eq!((j["status"].as_str(), j["attempts"].as_i64()), (Some("ready"), Some(0)), "waiting, not done and not failed: {j}");
+    assert!(j["last_error_code"].is_null(), "{j}");
+    assert_eq!(h.stub.count("/chat/completions"), 0);
+
+    // the allowance is raised: the same job runs and the check is made
+    assert_eq!(op(&h.app, "PATCH", &format!("/api/operator/v1/orgs/{a_id}"), Some(json!({ "ai_allowance_usd": 5.0 }))).await.0, StatusCode::OK);
+    let stub = h.stub.clone();
+    eventually("the check to reach the provider", move || stub.count("/chat/completions") >= 1).await;
+    let start = Instant::now();
+    loop {
+        let j = job_row(&h.app, &key).await;
+        if j["status"] == "done" {
+            assert!(j["last_error_code"].is_null(), "{j}");
+            break;
+        }
+        assert!(start.elapsed() < Duration::from_secs(10), "{j}");
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    stop.send(true).unwrap();
+    let _ = w.await;
+}
+
+#[tokio::test]
+async fn a_supersede_check_for_an_organisation_with_ai_switched_off_waits_and_runs_when_it_is_on_again() {
+    let h = host().await;
+    h.app.state.pool.ai().set_hold(Duration::from_millis(100));
+    let (_, owner) = owned_org(&h.app, "ss_b", "ssb@acme.test", 3, None).await;
+    let a = user_of(&h.app, &owner).await;
+    let (subject, _old, new) = two_facts(&h, &a).await;
+    tokio::time::sleep(Duration::from_millis(800)).await; // the writes' own background embedding finishes
+    h.stub.clear();
+    assert_eq!(call(&h.app, &owner.cookie, "PUT", "/api/org/ai/enabled", Some(json!({ "enabled": false }))).await.0, StatusCode::OK);
+    let db = db_of(&h.app, &a).await;
+    // switched off after the job was queued: the check says so instead of returning "nothing superseded"
+    let err = common::sys(supersede::check(&db, settings(&h.app), &a.id, &subject, std::slice::from_ref(&new))).await.expect_err("refused");
+    assert_eq!(err.code.as_str(), "ai.disabled", "{}", err.message);
+    // consolidation, which runs the same check first, waits with it
+    let err = common::sys(eunomia_backend::entities::consolidate::consolidate_subject(&db, settings(&h.app), &a.id, &subject, None)).await.expect_err("refused");
+    assert_eq!(err.code.as_str(), "ai.disabled", "{}", err.message);
+    assert_eq!(h.stub.total(), 0, "nothing reached a provider");
+
+    let (stop, stopped) = tokio::sync::watch::channel(false);
+    let w = tokio::spawn(worker::run(h.app.state.clone(), jobs::handlers::registry(), worker_cfg("w-ss2"), stopped));
+    let job = jobs::handlers::supersede_job(a.org, &a.id, &subject, &new);
+    let key = job.key.clone();
+    jobs::enqueue(&h.app.state.control, job).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    let j = job_row(&h.app, &key).await;
+    assert_eq!((j["status"].as_str(), j["attempts"].as_i64()), (Some("ready"), Some(0)), "{j}");
+    assert_eq!(call(&h.app, &owner.cookie, "PUT", "/api/org/ai/enabled", Some(json!({ "enabled": true }))).await.0, StatusCode::OK);
+    let stub = h.stub.clone();
+    eventually("the check to reach the provider once AI is on", move || stub.count("/chat/completions") >= 1).await;
+    stop.send(true).unwrap();
+    let _ = w.await;
+}
+
+// ------------------------------------------------------------------ retention and the bound on model names
+
+fn months_ago(n: u32) -> String {
+    hub::month_of(chrono::Utc::now() - chrono::Months::new(n))
+}
+
+/// One counter row for `org` in `month`, written directly.
+async fn seed_month(app: &common::TestApp, org: &str, month: &str, cost: i64) {
+    let o = eunomia_backend::pool::OrgId::parse(org).unwrap();
+    app.control()
+        .test_raw()
+        .query("UPSERT $id SET org = $o, day = $d, month = $m, purpose = 'chat', model = 'seed', source = 'server', calls = 1, input_tokens = 0, output_tokens = 0, estimated_calls = 0, cost_micros = $c")
+        .bind(("id", surrealdb::types::RecordId::new("ai_usage", format!("ret_{org}_{month}"))))
+        .bind(("o", o.record()))
+        .bind(("d", format!("{month}-01")))
+        .bind(("m", month.to_string()))
+        .bind(("c", cost))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+}
+
+async fn months_present(app: &common::TestApp, org: &str) -> Vec<String> {
+    let o = eunomia_backend::pool::OrgId::parse(org).unwrap();
+    let rows: Vec<Value> = app.control().test_raw().query("SELECT month FROM ai_usage WHERE org = $o ORDER BY month").bind(("o", o.record())).await.unwrap().take(0).unwrap();
+    rows.iter().map(|r| r["month"].as_str().unwrap().to_string()).collect()
+}
+
+#[test]
+fn the_retention_cutoff_counts_whole_months_across_years() {
+    assert_eq!(hub::retention_cutoff("2026-11", 24), "2024-11");
+    assert_eq!(hub::retention_cutoff("2026-11", 1), "2026-10");
+    assert_eq!(hub::retention_cutoff("2026-01", 1), "2025-12");
+    assert_eq!(hub::retention_cutoff("2026-01", 13), "2024-12");
+    assert_eq!(hub::retention_cutoff("2026-03", 15), "2024-12");
+}
+
+#[tokio::test]
+async fn pruning_usage_never_touches_the_current_or_previous_month_and_keeps_what_is_inside_the_window() {
+    let h = host().await;
+    let (a_id, _) = owned_org(&h.app, "ret_a", "reta@acme.test", 3, None).await;
+    let hub = h.app.state.pool.ai().clone();
+    let org = eunomia_backend::pool::OrgId::parse(&a_id).unwrap();
+    let ages = [0u32, 1, 2, 5, 23, 24, 25, 40];
+    for n in ages {
+        seed_month(&h.app, &a_id, &months_ago(n), 100 + i64::from(n)).await;
+    }
+    assert_eq!(months_present(&h.app, &a_id).await.len(), ages.len());
+    let (current, previous) = (months_ago(0), months_ago(1));
+    let (cur_before, prev_before) = (hub.month_spend(&org, &current).await.unwrap(), hub.month_spend(&org, &previous).await.unwrap());
+    assert_eq!((cur_before, prev_before), (100, 101));
+    let kept = |ages: &[u32]| {
+        let mut months: Vec<String> = ages.iter().map(|n| months_ago(*n)).collect();
+        months.sort();
+        months
+    };
+
+    // 0 keeps everything, as for the tool-usage counters
+    assert_eq!(hub.prune_usage(0).await.unwrap(), None);
+    assert_eq!(months_present(&h.app, &a_id).await.len(), ages.len());
+
+    // the default window: the month 24 months back is kept, the ones before it go
+    assert_eq!(hub.prune_usage(hub::DEFAULT_RETENTION_MONTHS).await.unwrap(), Some(months_ago(24)));
+    assert_eq!(months_present(&h.app, &a_id).await, kept(&[24, 23, 5, 2, 1, 0]));
+
+    // the narrowest window: the current and the previous month are still there
+    assert_eq!(hub.prune_usage(1).await.unwrap(), Some(months_ago(1)));
+    assert_eq!(months_present(&h.app, &a_id).await, kept(&[1, 0]));
+    // asking for less is no different: 1 is the least there is (0 means keep everything), so the two months stay
+    assert_eq!(hub.prune_usage(1).await.unwrap(), Some(months_ago(1)));
+    assert_eq!((hub.month_spend(&org, &current).await.unwrap(), hub.month_spend(&org, &previous).await.unwrap()), (cur_before, prev_before), "the figures the operator reads did not move");
+
+    // and through the scheduled job, which prunes by the default window
+    seed_month(&h.app, &a_id, &months_ago(30), 5).await;
+    let (_, b_owner) = owned_org(&h.app, "ret_b", "retb@acme.test", 3, None).await;
+    let u = user_of(&h.app, &b_owner).await;
+    let (stop, stopped) = tokio::sync::watch::channel(false);
+    let w = tokio::spawn(worker::run(h.app.state.clone(), jobs::handlers::registry(), worker_cfg("w-ret"), stopped));
+    jobs::enqueue(&h.app.state.control, NewJob::new("prune_auth", u.id.clone(), "ret-prune")).await.unwrap();
+    let start = Instant::now();
+    loop {
+        let j = job_row(&h.app, "ret-prune").await;
+        if j["status"] == "done" {
+            break;
+        }
+        assert!(start.elapsed() < Duration::from_secs(15), "{j}");
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert_eq!(months_present(&h.app, &a_id).await, kept(&[1, 0]), "the 30-month-old row went; the two newest stayed");
+    stop.send(true).unwrap();
+    let _ = w.await;
+}
+
+#[tokio::test]
+async fn when_the_month_turns_the_month_that_just_ended_is_kept() {
+    let h = host().await;
+    let (a_id, _) = owned_org(&h.app, "ret_c", "retc@acme.test", 3, None).await;
+    let hub = h.app.state.pool.ai().clone();
+    for n in 0..3 {
+        seed_month(&h.app, &a_id, &months_ago(n), 10).await;
+    }
+    // the month turns: "this month" is the real month plus one, and the real month is the one that just ended
+    hub.set_clock(Some(chrono::Utc::now() + chrono::Months::new(1)));
+    assert_eq!(hub.prune_usage(1).await.unwrap(), Some(months_ago(0)));
+    hub.set_clock(None);
+    assert_eq!(months_present(&h.app, &a_id).await, vec![months_ago(0)], "the month that just ended stays; the two before it go");
+}
+
+#[tokio::test]
+async fn the_models_counted_for_one_organisation_on_one_day_are_bounded_and_the_overflow_keeps_every_total() {
+    let h = host().await;
+    let (a_id, _) = owned_org(&h.app, "fold_a", "folda@acme.test", 3, None).await;
+    let (b_id, _) = owned_org(&h.app, "fold_b", "foldb@acme.test", 3, None).await;
+    let hub = h.app.state.pool.ai().clone();
+    let (a, b) = (eunomia_backend::pool::OrgId::parse(&a_id).unwrap(), eunomia_backend::pool::OrgId::parse(&b_id).unwrap());
+    let used = Counters { calls: 1, input: 10, output: 5, estimated: 1, cost: 100 };
+    let max = hub::MAX_MODELS_PER_DAY;
+    // a script sending a new model name with every call, in several flushes: far more names than the day may hold
+    let mut sent = Counters::default();
+    for round in 0..4 {
+        for i in 0..15 {
+            hub.record(a, Purpose::Chat, &format!("random-{round}-{i}"), KeySource::Server, used, None);
+            sent.calls += used.calls;
+            sent.input += used.input;
+            sent.output += used.output;
+            sent.estimated += used.estimated;
+            sent.cost += used.cost;
+        }
+        // a name that is already counted keeps its own row after the day is full, on another purpose too
+        hub.record(a, Purpose::Chat, "random-0-0", KeySource::Server, used, None);
+        hub.record(a, Purpose::Extraction, "random-0-0", KeySource::User, used, None);
+        sent.calls += 2 * used.calls;
+        sent.input += 2 * used.input;
+        sent.output += 2 * used.output;
+        sent.estimated += 2 * used.estimated;
+        sent.cost += 2 * used.cost;
+        settle(&h.app).await;
+    }
+    // another organisation on the same day has its own allowance of names
+    hub.record(b, Purpose::Chat, "gpt-4o-mini", KeySource::Server, used, None);
+    settle(&h.app).await;
+
+    let rows = |org: &str| {
+        let o = eunomia_backend::pool::OrgId::parse(org).unwrap().record();
+        let app = &h.app;
+        async move {
+            let rows: Vec<Value> = app.control().test_raw().query("SELECT model, calls, input_tokens, output_tokens, estimated_calls, cost_micros FROM ai_usage WHERE org = $o").bind(("o", o)).await.unwrap().take(0).unwrap();
+            rows
+        }
+    };
+    let rows_a = rows(&a_id).await;
+    let names: std::collections::BTreeSet<&str> = rows_a.iter().map(|r| r["model"].as_str().unwrap()).collect();
+    assert_eq!(names.len() as i64, max + 1, "{max} names and `other`: {names:?}");
+    assert!(names.contains(hub::OTHER_MODEL));
+    let other = rows_a.iter().find(|r| r["model"] == hub::OTHER_MODEL).unwrap();
+    assert_eq!(other["calls"].as_i64(), Some(4 * 15 - max), "every call past the first {max} names is in `other`: {other}");
+    // nothing is lost in the fold: calls, tokens and cost add up to what was recorded
+    let sum = |k: &str| rows_a.iter().map(|r| r[k].as_i64().unwrap()).sum::<i64>();
+    assert_eq!((sum("calls"), sum("input_tokens"), sum("output_tokens"), sum("estimated_calls"), sum("cost_micros")), (sent.calls, sent.input, sent.output, sent.estimated, sent.cost), "{rows_a:?}");
+    // the allowance and the operator read the same total as before the fold
+    let summary_a = summary(&h.app, &a_id).await;
+    let server_cost = (sent.cost - 4 * used.cost) as f64;
+    assert!((org_micros(&summary_a) - server_cost).abs() < 0.5, "server-key cost only (a person's own key is free): {} vs {server_cost}", org_micros(&summary_a));
+    let kept = rows_a.iter().find(|r| r["model"] == "random-0-0").unwrap();
+    assert!(kept["calls"].as_i64().unwrap() >= 4, "the name that was counted first still has its own row: {kept}");
+    assert_eq!(rows(&b_id).await.len(), 1, "the other organisation's day is its own");
+
+    // the next day starts with room again
+    hub.set_clock(Some(chrono::Utc::now() + chrono::Duration::days(1)));
+    hub.record(a, Purpose::Chat, "a-new-day", KeySource::Server, used, None);
+    settle(&h.app).await;
+    hub.set_clock(None);
+    let rows_a = rows(&a_id).await;
+    assert!(rows_a.iter().any(|r| r["model"] == "a-new-day"), "a new day counts a new name under its own name");
 }

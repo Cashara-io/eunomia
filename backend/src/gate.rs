@@ -322,40 +322,43 @@ pub async fn gate(State(g): State<Gate>, mut req: Request, next: Next) -> Respon
     crate::ontology::activity::ACTOR_NAME.scope(actor_name, authz::with_caller(caller, next.run(req))).await
 }
 
-/// Set by the gate on a request that presented the operator token: the operator routes only answer to it.
+/// Set by the gate on a request that presented an operator token: the operator routes only answer to it. Says which
+/// of the two tokens (`EUNOMIA_OPERATOR_TOKEN`, `EUNOMIA_OPERATOR_TOKEN_NEXT`) it was.
 #[derive(Debug, Clone, Copy)]
-pub struct OperatorCall;
+pub struct OperatorCall(pub crate::plan::TokenSlot);
 
-/// The operator API's gate. With no `EUNOMIA_OPERATOR_TOKEN` the routes are not mounted and this lets the
-/// request fall through to the 404. Otherwise the bearer token must be the operator token (compared in
-/// constant time); a session cookie, an API token or an OAuth token is just a wrong token. A wrong one is
-/// throttled per client address like any failed credential and leaves an `auth.failed` row holding only a
-/// hash of what was presented, never the token itself.
+/// The operator API's gate. With no operator token set the routes are not mounted and this lets the request fall
+/// through to the 404. Otherwise the bearer token must be one of the two operator tokens (each compared in constant
+/// time); a session cookie, an API token or an OAuth token is just a wrong token. A wrong one is throttled per client
+/// address like any failed credential and leaves an `auth.failed` row holding only a hash of what was presented,
+/// never the token itself. Which token was right goes on the ledger row of the call (`token=current` or `token=next`).
 async fn operator_gate(g: &Gate, mut req: Request, next: Next) -> Response {
-    let Some(configured) = g.state.settings.hosted.operator_token.as_deref() else {
+    let hosted = &g.state.settings.hosted;
+    if !hosted.operator_enabled() {
         return next.run(req).await;
-    };
+    }
     let ip = client_ip(&req, &g.trusted());
     let target = format!("{} {}", req.method(), req.uri().path());
-    if !auth::bearer_token(req.headers()).is_some_and(|given| crate::plan::operator_token_matches(configured, given)) {
+    let Some(slot) = auth::bearer_token(req.headers()).and_then(|given| hosted.match_operator_token(given)) else {
         if let Err(wait) = g.limiter.check(&format!("auth:{ip}"), g.limits.auth_per_min) {
             return rate_limited(wait);
         }
         audit_auth_failed(g, req.headers(), &target, ErrorCode::AuthUnauthorized).await;
         return AppError::unauthorized("Not authenticated.").into_response();
-    }
+    };
     if let Err(wait) = g.limiter.check("operator-api", g.limits.operator_per_min) {
         return rate_limited(wait);
     }
-    req.extensions_mut().insert(OperatorCall);
+    req.extensions_mut().insert(OperatorCall(slot));
     // every call is on the ledger: a handler writes its own row; one that never reached a handler (a body that
     // does not parse, an unknown path or method) gets this one
     let audited = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let resp = crate::operator::AUDITED.scope(audited.clone(), next.run(req)).await;
+    let resp = crate::operator::TOKEN_SLOT.scope(slot, crate::operator::AUDITED.scope(audited.clone(), next.run(req))).await;
     if !audited.load(std::sync::atomic::Ordering::SeqCst) {
         let outcome = format!("http.{}", resp.status().as_u16());
         let actor = crate::authz::Actor { kind: crate::operator::ACTOR_KIND, id: crate::operator::ACTOR_ID.to_string() };
-        audit::record(&g.state.control, Event { user: None, actor: &actor, action: "operator.call", target: &target, outcome: &outcome, detail: "" }).await;
+        let detail = format!("token={}", slot.as_str());
+        audit::record(&g.state.control, Event { user: None, actor: &actor, action: "operator.call", target: &target, outcome: &outcome, detail: &detail }).await;
     }
     resp
 }

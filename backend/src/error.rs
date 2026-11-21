@@ -51,6 +51,7 @@ pub enum ErrorCode {
     OperatorReferenceReused,
     OperatorSeatsInUse,
     OperatorOwnerClaimed,
+    OperatorOwnerClaimPending,
     RateLimited,
     TenantDenied,
     TenantNotFound,
@@ -138,6 +139,7 @@ impl ErrorCode {
         ErrorCode::OperatorReferenceReused,
         ErrorCode::OperatorSeatsInUse,
         ErrorCode::OperatorOwnerClaimed,
+        ErrorCode::OperatorOwnerClaimPending,
         ErrorCode::RateLimited,
         ErrorCode::TenantDenied,
         ErrorCode::TenantNotFound,
@@ -225,6 +227,7 @@ impl ErrorCode {
             ErrorCode::OperatorReferenceReused => "operator.reference_reused",
             ErrorCode::OperatorSeatsInUse => "operator.seats_in_use",
             ErrorCode::OperatorOwnerClaimed => "operator.owner_claimed",
+            ErrorCode::OperatorOwnerClaimPending => "operator.owner_claim_pending",
             ErrorCode::RateLimited => "rate.limited",
             ErrorCode::TenantDenied => "tenant.denied",
             ErrorCode::TenantNotFound => "tenant.not_found",
@@ -298,7 +301,7 @@ impl ErrorCode {
             ErrorCode::InvitationNotFound => StatusCode::NOT_FOUND,
             ErrorCode::InvitationEmailMismatch => StatusCode::FORBIDDEN,
             ErrorCode::InvitationOtherOrg | ErrorCode::InvitationExists | ErrorCode::OrgSeatLimit | ErrorCode::OperatorOwnerInOtherOrg | ErrorCode::OperatorAtCapacity | ErrorCode::OperatorReferenceReused
-            | ErrorCode::OperatorSeatsInUse | ErrorCode::OperatorOwnerClaimed => StatusCode::CONFLICT,
+            | ErrorCode::OperatorSeatsInUse | ErrorCode::OperatorOwnerClaimed | ErrorCode::OperatorOwnerClaimPending => StatusCode::CONFLICT,
             ErrorCode::TenantProvisioningDisabled => StatusCode::NOT_IMPLEMENTED,
             ErrorCode::AuthResetInvalid => StatusCode::BAD_REQUEST,
             ErrorCode::AuthMfaUnreadable | ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision
@@ -505,7 +508,7 @@ mod tests {
                 | ErrorCode::AuthMfaRequired | ErrorCode::AuthMfaInvalid | ErrorCode::AuthMfaChallengeExpired | ErrorCode::AuthStepUpRequired | ErrorCode::AuthMfaUnreadable
                 | ErrorCode::InvitationNotFound | ErrorCode::InvitationExpired | ErrorCode::InvitationEmailMismatch | ErrorCode::InvitationOtherOrg | ErrorCode::InvitationExists | ErrorCode::OrgProtectedMember
                 | ErrorCode::OrgSuspended | ErrorCode::OrgSeatLimit | ErrorCode::AiDisabled | ErrorCode::AiAllowanceUsed | ErrorCode::OperatorOrgNotFound | ErrorCode::OperatorOwnerInOtherOrg | ErrorCode::OperatorOwnerReserved
-                | ErrorCode::OperatorAtCapacity | ErrorCode::OperatorReferenceReused | ErrorCode::OperatorSeatsInUse | ErrorCode::OperatorOwnerClaimed
+                | ErrorCode::OperatorAtCapacity | ErrorCode::OperatorReferenceReused | ErrorCode::OperatorSeatsInUse | ErrorCode::OperatorOwnerClaimed | ErrorCode::OperatorOwnerClaimPending
                 | ErrorCode::AuthResetInvalid | ErrorCode::AuthResetExpired | ErrorCode::EmailUnavailable
                 | ErrorCode::TenantDenied | ErrorCode::TenantNotFound | ErrorCode::TenantSchemaBehind
                 | ErrorCode::TenantProvisioningDisabled | ErrorCode::VaultNotFound | ErrorCode::VaultForbidden | ErrorCode::VaultNameTaken | ErrorCode::EntityNotFound

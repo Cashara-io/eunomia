@@ -1,7 +1,7 @@
 //! The operator API (`operator.rs`): `/api/operator/v1/...`, for the billing service of a hosted Cupel.
 //!
-//! Mounted only while `EUNOMIA_OPERATOR_TOKEN` is set (`lib.rs`); with it unset there is no such route and
-//! the answer is 404. The gate (`gate::operator_gate`) lets through only a request that carries that token,
+//! Mounted only while `EUNOMIA_OPERATOR_TOKEN` (or `EUNOMIA_OPERATOR_TOKEN_NEXT`) is set (`lib.rs`); with neither
+//! set there is no such route and the answer is 404. The gate (`gate::operator_gate`) lets through only a request that carries one of them,
 //! and every handler also asks for [`OperatorAuth`], so a route added here cannot be reached any other way.
 
 use axum::{
@@ -13,7 +13,7 @@ use axum::{
 use serde::Deserialize;
 
 use crate::error::{AppError, AppResult};
-use crate::operator::{self, Capacity, ClaimResent, CreateOrg, CreateOrgResult, OrgList, OrgSummary, PriceTableOut, PricesUpdate, SuspendOrg, UpdateOrg};
+use crate::operator::{self, Capacity, ClaimResent, CreateOrg, CreateOrgResult, ListFilter, OrgList, OrgSummary, OwnerAvailability, PriceTableOut, PricesUpdate, SuspendOrg, UpdateOrg};
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -23,6 +23,7 @@ pub fn router() -> Router<AppState> {
         .route("/operator/v1/orgs/{org_id}/suspend", post(suspend_org))
         .route("/operator/v1/orgs/{org_id}/resume", post(resume_org))
         .route("/operator/v1/orgs/{org_id}/owner-claim/resend", post(resend_claim))
+        .route("/operator/v1/owner-availability", get(get_owner_availability))
         .route("/operator/v1/capacity", get(get_capacity))
         .route("/operator/v1/ai/prices", get(get_prices).put(put_prices))
 }
@@ -45,6 +46,18 @@ struct ListQuery {
     limit: Option<i64>,
     /// Organisations to skip, oldest first.
     offset: Option<i64>,
+    /// Only the organisation made for this `external_ref` (an exact match; at most one).
+    external_ref: Option<String>,
+    /// Only organisations whose owner has this email: the account that claimed the organisation, or the address its
+    /// open owner claim was sent to. Normalised like sign-up normalises it, then an exact match.
+    owner_email: Option<String>,
+}
+
+#[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+struct OwnerAvailabilityQuery {
+    /// The owner's email address, as the buyer typed it.
+    email: String,
 }
 
 #[utoipa::path(
@@ -54,7 +67,7 @@ struct ListQuery {
     tag = "operator",
     summary = "Create an organisation for a buyer, with its owner claim and optional AI allowance (idempotent on external_ref)",
     description = "Provisions the organisation's database and makes a single-use owner claim for `owner_email`: whoever opens `claim_link` creates their account (password or single sign-on) and becomes the organisation's owner. The same `external_ref` is the same organisation, so a retried call returns it and never makes a second one (`created: false`, and no link: resend the claim). When this server sends email the link is also emailed to the owner; `emailed` says whether the mail server accepted it. \
-                   Refused: an owner email that already has an account (`operator.owner_in_other_org`), an address in `EUNOMIA_ADMIN_EMAILS` (`operator.owner_email_reserved`), the same reference with a different owner (`operator.reference_reused`), and a full server (`operator.at_capacity`).",
+                   Refused: an owner email that already has an account (`operator.owner_in_other_org`), an address in `EUNOMIA_ADMIN_EMAILS` or a look-alike of one (`operator.owner_email_reserved`), an address another organisation holds an unclaimed owner claim for (`operator.owner_claim_pending`; ask `GET /api/operator/v1/owner-availability` first), the same reference with a different owner (`operator.reference_reused`), and a full server (`operator.at_capacity`).",
     request_body = CreateOrg,
     responses((status = 200, body = CreateOrgResult), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("operator" = [])),
@@ -69,13 +82,13 @@ async fn create_org(_: OperatorAuth, State(state): State<AppState>, Json(body): 
     path = "/api/operator/v1/orgs",
     tag = "operator",
     summary = "List organisations with plan state, seat usage, owner and this month's model spend",
-    description = "Control-database metadata only: this API never reads anything from an organisation's own database.",
+    description = "Control-database metadata only: this API never reads anything from an organisation's own database. `external_ref` and `owner_email` narrow the list to the organisations that match (an exact match; both together must both match), so a reconciliation job can ask whether an organisation exists for an order without paging through every one; `total` then counts the matches. A filter that is empty or not a usable value (an `owner_email` that is not an address) is a `400`, never read as \"no filter\".",
     params(ListQuery),
     responses((status = 200, body = OrgList), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("operator" = [])),
 )]
 async fn list_orgs(_: OperatorAuth, State(state): State<AppState>, Query(q): Query<ListQuery>) -> AppResult<Json<OrgList>> {
-    Ok(Json(operator::list(&state, q.limit, q.offset).await?))
+    Ok(Json(operator::list(&state, q.limit, q.offset, ListFilter { external_ref: q.external_ref, owner_email: q.owner_email }).await?))
 }
 
 #[utoipa::path(
@@ -145,13 +158,29 @@ async fn resume_org(_: OperatorAuth, State(state): State<AppState>, Path(org_id)
     path = "/api/operator/v1/orgs/{org_id}/owner-claim/resend",
     tag = "operator",
     summary = "Make a new owner claim link while the organisation is unclaimed",
-    description = "The old link stops working at once. Refused once the owner has claimed the organisation (`operator.owner_claimed`) or when the owner's email has since got an account (`operator.owner_in_other_org`). Emailed too when this server sends email.",
+    description = "The old link stops working at once. Refused once the owner has claimed the organisation (`operator.owner_claimed`) or when the owner's email has since got an account (`operator.owner_in_other_org`), been given to another organisation's claim (`operator.owner_claim_pending`) or been listed as an operator's (`operator.owner_email_reserved`). Emailed too when this server sends email.",
     params(("org_id" = String, Path, description = "The organisation id")),
     responses((status = 200, body = ClaimResent), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("operator" = [])),
 )]
 async fn resend_claim(_: OperatorAuth, State(state): State<AppState>, Path(org_id): Path<String>) -> AppResult<Json<ClaimResent>> {
     Ok(Json(operator::resend_claim(&state, &org_id).await?))
+}
+
+#[utoipa::path(
+    operation_id = "operatorGetOwnerAvailability",
+    get,
+    path = "/api/operator/v1/owner-availability",
+    tag = "operator",
+    summary = "Whether an email can own a new organisation, before the buyer pays",
+    description = "Answers `{ \"available\": true }`, or `{ \"available\": false, \"reason\": \"has_account\" | \"reserved\" | \"pending_claim\" }`. It is the rule creating an organisation applies, asked first: `has_account` (the address already has an account, in whichever organisation), `reserved` (an address in `EUNOMIA_ADMIN_EMAILS`, or a look-alike of one) and `pending_claim` (another organisation holds an owner claim for it that nobody has accepted or withdrawn). The address is normalised as sign-up normalises it; one that is not an address is a `400`. \
+                   **This route tells its caller whether an address has an account.** That is acceptable only because the caller holds the operator token. The billing service must rate limit and bot-protect whatever public form sits in front of it, so it cannot be used to ask the question about addresses it does not own.",
+    params(OwnerAvailabilityQuery),
+    responses((status = 200, body = OwnerAvailability), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("operator" = [])),
+)]
+async fn get_owner_availability(_: OperatorAuth, State(state): State<AppState>, Query(q): Query<OwnerAvailabilityQuery>) -> AppResult<Json<OwnerAvailability>> {
+    Ok(Json(operator::owner_availability_for(&state, &q.email).await?))
 }
 
 #[utoipa::path(
@@ -197,5 +226,5 @@ async fn put_prices(_: OperatorAuth, State(state): State<AppState>, Json(body): 
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(create_org, list_orgs, get_org, update_org, suspend_org, resume_org, resend_claim, get_capacity, get_prices, put_prices))]
+#[openapi(paths(create_org, list_orgs, get_org, update_org, suspend_org, resume_org, resend_claim, get_owner_availability, get_capacity, get_prices, put_prices))]
 pub struct Doc;

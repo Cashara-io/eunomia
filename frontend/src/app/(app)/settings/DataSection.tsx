@@ -208,7 +208,9 @@ function DeleteAccount() {
   );
 }
 
-export function DataSection() {
+/** `paused`: the workspace is suspended, so only what the server still allows is offered. The personal-space JSON
+ * (`GET /api/export`) reads workspace content and is refused then; the full export covers it. */
+export function DataSection({ paused = false }: { paused?: boolean }) {
   const exports = useSubjectExports();
   const start = useStartExport();
   const [error, setError] = useState<Failure | null>(null);
@@ -256,24 +258,26 @@ export function DataSection() {
             ))}
           </ul>
         )}
-        <button
-          type="button"
-          className="self-start text-[13px] underline"
-          style={{ color: "var(--ink-dim)" }}
-          onClick={async () => {
-            setQuick(true);
-            setError(null);
-            try {
-              await downloadExport();
-            } catch (e) {
-              setError(failure(e, "Could not prepare the export.", " Try again in a moment."));
-            } finally {
-              setQuick(false);
-            }
-          }}
-        >
-          {quick ? "Preparing…" : "Or download just your personal space as JSON"}
-        </button>
+        {!paused && (
+          <button
+            type="button"
+            className="self-start text-[13px] underline"
+            style={{ color: "var(--ink-dim)" }}
+            onClick={async () => {
+              setQuick(true);
+              setError(null);
+              try {
+                await downloadExport();
+              } catch (e) {
+                setError(failure(e, "Could not prepare the export.", " Try again in a moment."));
+              } finally {
+                setQuick(false);
+              }
+            }}
+          >
+            {quick ? "Preparing…" : "Or download just your personal space as JSON"}
+          </button>
+        )}
       </div>
       <DataActivity />
       <DeleteAccount />

@@ -36,11 +36,15 @@ pub const TTL: Duration = Duration::from_secs(3);
 /// The shortest operator token accepted at boot.
 pub const MIN_OPERATOR_TOKEN_LEN: usize = 32;
 
-/// `EUNOMIA_OPERATOR_TOKEN`, `EUNOMIA_MAX_ORGS` and `EUNOMIA_BILLING_URL`. All unset is a self-hosted install.
+/// `EUNOMIA_OPERATOR_TOKEN`, `EUNOMIA_OPERATOR_TOKEN_NEXT`, `EUNOMIA_MAX_ORGS` and `EUNOMIA_BILLING_URL`. All unset
+/// is a self-hosted install.
 #[derive(Clone, Default)]
 pub struct HostedConfig {
-    /// The bearer token of the operator API. `None`: the routes do not exist.
+    /// The bearer token of the operator API. `None` (and no next token): the routes do not exist.
     pub operator_token: Option<String>,
+    /// A second token that is valid beside [`Self::operator_token`], so the token can be rotated with no moment at
+    /// which the billing service is locked out (docs/deployment.md, "Rotating the operator token").
+    pub operator_token_next: Option<String>,
     /// The most organisations this server holds. `None`: no limit.
     pub max_orgs: Option<u32>,
     /// Where an organisation's owner goes to add seats or pay (shown in the plan status).
@@ -52,21 +56,68 @@ impl std::fmt::Debug for HostedConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("HostedConfig")
             .field("operator_token", &self.operator_token.as_ref().map(|_| "<set>"))
+            .field("operator_token_next", &self.operator_token_next.as_ref().map(|_| "<set>"))
             .field("max_orgs", &self.max_orgs)
             .field("billing_url", &self.billing_url)
             .finish()
     }
 }
 
+/// Which of the two operator tokens a request presented. Recorded on the instance ledger; the token never is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenSlot {
+    /// `EUNOMIA_OPERATOR_TOKEN`.
+    Current,
+    /// `EUNOMIA_OPERATOR_TOKEN_NEXT`.
+    Next,
+}
+
+impl TokenSlot {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TokenSlot::Current => "current",
+            TokenSlot::Next => "next",
+        }
+    }
+}
+
 impl HostedConfig {
-    /// Reads the three variables; a value that cannot work is an error so boot can refuse it.
+    /// The operator API exists: at least one operator token is set.
+    pub fn operator_enabled(&self) -> bool {
+        self.operator_token.is_some() || self.operator_token_next.is_some()
+    }
+
+    /// Which operator token `given` is, if either. Both are always compared (neither comparison short-circuits the
+    /// other), each in constant time.
+    pub fn match_operator_token(&self, given: &str) -> Option<TokenSlot> {
+        let current = self.operator_token.as_deref().is_some_and(|t| operator_token_matches(t, given));
+        let next = self.operator_token_next.as_deref().is_some_and(|t| operator_token_matches(t, given));
+        if current {
+            Some(TokenSlot::Current)
+        } else if next {
+            Some(TokenSlot::Next)
+        } else {
+            None
+        }
+    }
+
+    /// Reads the variables; a value that cannot work is an error so boot can refuse it.
     pub fn from_vars(get: impl Fn(&str) -> Option<String>) -> Result<Self, String> {
         let var = |k: &str| get(k).map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
-        let operator_token = var("EUNOMIA_OPERATOR_TOKEN");
-        if let Some(t) = &operator_token
-            && t.chars().count() < MIN_OPERATOR_TOKEN_LEN
-        {
-            return Err(format!("EUNOMIA_OPERATOR_TOKEN is too short: use at least {MIN_OPERATOR_TOKEN_LEN} characters (for example `openssl rand -base64 48`)"));
+        let token = |k: &str| -> Result<Option<String>, String> {
+            let t = var(k);
+            if let Some(t) = &t
+                && t.chars().count() < MIN_OPERATOR_TOKEN_LEN
+            {
+                return Err(format!("{k} is too short: use at least {MIN_OPERATOR_TOKEN_LEN} characters (for example `openssl rand -base64 48`)"));
+            }
+            Ok(t)
+        };
+        let operator_token = token("EUNOMIA_OPERATOR_TOKEN")?;
+        let operator_token_next = token("EUNOMIA_OPERATOR_TOKEN_NEXT")?;
+        // two equal tokens would make the ledger's `current` / `next` meaningless and mean a rotation that never happened
+        if operator_token.is_some() && operator_token == operator_token_next {
+            return Err("EUNOMIA_OPERATOR_TOKEN_NEXT is the same as EUNOMIA_OPERATOR_TOKEN: the next token must be a new one".to_string());
         }
         let max_orgs = match var("EUNOMIA_MAX_ORGS") {
             None => None,
@@ -77,7 +128,7 @@ impl HostedConfig {
             Some(v) if v.starts_with("https://") || v.starts_with("http://") => Some(v),
             Some(v) => return Err(format!("EUNOMIA_BILLING_URL must be an http(s) address, got {v:?}")),
         };
-        Ok(HostedConfig { operator_token, max_orgs, billing_url })
+        Ok(HostedConfig { operator_token, operator_token_next, max_orgs, billing_url })
     }
 }
 
@@ -86,7 +137,7 @@ impl HostedConfig {
 pub fn boot_warnings(signup_mode: &str, hosted: &HostedConfig) -> Vec<String> {
     let open = matches!(signup_mode.trim().to_ascii_lowercase().as_str(), "" | "open");
     let mut out = Vec::new();
-    if open && hosted.operator_token.is_some() {
+    if open && hosted.operator_enabled() {
         out.push(
             "EUNOMIA_OPERATOR_TOKEN is set (this is a hosted service) while SIGNUP=open: anyone who can reach this server can sign up. \
              Set SIGNUP=invite (and EUNOMIA_SIGNUP_ORG=personal) so organisations come only from the operator API and invitations; see docs/deployment.md, \"Running a hosted service\"."
@@ -336,6 +387,40 @@ mod tests {
         assert!(!format!("{ok:?}").contains("an-operator-token"), "Debug never prints the token");
     }
 
+    const T1: &str = "an-operator-token-of-32-characters";
+    const T2: &str = "the-next-operator-token-of-32-chars";
+
+    #[test]
+    fn a_next_token_is_a_second_token_with_the_same_rules() {
+        let both = HostedConfig::from_vars(vars(&[("EUNOMIA_OPERATOR_TOKEN", T1), ("EUNOMIA_OPERATOR_TOKEN_NEXT", T2)])).unwrap();
+        assert!(both.operator_enabled());
+        assert_eq!(both.match_operator_token(T1), Some(TokenSlot::Current));
+        assert_eq!(both.match_operator_token(T2), Some(TokenSlot::Next));
+        for wrong in ["", "x", &T1[..T1.len() - 1], &format!("{T2}x")] {
+            assert_eq!(both.match_operator_token(wrong), None, "{wrong:?}");
+        }
+        assert_eq!((TokenSlot::Current.as_str(), TokenSlot::Next.as_str()), ("current", "next"));
+        // either alone also enables the API; neither does not
+        let only_next = HostedConfig::from_vars(vars(&[("EUNOMIA_OPERATOR_TOKEN_NEXT", T2)])).unwrap();
+        assert!(only_next.operator_enabled() && only_next.match_operator_token(T2) == Some(TokenSlot::Next) && only_next.match_operator_token(T1).is_none());
+        assert!(!HostedConfig::from_vars(vars(&[])).unwrap().operator_enabled());
+        // blank is unset
+        assert!(HostedConfig::from_vars(vars(&[("EUNOMIA_OPERATOR_TOKEN", T1), ("EUNOMIA_OPERATOR_TOKEN_NEXT", "  ")])).unwrap().operator_token_next.is_none());
+        // the same length rule, and the error never repeats the token
+        let e = HostedConfig::from_vars(vars(&[("EUNOMIA_OPERATOR_TOKEN", T1), ("EUNOMIA_OPERATOR_TOKEN_NEXT", "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy")])).unwrap_err();
+        assert!(e.contains("EUNOMIA_OPERATOR_TOKEN_NEXT") && e.contains("too short") && !e.contains("yyyyyyyy"), "{e}");
+        assert!(!format!("{both:?}").contains("operator-token"), "Debug never prints either token: {both:?}");
+    }
+
+    #[test]
+    fn two_equal_tokens_are_refused_at_boot() {
+        let e = HostedConfig::from_vars(vars(&[("EUNOMIA_OPERATOR_TOKEN", T1), ("EUNOMIA_OPERATOR_TOKEN_NEXT", T1)])).unwrap_err();
+        assert!(e.contains("same as") && !e.contains(T1), "{e}");
+        // equal once trimmed is equal
+        let spaced: &'static [(&'static str, &'static str)] = &[("EUNOMIA_OPERATOR_TOKEN", "an-operator-token-of-32-characters"), ("EUNOMIA_OPERATOR_TOKEN_NEXT", "  an-operator-token-of-32-characters ")];
+        assert!(HostedConfig::from_vars(vars(spaced)).is_err());
+    }
+
     #[test]
     fn the_other_settings_are_checked() {
         assert!(HostedConfig::from_vars(vars(&[("EUNOMIA_MAX_ORGS", "many")])).is_err());
@@ -379,6 +464,7 @@ mod tests {
             (&get, "/api/export/subject"),
             (&post, "/api/export/subject"),
             (&get, "/api/export/subject/subject_export:x"),
+            (&get, "/api/account/activity"),
             (&get, "/api/admin/people"),
         ] {
             assert!(allowed_while_suspended(m, p), "{m} {p}");
@@ -390,6 +476,8 @@ mod tests {
             (&get, "/api/vaults"),
             (&post, "/api/documents"),
             (&post, "/api/chat/threads"),
+            // the personal-space JSON reads workspace content: the suspended page does not offer it
+            (&get, "/api/export"),
             (&get, "/api/org/seats"),
             (&post, "/api/org/invitations"),
             (&put, "/api/admin/people/user:x/suspended"),
