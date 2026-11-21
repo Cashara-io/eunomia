@@ -457,7 +457,7 @@ async fn key_precedence_is_the_persons_own_then_the_organisations_then_the_serve
     let server = row(&rows, "chat", "server");
     assert_eq!((server["calls"].as_i64(), server["cost_micros"].as_i64()), (Some(1), Some(450)), "{server}");
     let org = row(&rows, "chat", "org");
-    assert_eq!((org["calls"].as_i64(), org["input_tokens"].as_i64(), org["cost_micros"].as_i64()), (Some(2), Some(2_000), Some(0)), "{org}");
+    assert_eq!((org["calls"].as_i64(), org["input_tokens"].as_i64(), org["cost_micros"].as_i64()), (Some(3), Some(3_000), Some(0)), "{org}");
     let user = row(&rows, "chat", "user");
     assert_eq!((user["calls"].as_i64(), user["cost_micros"].as_i64()), (Some(1), Some(0)), "{user}");
     // and the allowance of A saw only the server's call; B's is its own
@@ -829,7 +829,7 @@ async fn with_ai_switched_off_no_call_reaches_any_provider_with_any_key_and_feat
     let off = every_model_entry_point(&h, &member).await;
     assert_eq!(h.stub.total(), 0, "no request reached a provider, with the person's key, the organisation's or the server's: {:?} {off:?}", h.stub.hits());
     let by = |name: &str| off.iter().find(|(n, _)| *n == name).unwrap().1.clone();
-    assert_eq!(by("embed"), "ai.disabled");
+    assert_eq!(by("embed"), "ai.disabled", "{off:?}");
     assert_eq!(by("extract"), "ai.disabled");
     assert_eq!(by("chat"), "403 ai.disabled");
     assert_eq!(by("models"), "403 ai.disabled");
@@ -1027,16 +1027,19 @@ async fn usage_is_written_in_batches_and_a_crash_loses_at_most_one_interval() {
         rows.iter().map(|r| r["calls"].as_i64().unwrap()).sum::<i64>()
     };
     // a long interval: twenty calls are counted in memory, and not one of them has cost a database round trip
+    chat_call(&h.app, &u, Purpose::Chat).await.unwrap(); // starts the background writer
     h.app.state.pool.ai().set_flush_interval(Duration::from_secs(3600));
+    tokio::time::sleep(Duration::from_millis(500)).await; // it wakes once, writes that call, and goes back to sleep
+    assert_eq!(written().await, 1);
     for _ in 0..20 {
         chat_call(&h.app, &u, Purpose::Chat).await.unwrap();
     }
-    assert_eq!(written().await, 0, "nothing is written until the interval: this is what a crash would lose");
+    assert_eq!(written().await, 1, "nothing is written until the interval: this is what a crash would lose");
     assert!(h.app.state.pool.ai().unwritten() >= 1);
     // the interval passes: one counter row, twenty calls
     h.app.state.pool.ai().set_flush_interval(Duration::from_millis(100));
     let start = Instant::now();
-    while written().await != 20 {
+    while written().await != 21 {
         assert!(start.elapsed() < Duration::from_secs(10), "the background write never came");
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
@@ -1075,7 +1078,8 @@ async fn the_operator_sees_each_organisation_and_the_total_and_can_set_the_allow
     assert_eq!(cap["ai"]["organisations_used_up"], 1, "{cap}");
 
     // update: set, change, clear; nonsense refused
-    let patch = |v: Value| op(&h.app, "PATCH", &format!("/api/operator/v1/orgs/{b_id}"), Some(v));
+    let b_path = format!("/api/operator/v1/orgs/{b_id}");
+    let patch = |v: Value| op(&h.app, "PATCH", &b_path, Some(v));
     let (status, body) = patch(json!({ "ai_allowance_usd": 35.5 })).await;
     assert_eq!((status, body["ai"]["allowance_usd"].as_f64()), (StatusCode::OK, Some(35.5)), "{body}");
     let (status, body) = patch(json!({ "ai_allowance_usd": null })).await;

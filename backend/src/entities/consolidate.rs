@@ -231,6 +231,8 @@ pub async fn consolidate_subject(
 
     let belief = match call_llm(db, settings, owner, &mission, current_belief, &fact_texts).await {
         Ok(b) => b,
+        // refused (AI switched off, allowance used up): the job waits for the reason to pass
+        Err(e) if crate::ai::Refusal::is_hold(e.code) => return Err(e),
         Err(e) => {
             tracing::warn!("consolidation LLM call failed for {}: {}", subject_id.to_string(), e.message);
             return Ok(None);

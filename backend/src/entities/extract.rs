@@ -502,6 +502,9 @@ pub async fn extract_entities(
     };
     let mut data = match call_llm(db, settings, owner, prompt).await {
         Ok(d) => d,
+        // refused (AI switched off, allowance used up): not a failed call, and the record must not be taken as
+        // extracted: the job waits and runs again when the reason passes
+        Err(e) if crate::ai::Refusal::is_hold(e.code) => return Err(e),
         Err(e) => {
             tracing::warn!("entity extraction LLM call failed for {}: {}", record.id, e.message);
             return if email { Err(e) } else { Ok(HashSet::new()) };
