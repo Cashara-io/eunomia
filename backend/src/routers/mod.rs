@@ -12,6 +12,7 @@ pub mod access_reviews;
 pub mod admin;
 pub mod audit_chain;
 pub mod org;
+pub mod operator;
 pub mod org_admin;
 pub mod audit;
 pub mod debug;

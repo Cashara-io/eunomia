@@ -70,6 +70,8 @@ pub fn test_settings() -> Settings {
         chat_model_timeout_secs: 90,
         // email is off unless a test turns it on (`MailBackend::Capture`)
         mail: Default::default(),
+        // no operator API, no limits: a hosted-service test sets them
+        hosted: Default::default(),
     }
 }
 

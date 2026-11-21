@@ -247,7 +247,8 @@ async fn assign_org(state: &AppState, user: &RecordId, email: &str, personal: bo
     };
     // `role` is what we hoped for; the statement decides atomically (one owner per org, enforced by a unique slot),
     // and a lost race is retried so the loser re-reads and joins as a member
-    crate::tx::with_retry_dup(|| async {
+    // joining an org takes a seat: refused with `org.seat_limit` when the org has a limit and is full
+    let added = crate::tx::with_retry_dup(|| async {
         store::control::MEMBERSHIP_ADD
             .on(&state.control)
             .bind(("user", user.clone()))
@@ -255,7 +256,10 @@ async fn assign_org(state: &AppState, user: &RecordId, email: &str, personal: bo
             .await?
             .check()
     })
-    .await?;
+    .await;
+    if let Err(e) = added {
+        return Err(crate::plan::explain_seat_refusal(&state.control, &org.record(), e.into()).await);
+    }
     Ok(org)
 }
 

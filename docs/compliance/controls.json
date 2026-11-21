@@ -32,7 +32,7 @@
     {
       "id": "hosted-service-attestation",
       "owner": "shared",
-      "reason": "This catalogue scopes self-hosted software. A hosted edition needs a new service boundary, processor analysis and operational evidence."
+      "reason": "This catalogue scopes self-hosted software. A hosted edition needs a new service boundary, processor analysis and operational evidence. The code now has plans, seat limits, suspension and an operator API for a hosted service (control migration 0015); that is software support, not the service boundary, processor analysis or operational evidence this exclusion still stands for."
     }
   ],
   "sources": [
@@ -834,7 +834,7 @@
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Done for existing Owner/Member access matrix and per-org database users. No read-only or auditor role today. E01,E04.",
+      "finding": "Done for existing Owner/Member access matrix and per-org database users. No read-only or auditor role today. E01,E04. A hosted service's operator API (control migration 0015, hosted plans lane) reads and writes only the control database (organisation records, membership and invitation counts): it never opens an organisation's own database, and a test plants a canary in an organisation's memory and finds it in no operator response (tests/hosted.rs). Its token opens no member route and no member credential opens its routes (tested in both directions).",
       "evidence": [
         "EV-C04-1",
         "EV-C04-2"
@@ -1033,7 +1033,7 @@
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. Durable in-process delivery with replay, a hash chain per organisation plus an instance chain, genesis, periodic and retention checkpoints, in-app and offline verification and a metadata-only export exist (PR03). External anchoring of checkpoints is absent, an event held only in a process's in-memory queue is lost if that process crashes, and audited routes other than PR03's own still record after the action. E07-E08.",
+      "finding": "Partial. Durable in-process delivery with replay, a hash chain per organisation plus an instance chain, genesis, periodic and retention checkpoints, in-app and offline verification and a metadata-only export exist (PR03). External anchoring of checkpoints is absent, an event held only in a process's in-memory queue is lost if that process crashes, and audited routes other than PR03's own still record after the action. E07-E08. A hosted service's operator API writes every call, refused ones included, to the instance ledger as actor `operator` (id `operator-api`) with its outcome and never the token; a wrong token leaves an `auth.failed` row holding only a hash, and a call refused by the rate limit before its handler is not audited.",
       "evidence": [
         "EV-C07-1",
         "EV-C07-2"
@@ -1118,7 +1118,7 @@
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. People and suspension routes exist, and suspension also stops peer sync, share codes, webhook deliveries and queued jobs (#243). Recorded access reviews with per-person decisions, self-review refused, and completed reviews frozen and committed to the audit chain exist (PR03); invitations let org admins invite members only (#247). On a shared host an organisation's owner and admins now run their own organisation (hosted organisation-admin lane): they list members, suspend and restore them, end sessions and revoke tokens and connected apps, change roles (only the owner grants or removes admin; nobody changes the owner), read, verify and export their own organisation's audit log and run its access reviews, never another organisation's, and the instance operator's powers (instance ledger, server-wide MFA switch, erasing another account, granting the instance-admin flag) stay closed to them. Role-separation exists only as owner versus admin versus member of one organisation. A reviewer role, separation-of-duties rules, a review schedule and signed review records are absent, and decisions are not acted on automatically. E04,E07.",
+      "finding": "Partial. People and suspension routes exist, and suspension also stops peer sync, share codes, webhook deliveries and queued jobs (#243). Recorded access reviews with per-person decisions, self-review refused, and completed reviews frozen and committed to the audit chain exist (PR03); invitations let org admins invite members only (#247). On a shared host an organisation's owner and admins now run their own organisation (hosted organisation-admin lane): they list members, suspend and restore them, end sessions and revoke tokens and connected apps, change roles (only the owner grants or removes admin; nobody changes the owner), read, verify and export their own organisation's audit log and run its access reviews, never another organisation's, and the instance operator's powers (instance ledger, server-wide MFA switch, erasing another account, granting the instance-admin flag) stay closed to them. Role-separation exists only as owner versus admin versus member of one organisation. A reviewer role, separation-of-duties rules, a review schedule and signed review records are absent, and decisions are not acted on automatically. E04,E07. A hosted service can suspend a whole organisation through the operator API (hosted plans lane; control migration 0015): within seconds (3 seconds across replicas) every member's request that reads or writes content is refused at the gate, queued and running jobs pause and resume without loss, and members keep sign-in, their own password, export and erasure. Seat limits are checked in the transaction that takes a seat. The operator token is one shared bearer secret held by the billing service: it has no per-caller identity, no rotation tooling and no second factor, and anyone holding it can suspend or resume any organisation.",
       "evidence": [
         "EV-C08-1",
         "EV-C08-2"
@@ -1179,7 +1179,7 @@
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. Per-process request limits and body/model bounds; only the two-step verification attempt counters are shared across replicas (PR04); no cluster-wide request budget or sustained capacity proof. E16,E20.",
+      "finding": "Partial. Per-process request limits and body/model bounds; only the two-step verification attempt counters are shared across replicas (PR04); no cluster-wide request budget or sustained capacity proof. E16,E20. The operator API has its own per-process limit (RATE_LIMIT_OPERATOR_PER_MIN, default 300 a minute) and a wrong operator token is throttled per client address like any failed credential; neither is shared across replicas.",
       "evidence": [
         "EV-C09-1",
         "EV-C09-2"
@@ -2042,7 +2042,7 @@
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. A subject export job (zip with a manifest, every inventory category across every workspace, third-party redaction; facts carry `occurred_at`, `asserted_at` and `superseded_by`, and the fact-date ledger is deleted rather than exported) for the person, and a narrower export of one workspace's data about a member for its admin, exist (PR08). Identity is a browser session only (no re-authentication or step-up), assistant prose that repeats a name from an unreadable space is not detected, and archives above EUNOMIA_EXPORT_MAX_MB fail. E09.",
+      "finding": "Partial. A subject export job (zip with a manifest, every inventory category across every workspace, third-party redaction; facts carry `occurred_at`, `asserted_at` and `superseded_by`, and the fact-date ledger is deleted rather than exported) for the person, and a narrower export of one workspace's data about a member for its admin, exist (PR08). Identity is a browser session only (no re-authentication or step-up), assistant prose that repeats a name from an unreadable space is not detected, and archives above EUNOMIA_EXPORT_MAX_MB fail. E09. A suspended organisation's members keep the routes for their own export (and the export job is exempt from the pause), so a company that stops paying does not close its people's access to their own data.",
       "evidence": [
         "EV-C21-1",
         "EV-C21-2"
@@ -2099,7 +2099,7 @@
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. Subject-level erasure with confirmation, step-up, legal holds, a post-check that fails on residue, a completion record, resync stand-down and restore carry-over with re-apply exist (PR08); the post-check also covers the fact-date ledger, and erasing a person's fact that replaced someone else's makes the replaced fact current again (#249). Not done: a legal hold does not pause retention windows and there is no per-category retention schedule; backups are not rewritten and a restore by other means loses later tombstones; an erased person's account and token ids stay on sealed audit events and completed access reviews keep their row; only an operator, not an org admin, can erase a member; names in free text are not searched. E08-E09,E24.",
+      "finding": "Partial. Subject-level erasure with confirmation, step-up, legal holds, a post-check that fails on residue, a completion record, resync stand-down and restore carry-over with re-apply exist (PR08); the post-check also covers the fact-date ledger, and erasing a person's fact that replaced someone else's makes the replaced fact current again (#249). Not done: a legal hold does not pause retention windows and there is no per-category retention schedule; backups are not rewritten and a restore by other means loses later tombstones; an erased person's account and token ids stay on sealed audit events and completed access reviews keep their row; only an operator, not an org admin, can erase a member; names in free text are not searched. E08-E09,E24. A suspended organisation's members keep the erasure route and its job is exempt from the pause.",
       "evidence": [
         "EV-C22-1",
         "EV-C22-2"

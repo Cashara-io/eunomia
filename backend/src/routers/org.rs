@@ -18,6 +18,7 @@ use crate::authz;
 use crate::error::AppResult;
 use crate::invitations::{self, InvitationAccepted, OrgInvitationLink, OrgInvitation, OrgInviteRole, InvitationLookup, OrgSeats, Who};
 use crate::models_user::User;
+use crate::plan::PlanStatus;
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -26,6 +27,7 @@ pub fn router() -> Router<AppState> {
         .route("/org/invitations/{invitation_id}", delete(revoke_invitation))
         .route("/org/invitations/{invitation_id}/resend", post(resend_invitation))
         .route("/org/seats", get(get_seats))
+        .route("/org/plan", get(get_plan))
         .route("/invitations/lookup", post(lookup_invitation))
         .route("/invitations/accept", post(accept_invitation))
 }
@@ -121,6 +123,20 @@ async fn get_seats(State(state): State<AppState>, user: User) -> AppResult<Json<
 }
 
 #[utoipa::path(
+    operation_id = "getOrgPlan",
+    get,
+    path = "/api/org/plan",
+    tag = "org",
+    summary = "Your organisation's plan: status, seat limit, seats in use, trial end and where to manage it (any member)",
+    description = "Readable by every member, also while the organisation is suspended. An organisation no plan was set on (every organisation on a self-hosted install) answers with nulls. `manage_url` is where the owner goes to add seats or pay (`EUNOMIA_BILLING_URL`).",
+    responses((status = 200, body = PlanStatus), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn get_plan(State(state): State<AppState>, user: User) -> AppResult<Json<PlanStatus>> {
+    Ok(Json(crate::plan::status_for(&state, &user).await?))
+}
+
+#[utoipa::path(
     operation_id = "lookupOrgInvitation",
     post,
     path = "/api/invitations/lookup",
@@ -153,5 +169,5 @@ async fn accept_invitation(State(state): State<AppState>, user: User, Json(body)
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(list_invitations, create_invitation, resend_invitation, revoke_invitation, get_seats, lookup_invitation, accept_invitation))]
+#[openapi(paths(list_invitations, create_invitation, resend_invitation, revoke_invitation, get_seats, get_plan, lookup_invitation, accept_invitation))]
 pub struct Doc;

@@ -6775,6 +6775,403 @@
         ]
       }
     },
+    "/api/operator/v1/capacity": {
+      "get": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "How many organisations exist and the limit (`EUNOMIA_MAX_ORGS`)",
+        "operationId": "operatorGetCapacity",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Capacity"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operator": []
+          }
+        ]
+      }
+    },
+    "/api/operator/v1/orgs": {
+      "get": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "List organisations with plan state, seat usage and owner",
+        "description": "Control-database metadata only: this API never reads anything from an organisation's own database.",
+        "operationId": "operatorListOrgs",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 500 (default 100).",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Organisations to skip, oldest first.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgList"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operator": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "Create an organisation for a buyer, with its owner claim (idempotent on external_ref)",
+        "description": "Provisions the organisation's database and makes a single-use owner claim for `owner_email`: whoever opens `claim_link` creates their account (password or single sign-on) and becomes the organisation's owner. The same `external_ref` is the same organisation, so a retried call returns it and never makes a second one (`created: false`, and no link: resend the claim). When this server sends email the link is also emailed to the owner; `emailed` says whether the mail server accepted it. Refused: an owner email that already has an account (`operator.owner_in_other_org`), an address in `EUNOMIA_ADMIN_EMAILS` (`operator.owner_email_reserved`), the same reference with a different owner (`operator.reference_reused`), and a full server (`operator.at_capacity`).",
+        "operationId": "operatorCreateOrg",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrg"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateOrgResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operator": []
+          }
+        ]
+      }
+    },
+    "/api/operator/v1/orgs/{org_id}": {
+      "get": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "One organisation: plan state, seat usage, owner and whether it was claimed",
+        "operationId": "operatorGetOrg",
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "description": "The organisation id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgSummary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operator": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "Change an organisation's plan, seat limit, trial end or name",
+        "description": "Only the fields you send change. `seat_limit` and `trial_ends_at` take `null` to clear them. Lowering the seat limit below the seats in use (active members plus pending invitations) is refused with `operator.seats_in_use`, so the billing service can tell the customer to remove people first.",
+        "operationId": "operatorUpdateOrg",
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "description": "The organisation id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOrg"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgSummary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operator": []
+          }
+        ]
+      }
+    },
+    "/api/operator/v1/orgs/{org_id}/owner-claim/resend": {
+      "post": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "Make a new owner claim link while the organisation is unclaimed",
+        "description": "The old link stops working at once. Refused once the owner has claimed the organisation (`operator.owner_claimed`) or when the owner's email has since got an account (`operator.owner_in_other_org`). Emailed too when this server sends email.",
+        "operationId": "operatorResendOwnerClaim",
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "description": "The organisation id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimResent"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operator": []
+          }
+        ]
+      }
+    },
+    "/api/operator/v1/orgs/{org_id}/resume": {
+      "post": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "Resume a suspended organisation",
+        "description": "Members' requests work again within a few seconds and paused background work picks up where it left off.",
+        "operationId": "operatorResumeOrg",
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "description": "The organisation id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgSummary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operator": []
+          }
+        ]
+      }
+    },
+    "/api/operator/v1/orgs/{org_id}/suspend": {
+      "post": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "Suspend an organisation (for example when payment fails)",
+        "description": "Within a few seconds every member's requests that read or write workspace content are refused (`org.suspended`) and its background work pauses. Members can still sign in and out, read the plan status, change their own password, export or erase their own data, and an owner or admin can read the People list. Suspending again keeps the first time. Nothing is deleted.",
+        "operationId": "operatorSuspendOrg",
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "description": "The organisation id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuspendOrg"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgSummary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "operator": []
+          }
+        ]
+      }
+    },
     "/api/org/invitations": {
       "get": {
         "tags": [
@@ -6952,6 +7349,46 @@
         "security": [
           {
             "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/org/plan": {
+      "get": {
+        "tags": [
+          "org"
+        ],
+        "summary": "Your organisation's plan: status, seat limit, seats in use, trial end and where to manage it (any member)",
+        "description": "Readable by every member, also while the organisation is suspended. An organisation no plan was set on (every organisation on a self-hosted install) answers with nulls. `manage_url` is where the owner goes to add seats or pay (`EUNOMIA_BILLING_URL`).",
+        "operationId": "getOrgPlan",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanStatus"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -12515,6 +12952,33 @@
           }
         }
       },
+      "Capacity": {
+        "type": "object",
+        "description": "How many organisations this server holds and how many it may.",
+        "required": [
+          "organisations",
+          "at_capacity"
+        ],
+        "properties": {
+          "at_capacity": {
+            "type": "boolean",
+            "description": "Creating another organisation is refused (`operator.at_capacity`)."
+          },
+          "max_organisations": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "`EUNOMIA_MAX_ORGS`; null: no limit.",
+            "minimum": 0
+          },
+          "organisations": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "Capsule": {
         "type": "object",
         "required": [
@@ -13142,6 +13606,30 @@
           }
         }
       },
+      "ClaimResent": {
+        "type": "object",
+        "description": "A fresh owner claim link.",
+        "required": [
+          "claim_link",
+          "claim_expires_at",
+          "email_enabled",
+          "emailed"
+        ],
+        "properties": {
+          "claim_expires_at": {
+            "type": "string"
+          },
+          "claim_link": {
+            "type": "string"
+          },
+          "email_enabled": {
+            "type": "boolean"
+          },
+          "emailed": {
+            "type": "boolean"
+          }
+        }
+      },
       "CloneOut": {
         "type": "object",
         "required": [
@@ -13564,6 +14052,90 @@
               "null"
             ],
             "description": "A vault you belong to; omit for your personal vault."
+          }
+        }
+      },
+      "CreateOrg": {
+        "type": "object",
+        "required": [
+          "name",
+          "owner_email",
+          "plan",
+          "seat_limit",
+          "external_ref"
+        ],
+        "properties": {
+          "external_ref": {
+            "type": "string",
+            "description": "The billing service's own id for this purchase. The same reference is the same organisation: a retried\ncall returns it and never makes a second one."
+          },
+          "name": {
+            "type": "string",
+            "description": "The organisation's name (1 to 80 characters, no `@`); shown to people it invites."
+          },
+          "owner_email": {
+            "type": "string",
+            "description": "The owner's email. They claim the organisation with the link this call returns."
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanName"
+          },
+          "seat_limit": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many seats the organisation has (at least 1): active members plus pending invitations."
+          },
+          "trial_ends_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the trial ends, for display. This server never suspends on its own."
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateOrgResult": {
+        "type": "object",
+        "description": "The result of creating an organisation.",
+        "required": [
+          "organisation_id",
+          "created",
+          "email_enabled",
+          "emailed",
+          "organisation"
+        ],
+        "properties": {
+          "claim_expires_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "claim_link": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The link the owner opens to claim the organisation and become its owner. Returned once, when this call\nmade it (a retry after the first reply was lost has none: resend the claim for a new one). Null when\nthe organisation was already claimed or its claim was already made."
+          },
+          "created": {
+            "type": "boolean",
+            "description": "`true` when this call made the organisation; `false` when the reference already had one (a retry)."
+          },
+          "email_enabled": {
+            "type": "boolean",
+            "description": "This server sends email (`SMTP_HOST`)."
+          },
+          "emailed": {
+            "type": "boolean",
+            "description": "The link was also emailed to the owner and the mail server accepted it."
+          },
+          "organisation": {
+            "$ref": "#/components/schemas/OrgSummary"
+          },
+          "organisation_id": {
+            "type": "string"
           }
         }
       },
@@ -17131,6 +17703,37 @@
           "admin"
         ]
       },
+      "OrgList": {
+        "type": "object",
+        "description": "One page of organisations, oldest first.",
+        "required": [
+          "organisations",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "organisations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrgSummary"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Every organisation on this server."
+          }
+        }
+      },
       "OrgOut": {
         "type": "object",
         "description": "The organisation's name and security policy, and what the caller may do with them.",
@@ -17213,6 +17816,95 @@
           "suspended_members": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "OrgSummary": {
+        "type": "object",
+        "description": "One organisation as the operator sees it. Control-database metadata only.",
+        "required": [
+          "id",
+          "name",
+          "status",
+          "seats",
+          "owner_claimed",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "external_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The reference the billing service gave when it created the organisation."
+          },
+          "id": {
+            "type": "string",
+            "description": "The organisation id (32 hex digits)."
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner_claim_expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the unclaimed owner claim expires (resend it for a new link); null once claimed."
+          },
+          "owner_claimed": {
+            "type": "boolean",
+            "description": "The owner has claimed the organisation."
+          },
+          "owner_email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The owner's email: the account that claimed the organisation, or the address the claim was sent to."
+          },
+          "plan": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`trial`, `team` or `enterprise`; null for an organisation no plan was set on (every organisation on a\nself-hosted install, and the server's own)."
+          },
+          "seat_limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Null: no limit."
+          },
+          "seats": {
+            "$ref": "#/components/schemas/Seats"
+          },
+          "status": {
+            "type": "string",
+            "description": "`active` or `suspended`. An organisation with no plan state is `active`."
+          },
+          "suspended_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "suspended_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trial_ends_at": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -17620,6 +18312,65 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "PlanName": {
+        "type": "string",
+        "description": "`trial`, `team` or `enterprise`.",
+        "enum": [
+          "trial",
+          "team",
+          "enterprise"
+        ]
+      },
+      "PlanStatus": {
+        "type": "object",
+        "description": "What the plan means for the people in an organisation.",
+        "properties": {
+          "manage_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Where the owner goes to add seats or pay (`EUNOMIA_BILLING_URL`); null when not configured or unmanaged."
+          },
+          "plan": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`trial`, `team` or `enterprise`; null for an unmanaged organisation."
+          },
+          "seat_limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "How many seats the organisation has; null when it has no limit."
+          },
+          "seats_in_use": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Active members plus pending invitations; null for an unmanaged organisation."
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`active` or `suspended`; null for an unmanaged organisation."
+          },
+          "trial_ends_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the trial ends, for display: this server never suspends on its own. Null when not set."
           }
         }
       },
@@ -18965,6 +19716,37 @@
           }
         }
       },
+      "Seats": {
+        "type": "object",
+        "description": "Seats in use, in the words the billing service needs.",
+        "required": [
+          "active_members",
+          "suspended_members",
+          "pending_invitations",
+          "in_use"
+        ],
+        "properties": {
+          "active_members": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Members whose account is not suspended."
+          },
+          "in_use": {
+            "type": "integer",
+            "format": "int64",
+            "description": "`active_members + pending_invitations`: what the seat limit is checked against."
+          },
+          "pending_invitations": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open invitations that have not expired (the owner's unclaimed invitation included)."
+          },
+          "suspended_members": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "SecurityChange": {
         "type": "object",
         "required": [
@@ -19716,6 +20498,19 @@
           }
         }
       },
+      "SuspendOrg": {
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Why (for example `payment_failed`); kept on the organisation and on the ledger, never shown to its members."
+          }
+        },
+        "additionalProperties": false
+      },
       "SyncReport": {
         "type": "object",
         "description": "Outcome of a sync or webhook ingest: an ingest report, `source` + `error` when the sync failed, or\n`status: \"already_running\"` when a sync of that source is already queued or running, or\n`status: \"queued\"` when it was queued but no worker finished it within the wait. Schema only:\nthe handlers pass the report through.",
@@ -20203,6 +20998,44 @@
             "description": "Present only when the updater is configured."
           }
         }
+      },
+      "UpdateOrg": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A new name (1 to 80 characters, no `@`)."
+          },
+          "plan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PlanName"
+              }
+            ]
+          },
+          "seat_limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "A new seat limit, or `null` for no limit. Refused (`operator.seats_in_use`) below the seats in use."
+          },
+          "trial_ends_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A new trial end, or `null` to clear it."
+          }
+        },
+        "additionalProperties": false
       },
       "UpdateStatus": {
         "type": "object",
@@ -20785,6 +21618,11 @@
         "type": "apiKey",
         "in": "cookie",
         "name": "eunomia_session"
+      },
+      "operator": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The operator token (`EUNOMIA_OPERATOR_TOKEN`), for the hosted service's billing system. Not an API token."
       }
     }
   }

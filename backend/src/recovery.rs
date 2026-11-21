@@ -137,6 +137,21 @@ pub fn invitation_mail(to: &str, invited_by: &str, link: &str, days: i64) -> Mai
     }
 }
 
+/// The email a new workspace's owner claim goes out in (made through the operator API). `link` is the link
+/// the billing service also receives.
+pub fn owner_claim_mail(to: &str, org_name: &str, link: &str, days: i64) -> Mail {
+    Mail {
+        to: to.to_string(),
+        subject: "Your Eunomia workspace is ready".into(),
+        body: format!(
+            "Your Eunomia workspace \u{201c}{org_name}\u{201d} is ready, and you're its owner.\n\n\
+             To set it up, open this link and sign in or create your account with this email address ({to}):\n\n{link}\n\n\
+             The link works once and expires in {days} days. If it expires, ask whoever set up the workspace for a new one.\n\n\
+             If you weren't expecting this, you can ignore this email.\n"
+        ),
+    }
+}
+
 /// Sets a new password with a reset link's `token`. `ip` is the client address. Ends every session of the
 /// account; starts none.
 pub async fn reset_password(state: &AppState, ip: &str, token: &str, new_password: &str) -> AppResult<()> {

@@ -582,7 +582,24 @@ expression: first
         "select": false,
         "update": false
       },
-      "indexes": []
+      "indexes": [
+        {
+          "cols": [
+            "external_ref"
+          ],
+          "index": "",
+          "name": "org_external_ref_idx",
+          "table": "org"
+        },
+        {
+          "cols": [
+            "status"
+          ],
+          "index": "",
+          "name": "org_status_idx",
+          "table": "org"
+        }
+      ]
     },
     {
       "drop": false,

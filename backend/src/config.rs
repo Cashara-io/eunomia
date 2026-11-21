@@ -55,6 +55,9 @@ pub struct Settings {
     /// `SMTP_*`: where outgoing email goes. `Off` (no `SMTP_HOST`) leaves every route as it was and
     /// turns the routes that need email (forgot password) into `email.unavailable`. See `mail.rs`.
     pub mail: crate::mail::MailBackend,
+    /// `EUNOMIA_OPERATOR_TOKEN`, `EUNOMIA_MAX_ORGS`, `EUNOMIA_BILLING_URL`: a hosted service's operator API and
+    /// limits (`plan.rs`). All unset on a self-hosted install, which then behaves as it always did.
+    pub hosted: crate::plan::HostedConfig,
 }
 
 /// `EUNOMIA_COMPOSE_PROFILES` -> is the `secrets` profile on (see `Settings::secrets_helper_enabled`).
@@ -114,6 +117,11 @@ impl Settings {
             mail: crate::mail::MailBackend::from_vars(|k| env::var(k).ok()).unwrap_or_else(|e| {
                 // email the operator asked for but that cannot work: stop, like a bad sign-in configuration
                 eprintln!("invalid email configuration: {e}");
+                std::process::exit(2);
+            }),
+            hosted: crate::plan::HostedConfig::from_vars(|k| env::var(k).ok()).unwrap_or_else(|e| {
+                // a hosted setting that cannot work (a token anyone could guess): stop rather than run without it
+                eprintln!("invalid hosted-service configuration: {e}");
                 std::process::exit(2);
             }),
         }

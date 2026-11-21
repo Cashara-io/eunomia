@@ -407,7 +407,7 @@ async fn source_webhook(
     let Ok(owner) = crate::rid::parse(&owner_id) else { return ignored() };
     let Ok(org) = crate::models_user::org_of(&state.control, &owner).await else { return ignored() };
     // a suspended owner's sources take nothing in
-    if crate::models_user::is_suspended(&state.control, &owner).await.unwrap_or(true) {
+    if crate::models_user::is_suspended(&state.control, &owner).await.unwrap_or(true) || crate::plan::user_org_suspended(&state.control, &state.plans, &owner).await {
         return ignored();
     }
     let state = state.org(&org).await?;
