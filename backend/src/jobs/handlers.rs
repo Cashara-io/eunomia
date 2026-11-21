@@ -255,15 +255,18 @@ async fn consolidate_subject(state: AppState, job: Job) -> Result<(), JobError> 
 
 /// The check `memory_write` used to wait for: earlier facts about `subject` the new `memory` makes
 /// untrue are marked superseded (and the subject's observation stale, so consolidation rebuilds it).
-/// Best effort like the rest of the enrichment: a failed model call marks nothing.
+/// Best effort like the rest of the enrichment: a failed model call marks nothing. A refusal is not a failure: the
+/// job waits (the worker hands it back) and runs when AI is on again or the allowance has room.
 async fn supersede(state: AppState, job: Job) -> Result<(), JobError> {
     let state = org_state(&state, &job).await?;
     let parse = |field| {
         payload_str(&job, field).and_then(|v| crate::rid::parse(v).map_err(|_| JobError::permanent(ErrorCode::ValidationInvalid, format!("bad {field} id"))))
     };
     let (subject, memory) = (parse("subject")?, parse("memory")?);
-    ready(&state.db, &state, &job, crate::ai::Purpose::Supersede, "supersede skipped: no LLM key configured").await?;
-    crate::entities::supersede::check(&state.db, &state.settings, &job.owner, &subject, &[memory]).await;
+    if !ready(&state.db, &state, &job, crate::ai::Purpose::Supersede, "supersede skipped: no LLM key configured").await? {
+        return Ok(());
+    }
+    crate::entities::supersede::check(&state.db, &state.settings, &job.owner, &subject, &[memory]).await?;
     Ok(())
 }
 
@@ -331,9 +334,12 @@ async fn prune_capsules(state: AppState, _job: Job) -> Result<(), JobError> {
     Ok(crate::capsules::prune_default(&state.control).await?)
 }
 
-/// Tool-usage hours past `TOOL_USAGE_RETENTION_DAYS`, audit events past `AUDIT_RETENTION_DAYS` and sessions expired for `SESSION_RETENTION_DAYS`.
+/// Tool-usage hours past `TOOL_USAGE_RETENTION_DAYS`, audit events past `AUDIT_RETENTION_DAYS`, sessions expired for
+/// `SESSION_RETENTION_DAYS` and model-usage rows of months past `AI_USAGE_RETENTION_MONTHS` (never the current or the
+/// previous month).
 async fn prune_auth(state: AppState, _job: Job) -> Result<(), JobError> {
     crate::usage::prune_default(&state.control).await?;
+    state.pool.ai().prune_usage_default().await?;
     Ok(crate::audit::prune_default(&state.control).await?)
 }
 
