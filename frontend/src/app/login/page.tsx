@@ -22,7 +22,7 @@ const pendingFromUrl = () => (new URLSearchParams(window.location.search).get("m
 export default function LoginPage() {
   const router = useRouter();
   const login = useLogin();
-  const { pending, mode, provider } = useSignIn();
+  const { pending, mode, provider, emailEnabled } = useSignIn();
   const oidcError = useOidcError(provider);
   // null until typed in: the field then shows the email the link carried, if any.
   const [typedEmail, setEmail] = useState<string | null>(null);
@@ -146,6 +146,11 @@ export default function LoginPage() {
                   />
                   <RevealToggle shown={show} onToggle={() => setShow((s) => !s)} controls="password" />
                 </div>
+                {emailEnabled && (
+                  <Link href="/forgot-password" className="link text-body self-start" data-testid="forgot-password-link">
+                    Forgot password?
+                  </Link>
+                )}
               </div>
 
               {error && (suspended ? <SuspendedNotice message={error.message} /> : <ErrorLine error={error} />)}

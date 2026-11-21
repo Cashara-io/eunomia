@@ -513,6 +513,10 @@ export type BootstrapOut = {
      * Which sign-in methods the login and register pages offer.
      */
     auth_mode: AuthModeOut;
+    /**
+     * This server sends email (`SMTP_HOST` is set), so "Forgot password?" and emailed invitations work.
+     */
+    email_enabled: boolean;
     has_users: boolean;
     /**
      * The button label ("Continue with {oidc_provider}") when an OpenID Connect provider is configured.
@@ -584,6 +588,19 @@ export type Change = {
      * Strictly increasing per vault, with no gaps.
      */
     seq: number;
+};
+
+export type ChangeBody = {
+    current_password: string;
+    /**
+     * A current authenticator or recovery code. Needed from an account with two-step verification when its
+     * last second factor is older than 10 minutes (`auth.step_up_required`).
+     */
+    mfa_code?: string | null;
+    /**
+     * The same rules as sign-up (8 characters, at most 72 bytes).
+     */
+    new_password: string;
 };
 
 /**
@@ -1408,6 +1425,10 @@ export type FinanceTransaction = {
     amount: string;
     created_at: string;
     description: string;
+};
+
+export type ForgotBody = {
+    email: string;
 };
 
 export type Grain = 'day' | 'week' | 'month' | 'quarter' | 'year';
@@ -2408,6 +2429,11 @@ export type OrgInvitationCreate = {
  * A new or resent invitation, with its link. The link is shown once: only its hash is kept.
  */
 export type OrgInvitationLink = {
+    /**
+     * The link was also emailed to the invited address and the mail server accepted it. `false` when this
+     * server sends no email, or the mail server refused it or did not answer in time: copy the link.
+     */
+    emailed: boolean;
     invitation: OrgInvitation;
     /**
      * `<frontend>/invite#<token>`. The token rides in the fragment, which browsers never send to a server.
@@ -3063,6 +3089,17 @@ export type RequestOut = {
     status: string;
     target_hosts: Array<string>;
     vault_id: string;
+};
+
+export type ResetBody = {
+    /**
+     * The new password: the same rules as sign-up (8 characters, at most 72 bytes).
+     */
+    password: string;
+    /**
+     * The token from the reset link (the part after `#`).
+     */
+    token: string;
 };
 
 /**
@@ -3873,6 +3910,28 @@ export type EraseMyAccountResponses = {
 };
 
 export type EraseMyAccountResponse = EraseMyAccountResponses[keyof EraseMyAccountResponses];
+
+export type ChangePasswordData = {
+    body: ChangeBody;
+    path?: never;
+    query?: never;
+    url: '/api/account/password';
+};
+
+export type ChangePasswordErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ChangePasswordError = ChangePasswordErrors[keyof ChangePasswordErrors];
+
+export type ChangePasswordResponses = {
+    200: OkBody;
+};
+
+export type ChangePasswordResponse = ChangePasswordResponses[keyof ChangePasswordResponses];
 
 export type ListAccessReviewsData = {
     body?: never;
@@ -4892,6 +4951,50 @@ export type OidcStartInvitedResponses = {
 };
 
 export type OidcStartInvitedResponse = OidcStartInvitedResponses[keyof OidcStartInvitedResponses];
+
+export type ForgotPasswordData = {
+    body: ForgotBody;
+    path?: never;
+    query?: never;
+    url: '/api/auth/password/forgot';
+};
+
+export type ForgotPasswordErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ForgotPasswordError = ForgotPasswordErrors[keyof ForgotPasswordErrors];
+
+export type ForgotPasswordResponses = {
+    200: OkBody;
+};
+
+export type ForgotPasswordResponse = ForgotPasswordResponses[keyof ForgotPasswordResponses];
+
+export type ResetPasswordData = {
+    body: ResetBody;
+    path?: never;
+    query?: never;
+    url: '/api/auth/password/reset';
+};
+
+export type ResetPasswordErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ResetPasswordError = ResetPasswordErrors[keyof ResetPasswordErrors];
+
+export type ResetPasswordResponses = {
+    200: OkBody;
+};
+
+export type ResetPasswordResponse = ResetPasswordResponses[keyof ResetPasswordResponses];
 
 export type RegisterData = {
     body: RegisterBody;

@@ -4,6 +4,8 @@ import { useState } from "react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import CopyButton from "@/components/bits/CopyButton";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import { useQuery } from "@tanstack/react-query";
+import { bootstrapQuery } from "@/lib/queries/auth";
 import { useCreateInvitation, useOrgInvitations, useOrgSeats, useResendInvitation, useRevokeInvitation } from "@/lib/queries/org";
 import type { OrgInvitation, OrgInviteRole } from "@/lib/gen";
 import { RevokeButton } from "./shared";
@@ -14,14 +16,23 @@ const linkFor = (token: string) => `${window.location.origin}/invite#${token}`;
 
 const when = (iso: string) => new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 
-/* A link that was just made: shown once, with a copy button. Eunomia sends no email. */
-function FreshLink({ email, link, onDone }: { email: string; link: string; onDone: () => void }) {
+/* A link that was just made: shown once, with a copy button. When the server sends email the same link was also
+   emailed to the invitee (`emailed`); otherwise, or when the mail server didn't take it, the admin sends it. */
+function FreshLink({ email, link, emailed, emailEnabled, onDone }: { email: string; link: string; emailed: boolean; emailEnabled: boolean; onDone: () => void }) {
   return (
     <div className="flex flex-col gap-2 p-3 rounded-[10px]" style={{ background: "var(--surface-2, var(--bg-subtle))" }} data-testid="invite-link">
-      <p className="text-[13px]">
-        Send this link to <strong>{email}</strong> yourself. Eunomia doesn&apos;t send email. It works once and expires in 7 days.
-        You won&apos;t see it again, but you can make a new one with Resend.
-      </p>
+      {emailed ? (
+        <p className="text-[13px]" data-testid="invite-emailed">
+          We emailed this link to <strong>{email}</strong>. You can also copy it and send it yourself. It works once and expires in 7 days. You
+          won&apos;t see it again, but you can make a new one with Resend.
+        </p>
+      ) : (
+        <p className="text-[13px]">
+          {emailEnabled ? "We couldn't email this link, so send it to " : "Send this link to "}
+          <strong>{email}</strong> yourself.{emailEnabled ? "" : " This server doesn't send email."} It works once and expires in 7 days. You won&apos;t see it
+          again, but you can make a new one with Resend.
+        </p>
+      )}
       <div className="flex items-center gap-2 min-w-0">
         <code className="field flex-1 min-w-0 truncate px-3 py-2 text-[12px] font-mono" data-testid="invite-link-text">
           {link}
@@ -35,7 +46,9 @@ function FreshLink({ email, link, onDone }: { email: string; link: string; onDon
   );
 }
 
-function Row({ inv, onLink, onError }: { inv: OrgInvitation; onLink: (email: string, link: string) => void; onError: (f: Failure | null) => void }) {
+type Fresh = { email: string; link: string; emailed: boolean };
+
+function Row({ inv, onLink, onError }: { inv: OrgInvitation; onLink: (fresh: Fresh) => void; onError: (f: Failure | null) => void }) {
   const resend = useResendInvitation();
   const revoke = useRevokeInvitation();
   return (
@@ -58,7 +71,7 @@ function Row({ inv, onLink, onError }: { inv: OrgInvitation; onLink: (email: str
           onError(null);
           try {
             const r = await resend.mutateAsync(inv.id);
-            onLink(r.invitation.email, linkFor(r.token));
+            onLink({ email: r.invitation.email, link: linkFor(r.token), emailed: r.emailed });
           } catch (e) {
             onError(failure(e, `Could not make a new link for ${inv.email}.`));
           }
@@ -89,14 +102,15 @@ export function InvitationsSection() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<OrgInviteRole>("member");
   const [error, setError] = useState<Failure | null>(null);
-  const [fresh, setFresh] = useState<{ email: string; link: string } | null>(null);
+  const [fresh, setFresh] = useState<Fresh | null>(null);
+  const emailEnabled = useQuery(bootstrapQuery()).data?.email_enabled ?? false;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     try {
       const r = await create.mutateAsync({ email, role });
-      setFresh({ email: r.invitation.email, link: linkFor(r.token) });
+      setFresh({ email: r.invitation.email, link: linkFor(r.token), emailed: r.emailed });
       setEmail("");
     } catch (err) {
       setError(failure(err, "Could not create the invitation."));
@@ -148,14 +162,14 @@ export function InvitationsSection() {
         </button>
       </form>
       {error && <ErrorLine error={error} />}
-      {fresh && <FreshLink email={fresh.email} link={fresh.link} onDone={() => setFresh(null)} />}
+      {fresh && <FreshLink email={fresh.email} link={fresh.link} emailed={fresh.emailed} emailEnabled={emailEnabled} onDone={() => setFresh(null)} />}
       {list.isError && <ErrorLine error={failure(list.error, "Could not load the invitations. Reload to try again.")} />}
       {list.data === undefined && !list.isError ? (
         <LoadingSkeleton label="Loading invitations" rows={1} />
       ) : list.data && list.data.length > 0 ? (
         <ul className="hairline-rows text-[13px]" aria-label="Pending invitations">
           {list.data.map((inv) => (
-            <Row key={inv.id} inv={inv} onLink={(email, link) => setFresh({ email, link })} onError={setError} />
+            <Row key={inv.id} inv={inv} onLink={setFresh} onError={setError} />
           ))}
         </ul>
       ) : (
