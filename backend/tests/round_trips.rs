@@ -46,14 +46,20 @@ async fn round_trips_per_request() {
     ];
     let mut rows = Vec::new();
     for (label, body) in &cases {
-        // the first call warms whatever the process caches (org handle, credential); the second is the steady state
+        // the first call warms whatever the process caches (org handle, credential); the steady state is the
+        // lower of the next two. One of them can land on a timed refresh that is not part of any request's own
+        // cost: the organisation's AI settings are re-read at most once every `ai::hub::CONFIG_TTL` (3 s) per
+        // organisation, by whichever model-touching request comes first after that. Two calls in a row take far
+        // less than that, so at most one of them carries it, and the lower count is the request alone. Taking a
+        // single sample made this test fail whenever the refresh fell on it (first seen in the hardened CI job).
         let cold = count(&app, body.clone()).await;
-        let warm = count(&app, body.clone()).await;
+        let warm = count(&app, body.clone()).await.min(count(&app, body.clone()).await);
         rows.push((*label, cold, warm));
     }
     let new_subject = |n: u32| call("memory_write", json!({ "subject_name": format!("Emil Novak {n}"), "subject_kind": "person", "text": "Emil joined" }));
     count(&app, new_subject(1)).await;
-    let fresh = count(&app, new_subject(2)).await;
+    // two fresh subjects, the lower count, for the same reason
+    let fresh = count(&app, new_subject(2)).await.min(count(&app, new_subject(3)).await);
     rows.push(("memory_write new", fresh, fresh));
 
     println!("\n{:<22} {:>5} {:>5}", "request", "cold", "warm");
