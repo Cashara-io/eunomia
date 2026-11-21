@@ -10,7 +10,7 @@ Owned by the lead. One line per reserved migration number (docs/architecture/nex
 
 Tenant set: 0044 is the audit chain's access reviews (compliance PR03); 0045 is subject export and erasure (compliance PR08); 0046 is fact dates (#249). Next free: 0047.
 
-Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension to user records (PR #162); 0009 is enforced MFA (compliance PR04); 0010 is the audit chain (compliance PR03); 0011 is subject erasure (compliance PR08); 0012 is organisation invitations (#247). Next free: 0013.
+Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension to user records (PR #162); 0009 is enforced MFA (compliance PR04); 0010 is the audit chain (compliance PR03); 0011 is subject erasure (compliance PR08); 0012 is organisation invitations (#247); 0013 (account_recovery) is held by another lane; 0014 is the per-organisation MFA policy (hosted organisation admin). Next free: 0015.
 
 | set | number | name | lane | PR | state |
 |---|---|---|---|---|---|
@@ -45,3 +45,4 @@ Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension t
 | control | 0010 | audit_chain | Compliance PR03 (audit chain) | #245 | locked |
 | control | 0011 | erasure | Lane C: subject export and erasure (compliance PR08) | #246 | locked |
 | control | 0012 | org_invitations | Enterprise: org invitations | #247 | locked |
+| control | 0014 | org_admin_policy | Hosted: organisation admin | (this branch) | locked |

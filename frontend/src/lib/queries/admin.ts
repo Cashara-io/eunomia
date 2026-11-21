@@ -2,15 +2,20 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import {
   completeAccessReview,
   decideAccessReview,
+  endPersonSessions,
   exportAccessReview,
   exportAuditChain,
   getAccessReview,
   listAccessReviews,
   listPeople,
+  listPersonApps,
   listPersonTokens,
   listWorkspaceAudit,
+  revokePersonAccess,
+  revokePersonApp,
   revokePersonToken,
   setPersonAdmin,
+  setPersonOrgRole,
   setPersonSuspended,
   startAccessReview,
   verifyAuditChain,
@@ -25,6 +30,7 @@ export const adminKeys = {
   audit: (category: AuditCategory, limit: number, offset: number) => [...adminKeys.all, "audit", category, limit, offset] as const,
   people: () => [...adminKeys.all, "people"] as const,
   tokens: (user_id: string) => [...adminKeys.all, "tokens", user_id] as const,
+  apps: (user_id: string) => [...adminKeys.all, "apps", user_id] as const,
   verify: () => [...adminKeys.all, "verify"] as const,
   reviews: () => [...adminKeys.all, "reviews"] as const,
   review: (id: string) => [...adminKeys.all, "reviews", id] as const,
@@ -85,6 +91,53 @@ export function useRevokePersonToken() {
       void qc.invalidateQueries({ queryKey: [...adminKeys.all, "audit"] });
       // an admin may revoke their own token here: Settings > API tokens follows
       void qc.invalidateQueries({ queryKey: ["auth", "tokens"] });
+    },
+  });
+}
+
+/** Make a member an organisation admin, or an ordinary member again (the owner). The server answers with the updated people list. */
+export function useSetPersonRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ user_id, role }: { user_id: string; role: "member" | "admin" }) => call(setPersonOrgRole({ path: { user_id }, body: { role } })),
+    onSuccess: (report) => {
+      qc.setQueryData(adminKeys.people(), report);
+      void qc.invalidateQueries({ queryKey: [...adminKeys.all, "audit"] });
+    },
+  });
+}
+
+function afterAccessChange(qc: ReturnType<typeof useQueryClient>, user_id: string) {
+  void qc.invalidateQueries({ queryKey: adminKeys.people() });
+  void qc.invalidateQueries({ queryKey: adminKeys.tokens(user_id) });
+  void qc.invalidateQueries({ queryKey: adminKeys.apps(user_id) });
+  void qc.invalidateQueries({ queryKey: [...adminKeys.all, "audit"] });
+}
+
+/** Sign a member out everywhere. */
+export function useEndSessions() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (user_id: string) => call(endPersonSessions({ path: { user_id } })), onSuccess: (_, user_id) => afterAccessChange(qc, user_id) });
+}
+
+/** End every session, API token and connected app of a member at once. */
+export function useRevokeAccess() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (user_id: string) => call(revokePersonAccess({ path: { user_id } })), onSuccess: (_, user_id) => afterAccessChange(qc, user_id) });
+}
+
+/** The apps a member connected through OAuth (owner or admin). Loads only while `enabled`. */
+export const usePersonApps = (user_id: string, enabled = true) =>
+  useQuery({ queryKey: adminKeys.apps(user_id), queryFn: () => call(listPersonApps({ path: { user_id } })), enabled });
+
+/** Disconnect one app of a member. The server answers with their remaining apps. */
+export function useRevokePersonApp() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ user_id, grant_id }: { user_id: string; grant_id: string }) => call(revokePersonApp({ path: { user_id, grant_id } })),
+    onSuccess: (left, { user_id }) => {
+      qc.setQueryData(adminKeys.apps(user_id), left);
+      void qc.invalidateQueries({ queryKey: [...adminKeys.all, "audit"] });
     },
   });
 }

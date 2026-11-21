@@ -1,4 +1,4 @@
-//! Access reviews (admin only, Settings > Access reviews). An admin starts a review, which
+//! Access reviews (an organisation's owner or admin, Settings > Access reviews). An admin starts a review, which
 //! snapshots who has access to what: every person in the workspace, their role, admin rights and
 //! suspension, their space memberships, and their API tokens, connected apps and live sessions by
 //! name and count (never a secret). Admins record a decision per person (keep, remove, suspend)
@@ -149,6 +149,7 @@ async fn snapshot(state: &AppState, user: &User) -> AppResult<Value> {
     let org = state.org(&user.org).await?;
     let people = super::admin::people_rows(state, user).await?;
     let creator = crate::capsules::first_user(&state.control).await?;
+    let org_roles = crate::org_admin::roles(&state.control, user).await?;
     let ids: Vec<RecordId> = people.iter().map(|p| p.id.clone()).collect();
     let tokens: Vec<TokenRow> = store::control::ACCESS_TOKENS.on(&state.control).bind(("ids", ids.clone())).await?.take(0)?;
     let apps: Vec<AppRow> = store::control::ACCESS_APPS.on(&state.control).bind(("ids", ids.clone())).await?.take(0)?;
@@ -199,6 +200,7 @@ async fn snapshot(state: &AppState, user: &User) -> AppResult<Value> {
                 "user_id": id,
                 "email": p.email,
                 "role": if source.is_empty() { "member" } else { "admin" },
+                "org_role": org_roles.get(&p.id.to_string()).map(|r| r.as_str()).unwrap_or("member"),
                 "admin_source": source,
                 "suspended_at": time(&p.suspended_at),
                 "created_at": time(&p.created_at),
@@ -439,12 +441,12 @@ fn result_doc(r: &ReviewRow, decisions: &[DecisionRow], completed_by: &RecordId,
     get,
     path = "/api/admin/access-reviews",
     tag = "admin",
-    summary = "Access reviews, newest first (admin only)",
+    summary = "Access reviews, newest first (organisation owner or admin)",
     responses((status = 200, body = Vec<AccessReviewSummary>), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
 async fn list(State(state): State<AppState>, user: User) -> AppResult<Json<Vec<AccessReviewSummary>>> {
-    super::admin::require_admin(&state, &user).await?;
+    crate::org_admin::may_run_access_reviews(&state.control, &user).await?;
     let org = state.org(&user.org).await?;
     let rows: Vec<ListRow> = store::access_reviews::REVIEW_LIST.on(&org.db).bind(("org", org.db.org().key())).bind(("limit", 50)).await?.take(0)?;
     Ok(Json(
@@ -469,7 +471,7 @@ async fn list(State(state): State<AppState>, user: User) -> AppResult<Json<Vec<A
     post,
     path = "/api/admin/access-reviews",
     tag = "admin",
-    summary = "Start an access review: snapshot who has access to what (admin only, browser session)",
+    summary = "Start an access review: snapshot who has access to what (organisation owner or admin, browser session)",
     description = "One review can be open at a time. The snapshot lists every person, their role, admin rights and suspension, their spaces, and their API tokens, connected apps and live sessions by name and count. It never holds a secret.",
     responses((status = 200, body = AccessReview), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = [])),
@@ -481,7 +483,7 @@ async fn start(State(state): State<AppState>, user: User) -> AppResult<Json<Acce
 
 async fn start_now(state: AppState, user: User) -> AppResult<Json<AccessReview>> {
     authz::require_session()?;
-    super::admin::require_admin(&state, &user).await?;
+    crate::org_admin::may_run_access_reviews(&state.control, &user).await?;
     let org = state.org(&user.org).await?;
     let snap = snapshot(&state, &user).await?;
     let snapshot_hash = sha256_hex(canonical_json(&snap));
@@ -516,13 +518,13 @@ async fn start_now(state: AppState, user: User) -> AppResult<Json<AccessReview>>
     get,
     path = "/api/admin/access-reviews/{review_id}",
     tag = "admin",
-    summary = "One access review with its snapshot and decisions (admin only)",
+    summary = "One access review with its snapshot and decisions (organisation owner or admin)",
     params(("review_id" = String, Path)),
     responses((status = 200, body = AccessReview), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
 async fn get_review(State(state): State<AppState>, user: User, Path(review_id): Path<String>) -> AppResult<Json<AccessReview>> {
-    super::admin::require_admin(&state, &user).await?;
+    crate::org_admin::may_run_access_reviews(&state.control, &user).await?;
     let org = state.org(&user.org).await?;
     let (row, decisions) = load(&org.db, &review_id).await?;
     Ok(Json(view(row, decisions, &user)))
@@ -542,7 +544,7 @@ struct AccessReviewDecisionBody {
     put,
     path = "/api/admin/access-reviews/{review_id}/decisions/{user_id}",
     tag = "admin",
-    summary = "Record a decision about one person in an open access review (admin only, browser session)",
+    summary = "Record a decision about one person in an open access review (organisation owner or admin, browser session)",
     description = "Deciding again replaces the earlier decision while the review is open. You cannot decide about your own access. A decision is a record: suspending or removing the person is done from People.",
     params(("review_id" = String, Path), ("user_id" = String, Path)),
     request_body = AccessReviewDecisionBody,
@@ -560,7 +562,7 @@ async fn decide(
 
 async fn decide_now(state: AppState, user: User, review_id: String, user_id: String, body: AccessReviewDecisionBody) -> AppResult<Json<AccessReview>> {
     authz::require_session()?;
-    super::admin::require_admin(&state, &user).await?;
+    crate::org_admin::may_run_access_reviews(&state.control, &user).await?;
     if !matches!(body.decision.as_str(), "keep" | "remove" | "suspend") {
         return Err(AppError::bad_request("`decision` must be keep, remove or suspend."));
     }
@@ -610,7 +612,7 @@ async fn decide_now(state: AppState, user: User, review_id: String, user_id: Str
     post,
     path = "/api/admin/access-reviews/{review_id}/complete",
     tag = "admin",
-    summary = "Complete an access review; it can't be changed afterwards (admin only, browser session)",
+    summary = "Complete an access review; it can't be changed afterwards (organisation owner or admin, browser session)",
     description = "Everyone must have a decision, except you: your own access is recorded as not reviewed when no other admin decided it. The completion, with the hash of the review, goes into the security log.",
     params(("review_id" = String, Path)),
     responses((status = 200, body = AccessReview), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
@@ -622,7 +624,7 @@ async fn complete(State(state): State<AppState>, user: User, Path(review_id): Pa
 
 async fn complete_now(state: AppState, user: User, review_id: String) -> AppResult<Json<AccessReview>> {
     authz::require_session()?;
-    super::admin::require_admin(&state, &user).await?;
+    crate::org_admin::may_run_access_reviews(&state.control, &user).await?;
     let org = state.org(&user.org).await?;
     let (row, decisions) = load(&org.db, &review_id).await?;
     if row.status != "open" {
@@ -723,13 +725,13 @@ struct AccessReviewAuditLink {
     get,
     path = "/api/admin/access-reviews/{review_id}/export",
     tag = "admin",
-    summary = "Download a completed access review with the hashes that tie it to the security log (admin only)",
+    summary = "Download a completed access review with the hashes that tie it to the security log (organisation owner or admin)",
     params(("review_id" = String, Path)),
     responses((status = 200, body = AccessReviewExport), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
 async fn export(State(state): State<AppState>, user: User, Path(review_id): Path<String>) -> AppResult<impl IntoResponse> {
-    super::admin::require_admin(&state, &user).await?;
+    crate::org_admin::may_run_access_reviews(&state.control, &user).await?;
     let org = state.org(&user.org).await?;
     let (row, decisions) = load(&org.db, &review_id).await?;
     let (Some(by), Some(at), Some(result_hash)) = (row.completed_by.clone(), row.completed_at, row.result_hash.clone()) else {

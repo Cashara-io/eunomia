@@ -11,7 +11,7 @@ import { queryWords, usePaletteSearch } from "@/lib/queries/tools";
 import { useMe } from "@/lib/queries/auth";
 import { useVaults } from "@/lib/queries/vaults";
 import { modKey } from "@/lib/platform";
-import { SETTINGS_GROUPS } from "@/lib/settingsTabs";
+import { SETTINGS_GROUPS, visibleGroups } from "@/lib/settingsTabs";
 
 type IconType = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
 // `rich` replaces the one-line label: a memory's text, up to two lines, with the matched words bold.
@@ -61,10 +61,9 @@ const KIND_WORD: Record<string, string> = {
 };
 
 // Settings tabs come from the one list the Settings page also reads; admin groups are for admins only.
-type SettingsEntry = { id: string; label: string; group: string; admin: boolean; words: string };
-const SETTINGS_ENTRIES: SettingsEntry[] = SETTINGS_GROUPS.flatMap((g) =>
-  g.tabs.map((t) => ({ id: t.id, label: t.label, group: g.label, admin: g.admin, words: t.keywords }))
-);
+type SettingsEntry = { id: string; label: string; group: string; words: string };
+const settingsEntries = (who: { isAdmin: boolean; canManageOrg: boolean }): SettingsEntry[] =>
+  visibleGroups(SETTINGS_GROUPS, who).flatMap((g) => g.tabs.map((t) => ({ id: t.id, label: t.label, group: g.label, words: t.keywords })));
 
 /** How well `label` (plus extra `words`) matches `needle`: 0 is best, null is no match. Exact and
  * prefix matches on the label beat a keyword hit, which beats a match in the middle of a word. */
@@ -149,7 +148,9 @@ function Palette({ onClose }: { onClose: () => void }) {
   const rows = useSources().data ?? [];
   const [debounced, setDebounced] = useState("");
   const router = useRouter();
-  const isAdmin = useMe().data?.is_admin ?? false;
+  const me = useMe().data;
+  const isAdmin = me?.is_admin ?? false;
+  const canManageOrg = me?.can_manage_org ?? false;
   const vaults = useVaults().data ?? [];
   const spaceName = (id?: string) => {
     const v = id ? vaults.find((x) => x.id === id) : undefined;
@@ -186,7 +187,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   // Settings tabs only once something is typed, so the empty palette stays short.
   const settingsItems: Item[] = needle
     ? ranked(
-        SETTINGS_ENTRIES.filter((t) => !t.admin || isAdmin).map((t) =>
+        settingsEntries({ isAdmin, canManageOrg }).map((t) =>
           scored(
             {
               key: `settings:${t.id}`,

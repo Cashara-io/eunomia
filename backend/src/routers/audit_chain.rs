@@ -1,4 +1,4 @@
-//! The security log's integrity (admin only): verify the hash chain, and export a time range of it
+//! The security log's integrity (organisation owner or admin): verify the hash chain, and export a time range of it
 //! as a file anyone can verify offline (`scripts/audit/verify-audit-export.py`). See
 //! docs/audit-chain.md.
 
@@ -34,13 +34,13 @@ struct AuditVerifyReport {
     get,
     path = "/api/admin/audit/verify",
     tag = "admin",
-    summary = "Check that the security log was not altered (admin only)",
+    summary = "Check that the security log was not altered (organisation owner or admin)",
     description = "Seals anything still pending, then walks the workspace's hash chain and the instance chain from their starting checkpoints to their newest event and reports the first break: an edited, deleted or reordered event.",
     responses((status = 200, body = AuditVerifyReport), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
 async fn verify(State(state): State<AppState>, user: User) -> AppResult<Json<AuditVerifyReport>> {
-    super::admin::require_admin(&state, &user).await?;
+    crate::org_admin::may_read_org_audit(&state.control, &user).await?;
     let mut ledgers = vec![chain::verify(&state.control, &chain::org_ledger(&user.org)).await?];
     if crate::authz::sees_instance(&state.control, &user).await? {
         ledgers.push(chain::verify(&state.control, chain::INSTANCE).await?);
@@ -76,7 +76,7 @@ fn parse_time(field: &str, v: Option<&str>) -> AppResult<Option<DateTime<Utc>>> 
     get,
     path = "/api/admin/audit/export",
     tag = "admin",
-    summary = "Download the security log for a time range, with checkpoints to verify it offline (admin only)",
+    summary = "Download the security log for a time range, with checkpoints to verify it offline (organisation owner or admin)",
     description = "Metadata only: who, what, when, on which record and the outcome. Free-text detail is replaced by a keyed digest (HMAC-SHA256 under a server key), so the file holds no memory text, chat content, prompts or secrets and still verifies. At most 50,000 events per file: `truncated` and `next_seq` say where to continue.",
     params(ExportQuery),
     responses((status = 200, body = AuditExport), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
@@ -88,7 +88,7 @@ async fn export(State(state): State<AppState>, user: User, Query(q): Query<Expor
 }
 
 async fn export_now(state: AppState, user: User, q: ExportQuery) -> AppResult<([(header::HeaderName, String); 1], Json<AuditExport>)> {
-    super::admin::require_admin(&state, &user).await?;
+    crate::org_admin::may_read_org_audit(&state.control, &user).await?;
     let ledger = match q.ledger.as_deref().unwrap_or("org") {
         "org" | "" => chain::org_ledger(&user.org),
         "instance" if crate::authz::sees_instance(&state.control, &user).await? => chain::INSTANCE.to_string(),

@@ -80,6 +80,8 @@ pub const CONTROL_MIGRATIONS: &[(u32, &str, &str)] = &[
     (10, "audit_chain", include_str!("../migrations/control/0010_audit_chain.surql")),
     (11, "erasure", include_str!("../migrations/control/0011_erasure.surql")),
     (12, "org_invitations", include_str!("../migrations/control/0012_org_invitations.surql")),
+    // 0013 (account_recovery) is held by another lane and not in this tree: until it lands `first_gap` reports it.
+    (14, "org_admin_policy", include_str!("../migrations/control/0014_org_admin_policy.surql")),
 ];
 
 /// The first number missing from `list`, which must run 1, 2, 3, ... with no gap. A gap is final:

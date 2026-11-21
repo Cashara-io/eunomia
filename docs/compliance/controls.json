@@ -709,7 +709,7 @@
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. Authenticator-app (TOTP) second factor with encrypted secrets, replay refusal, single-use recovery codes, database-backed attempt limits, an instance-wide require-MFA switch, step-up for issuing credentials and an optional OIDC amr/acr check exist (PR04). Passkeys with origin and replay checks, admin-assisted recovery and a per-organisation policy are missing, and a \"start fresh\" single sign-on account cannot enrol an authenticator. E02-E03.",
+      "finding": "Partial. Authenticator-app (TOTP) second factor with encrypted secrets, replay refusal, single-use recovery codes, database-backed attempt limits, an instance-wide require-MFA switch, step-up for issuing credentials and an optional OIDC amr/acr check exist (PR04). An organisation's owner or admin can also require it of their own organisation's members (a per-organisation policy that binds only that organisation and combines with the instance switch: a member needs it when either requires it; same enforcement points, org_admin.rs, control migration 0014, hosted organisation-admin lane). Passkeys with origin and replay checks and admin-assisted recovery are missing, a per-organisation single sign-on assertion is not built, and a \"start fresh\" single sign-on account cannot enrol an authenticator. E02-E03.",
       "evidence": [
         "EV-C02-1",
         "EV-C02-2"
@@ -1118,7 +1118,7 @@
         "documentation"
       ],
       "policy_track": "templates/README.md",
-      "finding": "Partial. People and suspension routes exist, and suspension also stops peer sync, share codes, webhook deliveries and queued jobs (#243). Recorded access reviews with per-person decisions, self-review refused, and completed reviews frozen and committed to the audit chain exist (PR03); invitations let org admins invite members only (#247). A reviewer role, separation-of-duties rules, a review schedule and signed review records are absent, and decisions are not acted on automatically. E04,E07.",
+      "finding": "Partial. People and suspension routes exist, and suspension also stops peer sync, share codes, webhook deliveries and queued jobs (#243). Recorded access reviews with per-person decisions, self-review refused, and completed reviews frozen and committed to the audit chain exist (PR03); invitations let org admins invite members only (#247). On a shared host an organisation's owner and admins now run their own organisation (hosted organisation-admin lane): they list members, suspend and restore them, end sessions and revoke tokens and connected apps, change roles (only the owner grants or removes admin; nobody changes the owner), read, verify and export their own organisation's audit log and run its access reviews, never another organisation's, and the instance operator's powers (instance ledger, server-wide MFA switch, erasing another account, granting the instance-admin flag) stay closed to them. Role-separation exists only as owner versus admin versus member of one organisation. A reviewer role, separation-of-duties rules, a review schedule and signed review records are absent, and decisions are not acted on automatically. E04,E07.",
       "evidence": [
         "EV-C08-1",
         "EV-C08-2"

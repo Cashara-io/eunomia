@@ -12,6 +12,7 @@ import { useCancelErasure, useErasePerson, useErasures, useMakeWorkspaceOwner, u
 import { useMe } from "@/lib/queries/auth";
 import { ICON, PanelHead, QUIET_DANGER, RevokeButton, TableSkeleton, expiryLabel, relativeTime } from "./shared";
 import { InvitationsSection } from "./InvitationsSection";
+import { OrgRowActions, PersonApps, orgRoleLabel } from "./OrgPersonActions";
 
 /* Why an admin can't be changed here, for the tooltip on the disabled button. */
 const LOCKED: Record<string, string> = {
@@ -487,23 +488,18 @@ function Email({ p }: { p: Person }) {
   );
 }
 
-/** An owner or admin of the organisation who is not an instance admin: invitations and seats only. */
-function OrgPeopleSection() {
-  return (
-    <div className="flex flex-col gap-5">
-      <PanelHead title="People">Invite colleagues to this organisation.</PanelHead>
-      <InvitationsSection />
-    </div>
-  );
+/** `scope="instance"` for an instance admin (everyone's account, the sign-up policy, admin rights, data rights);
+ * `scope="org"` for an owner or admin of the organisation, who runs the same list for their own organisation only
+ * (suspend, role, sessions, tokens and apps), without the server's settings or other people's data. */
+export type PeopleScope = "instance" | "org";
+
+export function PeopleSection({ scope = "instance" }: { scope?: PeopleScope }) {
+  return <FullPeopleSection scope={scope} />;
 }
 
-/** `full` for an instance admin (everyone's account, suspend, admin rights); else invitations only. */
-export function PeopleSection({ full = true }: { full?: boolean }) {
-  if (!full) return <OrgPeopleSection />;
-  return <FullPeopleSection />;
-}
-
-function FullPeopleSection() {
+function FullPeopleSection({ scope }: { scope: PeopleScope }) {
+  const org = scope === "org";
+  const [notice, setNotice] = useState<string | null>(null);
   const query = usePeople();
   const data = query.data;
   const people = data?.people ?? null;
@@ -522,11 +518,11 @@ function FullPeopleSection() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PanelHead title="People">Everyone with an account in this workspace.</PanelHead>
+      <PanelHead title="People">{org ? "Everyone in this organisation." : "Everyone with an account in this workspace."}</PanelHead>
 
       {query.isError && <ErrorLine error={failure(query.error, "Could not load the people in this workspace. Reload to try again.")} />}
 
-      {signup && (
+      {!org && signup && (
         <div className="flex flex-col gap-1.5 text-[14px]">
           {signup.mode !== "open" && (
             <div>
@@ -563,6 +559,11 @@ function FullPeopleSection() {
       <InvitationsSection />
 
       {actionError && <ErrorLine error={actionError} />}
+      {notice && (
+        <p role="status" className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+          {notice}
+        </p>
+      )}
 
       {/* Phones: one stacked entry per person (email, then the facts, then the actions), no sideways scroll. */}
       <ul className="sm:hidden hairline-rows text-[13px]" aria-label="People">
@@ -578,12 +579,12 @@ function FullPeopleSection() {
               <Email p={p} />
               <span className="text-[12px] tabular-nums" style={{ color: "var(--ink-dim)" }}>
                 {[
-                  p.role === "admin" ? "Admin" : "Member",
+                  org ? orgRoleLabel(p) : p.role === "admin" ? "Admin" : "Member",
                   `joined ${date(p.created_at)}`,
                   `active ${relativeTime(p.last_active ?? null)}`,
                   `${p.shared_spaces} ${p.shared_spaces === 1 ? "space" : "spaces"}`,
                 ].join(" · ")}
-                {p.tokens > 0 && (
+                {p.tokens > 0 && (!org || p.can_revoke) && (
                   <>
                     {" · "}
                     <TokenCount p={p} open={tokensOf === p.id} onToggle={() => toggleTokens(p.id)} />
@@ -593,13 +594,14 @@ function FullPeopleSection() {
               {tokensOf === p.id && (
                 <div className="pl-3 border-l" style={{ borderColor: "var(--border)" }}>
                   <PersonTokens p={p} onError={setActionError} />
+                  {org && <PersonApps p={p} onError={setActionError} />}
                 </div>
               )}
               {/* pulled left by the buttons' own padding, so the actions line up with the email above */}
               <div className={`pt-1 ${p.is_you ? "" : "-ml-2.5"}`}>
-                <RowActions p={p} onError={setActionError} onData={() => toggleData(p.id)} />
+                {org ? <OrgRowActions p={p} onError={setActionError} onNotice={setNotice} /> : <RowActions p={p} onError={setActionError} onData={() => toggleData(p.id)} />}
               </div>
-              {dataOf === p.id && <PersonData p={p} onError={setActionError} iOwn={iOwn} iOperate={iOperate} />}
+              {!org && dataOf === p.id && <PersonData p={p} onError={setActionError} iOwn={iOwn} iOperate={iOperate} />}
             </li>
           ))
         )}
@@ -635,7 +637,7 @@ function FullPeopleSection() {
                     <td>
                       <Email p={p} />
                     </td>
-                    <td className="whitespace-nowrap">{p.role === "admin" ? "Admin" : "Member"}</td>
+                    <td className="whitespace-nowrap">{org ? orgRoleLabel(p) : p.role === "admin" ? "Admin" : "Member"}</td>
                     <td className="whitespace-nowrap hidden lg:table-cell tabular-nums" style={{ color: "var(--ink-dim)" }}>
                       {date(p.created_at)}
                     </td>
@@ -648,20 +650,21 @@ function FullPeopleSection() {
                     </td>
                     <td className="text-right tabular-nums hidden lg:table-cell">{p.shared_spaces}</td>
                     <td className="whitespace-nowrap">
-                      <TokenCount p={p} open={tokensOf === p.id} onToggle={() => toggleTokens(p.id)} />
+                      {org && !p.can_revoke ? <span className="tabular-nums">{p.tokens || "None"}</span> : <TokenCount p={p} open={tokensOf === p.id} onToggle={() => toggleTokens(p.id)} />}
                     </td>
                     <td className="text-right whitespace-nowrap">
-                      <RowActions p={p} onError={setActionError} onData={() => toggleData(p.id)} />
+                      {org ? <OrgRowActions p={p} onError={setActionError} onNotice={setNotice} /> : <RowActions p={p} onError={setActionError} onData={() => toggleData(p.id)} />}
                     </td>
                   </tr>,
                   tokensOf === p.id ? (
                     <tr key={`${p.id}-tokens`} data-testid={`person-tokens-${p.email}`}>
                       <td colSpan={7} className="h-auto! pl-8!">
                         <PersonTokens p={p} onError={setActionError} />
+                        {org && <PersonApps p={p} onError={setActionError} />}
                       </td>
                     </tr>
                   ) : null,
-                  dataOf === p.id ? (
+                  !org && dataOf === p.id ? (
                     <tr key={`${p.id}-data`}>
                       <td colSpan={7} className="h-auto! pl-8!">
                         <PersonData p={p} onError={setActionError} iOwn={iOwn} iOperate={iOperate} />
@@ -673,13 +676,21 @@ function FullPeopleSection() {
           </tbody>
         </table>
       </div>
+      {org ? (
+        <p className="text-[12px] max-w-[68ch]" style={{ color: "var(--ink-faint)" }}>
+          The owner and admins of this organisation can see this page, its audit log and its access reviews. Only the owner makes or removes an admin
+          or manages one. A suspended account can&apos;t sign in, and its API tokens and connected apps stop working until you restore it.
+          Everyone deletes their own account in Settings &gt; Data; the server&apos;s operator deletes anyone else&apos;s.
+        </p>
+      ) : (
       <p className="text-[12px] max-w-[68ch]" style={{ color: "var(--ink-faint)" }}>
         Admins can see this page, the audit log and the server settings. A suspended account can&apos;t sign in, and its API tokens
         and connected apps stop working until you restore it. Deleting an account removes everything that is theirs alone; a
         legal hold stops that until the server operator lifts it. Only the server operator deletes someone&apos;s account; anyone
         can delete their own in Settings &gt; Data.
       </p>
-      <Erasures iOperate={iOperate} />
+      )}
+      {!org && <Erasures iOperate={iOperate} />}
     </div>
   );
 }

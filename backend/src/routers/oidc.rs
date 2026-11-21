@@ -909,7 +909,7 @@ async fn link(
         if !provider_owns_mfa {
             let next_step = if crate::mfa::enabled(&state.control, &user_id).await? {
                 Some(crate::mfa::AfterPassword::Verify)
-            } else if crate::mfa::require_mfa(&state.control).await? {
+            } else if crate::mfa::required_for(&state.control, &user_id).await? {
                 Some(crate::mfa::AfterPassword::Enrol)
             } else {
                 None

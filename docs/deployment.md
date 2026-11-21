@@ -212,9 +212,42 @@ On a host that runs many organisations (`EUNOMIA_SIGNUP_ORG=personal`), an organ
 - Inviting an email that has an account in another organisation looks exactly like inviting one with no account, and when such an invitation is not accepted, the inviting organisation's log says only that it could not be accepted.
 - Limits (per process): creating and resending, 20 a minute per organisation and per admin; opening or accepting links, 20 a minute per address or account; and after 10 links that don't work in 15 minutes from one address or account, further tries are refused for a while.
 - `GET /api/org/seats` gives active members, suspended members and pending (unexpired) invitations, for billing on seats. Counts only.
-- **Audit.** Invitations sent, resent, withdrawn, accepted and refused (expired, or could not be accepted) are written to the security ledger. Settings > Audit log is for **instance admins only** and shows the instance admin's own organisation, so on a shared host the operator sees these rows and customers' owners and admins do not. A customer-facing audit view is not built yet.
+- **Audit.** Invitations sent, resent, withdrawn, accepted and refused (expired, or could not be accepted) are written to the security ledger. Settings > Audit log shows the viewer's **own organisation** to its owner and admins (see [Who may administer what](#who-may-administer-what)), so each customer reads its own rows and never another organisation's.
 
-**Who holds instance-wide admin.** `authz::is_admin` is true for exactly three kinds of account: (1) the install's first account (the oldest user row); (2) any account whose email is listed in `EUNOMIA_ADMIN_EMAILS`, compared in normalized form; (3) any account an instance admin made an admin in Settings > People (`user.admin`), which only reaches accounts in that admin's own organisation. An organisation owner or admin role grants none of this.
+## Who may administer what
+
+Three kinds of authority, kept apart in code (`backend/src/org_admin.rs` holds one function per capability, and every route calls it) and here.
+
+- **Organisation owner and organisation admin** (`membership.role`) run **their own organisation, and nothing outside it**. The organisation is always the caller's own (their oldest membership), never a request value, and a person is looked up through that organisation's membership before anything about them is read or changed: an account in another organisation gets the same `auth.not_found` as one that does not exist. An invitation can make a member an `admin`; only the owner changes roles afterwards. There is one owner per organisation, set when it is created or handed over (Settings > People > Data > Make workspace owner); nobody changes the owner's role.
+- **Instance admins** (`authz::is_admin`: the install's first account, an address in `EUNOMIA_ADMIN_EMAILS`, or an account made an admin in Settings > People, which sets `user.admin`) keep every right they had. Inside their own organisation they are treated like its owner, as invitations always did.
+- **Instance operators** (the install's first account, or an address in `EUNOMIA_ADMIN_EMAILS`) keep what spans organisations or the server: the instance ledger, the server-wide two-step verification switch, debug routes, updates, HTTPS and the AI provider, erasing another person's account, lifting a legal hold, and making an account an instance admin. An organisation's owner or admin passes none of those gates.
+
+| Capability | Plain member | Org admin | Org owner | Instance admin | Instance operator |
+|---|---|---|---|---|---|
+| See the organisation's people (role, status, two-step verification, last activity) | no | own org | own org | own org | own org |
+| Invite members; withdraw or resend a member invitation; see seats | no | yes | yes | yes | yes |
+| Invite an `admin`; manage `admin` invitations | no | no | yes | yes | yes |
+| Suspend or restore a member | no | members | members and admins | as before | as before |
+| End a member's sessions; revoke their API tokens and connected apps | no | members | members and admins | as before | as before |
+| Change a member's role (`member` or `admin`) | no | no | yes (never the owner's) | yes (never the owner's) | yes |
+| Act on the owner, or on an account that is an instance admin or operator | no | no | no | as before | as before |
+| Read, verify and export the organisation's audit log | no | yes | yes | yes | yes |
+| Start, decide and complete the organisation's access reviews | no | yes | yes | yes | yes |
+| Require two-step verification of the organisation's members | no | yes | yes | yes | yes |
+| Rename the organisation | no | no | yes | no (unless owner) | no (unless owner) |
+| The instance ledger (sign-ins with an unknown email) | no | no | no | only while the install has one organisation | yes |
+| Server-wide two-step verification switch; make someone an instance admin | no | no | no | no / as before | yes |
+| Erase another person's account; lift a legal hold; update, HTTPS, debug | no | no | no | update, HTTPS, debug as before | yes |
+
+Rules that hold for every row: nobody acts on their own account through these routes (their own Settings do that); a **suspended** account has no powers at once (its sessions end, and its tokens and apps are refused); an organisation admin cannot act on another admin, and nobody but an instance operator acts on the owner. An address in `EUNOMIA_ADMIN_EMAILS`, the first account, and an account carrying the `user.admin` flag are **protected**: an organisation's owner or admin cannot suspend, restore, sign out or revoke them (`org.protected_member`). An organisation's owner, like anyone, can erase only their own account; erasing another person's stays with that person and the server operator.
+
+**Removing a member.** There is no "remove from the organisation" distinct from erasing the account, which stays with the person and the operator. Suspending a member is how an organisation takes someone out: the account cannot sign in, its sessions end at once, and its tokens and apps are refused until it is restored. "Revoke all access" ends sessions, tokens and apps without suspending.
+
+**Per-organisation two-step verification.** An owner or admin turns on "Require two-step verification" for the organisation in Settings > Organisation (`PUT /api/admin/org/security`). A member must use two-step verification when the server-wide switch or their organisation's policy requires it (`mfa::required_for`, asked at every enforcement point). Turning it on behaves for that organisation's members as the server-wide switch does: a password sign-in without it must enrol before it gets a session, a session that never passed a second factor is refused on its next request, a new account joining the organisation enrols at sign-up, and a member cannot turn it off while it is required. Members who sign in only through single sign-on are left to their identity provider, as for the server-wide switch. API tokens and app connections keep working. The policy binds only the organisation's own members, and an organisation cannot turn off the server-wide switch.
+
+**Naming the organisation.** An organisation created under `EUNOMIA_SIGNUP_ORG=personal` is named after its founder's email until its owner renames it (Settings > Organisation, `PUT /api/admin/org/name`: 1 to 80 characters, no `@`). The name is shown to people invited to it.
+
+**Audit.** Role changes, renames, policy changes, sign-outs and revocations are written to the organisation's ledger, attributed to the person who acted (`org.role`, `org.rename`, `org.require_mfa`, `admin.sessions_end`, `admin.access_revoke`, `admin.app_revoke`, plus the earlier `user.suspend`, `user.restore`, `admin.token_revoke`).
 
 ## Single sign-on (OpenID Connect)
 

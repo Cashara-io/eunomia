@@ -103,7 +103,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Access reviews, newest first (admin only)",
+        "summary": "Access reviews, newest first (organisation owner or admin)",
         "operationId": "listAccessReviews",
         "responses": {
           "200": {
@@ -143,7 +143,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Start an access review: snapshot who has access to what (admin only, browser session)",
+        "summary": "Start an access review: snapshot who has access to what (organisation owner or admin, browser session)",
         "description": "One review can be open at a time. The snapshot lists every person, their role, admin rights and suspension, their spaces, and their API tokens, connected apps and live sessions by name and count. It never holds a secret.",
         "operationId": "startAccessReview",
         "responses": {
@@ -180,7 +180,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "One access review with its snapshot and decisions (admin only)",
+        "summary": "One access review with its snapshot and decisions (organisation owner or admin)",
         "operationId": "getAccessReview",
         "parameters": [
           {
@@ -229,7 +229,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Complete an access review; it can't be changed afterwards (admin only, browser session)",
+        "summary": "Complete an access review; it can't be changed afterwards (organisation owner or admin, browser session)",
         "description": "Everyone must have a decision, except you: your own access is recorded as not reviewed when no other admin decided it. The completion, with the hash of the review, goes into the security log.",
         "operationId": "completeAccessReview",
         "parameters": [
@@ -276,7 +276,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Record a decision about one person in an open access review (admin only, browser session)",
+        "summary": "Record a decision about one person in an open access review (organisation owner or admin, browser session)",
         "description": "Deciding again replaces the earlier decision while the review is open. You cannot decide about your own access. A decision is a record: suspending or removing the person is done from People.",
         "operationId": "decideAccessReview",
         "parameters": [
@@ -341,7 +341,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Download a completed access review with the hashes that tie it to the security log (admin only)",
+        "summary": "Download a completed access review with the hashes that tie it to the security log (organisation owner or admin)",
         "operationId": "exportAccessReview",
         "parameters": [
           {
@@ -390,8 +390,8 @@
         "tags": [
           "admin"
         ],
-        "summary": "Workspace activity log: sign-ins, tokens, app connections and space changes (admin only)",
-        "description": "Reads the security ledger for the admin's workspace, newest first. Per-tool-call rows are left out (see `/api/audit/tool-usage`).",
+        "summary": "Workspace activity log: sign-ins, tokens, app connections and space changes (organisation owner or admin)",
+        "description": "Reads the security ledger for the caller's own organisation, newest first. Per-tool-call rows are left out (see `/api/audit/tool-usage`). Rows that belong to no organisation (sign-in attempts with an unknown email) are for the server's operators only.",
         "operationId": "listWorkspaceAudit",
         "parameters": [
           {
@@ -472,7 +472,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Download the security log for a time range, with checkpoints to verify it offline (admin only)",
+        "summary": "Download the security log for a time range, with checkpoints to verify it offline (organisation owner or admin)",
         "description": "Metadata only: who, what, when, on which record and the outcome. Free-text detail is replaced by a keyed digest (HMAC-SHA256 under a server key), so the file holds no memory text, chat content, prompts or secrets and still verifies. At most 50,000 events per file: `truncated` and `next_seq` say where to continue.",
         "operationId": "exportAuditChain",
         "parameters": [
@@ -541,7 +541,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Check that the security log was not altered (admin only)",
+        "summary": "Check that the security log was not altered (organisation owner or admin)",
         "description": "Seals anything still pending, then walks the workspace's hash chain and the instance chain from their starting checkpoints to their newest event and reports the first break: an edited, deleted or reordered event.",
         "operationId": "verifyAuditChain",
         "responses": {
@@ -706,12 +706,146 @@
         ]
       }
     },
+    "/api/admin/org": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Your organisation's name and security policy (organisation owner or admin)",
+        "operationId": "getOrg",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/org/name": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Rename your organisation (its owner, browser session)",
+        "description": "The name is shown to people you invite. It is recorded in the audit log.",
+        "operationId": "renameOrg",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NameChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/org/security": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Require two-step verification of your organisation's members, or stop (organisation owner or admin, browser session)",
+        "description": "Binds this organisation's members only, on top of the server-wide switch (`/api/admin/security`, the server's operator): a member must use two-step verification when either requires it. Turning it on works as the server-wide switch does: a password sign-in without two-step verification must set it up before it gets a session, and browser sessions that never passed a second factor are signed out. API tokens and app connections keep working. Needs your own account protected first.",
+        "operationId": "setOrgSecurity",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/admin/people": {
       "get": {
         "tags": [
           "admin"
         ],
-        "summary": "Every account in the workspace and the sign-up policy (admin only)",
+        "summary": "Every account in the workspace and the sign-up policy (organisation owner or admin)",
+        "description": "The caller's own organisation only. Each person carries their organisation role and which actions the caller may take on them. The sign-up policy's allowlist and the server's operator list are filled in for the server's operators only.",
         "operationId": "listPeople",
         "responses": {
           "200": {
@@ -780,6 +914,116 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PeopleReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/apps": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The apps a member connected through OAuth (organisation owner or admin)",
+        "operationId": "listPersonApps",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PersonApp"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/apps/{grant_id}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Disconnect one app of a member (organisation owner or admin, browser session)",
+        "description": "The app's tokens stop working at once. Returns the member's remaining apps.",
+        "operationId": "revokePersonApp",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "grant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PersonApp"
+                  }
                 }
               }
             }
@@ -963,13 +1207,164 @@
         ]
       }
     },
+    "/api/admin/people/{user_id}/revoke-access": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "End every session, API token and connected app of a member at once (organisation owner or admin, browser session)",
+        "description": "For a lost laptop or a leaver. The account itself is untouched: it can sign in again unless it is suspended.",
+        "operationId": "revokePersonAccess",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRevoked"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/role": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Make a member an organisation admin, or an ordinary member again (the organisation's owner, browser session)",
+        "description": "An organisation admin can invite members, suspend members and revoke their access, read the audit log and run access reviews, for this organisation only. Only the owner changes roles. The owner's role never changes here, and an operator of the server is not changed by an organisation's owner.",
+        "operationId": "setPersonOrgRole",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/sessions": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Sign a member out everywhere (organisation owner or admin, browser session)",
+        "description": "Ends their browser sessions. Their API tokens and connected apps keep working: see `revoke-access`.",
+        "operationId": "endPersonSessions",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionsEnded"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/admin/people/{user_id}/suspended": {
       "put": {
         "tags": [
           "admin"
         ],
-        "summary": "Suspend or restore an account (admin only, browser session)",
-        "description": "A suspended account cannot sign in. Its sessions end at once, and its API tokens and app connections are refused until it is restored. You cannot suspend yourself or the first account.",
+        "summary": "Suspend or restore an account (organisation owner or admin, browser session)",
+        "description": "A suspended account cannot sign in. Its sessions end at once, and its API tokens and app connections are refused until it is restored. You cannot suspend yourself or the first account. An organisation's owner or admin can suspend a member of their own organisation; only the owner acts on an admin, and nobody but the server's operator acts on the owner or on an operator of the server (`org.protected_member`). A person in another organisation is `auth.not_found`.",
         "operationId": "setPersonSuspended",
         "parameters": [
           {
@@ -1025,7 +1420,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Someone's API tokens, newest first (admin only)",
+        "summary": "Someone's API tokens, newest first (organisation owner or admin)",
         "description": "Names and dates only; a token's secret is never stored or shown.",
         "operationId": "listPersonTokens",
         "parameters": [
@@ -1078,7 +1473,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Revoke someone's API token (admin only, browser session)",
+        "summary": "Revoke someone's API token (organisation owner or admin, browser session)",
         "description": "The token stops working at once. Returns the person's remaining tokens.",
         "operationId": "revokePersonToken",
         "parameters": [
@@ -10962,6 +11357,32 @@
           }
         }
       },
+      "AccessRevoked": {
+        "type": "object",
+        "description": "What ending a member's access removed.",
+        "required": [
+          "sessions",
+          "tokens",
+          "apps"
+        ],
+        "properties": {
+          "apps": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Connected apps (OAuth grants) revoked."
+          },
+          "sessions": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Browser sessions that were open."
+          },
+          "tokens": {
+            "type": "integer",
+            "format": "int64",
+            "description": "API tokens revoked."
+          }
+        }
+      },
       "AckOut": {
         "type": "object",
         "required": [
@@ -16262,7 +16683,7 @@
           },
           "required": {
             "type": "boolean",
-            "description": "An admin requires two-step verification for every password account on this server."
+            "description": "The server's operator or this account's organisation requires two-step verification of it."
           },
           "unreadable": {
             "type": "boolean",
@@ -16364,6 +16785,18 @@
             "type": "integer",
             "description": "Back to pending.",
             "minimum": 0
+          }
+        }
+      },
+      "NameChange": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The organisation's new display name (1 to 80 characters, no `@`)."
           }
         }
       },
@@ -16512,6 +16945,66 @@
       "OrgInviteRole": {
         "type": "string",
         "description": "The role an invitation gives.",
+        "enum": [
+          "member",
+          "admin"
+        ]
+      },
+      "OrgOut": {
+        "type": "object",
+        "description": "The organisation's name and security policy, and what the caller may do with them.",
+        "required": [
+          "name",
+          "your_role",
+          "can_rename",
+          "require_mfa",
+          "server_requires_mfa",
+          "without_mfa"
+        ],
+        "properties": {
+          "can_rename": {
+            "type": "boolean",
+            "description": "The caller may rename it (its owner)."
+          },
+          "name": {
+            "type": "string",
+            "description": "The organisation's display name. A workspace made at sign-up is named after its founder's email until renamed."
+          },
+          "require_mfa": {
+            "type": "boolean",
+            "description": "This organisation requires two-step verification of every member who signs in with a password."
+          },
+          "server_requires_mfa": {
+            "type": "boolean",
+            "description": "The server's operator requires it for everyone on the server too: an organisation cannot turn that off."
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Email of the member who last changed the organisation's policy."
+          },
+          "without_mfa": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Active password members of this organisation without two-step verification yet: while it is required\nthey must set it up at their next sign-in."
+          },
+          "your_role": {
+            "type": "string",
+            "description": "The caller's role in it: `owner`, `admin` or `member`."
+          }
+        }
+      },
+      "OrgRoleChoice": {
+        "type": "string",
+        "description": "The roles a role change may give.",
         "enum": [
           "member",
           "admin"
@@ -16788,12 +17281,28 @@
           "is_you",
           "tokens",
           "workspace_owner",
-          "mfa"
+          "mfa",
+          "org_role",
+          "can_suspend",
+          "can_set_role",
+          "can_revoke"
         ],
         "properties": {
           "admin": {
             "type": "string",
             "description": "Why this person is an admin: `creator` (the first account), `operator` (listed in the server's\nadmin emails), `granted` (made an admin in the app), or empty for a member."
+          },
+          "can_revoke": {
+            "type": "boolean",
+            "description": "The viewer may end this person's sessions and revoke their API tokens and connected apps."
+          },
+          "can_set_role": {
+            "type": "boolean",
+            "description": "The viewer may change this person's organisation role (the owner may, to `member` or `admin`)."
+          },
+          "can_suspend": {
+            "type": "boolean",
+            "description": "The viewer may suspend or restore this person (`org_admin::decide`: not themselves, not the owner, not\nan operator of the server, and only the owner acts on an admin)."
           },
           "created_at": {
             "type": [
@@ -16829,6 +17338,10 @@
             "type": "string",
             "description": "Two-step verification: `on`, `off`, or `provider` for an account that signs in only through single\nsign-on (its identity provider handles the second factor)."
           },
+          "org_role": {
+            "type": "string",
+            "description": "The person's role in this organisation: `owner`, `admin` or `member` (`role` above is the server-wide\nadmin right, a different thing)."
+          },
           "role": {
             "type": "string",
             "description": "`admin` or `member`."
@@ -16853,6 +17366,45 @@
           "workspace_owner": {
             "type": "boolean",
             "description": "The workspace's owner (one per workspace). An owner whose workspace has other members hands it\nover (`/api/admin/people/{user_id}/workspace-owner`) before their account can be erased."
+          }
+        }
+      },
+      "PersonApp": {
+        "type": "object",
+        "description": "An app a member connected through OAuth (an MCP client such as Claude Desktop).",
+        "required": [
+          "id",
+          "name",
+          "client_id",
+          "scope"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -16930,6 +17482,25 @@
           "recordings_count": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "PolicyChange": {
+        "type": "object",
+        "required": [
+          "require_mfa"
+        ],
+        "properties": {
+          "mfa_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A current authenticator or recovery code, when your own account has two-step verification and its\nlast second factor is older than 10 minutes (`auth.step_up_required`)."
+          },
+          "require_mfa": {
+            "type": "boolean",
+            "description": "`true` requires two-step verification of every member of this organisation who signs in with a password."
           }
         }
       },
@@ -18085,6 +18656,18 @@
           }
         }
       },
+      "RoleChange": {
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/OrgRoleChoice",
+            "description": "`member` or `admin`. Only the organisation's owner changes roles; nobody changes the owner's."
+          }
+        }
+      },
       "RoleRequest": {
         "type": "object",
         "required": [
@@ -18286,6 +18869,19 @@
           },
           "user_agent": {
             "type": "string"
+          }
+        }
+      },
+      "SessionsEnded": {
+        "type": "object",
+        "required": [
+          "sessions"
+        ],
+        "properties": {
+          "sessions": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Browser sessions that were open."
           }
         }
       },
