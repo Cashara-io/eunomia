@@ -29,13 +29,13 @@ pub const CONTROL_ALL: &[&ControlStmt] = &[
 
 /// The seats in use by `$org`: active members plus pending (open, unexpired) invitations. Suspended members
 /// do not count. A SurrealQL expression, shared so every statement counts the same way.
-macro_rules! used {
+macro_rules! seats_used {
     () => {
         "((SELECT count() AS n FROM membership WHERE org = $org AND user.suspended_at IS NONE GROUP ALL)[0].n ?? 0) + \
          ((SELECT count() AS n FROM org_invitation WHERE org = $org AND accepted_at IS NONE AND revoked_at IS NONE AND expires_at > time::now() GROUP ALL)[0].n ?? 0)"
     };
 }
-pub(crate) use used;
+pub(crate) use seats_used;
 
 /// The plan fields of one organisation (an organisation with none set is unmanaged).
 pub const GET: ControlStmt = ControlStmt::new(
@@ -70,7 +70,7 @@ pub const UPDATE: ControlStmt = ControlStmt::new(
         "BEGIN TRANSACTION; \
          UPDATE $org SET seat_guard = (seat_guard ?? 0) + 1 RETURN NONE; \
          LET $used = ",
-        used!(),
+        seats_used!(),
         "; \
          IF $set_limit AND $seat_limit != NONE AND $seat_limit < $used { THROW 'operator.seats_in_use' }; \
          UPDATE $org SET name = IF $set_name THEN $name ELSE name END, plan = IF $set_plan THEN $plan ELSE plan END, \
@@ -98,7 +98,7 @@ pub const RESTORE_MEMBER: ControlStmt = ControlStmt::new(
          IF $limit != NONE { \
              UPDATE $org SET seat_guard = (seat_guard ?? 0) + 1 RETURN NONE; \
              LET $used = ",
-        used!(),
+        seats_used!(),
         "; \
              IF $used >= $limit { THROW 'org.seat_limit' }; \
          }; \
@@ -146,4 +146,4 @@ pub const OWNER_CLAIMS: ControlStmt = ControlStmt::new(
 );
 
 /// Seats in use by `$org` (the same count the seat checks make), for the plan status.
-pub const SEATS_USED: ControlStmt = ControlStmt::new("plan.seats_used", concat!("RETURN ", used!(), ";"));
+pub const SEATS_USED: ControlStmt = ControlStmt::new("plan.seats_used", concat!("RETURN ", seats_used!(), ";"));

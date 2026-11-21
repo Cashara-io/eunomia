@@ -28,7 +28,7 @@ pub const CREATE: ControlStmt = ControlStmt::at(
          IF $limit != NONE { \
              UPDATE $org SET seat_guard = (seat_guard ?? 0) + 1 RETURN NONE; \
              LET $used = ",
-        super::plan::used!(),
+        super::plan::seats_used!(),
         "; \
              IF $used >= $limit { THROW 'org.seat_limit' }; \
          }; \
@@ -59,7 +59,7 @@ pub const RESEND: ControlStmt = ControlStmt::at(
          IF $limit != NONE AND $lapsed { \
              UPDATE $org SET seat_guard = (seat_guard ?? 0) + 1 RETURN NONE; \
              LET $used = ",
-        super::plan::used!(),
+        super::plan::seats_used!(),
         "; \
              IF $used >= $limit { THROW 'org.seat_limit' }; \
          }; \
@@ -114,7 +114,7 @@ pub const CLAIM: ControlStmt = ControlStmt::at(
              IF $limit != NONE { \
                  UPDATE $org SET seat_guard = (seat_guard ?? 0) + 1 RETURN NONE; \
                  LET $used = ",
-        super::plan::used!(),
+        super::plan::seats_used!(),
         "; \
                  IF $used + 1 > $limit { THROW 'org.seat_limit' }; \
              }; \

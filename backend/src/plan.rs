@@ -27,7 +27,6 @@ use surrealdb::types::{Datetime, RecordId, SurrealValue};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::models_user::User;
 use crate::pool::{ControlDb, OrgId};
-use crate::rid::RecordIdExt;
 use crate::state::AppState;
 use crate::store::plan as q;
 
@@ -80,6 +79,21 @@ impl HostedConfig {
         };
         Ok(HostedConfig { operator_token, max_orgs, billing_url })
     }
+}
+
+/// What a hosted configuration should say at boot. A hosted server (an operator token is set) should not let the
+/// public sign up: organisations come from the operator API and from invitations.
+pub fn boot_warnings(signup_mode: &str, hosted: &HostedConfig) -> Vec<String> {
+    let open = matches!(signup_mode.trim().to_ascii_lowercase().as_str(), "" | "open");
+    let mut out = Vec::new();
+    if open && hosted.operator_token.is_some() {
+        out.push(
+            "EUNOMIA_OPERATOR_TOKEN is set (this is a hosted service) while SIGNUP=open: anyone who can reach this server can sign up. \
+             Set SIGNUP=invite (and EUNOMIA_SIGNUP_ORG=personal) so organisations come only from the operator API and invitations; see docs/deployment.md, \"Running a hosted service\"."
+                .to_string(),
+        );
+    }
+    out
 }
 
 /// Whether `given` is the configured operator token, in time that does not depend on how much of it matches
@@ -323,6 +337,21 @@ mod tests {
         assert_eq!(HostedConfig::from_vars(vars(&[("EUNOMIA_MAX_ORGS", "25")])).unwrap().max_orgs, Some(25));
         assert!(HostedConfig::from_vars(vars(&[("EUNOMIA_BILLING_URL", "billing.example.com")])).is_err());
         assert!(HostedConfig::from_vars(vars(&[("EUNOMIA_BILLING_URL", "https://billing.example.com/manage")])).is_ok());
+    }
+
+    #[test]
+    fn a_hosted_server_with_open_signup_is_warned_about() {
+        let hosted = HostedConfig { operator_token: Some("an-operator-token-of-32-characters".into()), ..Default::default() };
+        for open in ["", "open", " OPEN "] {
+            assert_eq!(boot_warnings(open, &hosted).len(), 1, "{open:?}");
+        }
+        assert!(boot_warnings("open", &hosted)[0].contains("SIGNUP=open"));
+        assert!(!boot_warnings("open", &hosted)[0].contains("an-operator-token"), "never the token");
+        for closed in ["invite", "closed"] {
+            assert!(boot_warnings(closed, &hosted).is_empty(), "{closed}");
+        }
+        // a self-hosted install (no token) is not warned about
+        assert!(boot_warnings("open", &HostedConfig::default()).is_empty());
     }
 
     #[test]

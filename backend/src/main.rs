@@ -18,6 +18,9 @@ async fn main() {
     if signup_open && eunomia_backend::llm_net::allow_private_llm_url() {
         tracing::warn!("SIGNUP=open and ALLOW_PRIVATE_LLM_URL=1 together: anyone who can reach this server can sign up and point it at private addresses. Set SIGNUP=invite or ALLOW_PRIVATE_LLM_URL=0; see docs/deployment.md.");
     }
+    for warning in eunomia_backend::plan::boot_warnings(&std::env::var("SIGNUP").unwrap_or_default(), &settings.hosted) {
+        tracing::warn!("{warning}");
+    }
     let state = match AppState::build(&settings, surrealdb::opt::Config::new()).await {
         Ok(s) => s,
         Err(e) => {

@@ -569,7 +569,7 @@ pub async fn check_usable(control: &ControlDb, p: Pending) -> AppResult<Pending>
 /// membership, atomically. A second accept, or one that lost a race, is `invitation.not_found`.
 pub async fn claim(control: &ControlDb, user: &RecordId, p: &Pending, join: bool) -> AppResult<()> {
     // joining takes a seat: one at a time in this process; across processes the seat guard decides
-    let _one = if join { crate::tx::lock(&format!("seats:{}", p.org.key())).await } else { None };
+    let _one = if join { crate::tx::lock(&format!("seats:{}", p.org_id().map(|o| o.key()).unwrap_or_default())).await } else { None };
     let res = crate::tx::with_retry(|| async {
         q::CLAIM
             .on(control)
