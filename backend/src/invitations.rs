@@ -348,9 +348,9 @@ pub async fn create(state: &AppState, by: &User, email: &str, role: OrgInviteRol
         return Err(AppError::coded(ErrorCode::InvitationExists, "That person is already in this organisation."));
     }
     let token = models_user::generate_token();
-    // one at a time in this process; across processes the statement's seat guard decides (store/plan.rs)
-    let _one = crate::tx::lock(&format!("seats:{}", by.org.key())).await;
     let created: AppResult<surrealdb::IndexedResults> = async {
+        // one at a time in this process (and not while a mail is sent); across processes the statement's seat guard decides (store/plan.rs)
+        let _one = crate::tx::lock(&format!("seats:{}", by.org.key())).await;
         Ok(crate::tx::with_retry(|| async {
             q::CREATE
                 .on(&state.control)
@@ -400,20 +400,22 @@ pub async fn resend(state: &AppState, by: &User, id: &str) -> AppResult<OrgInvit
     require_role_of(state, by, m, &id).await?;
     creation_rate(state, by)?;
     let token = models_user::generate_token();
-    let _one = crate::tx::lock(&format!("seats:{}", by.org.key())).await;
-    let res = crate::tx::with_retry(|| async {
-        q::RESEND
-            .on(&state.control)
-            .bind(("id", id.clone()))
-            .bind(("org", by.org.record()))
-            .bind(("roles", m.roles()))
-            .bind(("hash", models_user::hash_token(&token)))
-            .bind(("ttl", format!("{TTL_DAYS}d")))
-            .await?
-            .check()
-    })
-    .await
-    .map_err(AppError::from);
+    let res = {
+        let _one = crate::tx::lock(&format!("seats:{}", by.org.key())).await;
+        crate::tx::with_retry(|| async {
+            q::RESEND
+                .on(&state.control)
+                .bind(("id", id.clone()))
+                .bind(("org", by.org.record()))
+                .bind(("roles", m.roles()))
+                .bind(("hash", models_user::hash_token(&token)))
+                .bind(("ttl", format!("{TTL_DAYS}d")))
+                .await?
+                .check()
+        })
+        .await
+        .map_err(AppError::from)
+    };
     let mut res = match res {
         Ok(r) => r,
         Err(e) => return Err(crate::plan::explain_seat_refusal(&state.control, &by.org.record(), e).await),

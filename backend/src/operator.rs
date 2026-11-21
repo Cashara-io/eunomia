@@ -429,10 +429,10 @@ async fn create_inner(state: &AppState, req: CreateOrg) -> AppResult<CreateOrgRe
     let owner = models_user::normalize_new_email(&req.owner_email)?;
     owner_not_allowed(&owner)?;
     let org = org_for_ref(&external_ref);
-    // one create per reference at a time in this process; across processes the derived id and the
-    // insert-if-absent keep it to one organisation
+    // deciding and inserting the record: one create per reference at a time in this process (not while the database
+    // is provisioned or a mail is sent); across processes the derived id and the insert-if-absent keep it to one organisation
+    let created = {
     let _one = crate::tx::lock(&format!("operator.org:{}", org.key())).await;
-
     let existing = row_of(state, &org).await?;
     let created = existing.is_none();
     match &existing {
@@ -468,6 +468,8 @@ async fn create_inner(state: &AppState, req: CreateOrg) -> AppResult<CreateOrgRe
             }
         }
     }
+    created
+    };
 
     // the organisation's database; a ready one is left alone (provisioning it again would reset its name)
     if let Err(e) = state.pool.for_org(&org).await {
@@ -485,8 +487,12 @@ async fn create_inner(state: &AppState, req: CreateOrg) -> AppResult<CreateOrgRe
     let summary = summary_of(state, &org).await?;
     let (mut claim_link, mut claim_expires_at, mut emailed) = (None, None, false);
     if !summary.owner_claimed && summary.owner_claim_expires_at.is_none() {
-        let (link, expires_at, sent) = make_claim(state, &org, &summary.name, &owner, ClaimMode::Create).await?;
-        (claim_link, claim_expires_at, emailed) = (Some(link), Some(expires_at), sent);
+        match make_claim(state, &org, &summary.name, &owner, ClaimMode::Create).await {
+            Ok((link, expires_at, sent)) => (claim_link, claim_expires_at, emailed) = (Some(link), Some(expires_at), sent),
+            // a twin of this call (a retry that overlapped it) made the claim first: that call holds the link
+            Err(e) if e.code == ErrorCode::DbDuplicate => {}
+            Err(e) => return Err(e),
+        }
     }
     Ok(CreateOrgResult {
         organisation_id: org.key(),

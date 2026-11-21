@@ -537,12 +537,22 @@ pub const EMAIL_IN_ORG: ControlStmt = ControlStmt::new(
 /// org's first owner cannot both win (the loser's commit fails and is retried, see `assign_org`).
 pub const MEMBERSHIP_ADD: ControlStmt = ControlStmt::new(
     "control.membership_add",
-    r#"BEGIN TRANSACTION;
+    concat!(
+        r#"BEGIN TRANSACTION;
         LET $role = IF array::len((SELECT VALUE id FROM membership WHERE org = $org AND role = 'owner' LIMIT 1)) = 0 { 'owner' } ELSE { 'member' };
+        LET $limit = (SELECT VALUE seat_limit FROM org WHERE id = $org)[0];
+        IF $limit != NONE {
+            UPDATE $org SET seat_guard = (seat_guard ?? 0) + 1 RETURN NONE;
+            LET $used = "#,
+        super::plan::seats_used!(),
+        r#";
+            IF $used >= $limit { THROW 'org.seat_limit' };
+        };
         CREATE membership SET user = $user, org = $org, role = $role,
             slot = IF $role = 'owner' { string::concat(<string>$org, '/owner') } ELSE { string::concat(<string>$org, '/', <string>$user) }
             RETURN AFTER;
-        COMMIT TRANSACTION;"#,
+        COMMIT TRANSACTION;"#
+    ),
 );
 
 /// The self-host move inserts legacy `user` rows after the control migrations ran, so they arrive with

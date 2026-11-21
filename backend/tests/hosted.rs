@@ -250,6 +250,10 @@ async fn creating_is_idempotent_and_the_claim_link_makes_the_owner() {
     // and a retried call with concurrent twins is still one organisation
     let (a, b) = tokio::join!(create_org(&app, "sub_200", "twin@acme.test", 2), create_org(&app, "sub_200", "twin@acme.test", 2));
     assert_eq!(a["organisation_id"], b["organisation_id"]);
+    let made_it = [&a, &b].iter().filter(|r| r["created"] == true).count();
+    let has_link = [&a, &b].iter().filter(|r| r["claim_link"].is_string()).count();
+    assert_eq!((made_it, has_link), (1, 1), "exactly one of two overlapping calls made the organisation and holds its link: {a} {b}");
+    assert_eq!(app.state.mailer.captured().len(), 2, "one mail for sub_100, one for sub_200");
     assert_eq!(op(&app, "GET", "/api/operator/v1/capacity", None).await.1["organisations"].as_i64().unwrap(), before + 2);
 
     // the claim page names the organisation and the owner role
@@ -574,6 +578,24 @@ async fn accepting_invitations_never_takes_the_organisation_past_its_limit() {
     set_org(&app, &id2, "seat_limit = 3").await;
     assert_eq!(accept(&app, x["token"].as_str().unwrap(), "x@acme.test").await.0, StatusCode::OK);
     assert_eq!(accept(&app, y["token"].as_str().unwrap(), "y@acme.test").await.0, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn signing_up_into_a_full_organisation_is_refused() {
+    // an install where sign-up joins the install's one organisation (EUNOMIA_SIGNUP_ORG=join) still honours a seat limit
+    let app = host().await;
+    let (_, list) = op(&app, "GET", "/api/operator/v1/orgs", None).await;
+    let default = list["organisations"].as_array().unwrap().iter().find(|r| r["plan"].is_null()).unwrap()["id"].as_str().unwrap().to_string();
+    let (status, body) = op(&app, "PATCH", &format!("/api/operator/v1/orgs/{default}"), Some(json!({ "seat_limit": 1 }))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let refused = models_user::register_user_with(&app.state, "joiner@example.com", common::PASSWORD, false).await.unwrap_err();
+    assert_eq!(refused.code, eunomia_backend::error::ErrorCode::OrgSeatLimit, "{}", refused.message);
+    assert!(refused.message.contains("1 seat "), "{}", refused.message);
+    assert!(models_user::user_by_email(&app.state.control, "joiner@example.com").await.unwrap().is_none(), "no half-made account");
+    op(&app, "PATCH", &format!("/api/operator/v1/orgs/{default}"), Some(json!({ "seat_limit": 2 }))).await;
+    let joined = models_user::register_user_with(&app.state, "joiner@example.com", common::PASSWORD, false).await.unwrap();
+    assert_eq!(org_summary(&app, &default).await["seats"]["active_members"], 2);
+    drop(joined);
 }
 
 // ------------------------------------------------------------------ suspension
