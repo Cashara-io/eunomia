@@ -1,4 +1,4 @@
-# Getting help with Eunomia
+# Getting help with Cupel
 
 Open **Settings > Support > Diagnostics** and select **Download diagnostics**.
 Only instance admins can download the bundle. Members can ask their instance
@@ -6,7 +6,7 @@ admin to do this. Sign in with a browser session, API tokens cannot download it.
 The app currently has no step-up authentication flow.
 
 System checks have a 30-second timeout. Container collection then has a 60-second deadline, including file reads. Archive creation and audit recording follow.
-Review the zip before sending it to support. Eunomia never sends it automatically.
+Review the zip before sending it to support. Cupel never sends it automatically.
 
 ## Inside the zip
 
@@ -29,7 +29,7 @@ Review the zip before sending it to support. Eunomia never sends it automaticall
 - `containers/`: compose service status, images and up to 300 recent log lines per
   service. Docker reads are bounded to 1 MiB per command and six seconds each.
 - `health.json`: `/healthz`, readiness, the latest 50 job failures by code and
-  embedding backlog counts, plus ready, running and dead embedding/indexing jobs. Eunomia has `/healthz` and `/readyz`, not `/health`.
+  embedding backlog counts, plus ready, running and dead embedding/indexing jobs. Cupel has `/healthz` and `/readyz`, not `/health`.
 - `README.txt`: collection limits, exclusions and review instructions.
 
 Credentials, emails, organisation and connection names, cursor values, memory,
@@ -78,7 +78,7 @@ available after updating to a release that contains this collector.
 
 ## When the web app is down
 
-Run these commands from the Eunomia installation folder:
+Run these commands from the Cupel installation folder:
 
 ```sh
 docker compose ps --all

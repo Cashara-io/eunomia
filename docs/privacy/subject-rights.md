@@ -1,6 +1,6 @@
 # Data-subject export and erasure
 
-How Eunomia answers "give this person all their data" and "delete this person, and prove it". Readiness catalogue rows C21 and C22 ([controls.json](../compliance/controls.json)). Code: `backend/src/subject/`, `backend/src/routers/subject.rs`, `backend/src/store/subject.rs`. Proof: `backend/tests/subject_rights.rs`, `scripts/tests/backup.test.sh`.
+How Cupel answers "give this person all their data" and "delete this person, and prove it". Readiness catalogue rows C21 and C22 ([controls.json](../compliance/controls.json)). Code: `backend/src/subject/`, `backend/src/routers/subject.rs`, `backend/src/store/subject.rs`. Proof: `backend/tests/subject_rights.rs`, `scripts/tests/backup.test.sh`.
 
 An erasure is only as good as the inventory of where a person's data lives. The inventory below is the contract: every row names what the export includes and what the erasure does. A new table that can name a user must add a row here, a case in `store::subject::RESIDUE` or `CONTROL_RESIDUE` (the post-check), and a seed in `tests/subject_rights.rs`.
 
@@ -56,7 +56,7 @@ After that, the person's email address is replaced by `[erased person]`, matched
 
 ### Sync clients, peers and the change log
 
-The erasure writes the same content-free change rows the product's normal paths write: `deleted` for the person's facts, entities, relations, skills and documents it deletes outside the spaces that go whole, `updated` for every fact and entity whose text the email scrub rewrites, and a space-deleted event for each space that goes whole. A client syncing with `changes_since` therefore drops or refetches them. **Copies already held by another Eunomia server a space was shared with (peer vaults) are outside this server's reach**: that server's operator erases them there.
+The erasure writes the same content-free change rows the product's normal paths write: `deleted` for the person's facts, entities, relations, skills and documents it deletes outside the spaces that go whole, `updated` for every fact and entity whose text the email scrub rewrites, and a space-deleted event for each space that goes whole. A client syncing with `changes_since` therefore drops or refetches them. **Copies already held by another Cupel server a space was shared with (peer vaults) are outside this server's reach**: that server's operator erases them there.
 
 ### What is not searched, and content other people wrote
 
@@ -127,8 +127,8 @@ The erasure writes the same content-free change rows the product's normal paths 
 | --- | --- |
 | The `documents` file bucket (`EUNOMIA_DOCUMENTS_BACKEND`) | Covered above. With an S3 backend the object store's own versioning or retention may keep copies: configure it to match. |
 | Backups (`eunomia-backups` volume) | **Not rewritten.** A backup taken before the erasure still holds the person until it rotates out (14 daily and 8 weekly by default). Restoring one is covered by the re-apply below. Copies of backups outside the volume are the operator's to manage. |
-| Logs and traces | Request logs carry user ids and trace ids, not content. They are kept by the operator's logging setup, outside Eunomia. |
-| Data already sent to an AI provider or a connected service | Outside Eunomia. The erasure deletes the connector and its credentials; it cannot recall what the provider holds. |
+| Logs and traces | Request logs carry user ids and trace ids, not content. They are kept by the operator's logging setup, outside Cupel. |
+| Data already sent to an AI provider or a connected service | Outside Cupel. The erasure deletes the connector and its credentials; it cannot recall what the provider holds. |
 
 ## Audit trail
 
@@ -210,7 +210,7 @@ The previous `GET /api/export` (personal space as JSON) is unchanged for scripts
 
 - Erasure and export cover every org the person belongs to; the confirmation and the owner checks cover them all.
 - The account that set up the server cannot be erased in the app.
-- Accounts with single sign-on only confirm with a sign-in from the last 10 minutes. Eunomia's OIDC sign-in does not send `prompt=login` or `max_age`, so an identity provider that still has a session signs the person in again without asking for credentials; the check proves a recent sign-in, not a recent password.
+- Accounts with single sign-on only confirm with a sign-in from the last 10 minutes. Cupel's OIDC sign-in does not send `prompt=login` or `max_age`, so an identity provider that still has a session signs the person in again without asking for credentials; the check proves a recent sign-in, not a recent password.
 - An admin's export reads the person's API tokens, connected apps and audit events account-wide (they are not tagged by workspace). That is right only while an account belongs to one workspace, as every account does today; an admin export of an account with more than one membership is refused (`auth.forbidden`) rather than show one workspace's admin another's activity.
 - **The audit chain keeps an erased person's ids.** Their sealed events keep the account and token ids the hash covers (the detail is erased). Removing those too needs a chain format that commits to a keyed form of the ids; that is a design change to the chain, not made here.
 - **Access reviews keep the person** (see "Access reviews").

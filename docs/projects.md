@@ -1,12 +1,12 @@
 # Projects
 
-A Eunomia project ties a repo to one vault. A small `.eunomia/` folder, committed to git,
+A Cupel project ties a repo to one vault. A small `.eunomia/` folder, committed to git,
 names the server and the vault, so every agent on the team that works in the repo reads and
 writes the same memory and finds the same skills.
 
 ## Set one up
 
-In the repo's root, with your Eunomia server running:
+In the repo's root, with your Cupel server running:
 
 ```bash
 npm create eunomia

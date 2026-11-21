@@ -1,8 +1,8 @@
 # Password managers (1Password and Bitwarden)
 
-Eunomia can let a tool use a secret that stays in your organisation's own password manager. Eunomia
+Cupel can let a tool use a secret that stays in your organisation's own password manager. Cupel
 stores only a **reference** to the secret, such as `op://Ops/Square/access_token`. When a tool call
-names that reference, Eunomia asks your password manager for the value, hands it to that one tool
+names that reference, Cupel asks your password manager for the value, hands it to that one tool
 call, and logs that it did. The value is never saved: not in memory, skills, the audit log, failure
 reports, the change log or the server's logs.
 
@@ -13,7 +13,7 @@ Supported:
 - **Bitwarden Secrets Manager** (**Preview**): a machine account access token (it starts with `0.`), on
   Bitwarden's US or EU cloud or a self-hosted server.
 
-**Bitwarden Secrets Manager is a preview.** Eunomia talks to Bitwarden with its own small client (the
+**Bitwarden Secrets Manager is a preview.** Cupel talks to Bitwarden with its own small client (the
 Bitwarden SDK's licence is not open source), which is tested against a mock of Bitwarden's API, not yet
 against Bitwarden's cloud. Settings shows it with a **Preview** badge. Try it on non-critical secrets
 first, and tell us if Test connection or a resolution fails where Bitwarden's own tools work. The
@@ -37,7 +37,7 @@ Design and threat model: `docs/architecture/specs/broker.md`.
 **Scope the password manager's token.** Because vault owners register their own references, any item the
 token can read can be registered by any vault owner (anyone can create a vault). Give the 1Password
 service account or Connect token, or the Bitwarden machine account, access only to the vaults or projects
-whose secrets your Eunomia vault owners may use. Every registration and every use is audited.
+whose secrets your Cupel vault owners may use. Every registration and every use is audited.
 
 ## 0. Switch password managers on
 
@@ -72,8 +72,8 @@ Open **Connectors**, scroll to **Password managers** and choose **Set up** on th
 
 1. In 1Password, create a Connect server and an access token that can read the vaults you need
    ([1Password's guide](https://developer.1password.com/docs/connect/get-started/)). Run the Connect
-   server where the Eunomia host can reach it.
-2. In Eunomia, enter the **Connect server URL** (for example `https://connect.example.com:8080`) and the
+   server where the Cupel host can reach it.
+2. In Cupel, enter the **Connect server URL** (for example `https://connect.example.com:8080`) and the
    **Token**, then **Save**.
 3. Choose **Test connection**. It should say how many vaults the token can see.
 
@@ -82,13 +82,13 @@ Open **Connectors**, scroll to **Password managers** and choose **Set up** on th
 1. In 1Password, create a service account with read access to the vaults you need
    ([1Password's guide](https://developer.1password.com/docs/service-accounts/get-started/)) and copy
    its token.
-2. In Eunomia, paste the **Token** and **Save**, then **Test connection**.
+2. In Cupel, paste the **Token** and **Save**, then **Test connection**.
 
 ### Bitwarden Secrets Manager (Preview)
 
 1. In Bitwarden Secrets Manager, create a machine account, give it access to the projects you need, and
    create an access token for it ([Bitwarden's guide](https://bitwarden.com/help/access-tokens/)).
-2. In Eunomia, paste the **Token**. Leave **Server URL** empty for Bitwarden's US cloud, enter
+2. In Cupel, paste the **Token**. Leave **Server URL** empty for Bitwarden's US cloud, enter
    `https://vault.bitwarden.eu` for the EU cloud, or your own server's address if you self-host.
 3. **Save**, then **Test connection**. It should say it signed in as the machine account.
 
@@ -105,7 +105,7 @@ A tool can only use a reference that an owner, an admin or the bound vault's own
   (copy it with **Copy Secret Reference** in the 1Password app), or `bws://<secret id>` for Bitwarden
   (the secret's id, shown in Secrets Manager).
 - **Resolved by**: which of your password managers holds it.
-- **Bound to vault**: only members of this Eunomia vault can use it. A token restricted to another vault
+- **Bound to vault**: only members of this Cupel vault can use it. A token restricted to another vault
   cannot use it. A vault owner can pick only the vaults they own.
 - **Allowed tools**: the tools that may receive the value. `*` allows any tool that takes secrets. Empty
   allows none.

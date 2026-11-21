@@ -1,38 +1,38 @@
-# Sharing a memory space with another Eunomia
+# Sharing a memory space with another Cupel
 
-A memory space can be shared with a **different Eunomia install**: a teammate's, a second computer of
-yours, a small Eunomia on a laptop that hangs off a big one at the office. Each Eunomia keeps a full
+A memory space can be shared with a **different Cupel install**: a teammate's, a second computer of
+yours, a small Cupel on a laptop that hangs off a big one at the office. Each Cupel keeps a full
 copy of the space, and the copies keep each other in step by themselves.
 
-(Inviting someone by email is different: that gives a person access to a space on *this* Eunomia.)
+(Inviting someone by email is different: that gives a person access to a space on *this* Cupel.)
 
 ## For everyone
 
 **To share a space**
 
-1. Open **Memory spaces**, pick the space, and find **Share with another Eunomia**.
-2. Choose what the other Eunomia may do: **Can add and change** or **Can only read**.
+1. Open **Memory spaces**, pick the space, and find **Share with another Cupel**.
+2. Choose what the other Cupel may do: **Can add and change** or **Can only read**.
 3. Press **Create share code**, then **Copy**, and send the code to the person running the other
-   Eunomia (chat, email, whatever you use). A code works **once** and expires after **7 days**.
+   Cupel (chat, email, whatever you use). A code works **once** and expires after **7 days**.
 
 **To join a shared space**
 
-1. On the other Eunomia, open **Memory spaces** and press **Join a shared space**.
+1. On the other Cupel, open **Memory spaces** and press **Join a shared space**.
 2. Paste the code and press **Join**. A new space appears with a full copy, and it stays in step.
 
-**What you will see** next to each connected Eunomia:
+**What you will see** next to each connected Cupel:
 
 | Words | Meaning |
 |---|---|
 | Up to date | Both copies hold the same things. |
 | Syncing… | Changes are on their way. |
-| Can't reach the other Eunomia, will keep trying | It is off, asleep or on another network. Nothing is lost: changes wait and go across when it is back. |
-| Haven't heard from the other Eunomia lately | (On the Eunomia that shared the space.) The other side has not checked in for a few minutes. |
+| Can't reach the other Cupel, will keep trying | It is off, asleep or on another network. Nothing is lost: changes wait and go across when it is back. |
+| Haven't heard from the other Cupel lately | (On the Cupel that shared the space.) The other side has not checked in for a few minutes. |
 | A change failed its integrity check | Something arrived damaged or altered and was refused. See below. |
 | Sharing stopped. Your copy stays here. | The other side stopped sharing. Your copy is now a normal space. |
 
 **Copies match ✓** means both Eunomias computed the same fingerprint of everything shared. Each
-Eunomia also shows a short **ID** (like `3f9a-07c2`): the share code's maker can compare it with what the
+Cupel also shows a short **ID** (like `3f9a-07c2`): the share code's maker can compare it with what the
 joiner sees, to be sure they reached the right one.
 
 **Stop sharing** works from either side. Both sides keep the copy they have; changes simply stop
@@ -41,15 +41,15 @@ travelling. The person who shared the space can also cancel a code that was not 
 **What is shared:** people, organisations, places, code entities and your own kinds of entity; facts
 (memories); relations between them; and saved skills. **Not shared yet:** uploaded documents (facts
 already learned from a document *are* shared, as plain facts), and the summarised "observations" each
-Eunomia writes from facts: each side makes its own.
+Cupel writes from facts: each side makes its own.
 
-**Chains and trees work.** A space you joined can be shared again from your Eunomia. Changes travel
-along every connection, so a big Eunomia can share with a second big one, and each of them with
+**Chains and trees work.** A space you joined can be shared again from your Cupel. Changes travel
+along every connection, so a big Cupel can share with a second big one, and each of them with
 several small ones; a change made anywhere reaches everyone.
 
 ## How it connects
 
-The share code holds a list of addresses for the sharing Eunomia, best first:
+The share code holds a list of addresses for the sharing Cupel, best first:
 
 1. **The local network.** `EUNOMIA_LAN_ADDRS` (the installer writes it with
    `scripts/lan-addrs.sh --env .env`; port 3000, the web port; "Update now" writes it too on Linux
@@ -64,14 +64,14 @@ The share code holds a list of addresses for the sharing Eunomia, best first:
 3. **Anything else** in `EUNOMIA_PEER_ADDRS` (comma separated: a Cloudflare tunnel hostname, a port
    forward, `host:port` or full URLs).
 
-The joining Eunomia asks each address in turn (1.5 seconds each) "who are you?"
-(`GET /api/peer/v1/{org}/hello`) and uses the first that answers as the Eunomia named in the code.
-From then on the **joining Eunomia always calls the sharing one**, roughly every 30 seconds and on
-**Sync now**. So only the sharing Eunomia must be reachable: a laptop behind home NAT can join a space
+The joining Cupel asks each address in turn (1.5 seconds each) "who are you?"
+(`GET /api/peer/v1/{org}/hello`) and uses the first that answers as the Cupel named in the code.
+From then on the **joining Cupel always calls the sharing one**, roughly every 30 seconds and on
+**Sync now**. So only the sharing Cupel must be reachable: a laptop behind home NAT can join a space
 from an office server, but not the other way round. If none of the addresses works, put the sharing
-Eunomia on a network both can reach (same Wi-Fi, Tailscale, a tunnel) and add that address.
+Cupel on a network both can reach (same Wi-Fi, Tailscale, a tunnel) and add that address.
 
-Set `EUNOMIA_INSTANCE_NAME` to choose how an Eunomia introduces itself to others (otherwise the
+Set `EUNOMIA_INSTANCE_NAME` to choose how a Cupel introduces itself to others (otherwise the
 joiner uses the person's email and the sharer is named after its address).
 
 ## Protocol
@@ -177,13 +177,13 @@ the only port a peer needs.
 ## Limits and notes
 
 - **Documents** are not shared yet; observations are not shared (each side derives its own).
-- The **sharing Eunomia must be reachable** from the joining one (see "How it connects").
+- The **sharing Cupel must be reachable** from the joining one (see "How it connects").
 - A **read-only** guest's own edits stay on that guest, and its copy then differs ("Copies differ").
 - Memory `created_at` is not carried: a copied fact is dated when it arrived.
 - **Several backend replicas:** the scheduler leader runs the guest syncs; any replica answers a peer.
   Replay protection is per process, so within the 5 minute window a replica that did not see a nonce
   would accept its replay, and every write it could cause is idempotent.
-- **Handing the main copy over (#134)** — making the other Eunomia the one that holds the original —
+- **Handing the main copy over (#134)** — making the other Cupel the one that holds the original —
   is not done yet. Today: the new main copy shares the space back with a fresh code, and the old side
   stops sharing and joins it. Follow-up: flip a link's direction in place.
 

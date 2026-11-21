@@ -1,6 +1,6 @@
 # Two-step verification (MFA)
 
-Eunomia supports two-step verification for password accounts with an authenticator app (TOTP, RFC 6238) and single-use recovery codes. The server's operator can require it for every password account on the server, and an organisation's owner or admin can require it of their own organisation's members. Accounts that sign in through single sign-on (OIDC) leave the second factor to their identity provider. This is readiness capability C02 in [docs/compliance](../compliance/README.md); passkeys (WebAuthn) are not implemented yet.
+Cupel supports two-step verification for password accounts with an authenticator app (TOTP, RFC 6238) and single-use recovery codes. The server's operator can require it for every password account on the server, and an organisation's owner or admin can require it of their own organisation's members. Accounts that sign in through single sign-on (OIDC) leave the second factor to their identity provider. This is readiness capability C02 in [docs/compliance](../compliance/README.md); passkeys (WebAuthn) are not implemented yet.
 
 ## For people
 
@@ -31,7 +31,7 @@ Turning the switch on or off is recorded in the operator's activity log, as are 
 
 ## Single sign-on
 
-An account that set up its own authenticator passes it on every sign-in route, single sign-on included, **even when the ID token says the provider used a second factor**: that factor proves who holds the provider identity, not who owns the Eunomia account. The person gets the same pending second step as after a password: no session until the code. The only exception is an operator's explicit choice that the provider owns MFA for this server, `OIDC_REQUIRE_MFA=true`, whose claim check the token must pass anyway; then it goes straight in and the session counts as verified.
+An account that set up its own authenticator passes it on every sign-in route, single sign-on included, **even when the ID token says the provider used a second factor**: that factor proves who holds the provider identity, not who owns the Cupel account. The person gets the same pending second step as after a password: no session until the code. The only exception is an operator's explicit choice that the provider owns MFA for this server, `OIDC_REQUIRE_MFA=true`, whose claim check the token must pass anyway; then it goes straight in and the session counts as verified.
 
 **Linking to an account that has a password** (`/login/link`, see [deployment.md](../deployment.md)). A provider sign-in whose verified email belongs to an account with a password asks before linking: the person proves the password, or starts a new account and the old one is set aside. Two-step verification adds three rules, none of which apply when `OIDC_REQUIRE_MFA=true`:
 
@@ -69,7 +69,7 @@ Control migration 0009 (`mfa`) adds optional fields to accounts and sessions and
 
 - Passkeys (WebAuthn), a second PR under C02.
 - Account recovery by an admin when someone loses both their app and their recovery codes. Today an operator clears `mfa_secret_enc` and the account's `mfa_recovery_code` rows in the control database.
-- **Forced enrolment trusts whoever has the password.** While MFA is required, whoever holds a not-yet-enrolled account's password can enrol their own authenticator first. This stays true until email verification or operator-assisted enrolment exists (Eunomia sends no mail). The `auth.mfa_enrol` event is in the activity log.
+- **Forced enrolment trusts whoever has the password.** While MFA is required, whoever holds a not-yet-enrolled account's password can enrol their own authenticator first. This stays true until email verification or operator-assisted enrolment exists (Cupel sends no mail). The `auth.mfa_enrol` event is in the activity log.
 - **A password holder can push the owner onto recovery codes.** Ten wrong authenticator codes every 15 minutes keep the authenticator locked. The owner can still sign in with a recovery code (separate counter), which ends that lockout. There is no self-service password change yet; changing a password is an operator task.
 - Turning the switch on takes effect at once on the replica that served it. Other replicas keep a verified-credential cache for up to 20 seconds.
 - In the rare case that the database fails between spending a correct code and consuming the sign-in challenge, the code is spent and no session starts (counter resets after that point are best effort and cannot stop the sign-in).

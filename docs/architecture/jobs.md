@@ -97,7 +97,7 @@ Without an LLM or embeddings key the `extract`, `consolidate` and `embed` handle
 
 ## Inspect and retry dead jobs
 
-In Surreal Studio or `surreal sql` against the Eunomia namespace and the `control` database:
+In Surreal Studio or `surreal sql` against the `eunomia` namespace and the `control` database:
 
 ```sql
 -- what is stuck

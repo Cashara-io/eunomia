@@ -2,7 +2,7 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "How Eunomia fits together",
+    "title": "How Cupel fits together",
     "quality_profile": "showcase"
   },
   "components": [

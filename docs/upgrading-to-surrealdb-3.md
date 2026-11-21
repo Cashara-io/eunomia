@@ -12,7 +12,7 @@ Whichever runs first records `SURREAL_DATA_VOLUME=eunomia-surreal-data-v3` in `.
 
 Recovering by hand, if a move failed and you fixed the cause: `docker compose up -d` from the repo root (the service tries again), or `bash scripts/upgrade-surreal-v3.sh` then `docker compose up -d`. Set `EUNOMIA_SURREAL_OLD_IMAGE` if your old install did not run `surrealdb/surrealdb:v2.3`. Releasers: see [releasing.md](releasing.md).
 
-Eunomia moves from SurrealDB 2.x to SurrealDB 3.3. Released installs run `surrealdb/surrealdb:v2.3` (v1.2.2 and v1.3.0), so that is the real starting point. SurrealDB 3 cannot read 2.x data files, and it refuses to open a database that a newer version has written to. So the data is copied across, never upgraded in place. The script `scripts/upgrade-surreal-v3.sh` does the copy and checks it. You normally do not run it yourself: "Update now" in Settings, the installer or the `surreal-upgrade` service runs it for you.
+Cupel moves from SurrealDB 2.x to SurrealDB 3.3. Released installs run `surrealdb/surrealdb:v2.3` (v1.2.2 and v1.3.0), so that is the real starting point. SurrealDB 3 cannot read 2.x data files, and it refuses to open a database that a newer version has written to. So the data is copied across, never upgraded in place. The script `scripts/upgrade-surreal-v3.sh` does the copy and checks it. You normally do not run it yourself: "Update now" in Settings, the installer or the `surreal-upgrade` service runs it for you.
 
 ## What happens
 

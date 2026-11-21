@@ -27,7 +27,7 @@
       "id": "model-data-path",
       "owner": "customer",
       "reason": "Owner decision: customer selects the model endpoint and encryption is assumed on that path.",
-      "boundary": "Exclude provider retention, training, residency, subprocessors, provider contracts, certification and provider data handling. Model/endpoint identifiers for Eunomia activity remain in scope."
+      "boundary": "Exclude provider retention, training, residency, subprocessors, provider contracts, certification and provider data handling. Model/endpoint identifiers for Cupel activity remain in scope."
     },
     {
       "id": "hosted-service-attestation",
@@ -3104,35 +3104,35 @@
           "line_start": 1,
           "line_end": 16,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Eunomia enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Cupel enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "backend/src/oidc.rs",
           "line_start": 342,
           "line_end": 418,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Eunomia enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Cupel enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "backend/src/routers/oidc.rs",
           "line_start": 1,
           "line_end": 22,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Eunomia enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Cupel enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "backend/src/routers/oidc.rs",
           "line_start": 138,
           "line_end": 178,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Eunomia enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Cupel enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "docs/deployment.md",
           "line_start": 197,
           "line_end": 216,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Eunomia enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Cupel enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         }
       ],
       "limitations": [
@@ -3190,35 +3190,35 @@
           "line_start": 1,
           "line_end": 16,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Eunomia enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Cupel enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "backend/src/oidc.rs",
           "line_start": 399,
           "line_end": 495,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Eunomia enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Cupel enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "backend/src/routers/oidc.rs",
           "line_start": 1,
           "line_end": 37,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Eunomia enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Cupel enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "backend/src/routers/oidc.rs",
           "line_start": 186,
           "line_end": 270,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Eunomia enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Cupel enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "docs/deployment.md",
           "line_start": 219,
           "line_end": 247,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Eunomia enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Cupel enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "backend/migrations/control/0009_mfa.surql",
@@ -3350,35 +3350,35 @@
           "line_start": 1,
           "line_end": 16,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Eunomia enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Cupel enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "backend/src/oidc.rs",
           "line_start": 342,
           "line_end": 418,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Eunomia enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Cupel enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "backend/src/routers/oidc.rs",
           "line_start": 1,
           "line_end": 22,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Eunomia enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Cupel enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "backend/src/routers/oidc.rs",
           "line_start": 138,
           "line_end": 178,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Eunomia enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Cupel enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "docs/deployment.md",
           "line_start": 197,
           "line_end": 216,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Eunomia enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. No enforced MFA strength claim check was found, so an IdP offering MFA does not prove Cupel enforces it. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         }
       ],
       "limitations": [
@@ -3408,35 +3408,35 @@
           "line_start": 1,
           "line_end": 16,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Eunomia enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Cupel enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "backend/src/oidc.rs",
           "line_start": 399,
           "line_end": 495,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Eunomia enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Cupel enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "backend/src/routers/oidc.rs",
           "line_start": 1,
           "line_end": 37,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Eunomia enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Cupel enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "backend/src/routers/oidc.rs",
           "line_start": 186,
           "line_end": 270,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Eunomia enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Cupel enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "docs/deployment.md",
           "line_start": 219,
           "line_end": 247,
           "inventory_id": "E03",
-          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Eunomia enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
+          "summary": "OIDC authorisation-code flow, state, nonce, PKCE, signature, issuer, audience and expiry checks, verified-email account mapping. Modes include password and OIDC. Linking a provider identity to an existing account that has a password now asks first, and an account is linked to at most one identity per provider. OIDC_REQUIRE_MFA (off by default) refuses an ID token whose amr/acr names no second factor; it trusts the provider's claim, so an IdP offering MFA still does not prove Cupel enforces it unless that is set. SAML support was not found, and adding it is not necessary if OIDC meets customer needs."
         },
         {
           "path": "backend/src/routers/oidc.rs",
@@ -7406,7 +7406,7 @@
           "line_start": 77,
           "line_end": 102,
           "inventory_id": "E20",
-          "summary": "A fact's two dates (#249): when it happened and when Eunomia was last told it. The fact told most recently replaces the earlier one and records `superseded_by`; deleting it restores the fact it directly replaced."
+          "summary": "A fact's two dates (#249): when it happened and when Cupel was last told it. The fact told most recently replaces the earlier one and records `superseded_by`; deleting it restores the fact it directly replaced."
         },
         {
           "path": "backend/tests/fact_dates.rs",
@@ -7853,28 +7853,28 @@
           "line_start": 1,
           "line_end": 13,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/routers/mcp.rs",
           "line_start": 365,
           "line_end": 405,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/routers/mcp.rs",
           "line_start": 624,
           "line_end": 628,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/tools/registry/mod.rs",
           "line_start": 140,
           "line_end": 141,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         }
       ],
       "limitations": [
@@ -7960,28 +7960,28 @@
           "line_start": 1,
           "line_end": 13,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/routers/mcp.rs",
           "line_start": 403,
           "line_end": 459,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/routers/mcp.rs",
           "line_start": 678,
           "line_end": 682,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/tools/registry/mod.rs",
           "line_start": 142,
           "line_end": 143,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         }
       ],
       "limitations": [
@@ -8547,28 +8547,28 @@
           "line_start": 1,
           "line_end": 13,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/routers/mcp.rs",
           "line_start": 365,
           "line_end": 405,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/routers/mcp.rs",
           "line_start": 624,
           "line_end": 628,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/tools/registry/mod.rs",
           "line_start": 140,
           "line_end": 141,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         }
       ],
       "limitations": [
@@ -8696,28 +8696,28 @@
           "line_start": 1,
           "line_end": 13,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/routers/mcp.rs",
           "line_start": 403,
           "line_end": 459,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/routers/mcp.rs",
           "line_start": 678,
           "line_end": 682,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/tools/registry/mod.rs",
           "line_start": 142,
           "line_end": 143,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/audit.rs",
@@ -8907,28 +8907,28 @@
           "line_start": 1,
           "line_end": 13,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/routers/mcp.rs",
           "line_start": 365,
           "line_end": 405,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/routers/mcp.rs",
           "line_start": 624,
           "line_end": 628,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/tools/registry/mod.rs",
           "line_start": 140,
           "line_end": 141,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         }
       ],
       "limitations": [
@@ -9014,28 +9014,28 @@
           "line_start": 1,
           "line_end": 13,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/routers/mcp.rs",
           "line_start": 403,
           "line_end": 459,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/routers/mcp.rs",
           "line_start": 678,
           "line_end": 682,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         },
         {
           "path": "backend/src/tools/registry/mod.rs",
           "line_start": 142,
           "line_end": 143,
           "inventory_id": "E22",
-          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Eunomia's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
+          "summary": "MCP exposes instructions, server identity and read-only/destructive annotations. Test verifies \"You are the model\". The model is the external agent, not Cupel's storage service. Annotation hints are not approval enforcement or disclosure to the person using an MCP client."
         }
       ],
       "limitations": [

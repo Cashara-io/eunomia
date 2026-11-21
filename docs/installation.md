@@ -29,7 +29,7 @@ SurrealDB 2.x has its data moved to SurrealDB 3 first, as **Update now** does
 | `--acme-email <email>` | | Email for Let's Encrypt, required with `--domain` |
 | `--openai-base-url <url>` | `https://api.openai.com/v1` | any OpenAI-compatible endpoint |
 | `--api-key <key>` | none | optional, see [agents](agents.md#do-i-need-an-openai-key) |
-| `--email <email>` | your git email | Eunomia account to create |
+| `--email <email>` | your git email | Cupel account to create |
 | `--password <pw>` | generated | saved to `.eunomia-credentials` (0600) |
 | `--agents <list>` | `auto` | `auto`, `all`, `none`, or `claude,codex,hermes,gemini,cursor,windsurf,opencode` |
 | `--agent <name>` | detected | which agent is running the installer |
@@ -55,14 +55,14 @@ HTTPS shows when it's active.
 
 ## Installing as an AI agent
 
-If you're an agent installing Eunomia for your operator, run:
+If you're an agent installing Cupel for your operator, run:
 
 ```bash
 curl -fsSL https://www.buildpaperless.com.au/eunomia/install.sh | bash -s -- --yes
 ```
 
 With no terminal it runs unattended. It detects which agent you are (Claude
-Code, Codex, Gemini CLI, Cursor, OpenCode, Hermes) and adds the Eunomia MCP
+Code, Codex, Gemini CLI, Cursor, OpenCode, Hermes) and adds the Cupel MCP
 server to **your** config with its own API token. Pass `--agent <name>` if
 you aren't detected. Then:
 
@@ -75,7 +75,7 @@ you aren't detected. Then:
 ## Manual install
 
 ```bash
-git clone https://github.com/Cashara-io/eunomia.git && cd Eunomia
+git clone https://github.com/Cashara-io/eunomia.git && cd Cupel
 cp .env.example .env   # set JWT_SECRET, ENCRYPTION_KEY, SURREAL_PASS: openssl rand -base64 32
 # Set SECRETS_HELPER_KEY using: openssl rand -hex 32
 docker compose pull && docker compose up -d

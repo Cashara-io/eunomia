@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Cashara-io/eunomia/blob/main/docs/compliance/evidence-schema.json",
-  "title": "Eunomia readiness evidence record",
+  "title": "Cupel readiness evidence record",
   "description": "Version 1.0.0. Source inspection and operating results stay separate. Default evidence excludes tenant text and secrets.",
   "type": "object",
   "additionalProperties": false,
