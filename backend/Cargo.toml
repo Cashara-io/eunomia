@@ -63,6 +63,7 @@ rust_decimal = "1"
 jsonschema = { version = "0.58.6", default-features = false }
 totp-rs = { version = "6", default-features = false, features = ["std", "otpauth"] }
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+lettre = { version = "0.11", default-features = false, features = ["builder", "hostname", "smtp-transport", "tokio1", "tokio1-rustls-tls"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }

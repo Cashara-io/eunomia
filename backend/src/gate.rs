@@ -81,6 +81,8 @@ pub fn explicit_class(method: &Method, path: &str) -> Option<Class> {
         ["api", "auth", "oidc", "link"] => AuthAttempt,
         ["api", "auth", "logout" | "bootstrap"] => Public,
         ["api", "auth", "me"] => Any,
+        // asking for a reset link and using one: no session, so limited per client address like login
+        ["api", "auth", "password", "forgot" | "reset"] => AuthAttempt,
         // the second step of a password sign-in: no session yet (the short-lived MFA cookie), limited per client address like login
         ["api", "auth", "mfa", "challenge", ..] => AuthAttempt,
         // your own two-step verification: browser sessions only (the handlers refuse tokens)
@@ -401,6 +403,9 @@ mod tests {
         assert_eq!(class(Method::POST, "/api/auth/tokens"), Account(scopes::VAULTS_ADMIN));
         assert_eq!(class(Method::POST, "/api/auth/mfa/challenge/verify"), AuthAttempt);
         assert_eq!(class(Method::POST, "/api/auth/mfa/challenge/enrol/confirm"), AuthAttempt);
+        assert_eq!(class(Method::POST, "/api/auth/password/forgot"), AuthAttempt);
+        assert_eq!(class(Method::POST, "/api/auth/password/reset"), AuthAttempt);
+        assert_eq!(class(Method::POST, "/api/account/password"), Account(scopes::VAULTS_ADMIN));
         assert_eq!(class(Method::GET, "/api/auth/mfa"), Account(scopes::VAULTS_ADMIN));
         assert_eq!(class(Method::POST, "/api/auth/mfa/disable"), Account(scopes::VAULTS_ADMIN));
         assert_eq!(class(Method::GET, "/api/entities/graph"), Vault(scopes::MEMORY_READ));

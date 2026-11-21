@@ -5,7 +5,9 @@
 //!   Its token is 32 random bytes; only the sha256 is stored (`org_invitation.token_hash`), and the token
 //!   is never logged or written to the audit ledger. It expires [`TTL_DAYS`] after it was (re)sent and
 //!   is single use.
-//! - The product sends no email: the admin gets the link and sends it themselves.
+//! - The admin always gets the link to copy and send themselves. When the server sends email (`SMTP_HOST`,
+//!   `mail.rs`) the same link is also emailed to the invited address, on create and on resend, and the
+//!   answer says whether the mail server took it (`emailed`). With email off nothing is sent and nothing differs.
 //! - A valid invitation is itself the permission to create an account, whatever `SIGNUP` says, and the
 //!   account lands in the inviting org (not an org of its own under `EUNOMIA_SIGNUP_ORG=personal`).
 //! - An invitation is only ever used through its token: password signup sends it, and single sign-on
@@ -116,6 +118,9 @@ pub struct OrgInvitationLink {
     pub link: String,
     /// The token alone, for clients that build their own link.
     pub token: String,
+    /// The link was also emailed to the invited address and the mail server accepted it. `false` when this
+    /// server sends no email, or the mail server refused it or did not answer in time: copy the link.
+    pub emailed: bool,
 }
 
 /// OrgSeats for one org (the hosted business bills on these). Counts only.
@@ -279,6 +284,21 @@ fn link(state: &AppState, token: &str) -> String {
     format!("{}/invite#{token}", crate::oauth::frontend_url(&state.settings))
 }
 
+/// Emails `link` to the invited address when this server sends email. Waits for the mail server only up to
+/// the mail timeout; a failure is logged by the mailer and is not an error: the admin still has the link.
+async fn email_link(state: &AppState, by: &User, to: &str, link: &str) -> bool {
+    if !state.mailer.enabled() {
+        return false;
+    }
+    state.mailer.send("invitation", crate::recovery::invitation_mail(to, &by.email, link, TTL_DAYS)).await
+}
+
+/// ` emailed=true|false` for the audit detail when the server sends email; nothing when it does not, so a server
+/// without email writes the rows it always did.
+fn emailed_detail(state: &AppState, emailed: bool) -> String {
+    if state.mailer.enabled() { format!(" emailed={emailed}") } else { String::new() }
+}
+
 async fn record(control: &ControlDb, scope: &RecordId, actor: &Actor, action: &str, target: &str, outcome: &str, detail: &str) {
     audit::record(control, Event { user: Some(scope), actor, action, target, outcome, detail }).await;
 }
@@ -330,9 +350,11 @@ pub async fn create(state: &AppState, by: &User, email: &str, role: OrgInviteRol
         Err(e) => return Err(e),
     };
     let row: Row = res.take::<Vec<Row>>(0)?.into_iter().next().ok_or_else(|| AppError::internal("invitation insert returned no row"))?;
+    let link = link(state, &token);
+    let emailed = email_link(state, by, &email, &link).await;
     let actor = caller_actor(&by.id);
-    record(&state.control, &by.id, &actor, "org.invite", &row.id.to_string(), "ok", &format!("email={email} role={}", role.as_str())).await;
-    Ok(OrgInvitationLink { invitation: row.into(), link: link(state, &token), token })
+    record(&state.control, &by.id, &actor, "org.invite", &row.id.to_string(), "ok", &format!("email={email} role={}{}", role.as_str(), emailed_detail(state, emailed))).await;
+    Ok(OrgInvitationLink { invitation: row.into(), link, token, emailed })
 }
 
 /// The admin's org's open invitations, newest first.
@@ -363,9 +385,11 @@ pub async fn resend(state: &AppState, by: &User, id: &str) -> AppResult<OrgInvit
         .await?
         .check()?;
     let row: Row = res.take::<Vec<Row>>(0)?.into_iter().next().ok_or_else(admin_not_found)?;
+    let link = link(state, &token);
+    let emailed = email_link(state, by, &row.email, &link).await;
     let actor = caller_actor(&by.id);
-    record(&state.control, &by.id, &actor, "org.invite_resend", &row.id.to_string(), "ok", &format!("email={} role={}", row.email, row.role)).await;
-    Ok(OrgInvitationLink { invitation: row.into(), link: link(state, &token), token })
+    record(&state.control, &by.id, &actor, "org.invite_resend", &row.id.to_string(), "ok", &format!("email={} role={}{}", row.email, row.role, emailed_detail(state, emailed))).await;
+    Ok(OrgInvitationLink { invitation: row.into(), link, token, emailed })
 }
 
 /// Withdraws one of the admin's org's open invitations: its link stops working.

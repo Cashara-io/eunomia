@@ -31,6 +31,8 @@ pub struct AppStateInner {
     pub ready_cache: std::sync::Mutex<Option<(std::time::Instant, Option<String>)>>,
     /// OpenID Connect provider client: discovery and key-set caches (see `oidc.rs`).
     pub oidc: crate::oidc::Client,
+    /// Outgoing email (reset links, invitations); off without `SMTP_HOST` (see `mail.rs`).
+    pub mailer: std::sync::Arc<crate::mail::Mailer>,
 }
 
 impl std::ops::Deref for AppState {
@@ -88,7 +90,7 @@ impl AppState {
             guard_skipped_migrations(p, &control, &pool, repair).await?;
         }
         let scope_refusal_audit = crate::audit::scope_refusals::ScopeRefusals::new(control.clone());
-        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner, settings: settings.clone(), composio_publishing: Default::default(), large_bodies: Default::default(), fail_throttle: Default::default(), invite_limiter: Default::default(), scope_refusal_audit, credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
+        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner, settings: settings.clone(), composio_publishing: Default::default(), large_bodies: Default::default(), fail_throttle: Default::default(), invite_limiter: Default::default(), scope_refusal_audit, credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default(), mailer: std::sync::Arc::new(crate::mail::Mailer::new(&settings.mail)) })))
     }
 
     /// Connect to an install that is already set up, without provisioning or moving anything
@@ -100,7 +102,7 @@ impl AppState {
         let control = crate::pool::connect_control(&templates, settings).await?;
         let pool = Pool::new(templates, control.clone(), settings);
         let scope_refusal_audit = crate::audit::scope_refusals::ScopeRefusals::new(control.clone());
-        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner: None, settings: settings.clone(), composio_publishing: Default::default(), large_bodies: Default::default(), fail_throttle: Default::default(), invite_limiter: Default::default(), scope_refusal_audit, credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
+        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner: None, settings: settings.clone(), composio_publishing: Default::default(), large_bodies: Default::default(), fail_throttle: Default::default(), invite_limiter: Default::default(), scope_refusal_audit, credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default(), mailer: std::sync::Arc::new(crate::mail::Mailer::new(&settings.mail)) })))
     }
 
     /// The org's database, bundled with the app state.

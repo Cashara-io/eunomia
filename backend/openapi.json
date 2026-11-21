@@ -98,6 +98,53 @@
         ]
       }
     },
+    "/api/account/password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Change your own password (browser session)",
+        "description": "Needs the current password (10 wrong passwords per account in 15 minutes and it is refused, shared with setting up two-step verification) and, for an account with two-step verification, a recent second factor or `mfa_code` (`auth.step_up_required`). Every other session of the account ends; this one stays. A wrong current password is 403 `auth.forbidden`. Accounts that sign in only through single sign-on have no password to change.",
+        "operationId": "changePassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkBody"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/admin/access-reviews": {
       "get": {
         "tags": [
@@ -2083,6 +2130,96 @@
         "responses": {
           "303": {
             "description": "Redirect to the provider"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/auth/password/forgot": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Email a password reset link",
+        "description": "Always answers `{\"ok\": true}` for a well-formed address, whether or not an account exists, so it cannot be used to find out who has one. An account that has a password and is not suspended is emailed a link that works once and expires after 30 minutes; asking again replaces it, and a new one is not sent within a minute of the last. A single sign-on account has no password and is sent nothing. Limited per client address (429 `rate.limited`) and per email (no more links, same answer). `email.unavailable` (503) when this server sends no email: check `email_enabled` from `/api/auth/bootstrap` first.",
+        "operationId": "forgotPassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkBody"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/auth/password/reset": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Set a new password with a reset link",
+        "description": "The token works once and for 30 minutes (`auth.reset_invalid`, `auth.reset_expired`). On success every browser session of the account ends and no session starts: sign in with the new password. Two-step verification is untouched, so the next sign-in still asks for the second factor. API tokens and app connections are not revoked. An account with no password (single sign-on) can't be given one here.",
+        "operationId": "resetPassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkBody"
+                }
+              }
+            }
           },
           "default": {
             "description": "Error",
@@ -6290,7 +6427,7 @@
           "org"
         ],
         "summary": "Invite someone to your organisation by email (owner or admin, browser session)",
-        "description": "Returns the link once; only its hash is stored. Eunomia sends no email: send the link yourself. The link expires after 7 days and works once. It is refused for an email already in this organisation or already invited here.",
+        "description": "Returns the link once; only its hash is stored. When this server sends email the link is also emailed to the invited address (`emailed` says whether the mail server took it); either way you can copy the link and send it yourself. The link expires after 7 days and works once. It is refused for an email already in this organisation or already invited here.",
         "operationId": "createOrgInvitation",
         "requestBody": {
           "content": {
@@ -6383,7 +6520,7 @@
           "org"
         ],
         "summary": "Make a new link for an open invitation (owner or admin, browser session)",
-        "description": "The old link stops working and the expiry starts again.",
+        "description": "The old link stops working and the expiry starts again. When this server sends email the new link is emailed to the invited address too (`emailed`). Resending shares the rate limit of creating invitations.",
         "operationId": "resendOrgInvitation",
         "parameters": [
           {
@@ -11918,12 +12055,17 @@
         "type": "object",
         "required": [
           "has_users",
-          "auth_mode"
+          "auth_mode",
+          "email_enabled"
         ],
         "properties": {
           "auth_mode": {
             "$ref": "#/components/schemas/AuthModeOut",
             "description": "Which sign-in methods the login and register pages offer."
+          },
+          "email_enabled": {
+            "type": "boolean",
+            "description": "This server sends email (`SMTP_HOST` is set), so \"Forgot password?\" and emailed invitations work."
           },
           "has_users": {
             "type": "boolean"
@@ -12048,6 +12190,29 @@
             "type": "integer",
             "format": "int64",
             "description": "Strictly increasing per vault, with no gaps."
+          }
+        }
+      },
+      "ChangeBody": {
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string"
+          },
+          "mfa_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A current authenticator or recovery code. Needed from an account with two-step verification when its\nlast second factor is older than 10 minutes (`auth.step_up_required`)."
+          },
+          "new_password": {
+            "type": "string",
+            "description": "The same rules as sign-up (8 characters, at most 72 bytes)."
           }
         }
       },
@@ -14077,6 +14242,17 @@
             "type": "string"
           },
           "description": {
+            "type": "string"
+          }
+        }
+      },
+      "ForgotBody": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
             "type": "string"
           }
         }
@@ -16493,9 +16669,14 @@
         "required": [
           "invitation",
           "link",
-          "token"
+          "token",
+          "emailed"
         ],
         "properties": {
+          "emailed": {
+            "type": "boolean",
+            "description": "The link was also emailed to the invited address and the mail server accepted it. `false` when this\nserver sends no email, or the mail server refused it or did not answer in time: copy the link."
+          },
           "invitation": {
             "$ref": "#/components/schemas/OrgInvitation"
           },
@@ -18058,6 +18239,23 @@
           },
           "vault_id": {
             "type": "string"
+          }
+        }
+      },
+      "ResetBody": {
+        "type": "object",
+        "required": [
+          "token",
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "description": "The new password: the same rules as sign-up (8 characters, at most 72 bytes)."
+          },
+          "token": {
+            "type": "string",
+            "description": "The token from the reset link (the part after `#`)."
           }
         }
       },

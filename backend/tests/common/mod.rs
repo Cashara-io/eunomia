@@ -68,6 +68,8 @@ pub fn test_settings() -> Settings {
         secrets_helper_key: String::new(),
         secrets_helper_enabled: true,
         chat_model_timeout_secs: 90,
+        // email is off unless a test turns it on (`MailBackend::Capture`)
+        mail: Default::default(),
     }
 }
 

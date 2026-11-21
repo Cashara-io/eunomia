@@ -25,6 +25,7 @@ pub mod update;
 pub mod https;
 pub mod mcp;
 pub mod mfa;
+pub mod recovery;
 pub mod oauth;
 pub mod oidc;
 pub mod ontology;

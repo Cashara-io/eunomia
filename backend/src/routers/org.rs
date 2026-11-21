@@ -64,7 +64,7 @@ async fn list_invitations(State(state): State<AppState>, user: User) -> AppResul
     path = "/api/org/invitations",
     tag = "org",
     summary = "Invite someone to your organisation by email (owner or admin, browser session)",
-    description = "Returns the link once; only its hash is stored. Eunomia sends no email: send the link yourself. \
+    description = "Returns the link once; only its hash is stored. When this server sends email the link is also emailed to the invited address (`emailed` says whether the mail server took it); either way you can copy the link and send it yourself. \
                    The link expires after 7 days and works once. It is refused for an email already in this organisation or already invited here.",
     request_body = OrgInvitationCreate,
     responses((status = 200, body = OrgInvitationLink), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
@@ -81,7 +81,7 @@ async fn create_invitation(State(state): State<AppState>, user: User, Json(body)
     path = "/api/org/invitations/{invitation_id}/resend",
     tag = "org",
     summary = "Make a new link for an open invitation (owner or admin, browser session)",
-    description = "The old link stops working and the expiry starts again.",
+    description = "The old link stops working and the expiry starts again. When this server sends email the new link is emailed to the invited address too (`emailed`). Resending shares the rate limit of creating invitations.",
     params(("invitation_id" = String, Path)),
     responses((status = 200, body = OrgInvitationLink), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = [])),

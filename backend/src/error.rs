@@ -36,6 +36,9 @@ pub enum ErrorCode {
     InvitationEmailMismatch,
     InvitationOtherOrg,
     InvitationExists,
+    AuthResetInvalid,
+    AuthResetExpired,
+    EmailUnavailable,
     RateLimited,
     TenantDenied,
     TenantNotFound,
@@ -108,6 +111,9 @@ impl ErrorCode {
         ErrorCode::InvitationEmailMismatch,
         ErrorCode::InvitationOtherOrg,
         ErrorCode::InvitationExists,
+        ErrorCode::AuthResetInvalid,
+        ErrorCode::AuthResetExpired,
+        ErrorCode::EmailUnavailable,
         ErrorCode::RateLimited,
         ErrorCode::TenantDenied,
         ErrorCode::TenantNotFound,
@@ -180,6 +186,9 @@ impl ErrorCode {
             ErrorCode::InvitationEmailMismatch => "invitation.email_mismatch",
             ErrorCode::InvitationOtherOrg => "invitation.other_org",
             ErrorCode::InvitationExists => "invitation.exists",
+            ErrorCode::AuthResetInvalid => "auth.reset_invalid",
+            ErrorCode::AuthResetExpired => "auth.reset_expired",
+            ErrorCode::EmailUnavailable => "email.unavailable",
             ErrorCode::RateLimited => "rate.limited",
             ErrorCode::TenantDenied => "tenant.denied",
             ErrorCode::TenantNotFound => "tenant.not_found",
@@ -242,14 +251,15 @@ impl ErrorCode {
             ErrorCode::SecretOutboundFailed => StatusCode::BAD_GATEWAY,
             ErrorCode::SecretRequestClosed => StatusCode::CONFLICT,
             ErrorCode::RateLimited | ErrorCode::ExtensionBufferFull => StatusCode::TOO_MANY_REQUESTS,
-            ErrorCode::TenantSchemaBehind | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+            ErrorCode::TenantSchemaBehind | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable | ErrorCode::EmailUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             ErrorCode::DocumentTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             ErrorCode::DocumentUnsupportedType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            ErrorCode::ChangesResync | ErrorCode::InvitationExpired => StatusCode::GONE,
+            ErrorCode::ChangesResync | ErrorCode::InvitationExpired | ErrorCode::AuthResetExpired => StatusCode::GONE,
             ErrorCode::InvitationNotFound => StatusCode::NOT_FOUND,
             ErrorCode::InvitationEmailMismatch => StatusCode::FORBIDDEN,
             ErrorCode::InvitationOtherOrg | ErrorCode::InvitationExists => StatusCode::CONFLICT,
             ErrorCode::TenantProvisioningDisabled => StatusCode::NOT_IMPLEMENTED,
+            ErrorCode::AuthResetInvalid => StatusCode::BAD_REQUEST,
             ErrorCode::AuthMfaUnreadable | ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision
             | ErrorCode::AccessReviewOpen | ErrorCode::AccessReviewCompleted | ErrorCode::AccessReviewIncomplete
             | ErrorCode::SubjectLegalHold | ErrorCode::SubjectLastOwner | ErrorCode::SubjectWorkspaceCloses | ErrorCode::SubjectExportNotReady => StatusCode::CONFLICT,
@@ -448,6 +458,7 @@ mod tests {
                 | ErrorCode::AuthScope | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::RateLimited
                 | ErrorCode::AuthMfaRequired | ErrorCode::AuthMfaInvalid | ErrorCode::AuthMfaChallengeExpired | ErrorCode::AuthStepUpRequired | ErrorCode::AuthMfaUnreadable
                 | ErrorCode::InvitationNotFound | ErrorCode::InvitationExpired | ErrorCode::InvitationEmailMismatch | ErrorCode::InvitationOtherOrg | ErrorCode::InvitationExists
+                | ErrorCode::AuthResetInvalid | ErrorCode::AuthResetExpired | ErrorCode::EmailUnavailable
                 | ErrorCode::TenantDenied | ErrorCode::TenantNotFound | ErrorCode::TenantSchemaBehind
                 | ErrorCode::TenantProvisioningDisabled | ErrorCode::VaultNotFound | ErrorCode::VaultForbidden | ErrorCode::VaultNameTaken | ErrorCode::EntityNotFound
                 | ErrorCode::MemoryNotFound | ErrorCode::ChatThreadNotFound | ErrorCode::ConnectorNotFound

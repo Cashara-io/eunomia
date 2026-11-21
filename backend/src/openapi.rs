@@ -85,6 +85,7 @@ pub fn spec() -> utoipa::openapi::OpenApi {
     for part in [
         routers::auth::Doc::openapi(),
         routers::mfa::Doc::openapi(),
+        routers::recovery::Doc::openapi(),
         routers::admin::Doc::openapi(),
         routers::audit_chain::Doc::openapi(),
         routers::access_reviews::Doc::openapi(),

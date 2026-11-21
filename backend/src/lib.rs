@@ -21,6 +21,7 @@ pub mod invitations;
 pub mod isolation;
 pub mod jobs;
 pub mod llm_net;
+pub mod mail;
 pub mod mfa;
 pub mod migrate;
 pub mod models_user;
@@ -31,6 +32,7 @@ pub mod openapi;
 pub mod peers;
 pub mod pool;
 pub mod provisioning;
+pub mod recovery;
 pub mod redact;
 pub mod rid;
 pub mod ratelimit;
@@ -82,6 +84,7 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
         .route("/openapi.json", axum::routing::get(openapi::openapi_json))
         .merge(routers::auth::router())
         .merge(routers::mfa::router())
+        .merge(routers::recovery::router())
         .merge(routers::chat::router())
         .merge(routers::settings::router())
         .merge(routers::audit::router())

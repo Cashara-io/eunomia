@@ -90,6 +90,8 @@ struct BootstrapOut {
     auth_mode: AuthModeOut,
     /// The button label ("Continue with {oidc_provider}") when an OpenID Connect provider is configured.
     oidc_provider: Option<String>,
+    /// This server sends email (`SMTP_HOST` is set), so "Forgot password?" and emailed invitations work.
+    email_enabled: bool,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -758,7 +760,7 @@ async fn bootstrap(State(state): State<AppState>) -> AppResult<Json<BootstrapOut
         crate::oidc::AuthMode::Both => AuthModeOut::Both,
         crate::oidc::AuthMode::Oidc => AuthModeOut::Oidc,
     };
-    Ok(Json(BootstrapOut { has_users, auth_mode, oidc_provider: auth.oidc.as_ref().map(|o| o.provider_name.clone()) }))
+    Ok(Json(BootstrapOut { has_users, auth_mode, oidc_provider: auth.oidc.as_ref().map(|o| o.provider_name.clone()), email_enabled: state.mailer.enabled() }))
 }
 
 #[derive(utoipa::OpenApi)]
