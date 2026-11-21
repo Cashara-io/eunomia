@@ -309,14 +309,10 @@ async fn chat_call(app: &common::TestApp, u: &User, purpose: Purpose) -> Result<
     let db = db_of(app, u).await;
     let grant = ai::authorize(&db, settings(app), &u.id, purpose).await.unwrap()?;
     let model = grant.chat_model().await;
-    Ok(grant
-        .complete(json!({ "model": model, "messages": [{ "role": "user", "content": "hello" }] }), Duration::from_secs(20))
-        .await
-        .map_err(|e| {
-            assert_eq!(e.code.as_str(), "ai.allowance_used", "{}", e.message);
-            Refusal::AllowanceUsed
-        })
-        .map(|v| v)?)
+    grant.complete(json!({ "model": model, "messages": [{ "role": "user", "content": "hello" }] }), Duration::from_secs(20)).await.map_err(|e| {
+        assert_eq!(e.code.as_str(), "ai.allowance_used", "{}", e.message);
+        Refusal::AllowanceUsed
+    })
 }
 
 async fn embed_one(app: &common::TestApp, u: &User, text: &str) -> Result<Vec<Vec<f32>>, eunomia_backend::error::AppError> {
@@ -407,6 +403,7 @@ async fn a_streamed_chat_is_counted_from_the_providers_usage_chunk_or_estimated(
             last = serde_json::to_value(e).unwrap();
         }
         assert_eq!(last["type"], "done", "{last}");
+        assert!(h.stub.hits().iter().all(|x| x.stream && x.model == "gpt-4o-mini"), "{:?}", h.stub.hits());
         let rows = usage_rows(&h.app, &a_id).await;
         let c = row(&rows, "chat", "server");
         assert_eq!(c["calls"], total_calls, "{c}");
@@ -603,16 +600,6 @@ async fn a_call_on_the_servers_key_asks_the_provider_for_a_capped_answer_and_for
 }
 
 // ------------------------------------------------------------------ background work
-
-fn probe_registry(kind: &'static str, ran: Arc<AtomicU32>) -> Registry {
-    Registry::new().register(kind, move |_state, _job| {
-        let ran = ran.clone();
-        async move {
-            ran.fetch_add(1, Ordering::SeqCst);
-            Ok(())
-        }
-    })
-}
 
 fn worker_cfg(id: &str) -> WorkerConfig {
     WorkerConfig { id: id.into(), concurrency: 2, poll: Duration::from_millis(20), lease: Duration::from_secs(30), owner_cap: 100, grace: Duration::from_millis(200), retry_base: Duration::from_millis(10), tick: Duration::from_secs(30) }
@@ -1140,7 +1127,7 @@ async fn nothing_configured_behaves_as_it_always_did() {
     let app = common::TestApp::with_settings(settings).await;
     let u = app.user.clone();
     let db = app.db().await;
-    let grant = ai::authorize(&db, &app.state.settings, &u.id, Purpose::Chat).await.unwrap().ok().expect("allowed");
+    let grant = ai::authorize(&db, &app.state.settings, &u.id, Purpose::Chat).await.unwrap().expect("allowed");
     assert_eq!(grant.source(), ai::KeySource::Server);
     chat_call(&app, &u, Purpose::Chat).await.unwrap();
     embed_one(&app, &u, "text").await.unwrap();
