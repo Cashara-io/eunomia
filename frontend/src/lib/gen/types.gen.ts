@@ -547,6 +547,21 @@ export type Callback = {
     state: string;
 };
 
+/**
+ * How many organisations this server holds and how many it may.
+ */
+export type Capacity = {
+    /**
+     * Creating another organisation is refused (`operator.at_capacity`).
+     */
+    at_capacity: boolean;
+    /**
+     * `EUNOMIA_MAX_ORGS`; null: no limit.
+     */
+    max_organisations?: number | null;
+    organisations: number;
+};
+
 export type Capsule = {
     /**
      * Tool arguments, or `{method, uri, body}` for a route. Secrets are masked.
@@ -745,6 +760,16 @@ export type ClaimOut = {
     vault_id?: string | null;
 };
 
+/**
+ * A fresh owner claim link.
+ */
+export type ClaimResent = {
+    claim_expires_at: string;
+    claim_link: string;
+    email_enabled: boolean;
+    emailed: boolean;
+};
+
 export type CloneOut = {
     created_at?: string | null;
     entities_copied: number;
@@ -929,6 +954,58 @@ export type CreateBody = {
      * A vault you belong to; omit for your personal vault.
      */
     vault_id?: string | null;
+};
+
+export type CreateOrg = {
+    /**
+     * The billing service's own id for this purchase. The same reference is the same organisation: a retried
+     * call returns it and never makes a second one.
+     */
+    external_ref: string;
+    /**
+     * The organisation's name (1 to 80 characters, no `@`); shown to people it invites.
+     */
+    name: string;
+    /**
+     * The owner's email. They claim the organisation with the link this call returns.
+     */
+    owner_email: string;
+    plan: PlanName;
+    /**
+     * How many seats the organisation has (at least 1): active members plus pending invitations.
+     */
+    seat_limit: number;
+    /**
+     * When the trial ends, for display. This server never suspends on its own.
+     */
+    trial_ends_at?: string | null;
+};
+
+/**
+ * The result of creating an organisation.
+ */
+export type CreateOrgResult = {
+    claim_expires_at?: string | null;
+    /**
+     * The link the owner opens to claim the organisation and become its owner. Returned once, when this call
+     * made it (a retry after the first reply was lost has none: resend the claim for a new one). Null when
+     * the organisation was already claimed or its claim was already made.
+     */
+    claim_link?: string | null;
+    /**
+     * `true` when this call made the organisation; `false` when the reference already had one (a retry).
+     */
+    created: boolean;
+    /**
+     * This server sends email (`SMTP_HOST`).
+     */
+    email_enabled: boolean;
+    /**
+     * The link was also emailed to the owner and the mail server accepted it.
+     */
+    emailed: boolean;
+    organisation: OrgSummary;
+    organisation_id: string;
 };
 
 export type Credentials = {
@@ -2476,6 +2553,19 @@ export type OrgInvitationLink = {
 export type OrgInviteRole = 'member' | 'admin';
 
 /**
+ * One page of organisations, oldest first.
+ */
+export type OrgList = {
+    limit: number;
+    offset: number;
+    organisations: Array<OrgSummary>;
+    /**
+     * Every organisation on this server.
+     */
+    total: number;
+};
+
+/**
  * The organisation's name and security policy, and what the caller may do with them.
  */
 export type OrgOut = {
@@ -2529,6 +2619,51 @@ export type OrgSeats = {
      */
     pending_invitations: number;
     suspended_members: number;
+};
+
+/**
+ * One organisation as the operator sees it. Control-database metadata only.
+ */
+export type OrgSummary = {
+    created_at: string;
+    /**
+     * The reference the billing service gave when it created the organisation.
+     */
+    external_ref?: string | null;
+    /**
+     * The organisation id (32 hex digits).
+     */
+    id: string;
+    name: string;
+    /**
+     * When the unclaimed owner claim expires (resend it for a new link); null once claimed.
+     */
+    owner_claim_expires_at?: string | null;
+    /**
+     * The owner has claimed the organisation.
+     */
+    owner_claimed: boolean;
+    /**
+     * The owner's email: the account that claimed the organisation, or the address the claim was sent to.
+     */
+    owner_email?: string | null;
+    /**
+     * `trial`, `team` or `enterprise`; null for an organisation no plan was set on (every organisation on a
+     * self-hosted install, and the server's own).
+     */
+    plan?: string | null;
+    /**
+     * Null: no limit.
+     */
+    seat_limit?: number | null;
+    seats: Seats;
+    /**
+     * `active` or `suspended`. An organisation with no plan state is `active`.
+     */
+    status: string;
+    suspended_at?: string | null;
+    suspended_reason?: string | null;
+    trial_ends_at?: string | null;
 };
 
 /**
@@ -2723,6 +2858,41 @@ export type PersonToken = {
     id: string;
     last_used_at?: string | null;
     name: string;
+};
+
+/**
+ * `trial`, `team` or `enterprise`.
+ */
+export type PlanName = 'trial' | 'team' | 'enterprise';
+
+/**
+ * What the plan means for the people in an organisation.
+ */
+export type PlanStatus = {
+    /**
+     * Where the owner goes to add seats or pay (`EUNOMIA_BILLING_URL`); null when not configured or unmanaged.
+     */
+    manage_url?: string | null;
+    /**
+     * `trial`, `team` or `enterprise`; null for an unmanaged organisation.
+     */
+    plan?: string | null;
+    /**
+     * How many seats the organisation has; null when it has no limit.
+     */
+    seat_limit?: number | null;
+    /**
+     * Active members plus pending invitations; null for an unmanaged organisation.
+     */
+    seats_in_use?: number | null;
+    /**
+     * `active` or `suspended`; null for an unmanaged organisation.
+     */
+    status?: string | null;
+    /**
+     * When the trial ends, for display: this server never suspends on its own. Null when not set.
+     */
+    trial_ends_at?: string | null;
 };
 
 export type PocketaiSummary = {
@@ -3281,6 +3451,25 @@ export type Rule = {
     vault: string;
 };
 
+/**
+ * Seats in use, in the words the billing service needs.
+ */
+export type Seats = {
+    /**
+     * Members whose account is not suspended.
+     */
+    active_members: number;
+    /**
+     * `active_members + pending_invitations`: what the seat limit is checked against.
+     */
+    in_use: number;
+    /**
+     * Open invitations that have not expired (the owner's unclaimed invitation included).
+     */
+    pending_invitations: number;
+    suspended_members: number;
+};
+
 export type SecurityChange = {
     /**
      * A current authenticator or recovery code, when your own account has two-step verification and its
@@ -3612,6 +3801,13 @@ export type SuspendChange = {
     suspended: boolean;
 };
 
+export type SuspendOrg = {
+    /**
+     * Why (for example `payment_failed`); kept on the organisation and on the ledger, never shown to its members.
+     */
+    reason: string;
+};
+
 /**
  * Outcome of a sync or webhook ingest: an ingest report, `source` + `error` when the sync failed, or
  * `status: "already_running"` when a sync of that source is already queued or running, or
@@ -3774,6 +3970,22 @@ export type UpdateAck = {
      * Present only when the updater is configured.
      */
     requested?: boolean | null;
+};
+
+export type UpdateOrg = {
+    /**
+     * A new name (1 to 80 characters, no `@`).
+     */
+    name?: string | null;
+    plan?: null | PlanName;
+    /**
+     * A new seat limit, or `null` for no limit. Refused (`operator.seats_in_use`) below the seats in use.
+     */
+    seat_limit?: number | null;
+    /**
+     * A new trial end, or `null` to clear it.
+     */
+    trial_ends_at?: string | null;
 };
 
 /**
@@ -7333,6 +7545,216 @@ export type GetOpenapiResponses = {
 
 export type GetOpenapiResponse = GetOpenapiResponses[keyof GetOpenapiResponses];
 
+export type OperatorGetCapacityData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/operator/v1/capacity';
+};
+
+export type OperatorGetCapacityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorGetCapacityError = OperatorGetCapacityErrors[keyof OperatorGetCapacityErrors];
+
+export type OperatorGetCapacityResponses = {
+    200: Capacity;
+};
+
+export type OperatorGetCapacityResponse = OperatorGetCapacityResponses[keyof OperatorGetCapacityResponses];
+
+export type OperatorListOrgsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Page size, 1 to 500 (default 100).
+         */
+        limit?: number;
+        /**
+         * Organisations to skip, oldest first.
+         */
+        offset?: number;
+    };
+    url: '/api/operator/v1/orgs';
+};
+
+export type OperatorListOrgsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorListOrgsError = OperatorListOrgsErrors[keyof OperatorListOrgsErrors];
+
+export type OperatorListOrgsResponses = {
+    200: OrgList;
+};
+
+export type OperatorListOrgsResponse = OperatorListOrgsResponses[keyof OperatorListOrgsResponses];
+
+export type OperatorCreateOrgData = {
+    body: CreateOrg;
+    path?: never;
+    query?: never;
+    url: '/api/operator/v1/orgs';
+};
+
+export type OperatorCreateOrgErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorCreateOrgError = OperatorCreateOrgErrors[keyof OperatorCreateOrgErrors];
+
+export type OperatorCreateOrgResponses = {
+    200: CreateOrgResult;
+};
+
+export type OperatorCreateOrgResponse = OperatorCreateOrgResponses[keyof OperatorCreateOrgResponses];
+
+export type OperatorGetOrgData = {
+    body?: never;
+    path: {
+        /**
+         * The organisation id
+         */
+        org_id: string;
+    };
+    query?: never;
+    url: '/api/operator/v1/orgs/{org_id}';
+};
+
+export type OperatorGetOrgErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorGetOrgError = OperatorGetOrgErrors[keyof OperatorGetOrgErrors];
+
+export type OperatorGetOrgResponses = {
+    200: OrgSummary;
+};
+
+export type OperatorGetOrgResponse = OperatorGetOrgResponses[keyof OperatorGetOrgResponses];
+
+export type OperatorUpdateOrgData = {
+    body: UpdateOrg;
+    path: {
+        /**
+         * The organisation id
+         */
+        org_id: string;
+    };
+    query?: never;
+    url: '/api/operator/v1/orgs/{org_id}';
+};
+
+export type OperatorUpdateOrgErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorUpdateOrgError = OperatorUpdateOrgErrors[keyof OperatorUpdateOrgErrors];
+
+export type OperatorUpdateOrgResponses = {
+    200: OrgSummary;
+};
+
+export type OperatorUpdateOrgResponse = OperatorUpdateOrgResponses[keyof OperatorUpdateOrgResponses];
+
+export type OperatorResendOwnerClaimData = {
+    body?: never;
+    path: {
+        /**
+         * The organisation id
+         */
+        org_id: string;
+    };
+    query?: never;
+    url: '/api/operator/v1/orgs/{org_id}/owner-claim/resend';
+};
+
+export type OperatorResendOwnerClaimErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorResendOwnerClaimError = OperatorResendOwnerClaimErrors[keyof OperatorResendOwnerClaimErrors];
+
+export type OperatorResendOwnerClaimResponses = {
+    200: ClaimResent;
+};
+
+export type OperatorResendOwnerClaimResponse = OperatorResendOwnerClaimResponses[keyof OperatorResendOwnerClaimResponses];
+
+export type OperatorResumeOrgData = {
+    body?: never;
+    path: {
+        /**
+         * The organisation id
+         */
+        org_id: string;
+    };
+    query?: never;
+    url: '/api/operator/v1/orgs/{org_id}/resume';
+};
+
+export type OperatorResumeOrgErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorResumeOrgError = OperatorResumeOrgErrors[keyof OperatorResumeOrgErrors];
+
+export type OperatorResumeOrgResponses = {
+    200: OrgSummary;
+};
+
+export type OperatorResumeOrgResponse = OperatorResumeOrgResponses[keyof OperatorResumeOrgResponses];
+
+export type OperatorSuspendOrgData = {
+    body: SuspendOrg;
+    path: {
+        /**
+         * The organisation id
+         */
+        org_id: string;
+    };
+    query?: never;
+    url: '/api/operator/v1/orgs/{org_id}/suspend';
+};
+
+export type OperatorSuspendOrgErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OperatorSuspendOrgError = OperatorSuspendOrgErrors[keyof OperatorSuspendOrgErrors];
+
+export type OperatorSuspendOrgResponses = {
+    200: OrgSummary;
+};
+
+export type OperatorSuspendOrgResponse = OperatorSuspendOrgResponses[keyof OperatorSuspendOrgResponses];
+
 export type ListOrgInvitationsData = {
     body?: never;
     path?: never;
@@ -7424,6 +7846,28 @@ export type ResendOrgInvitationResponses = {
 };
 
 export type ResendOrgInvitationResponse = ResendOrgInvitationResponses[keyof ResendOrgInvitationResponses];
+
+export type GetOrgPlanData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/org/plan';
+};
+
+export type GetOrgPlanErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetOrgPlanError = GetOrgPlanErrors[keyof GetOrgPlanErrors];
+
+export type GetOrgPlanResponses = {
+    200: PlanStatus;
+};
+
+export type GetOrgPlanResponse = GetOrgPlanResponses[keyof GetOrgPlanResponses];
 
 export type GetOrgSeatsData = {
     body?: never;
