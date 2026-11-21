@@ -409,6 +409,8 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         CREATE erasure SET org = $okey_bare, subject_ref = $c, requested_by = 'operator', status = 'done', open_slot = $c, counts = {note: $c};
         CREATE $lock SET erasure = (SELECT VALUE id FROM erasure WHERE open_slot = $c)[0];
         CREATE $inv SET org = $org, email = 'invitee@example.net', role = 'member', token_hash = $c, invited_by = $u, expires_at = time::now() + 7d, slot = string::concat(<string>$org, '/invitee@example.net');
+        UPSERT $aiid SET org = $org, chat_model = $c;
+        CREATE ai_usage SET org = $org, day = '2026-11-01', month = '2026-11', purpose = 'chat', model = $c, source = 'server', calls = 1, cost_micros = 1;
         RETURN $g;";
     let mut res = state
         .control
@@ -422,6 +424,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         .bind(("mem", surrealdb::types::RecordId::new("membership", canary.clone())))
         .bind(("lock", surrealdb::types::RecordId::new("erasure_lock", canary.clone())))
         .bind(("inv", surrealdb::types::RecordId::new("org_invitation", canary.clone())))
+        .bind(("aiid", surrealdb::types::RecordId::new("org_ai", user.org.key())))
         .await
         .unwrap();
     let grant: Option<surrealdb::types::RecordId> = res.take(res.num_statements() - 1).unwrap();
@@ -479,6 +482,7 @@ const NO_SECRET_ROWS: &[&str] = &[
     "instance_setting",  // one instance-wide security row (require_mfa), not per org
     "fact_dates_backfill", // one progress row: a cursor id, a cutoff and counts, never content
     "fact_dates_redated",  // the backfill's ledger: memory and record ids and dates, never content
+    "ai_price",            // the operator's model price table: instance-wide, not per org
 ];
 
 // ---- the attack -----------------------------------------------------------------------------
