@@ -8,11 +8,11 @@ web
 
 ## Users
 
-Engineering teams and companies that run AI coding and work agents (Claude Code, Codex, Cursor, Windsurf, Gemini CLI, Hermes, OpenCode, VS Code, Claude Desktop). An admin installs Eunomia, connects the team's agents over MCP, and sets up shared vaults. Engineers then live in their agents; they open the web app to check what is remembered, browse the graph, manage vaults and connectors, mint tokens, and chat with memory.
+Engineering teams and companies that run AI coding and work agents (Claude Code, Codex, Cursor, Windsurf, Gemini CLI, Hermes, OpenCode, VS Code, Claude Desktop). An admin installs Cupel, connects the team's agents over MCP, and sets up shared vaults. Engineers then live in their agents; they open the web app to check what is remembered, browse the graph, manage vaults and connectors, mint tokens, and chat with memory.
 
 ## Product Purpose
 
-Eunomia is the shared, long-term memory layer for a team's AI agents. Every agent reads and writes the same memory through one tool registry, so no one has to re-explain people, projects, decisions or code to an agent again. Success: agents answer with the team's context on the first try, and people can see and trust what the agents know.
+Cupel is the shared, long-term memory layer for a team's AI agents. Every agent reads and writes the same memory through one tool registry, so no one has to re-explain people, projects, decisions or code to an agent again. Success: agents answer with the team's context on the first try, and people can see and trust what the agents know.
 
 ## Positioning
 
@@ -37,7 +37,7 @@ Self-hosted (Docker Compose or `./run.sh`), Rust/Axum backend on :8001, Next.js 
 
 ## Brand Commitments
 
-- The name "Eunomia" is fixed.
+- The name "Cupel" is fixed.
 - The logo mark may be redrawn.
 
 ## Evidence on Hand

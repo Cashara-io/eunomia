@@ -1,5 +1,5 @@
 ---
-name: Eunomia
+name: Cupel
 description: Shared memory for the AI apps people already use. Design system "Bauhaus Memory" (November 2026).
 colors:
   canvas: "#FAFAF7"
@@ -74,7 +74,7 @@ rounded:
 icons: "Phosphor Duotone (@phosphor-icons/react, the *Icon names from /ssr), back layer filled with a solid vault colour"
 ---
 
-# Eunomia design system: Bauhaus Memory
+# Cupel design system: Bauhaus Memory
 
 Source of truth for the web app (`frontend/`), the landing page, the blog,
 diagrams and docs. Tokens live in `frontend/src/app/globals.css`; every
@@ -380,7 +380,7 @@ hairline, then one primary "Copy command" button.
 **Phosphor Duotone everywhere** (`@phosphor-icons/react`, MIT). Import the
 `*Icon` names from `@phosphor-icons/react/ssr` so server and client components
 both work, always with `weight="duotone"`.
-- **The Eunomia twist:** the back layer is a solid vault colour instead of a
+- **The Cupel twist:** the back layer is a solid vault colour instead of a
   20% tint; the line stays the text colour. `globals.css` fills every Phosphor
   duotone layer with `var(--duo)` (yellow by default); set `--duo` per icon, or
   use `components/ui/Duo.tsx` with `tone="personal" | "project" | "company"`.
@@ -441,7 +441,7 @@ Tooltip. Each file is an original implementation inspired by React Bits
 3. **Sign in and approve** on the consent page, which explains the access in
    plain words before Allow.
 4. **Confirm and try it.** "Check connection" asks the server. Success appears
-   only when Eunomia has an approved sign-in for that app or a token it has
+   only when Cupel has an approved sign-in for that app or a token it has
    actually used.
 
 Connection help (`/connect/help`) is linked from every guide.
