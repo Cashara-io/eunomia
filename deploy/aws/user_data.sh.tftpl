@@ -1,0 +1,81 @@
+#!/bin/bash
+# First boot of the hosted Cupel server. Secrets come from SSM (${ssm_prefix}/*), never from user data.
+set -euo pipefail
+exec > >(tee -a /var/log/cupel-bootstrap.log) 2>&1
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y docker.io docker-compose-v2 git jq curl unattended-upgrades
+snap install aws-cli --classic
+systemctl enable --now docker
+
+# Retry: the instance role can take a minute to propagate at first boot. A value that never arrives
+# stops the script (an empty secret would start SurrealDB with an empty root password).
+getp() {
+  local v
+  for attempt in $(seq 1 30); do
+    v=$(aws ssm get-parameter --region ${region} --with-decryption --name "${ssm_prefix}/$1" --query Parameter.Value --output text 2>/dev/null) && [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+    sleep 10
+  done
+  echo "missing SSM parameter ${ssm_prefix}/$1" >&2
+  kill -TERM $$
+}
+# Fetch every secret before writing .env, so a failure cannot leave a half-written file.
+for k in jwt_secret encryption_key surreal_pass backup_encryption_key openai_api_key admin_email operator_token smtp_host smtp_port smtp_username smtp_password smtp_from; do
+  getp "$k" > /dev/null
+done
+
+mkdir -p /opt
+if [ ! -d /opt/cupel ]; then
+  git clone --branch ${cupel_version} --depth 1 https://github.com/Cashara-io/eunomia.git /opt/cupel
+fi
+cd /opt/cupel
+
+umask 077
+cat > .env <<ENV
+COMPOSE_PROJECT_NAME=eunomia
+COMPOSE_PROFILES=https
+EUNOMIA_IMAGE_TAG=${cupel_version}
+EUNOMIA_DOMAIN=${domain}
+EUNOMIA_ACME_EMAIL=${acme_email}
+PUBLIC_URL=https://${domain}
+FRONTEND_URL=https://${domain}
+FRONTEND_BIND=127.0.0.1
+FRONTEND_TRUST_FORWARDED=1
+COOKIE_SECURE=true
+JWT_SECRET=$(getp jwt_secret)
+ENCRYPTION_KEY=$(getp encryption_key)
+SURREAL_USER=root
+SURREAL_PASS=$(getp surreal_pass)
+BACKUP_ENCRYPTION_KEY=$(getp backup_encryption_key)
+OPENAI_API_KEY=$(getp openai_api_key)
+SIGNUP=invite
+EUNOMIA_SIGNUP_ORG=personal
+EUNOMIA_ADMIN_EMAILS=$(getp admin_email)
+EUNOMIA_OPERATOR_TOKEN=$(getp operator_token)
+EUNOMIA_BILLING_URL=${billing_url}
+EUNOMIA_MAX_ORGS=500
+ALLOW_PRIVATE_LLM_URL=0
+SMTP_HOST=$(getp smtp_host)
+SMTP_PORT=$(getp smtp_port)
+SMTP_USERNAME=$(getp smtp_username)
+SMTP_PASSWORD=$(getp smtp_password)
+SMTP_FROM=$(getp smtp_from)
+TZ=Australia/Sydney
+ENV
+chmod 600 .env
+
+docker compose pull surrealdb backend frontend caddy backup
+# The backend's first start (migrations) can outlast compose's health wait; retry rather than abort.
+for attempt in 1 2 3 4 5; do
+  docker compose up -d surrealdb backend frontend caddy backup && break
+  sleep 30
+done
+
+# Copy the nightly encrypted exports (03:00) to S3 at 04:00 Sydney time.
+cat > /etc/cron.d/cupel-backup-s3 <<CRON
+CRON_TZ=Australia/Sydney
+0 4 * * * root /snap/bin/aws s3 sync /var/lib/docker/volumes/eunomia_eunomia-backups/_data s3://${backups_bucket}/surreal/ --region ${region} --only-show-errors >> /var/log/cupel-backup-s3.log 2>&1
+CRON
+
+echo "cupel bootstrap complete"
