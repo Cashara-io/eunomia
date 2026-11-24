@@ -298,7 +298,7 @@ describe("init", () => {
     assert.match(minted[0].name, /^create-eunomia: Acme \(/);
 
     assert.match(toml(), /\[server\]\nurl = "http:\/\/127\.0\.0\.1:\d+"\n\n\[vault\]\nid = "vault:\d+"\nname = "Acme"\n/);
-    assert.match(toml(), /^# .*\n# Docs: https:\/\/github.com\/Cashara-io\/eunomia\/blob\/main\/docs\/projects.md/);
+    assert.match(toml(), /^# .*\n# Docs: https:\/\/github.com\/Cashara-io\/cupel\/blob\/main\/docs\/projects.md/);
     assert.ok(statSync(join(repo, ".eunomia", "skills", "README.md")).isFile());
     assert.ok(statSync(join(repo, ".eunomia", ".gitignore")).isFile());
 

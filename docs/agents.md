@@ -698,7 +698,7 @@ This deliberately differs from new personal access tokens, which default to
 Personal, read/write memory and 90 days. Cross-space recall is a core OAuth
 behaviour, so this release does not silently narrow OAuth grants or existing
 credentials. Space selection at consent is tracked in
-[issue 217](https://github.com/Cashara-io/eunomia/issues/217).
+[issue 217](https://github.com/Cashara-io/cupel/issues/217).
 
 ## Script permission inventory
 

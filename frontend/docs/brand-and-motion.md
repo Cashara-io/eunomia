@@ -67,7 +67,7 @@ FRONTEND_URL=https://memory.example.test bun run start --port 3415
 E2E_BASE_URL=http://localhost:3415 EXPECT_METADATA_ORIGIN=https://memory.example.test BRAND_SCREENSHOTS=/tmp/eunomia-brand-proof bunx playwright test tests/brand-and-motion.spec.ts
 ```
 
-Screenshots and the count frame strip are published under [brand-and-motion on pr-screenshots](https://github.com/Cashara-io/eunomia/tree/pr-screenshots/brand-and-motion). The [v2 icon sheet](https://raw.githubusercontent.com/Cashara-io/eunomia/pr-screenshots/brand-and-motion/icons-v2.png) shows the served ICO frames and theme-aware SVG at 1x, 2x and 4x on light and dark browser tab strip mock-ups. Apple and manifest icons appear at native size, 2x and 4x. The Apple icon has an iOS-style home tile, and the maskable icon includes its circular 80% safe zone and a circular crop. These are mock-ups, not physical-device screenshots.
+Screenshots and the count frame strip are published under [brand-and-motion on pr-screenshots](https://github.com/Cashara-io/cupel/tree/pr-screenshots/brand-and-motion). The [v2 icon sheet](https://raw.githubusercontent.com/Cashara-io/cupel/pr-screenshots/brand-and-motion/icons-v2.png) shows the served ICO frames and theme-aware SVG at 1x, 2x and 4x on light and dark browser tab strip mock-ups. Apple and manifest icons appear at native size, 2x and 4x. The Apple icon has an iOS-style home tile, and the maskable icon includes its circular 80% safe zone and a circular crop. These are mock-ups, not physical-device screenshots.
 
 ### Duplicate-text regression
 

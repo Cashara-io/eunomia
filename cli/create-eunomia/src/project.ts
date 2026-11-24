@@ -5,7 +5,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSyn
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export const DOCS_URL = "https://github.com/Cashara-io/eunomia/blob/main/docs/projects.md";
+export const DOCS_URL = "https://github.com/Cashara-io/cupel/blob/main/docs/projects.md";
 
 export interface ProjectConfig {
   url: string;

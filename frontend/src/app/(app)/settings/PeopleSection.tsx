@@ -20,7 +20,7 @@ const LOCKED: Record<string, string> = {
   operator: "The server's settings list this account as an admin. Change it there.",
 };
 
-const SIGNUP_DOCS = "https://github.com/Cashara-io/eunomia/blob/main/docs/deployment.md#2-env-vars-that-need-real-values";
+const SIGNUP_DOCS = "https://github.com/Cashara-io/cupel/blob/main/docs/deployment.md#2-env-vars-that-need-real-values";
 
 /* What each confirmation says and does: suspending signs them out, making an admin hands over the keys. */
 const CONFIRM = {

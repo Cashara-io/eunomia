@@ -52,9 +52,10 @@ main() {
   secrets_apply "$status_dir"
   heal_stack "$status_dir"
 
-  # The repository moved from Qyrhal/Eunomia: installs cloned from there follow it.
+  # The repository moved from Qyrhal/Eunomia, then was renamed Cashara-io/eunomia -> Cashara-io/cupel:
+  # installs cloned from either follow it.
   case "$(git remote get-url origin 2>/dev/null)" in
-    *[Qq]yrhal/[Ee]unomia*) git remote set-url origin https://github.com/Cashara-io/eunomia.git ;;
+    *[Qq]yrhal/[Ee]unomia*|*[Cc]ashara-[Ii]o/eunomia*) git remote set-url origin https://github.com/Cashara-io/cupel.git ;;
   esac
 
   # Nothing requested and checked recently: skip the network round-trip.

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/Cashara-io/eunomia/blob/main/docs/compliance/evidence-schema.json",
+  "$id": "https://github.com/Cashara-io/cupel/blob/main/docs/compliance/evidence-schema.json",
   "title": "Cupel readiness evidence record",
   "description": "Version 1.0.0. Source inspection and operating results stay separate. Default evidence excludes tenant text and secrets.",
   "type": "object",
@@ -104,7 +104,7 @@
       ],
       "properties": {
         "repository": {
-          "const": "Cashara-io/eunomia"
+          "const": "Cashara-io/cupel"
         },
         "release_sha": {
           "type": "string",
@@ -347,7 +347,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -398,7 +398,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },

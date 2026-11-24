@@ -25,8 +25,8 @@ look things up there.
 Free for personal and noncommercial use. Using it in a business needs a paid
 licence ([below](#licence-and-support)).
 
-[![CI](https://github.com/Cashara-io/eunomia/actions/workflows/ci.yml/badge.svg)](https://github.com/Cashara-io/eunomia/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/Cashara-io/eunomia?label=release)](https://github.com/Cashara-io/eunomia/releases/latest)
+[![CI](https://github.com/Cashara-io/cupel/actions/workflows/ci.yml/badge.svg)](https://github.com/Cashara-io/cupel/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/Cashara-io/cupel?label=release)](https://github.com/Cashara-io/cupel/releases/latest)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)](LICENSE)
 
 ![Scattered knowledge becoming a connected memory graph](docs/images/eunomia-cover.png)
@@ -65,7 +65,7 @@ Watch the launch film (with sound) in [1080p](docs/media/eunomia-launch-film.mp4
 review queue and activity together. Chat can show diagrams from saved ontology evidence.
 Composio connects selected Gmail, Google Drive and other supported app accounts to your memory.
 Projects, shared spaces and the command-line tools are included in the same install.
-Every release is described on the [releases page](https://github.com/Cashara-io/eunomia/releases).
+Every release is described on the [releases page](https://github.com/Cashara-io/cupel/releases).
 
 ---
 
@@ -399,6 +399,6 @@ the `docs` tool. The full list is in the [docs index](docs/README.md).
   paid commercial licence. Releases up to v2.0.4 remain under the MIT licence.
 - **Commercial licensing and support:**
   [developers@buildpaperless.com.au](mailto:developers@buildpaperless.com.au).
-- **Bugs and feature requests:** [GitHub issues](https://github.com/Cashara-io/eunomia/issues).
+- **Bugs and feature requests:** [GitHub issues](https://github.com/Cashara-io/cupel/issues).
 
 Built by [Paperless Labs](https://www.buildpaperless.com.au/eunomia). © 2026 Cashara Pty Ltd, trading as Paperless Labs

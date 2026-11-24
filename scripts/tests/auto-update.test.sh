@@ -277,9 +277,15 @@ printf 'surrealdb\nbackend\nfrontend\nupdater\n' > "$TMP/services"
 : > "$TMP/docker.log"; touch "$S/requested"; update
 check "profile off: an update leaves the helper alone" bash -c "grep -q 'compose pull backend frontend backup\$' '$TMP/docker.log' && ! grep -q 'secrets-helper' '$TMP/docker.log'"
 
-# installs cloned from the old Qyrhal/Eunomia repo are moved to Cashara-io/eunomia
+# installs cloned from the old Qyrhal/Eunomia repo are moved to Cashara-io/cupel
 (cd "$TMP/repo" && git remote set-url origin https://github.com/Qyrhal/Eunomia.git)
 rm -f "$S/status.json"; GIT_TERMINAL_PROMPT=0 GIT_ALLOW_PROTOCOL=file update
-check "old origin repointed" test "$(git -C "$TMP/repo" remote get-url origin)" = https://github.com/Cashara-io/eunomia.git
+check "old origin repointed" test "$(git -C "$TMP/repo" remote get-url origin)" = https://github.com/Cashara-io/cupel.git
+# installs cloned from Cashara-io/eunomia (before the rename to cupel) follow it, .git or not
+for old in https://github.com/Cashara-io/eunomia.git https://github.com/Cashara-io/eunomia; do
+  (cd "$TMP/repo" && git remote set-url origin "$old")
+  rm -f "$S/status.json"; GIT_TERMINAL_PROMPT=0 GIT_ALLOW_PROTOCOL=file update
+  check "Cashara-io/eunomia origin ($old) repointed" test "$(git -C "$TMP/repo" remote get-url origin)" = https://github.com/Cashara-io/cupel.git
+done
 echo "auto-update: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

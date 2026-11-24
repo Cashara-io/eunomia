@@ -73,7 +73,7 @@ cross-space recall in ChatGPT and Claude. Consent now states this plainly,
 including Personal and team spaces. OAuth access tokens remain 15 minutes and
 rotating refresh tokens remain 30 days. These differ from the new Personal-only,
 90-day personal access token defaults. Space selection at consent is tracked in
-[issue 217](https://github.com/Cashara-io/eunomia/issues/217).
+[issue 217](https://github.com/Cashara-io/cupel/issues/217).
 
 Agent skill installation and the Claude SessionStart hook now read the existing
 MCP skill resource with `memory:read`; they no longer need account settings

@@ -141,7 +141,7 @@ export function UpdateSection() {
     );
   }
 
-  const notes = `https://github.com/Cashara-io/eunomia/releases/tag/${encodeURIComponent(status.latest_version)}`;
+  const notes = `https://github.com/Cashara-io/cupel/releases/tag/${encodeURIComponent(status.latest_version)}`;
   const line = done
     ? `Updated to ${target}. Reloading…`
     : phase === "waiting"

@@ -3,7 +3,7 @@
   "evidence_schema_version": "1.0.0",
   "reviewed_on": "2026-11-15",
   "snapshot": {
-    "repository": "Cashara-io/eunomia",
+    "repository": "Cashara-io/cupel",
     "commit": "149f6476b615254dac5141ae54b2c81c99ab494c",
     "inventory_commit": "6116a00ff86fed992a917863e9a3515f70373b84",
     "recheck": "Refreshed on 2026-11-15 at origin/main 149f6476, 211 commits after 472c3bf1, including PR03 (#245), PR04 (#244), PR08 (#246), organisation invitations (#247), #242, #243 and fact dates (#249). Every capability has a new record at this commit: its baseline references were re-located and re-read, sentences the later code made false were rewritten, and new code was added. The baseline records (EV-Cxx-1) stay unchanged at 472c3bf1 as history.",
@@ -2964,7 +2964,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -3015,7 +3015,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C01-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -3067,7 +3067,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -3153,7 +3153,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C02-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -3341,7 +3341,7 @@
       "implementation": "Done",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -3399,7 +3399,7 @@
       "implementation": "Done",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C03-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -3472,7 +3472,7 @@
       "implementation": "Done",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -3572,7 +3572,7 @@
       "implementation": "Done",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C04-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -3680,7 +3680,7 @@
       "implementation": "Done",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -3752,7 +3752,7 @@
       "implementation": "Done",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C05-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -3832,7 +3832,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -3904,7 +3904,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C06-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -3998,7 +3998,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -4119,7 +4119,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C07-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -4328,7 +4328,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -4477,7 +4477,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C08-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -4671,7 +4671,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -4792,7 +4792,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C09-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -4921,7 +4921,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -4993,7 +4993,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C10-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -5066,7 +5066,7 @@
       "implementation": "Done",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -5124,7 +5124,7 @@
       "implementation": "Done",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C11-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -5183,7 +5183,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -5220,7 +5220,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C12-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -5258,7 +5258,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -5407,7 +5407,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C13-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -5557,7 +5557,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -5615,7 +5615,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C14-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -5674,7 +5674,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -5760,7 +5760,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C15-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -5847,7 +5847,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -5961,7 +5961,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C16-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -6076,7 +6076,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -6148,7 +6148,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C17-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -6221,7 +6221,7 @@
       "implementation": "Done",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -6265,7 +6265,7 @@
       "implementation": "Done",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C18-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -6310,7 +6310,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -6361,7 +6361,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C19-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -6413,7 +6413,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -6506,7 +6506,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C20-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -6600,7 +6600,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -6644,7 +6644,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C21-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -6746,7 +6746,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -6832,7 +6832,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C22-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -7019,7 +7019,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -7063,7 +7063,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C23-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -7108,7 +7108,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -7264,7 +7264,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C24-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -7442,7 +7442,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -7504,7 +7504,7 @@
           "summary": "Browser-session-only vault-owner decisions for kind, link, property and metric proposals. Strict mode rejects unapproved kinds and links. Chat has a static tool allowlist, ten-round limit and untrusted-data wrapping. These are real oversight controls, but not per-org approvals for every AI action."
         },
         {
-          "url": "https://github.com/Cashara-io/eunomia/blob/b0ff678cd7d14cad5fc891c3734f885db685e59f/e2e-2.2.0-gate4/e2e-report.md",
+          "url": "https://github.com/Cashara-io/cupel/blob/b0ff678cd7d14cad5fc891c3734f885db685e59f/e2e-2.2.0-gate4/e2e-report.md",
           "line_start": 3,
           "line_end": 104,
           "inventory_id": "E27",
@@ -7528,7 +7528,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C25-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -7590,7 +7590,7 @@
           "summary": "Browser-session-only vault-owner decisions for kind, link, property and metric proposals. Strict mode rejects unapproved kinds and links. Chat has a static tool allowlist, ten-round limit and untrusted-data wrapping. These are real oversight controls, but not per-org approvals for every AI action."
         },
         {
-          "url": "https://github.com/Cashara-io/eunomia/blob/b0ff678cd7d14cad5fc891c3734f885db685e59f/e2e-2.2.0-gate4/e2e-report.md",
+          "url": "https://github.com/Cashara-io/cupel/blob/b0ff678cd7d14cad5fc891c3734f885db685e59f/e2e-2.2.0-gate4/e2e-report.md",
           "line_start": 3,
           "line_end": 104,
           "inventory_id": "E27",
@@ -7615,7 +7615,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -7677,7 +7677,7 @@
           "summary": "Source record references, source memories and typed numeric views give provenance building blocks. They do not prove every natural-language assertion has a valid citation. Source citations and a generated-content origin mark answer different questions."
         },
         {
-          "url": "https://github.com/Cashara-io/eunomia/blob/b0ff678cd7d14cad5fc891c3734f885db685e59f/e2e-2.2.0-gate4/e2e-report.md",
+          "url": "https://github.com/Cashara-io/cupel/blob/b0ff678cd7d14cad5fc891c3734f885db685e59f/e2e-2.2.0-gate4/e2e-report.md",
           "line_start": 3,
           "line_end": 104,
           "inventory_id": "E27",
@@ -7701,7 +7701,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C26-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -7763,7 +7763,7 @@
           "summary": "Source record references, source memories and typed numeric views give provenance building blocks. They do not prove every natural-language assertion has a valid citation. Source citations and a generated-content origin mark answer different questions."
         },
         {
-          "url": "https://github.com/Cashara-io/eunomia/blob/b0ff678cd7d14cad5fc891c3734f885db685e59f/e2e-2.2.0-gate4/e2e-report.md",
+          "url": "https://github.com/Cashara-io/cupel/blob/b0ff678cd7d14cad5fc891c3734f885db685e59f/e2e-2.2.0-gate4/e2e-report.md",
           "line_start": 3,
           "line_end": 104,
           "inventory_id": "E27",
@@ -7788,7 +7788,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -7895,7 +7895,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C27-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -8003,7 +8003,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -8103,7 +8103,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C28-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -8204,7 +8204,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -8304,7 +8304,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C29-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -8405,7 +8405,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -8589,7 +8589,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C30-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -8753,7 +8753,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -8797,7 +8797,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C31-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -8842,7 +8842,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -8949,7 +8949,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C32-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -9057,7 +9057,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -9101,7 +9101,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C33-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -9146,7 +9146,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -9218,7 +9218,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C34-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -9291,7 +9291,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -9346,7 +9346,7 @@
           "summary": "CI has strict Clippy, backend tests, hardened isolation tests, frontend lint/build/type checks, API client drift checks, Playwright, shell checks, upgrade paths and restore drills. No dependency advisory, image CVE, secret scanner, CodeQL/SAST or SBOM job was found in the workflows. Frozen lockfiles and exact SurrealDB pins help but are insufficient."
         },
         {
-          "url": "https://github.com/Cashara-io/eunomia/blob/b0ff678cd7d14cad5fc891c3734f885db685e59f/e2e-2.2.0-gate4/e2e-report.md",
+          "url": "https://github.com/Cashara-io/cupel/blob/b0ff678cd7d14cad5fc891c3734f885db685e59f/e2e-2.2.0-gate4/e2e-report.md",
           "line_start": 3,
           "line_end": 104,
           "inventory_id": "E27",
@@ -9370,7 +9370,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C35-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -9425,7 +9425,7 @@
           "summary": "CI has strict Clippy, backend tests, hardened isolation tests, frontend lint/build/type checks, API client drift checks, Playwright, shell checks, upgrade paths and restore drills. No dependency advisory, image CVE, secret scanner, CodeQL/SAST or SBOM job was found in the workflows. Frozen lockfiles and exact SurrealDB pins help but are insufficient."
         },
         {
-          "url": "https://github.com/Cashara-io/eunomia/blob/b0ff678cd7d14cad5fc891c3734f885db685e59f/e2e-2.2.0-gate4/e2e-report.md",
+          "url": "https://github.com/Cashara-io/cupel/blob/b0ff678cd7d14cad5fc891c3734f885db685e59f/e2e-2.2.0-gate4/e2e-report.md",
           "line_start": 3,
           "line_end": 104,
           "inventory_id": "E27",
@@ -9450,7 +9450,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-09",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
         "scope": "Source inventory only; no deployed installation assessed."
       },
@@ -9494,7 +9494,7 @@
       "implementation": "Missing",
       "captured_on": "2026-11-15",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source re-inspection at the refreshed snapshot: the baseline references of EV-C36-1 (captured at 472c3bf1) re-located and re-read, plus code merged since; no deployed installation assessed."
       },
@@ -9539,7 +9539,7 @@
       "implementation": "Partial",
       "captured_on": "2026-11-21",
       "subject": {
-        "repository": "Cashara-io/eunomia",
+        "repository": "Cashara-io/cupel",
         "release_sha": "149f6476b615254dac5141ae54b2c81c99ab494c",
         "scope": "Source inspection of the hosted AI metering change (control migration 0016) on top of the refreshed snapshot; no deployed installation assessed."
       },
