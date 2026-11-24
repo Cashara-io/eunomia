@@ -26,13 +26,13 @@ Connections, selective graph expansion and the table equivalent remain for PR 4.
 
 A real MCP proposal landed in an already-open Review page. The second context kept its old revision open, received a 409 after another proposal edit, displayed the changed description, preserved the person's reason, and saved the subsequent approval. The first context displayed the stored reason in Activity. Batch merge stored the same reason on both selected definitions. A stale batch result also shows the changed fields and opens a fresh review with the batch reason preserved.
 
-- [Desktop light](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/activity-1440-light.png)
-- [Desktop dark](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/activity-1440-dark.png)
-- [Mobile light](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/activity-390-light.png)
-- [Mobile dark](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/activity-390-dark.png)
-- [Live proposal frame strip](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/live-proposal-strip.png)
-- [Stale revision conflict](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/stale-conflict.png)
-- [Batch revision conflict](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/batch-stale-conflict.png)
+- [Desktop light](https://github.com/Cashara-io/cupel/blob/pr-screenshots/ontology-3/activity-1440-light.png)
+- [Desktop dark](https://github.com/Cashara-io/cupel/blob/pr-screenshots/ontology-3/activity-1440-dark.png)
+- [Mobile light](https://github.com/Cashara-io/cupel/blob/pr-screenshots/ontology-3/activity-390-light.png)
+- [Mobile dark](https://github.com/Cashara-io/cupel/blob/pr-screenshots/ontology-3/activity-390-dark.png)
+- [Live proposal frame strip](https://github.com/Cashara-io/cupel/blob/pr-screenshots/ontology-3/live-proposal-strip.png)
+- [Stale revision conflict](https://github.com/Cashara-io/cupel/blob/pr-screenshots/ontology-3/stale-conflict.png)
+- [Batch revision conflict](https://github.com/Cashara-io/cupel/blob/pr-screenshots/ontology-3/batch-stale-conflict.png)
 
 ## Recorded check results
 

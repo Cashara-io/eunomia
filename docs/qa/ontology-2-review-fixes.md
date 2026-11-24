@@ -59,7 +59,7 @@ Milliseconds, 50 cold and 50 warm samples per case. Cold restarts both backend a
 | sales-sort | 71.03 | 81.13 | 34.70 | 36.77 |
 | profile | 48.00 | 58.93 | 28.23 | 38.92 |
 
-[All 16 screenshots and evidence index](https://github.com/Cashara-io/eunomia/blob/b96251a47fc1b27af4a1ceea4ddb70f4ec0134a1/ontology-2-v2/README.md), [raw samples](https://github.com/Cashara-io/eunomia/blob/b96251a47fc1b27af4a1ceea4ddb70f4ec0134a1/ontology-2-v2/performance.json), [EXPLAIN plans](https://github.com/Cashara-io/eunomia/blob/b96251a47fc1b27af4a1ceea4ddb70f4ec0134a1/ontology-2-v2/explain.json), [test and guard summary](https://github.com/Cashara-io/eunomia/blob/b96251a47fc1b27af4a1ceea4ddb70f4ec0134a1/ontology-2-v2/checks.txt).
+[All 16 screenshots and evidence index](https://github.com/Cashara-io/cupel/blob/b96251a47fc1b27af4a1ceea4ddb70f4ec0134a1/ontology-2-v2/README.md), [raw samples](https://github.com/Cashara-io/cupel/blob/b96251a47fc1b27af4a1ceea4ddb70f4ec0134a1/ontology-2-v2/performance.json), [EXPLAIN plans](https://github.com/Cashara-io/cupel/blob/b96251a47fc1b27af4a1ceea4ddb70f4ec0134a1/ontology-2-v2/explain.json), [test and guard summary](https://github.com/Cashara-io/cupel/blob/b96251a47fc1b27af4a1ceea4ddb70f4ec0134a1/ontology-2-v2/checks.txt).
 
 The upload contains 35 files, including raw test, mutation, lint, build and hardened-run logs. Local Git blob hashes were checked against the uploaded blobs and remote tree. These results supersede the original 12-sample timings. No merge or deployment was performed.
 

@@ -20,7 +20,7 @@ export function BackupsSection() {
         this machine: without it the backups can&apos;t be read.
       </p>
       <a
-        href="https://github.com/Cashara-io/eunomia/blob/main/INSTALLATION.md#backups"
+        href="https://github.com/Cashara-io/cupel/blob/main/INSTALLATION.md#backups"
         target="_blank"
         rel="noopener noreferrer"
         className="link text-[13px] self-start"

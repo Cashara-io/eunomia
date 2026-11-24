@@ -21,7 +21,7 @@ pub struct Policy { paths: &'static [&'static str], view: bool }
 
 /// Every tool has an explicit policy. Unregistered tools fail closed in the collector.
 /// Exclude only fields that can echo this request. Independent receipts remain evidence.
-/// Later reads of same-turn writes are tracked separately: Cashara-io/eunomia#215.
+/// Later reads of same-turn writes are tracked separately: Cashara-io/cupel#215.
 pub fn for_tool(name: &str) -> Option<Policy> {
     let paths: &'static [&'static str] = match name {
         "show_view" => VIEW,

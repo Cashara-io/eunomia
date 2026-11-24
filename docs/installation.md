@@ -75,7 +75,7 @@ you aren't detected. Then:
 ## Manual install
 
 ```bash
-git clone https://github.com/Cashara-io/eunomia.git && cd Cupel
+git clone https://github.com/Cashara-io/cupel.git && cd cupel
 cp .env.example .env   # set JWT_SECRET, ENCRYPTION_KEY, SURREAL_PASS: openssl rand -base64 32
 # Set SECRETS_HELPER_KEY using: openssl rand -hex 32
 docker compose pull && docker compose up -d

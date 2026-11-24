@@ -51,7 +51,7 @@ All CSV row labels now disclose that they are matched by name. Receipt and cell 
 
 Compact source inspection preserves page and pagination. Import activity navigates to the kind's Objects table because the API offers no import filter. Neutral receipts omit repeated verification prose, mobile values sit beside their labels, and mismatch notices use a labelled text block with a warning border in both themes.
 
-[Issue #231](https://github.com/Cashara-io/eunomia/issues/231) records the remaining backend work. The profile eagerly sends rows and payloads, and `backend/src/documents/mod.rs:465` reads the entire CSV object to return one row. Store row numbers and document revisions during import, then expose a bounded endpoint returning one referenced row on demand. These frontend changes cannot prove historical provenance.
+[Issue #231](https://github.com/Cashara-io/cupel/issues/231) records the remaining backend work. The profile eagerly sends rows and payloads, and `backend/src/documents/mod.rs:465` reads the entire CSV object to return one row. Store row numbers and document revisions during import, then expose a bounded endpoint returning one referenced row on demand. These frontend changes cannot prove historical provenance.
 
 New unit and browser regressions failed before their fixes. Production validation passed typecheck, lint, all 72 unit tests and the build, plus 97 mocked receipt and Connections tests. Connections tests retain their original assertions. The mobile layout regression was also run against the old stylesheet and failed in both themes before passing with the fix. Red and green logs and refreshed screenshots are in `/private/tmp/ontology-design/after/pr-c/`.
 

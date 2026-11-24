@@ -28,7 +28,7 @@ Flags (init):
 Credentials go only to a server you name (--url, EUNOMIA_URL or the prompt) or confirm.
 Sync and watch use the token init stored in ~/.config/eunomia for this exact server, or
 EUNOMIA_TOKEN together with EUNOMIA_URL (or --url) naming the same server as eunomia.toml.
-Docs: https://github.com/Cashara-io/eunomia/blob/main/docs/projects.md`;
+Docs: https://github.com/Cashara-io/cupel/blob/main/docs/projects.md`;
 
 const VALUE_FLAGS = ["url", "email", "password", "token", "vault", "agents"] as const;
 

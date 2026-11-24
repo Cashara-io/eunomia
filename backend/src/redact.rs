@@ -380,7 +380,7 @@ mod tests {
             "the ghp_ prefix marks a GitHub token; AKIA starts AWS keys",
             "https://example.com:8080/path?q=1 and mailto:avi@example.com",
             "http://host:8080 and ssh://git@github.com:22/org/repo.git",
-            "https://github.com/Cashara-io/eunomia/pull/110",
+            "https://github.com/Cashara-io/cupel/pull/110",
             "user@host.example ssh git@github.com:org/repo.git",
             "eyJ alone is not a token, nor is a.b.c",
             "-----BEGIN PUBLIC KEY-----\nMFkw\n-----END PUBLIC KEY-----",

@@ -38,7 +38,7 @@ The six questions requested a monthly trend, supplier breakdown, distribution, r
 
 The approved total amount is AUD 1588.00 and total quantity is 49. Increasing amounts by ten percent gives AUD 1746.80, with a change of AUD 158.80. All six answers matched the CSV recompute within 0.01, covering 335 numeric fields.
 
-Screenshots and receipts: [proof directory](https://github.com/Cashara-io/eunomia/tree/pr-screenshots/chat-json-render), [numeric audit](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/chat-json-render/numeric-audit.txt).
+Screenshots and receipts: [proof directory](https://github.com/Cashara-io/cupel/tree/pr-screenshots/chat-json-render), [numeric audit](https://github.com/Cashara-io/cupel/blob/pr-screenshots/chat-json-render/numeric-audit.txt).
 
 ## Review fixes
 
@@ -98,7 +98,7 @@ The live check used the disposable database at 8590, backend at 8591 and fronten
 
 `python3 -I scripts/chat-json-render/verify_numbers.py CSV ANSWER_DIRECTORY` matched 379 numeric fields within 0.01. This covers server rows, aggregates, totals, distributions and scenario fields. All six answer screenshots were opened and inspected, including the formatted scenario changes and table totals. All four regenerated catalogue contact sheets were inspected, with full-size checks of the phone StatGroup and phone/desktop Sankey labels.
 
-[Six answer screenshots, four catalogue sheets, CSV, receipts and numeric audit](https://github.com/Cashara-io/eunomia/tree/pr-screenshots/chat-json-render-v3). Guard failures, scale plans and final check logs are published there too. No keys, launch scripts or session cookies are published. Screenshots are uploaded through a temporary detached worktree. Cleanup removes this worktree's backend target, frontend node_modules, Next output, servers and disposable container.
+[Six answer screenshots, four catalogue sheets, CSV, receipts and numeric audit](https://github.com/Cashara-io/cupel/tree/pr-screenshots/chat-json-render-v3). Guard failures, scale plans and final check logs are published there too. No keys, launch scripts or session cookies are published. Screenshots are uploaded through a temporary detached worktree. Cleanup removes this worktree's backend target, frontend node_modules, Next output, servers and disposable container.
 
 ## Second review fixes
 
@@ -200,7 +200,7 @@ The earlier browser-submitted six-question run is retained under `attempts/brows
 
 `python3 -I scripts/chat-json-render/verify_numbers.py CSV ANSWER_DIRECTORY` passes 389 numeric and nullable field checks within 0.01. This audits all six final tool results and the applied dataset parameters. The earlier run also passed 673 checks, including its repeated table resolutions. All six final PNGs were opened and inspected. The final scenario image includes every changed row, and the table image includes its footer.
 
-[Six screenshots, authentic receipts, CSV, numeric audit and verification logs](https://github.com/Cashara-io/eunomia/tree/pr-screenshots/chat-json-render-v4).
+[Six screenshots, authentic receipts, CSV, numeric audit and verification logs](https://github.com/Cashara-io/cupel/tree/pr-screenshots/chat-json-render-v4).
 
 The first backend build needed test error-message and source-prose serialization corrections. A later run was stopped by the disk monitor when unrelated disk use took free space below 6 GiB. Its library, chat UI and golden-tools portions had passed; its interrupted ontology run is not counted as complete. The owned Rust target was removed. Free space subsequently recovered, and verification restarted. The owner then changed the pre-Cargo gate to wait below 7 GiB or while another Cargo runs, rechecking every three minutes for up to sixty minutes. Only this task's artefacts were removed. Earlier frontend typecheck and document-bucket setup failures are retained separately from the final checks. One restored parallel backend run failed the existing `gate2_a_long_question_caps_name_lookups_and_never_searches_memory_text` tracing assertion with zero spans. The earlier full run passed it; the final run uses one Rust test thread to avoid concurrent tracing collectors. No `cargo fmt` was run. All Cargo processes used two build jobs, no dev debug information, no incremental compilation, an 8 MiB Rust stack and niceness 19. Final cleanup removes this worktree's target, node_modules, .next, runtime processes and disposable container.
 
@@ -230,7 +230,7 @@ Earlier live attempts are retained separately. They exposed confusing aggregate 
 
 All six final questions produce the requested views without a user correction to the view. Histogram automatically repairs its calls and returns an initial plain view followed by a view with a bound count. The numeric audit covers both. The placeholder audit checks every substitution and requires the final view for each question to use a placeholder. Histogram's ordinary chat reply prints unresolved placeholder syntax despite its correct substituted view and server text. One follow-up corrects that ordinary reply. Its history retains the original sentence and correction. Scenario repairs schema, raw-headline and binding errors using the concrete paths returned by the server. These are recovery observations, not a claim that every tool call succeeds first time.
 
-All six screenshots were captured and inspected in native Helium after repeated T3 snapshot timeouts. They show substituted values, currency, chart counts, scenario totals and the table footer. The table footer covers both pages. [Screenshots, authentic histories, CSV and audits](https://github.com/Cashara-io/eunomia/tree/pr-screenshots/chat-json-render-v5).
+All six screenshots were captured and inspected in native Helium after repeated T3 snapshot timeouts. They show substituted values, currency, chart counts, scenario totals and the table footer. The table footer covers both pages. [Screenshots, authentic histories, CSV and audits](https://github.com/Cashara-io/cupel/tree/pr-screenshots/chat-json-render-v5).
 
 ### Verification
 
