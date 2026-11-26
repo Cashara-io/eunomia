@@ -394,10 +394,8 @@ the `docs` tool. The full list is in the [docs index](docs/README.md).
 
 ## Licence and support
 
-- **Licence:** licensed by Cashara Pty Ltd, trading as Paperless Labs. Free for personal and noncommercial use under the
-  [PolyForm Noncommercial License 1.0.0](LICENSE). Any use inside a business needs a
-  paid commercial licence. Releases up to v2.0.4 remain under the MIT licence.
-- **Commercial licensing and support:**
+- **Licence:** licensed by Cashara Pty Ltd, trading as Paperless Labs. Opensource under MIT License.
+- **Hosting and support:**
   [developers@buildpaperless.com.au](mailto:developers@buildpaperless.com.au).
 - **Bugs and feature requests:** [GitHub issues](https://github.com/Cashara-io/cupel/issues).
 
