@@ -24,6 +24,7 @@ pub mod isolation;
 pub mod jobs;
 pub mod llm_net;
 pub mod mail;
+pub mod mail_brand;
 pub mod mfa;
 pub mod migrate;
 pub mod models_user;

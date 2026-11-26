@@ -16,7 +16,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use lettre::message::Mailbox;
+use lettre::message::{Mailbox, MultiPart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 
@@ -47,6 +47,8 @@ impl TlsMode {
 
 #[derive(Clone)]
 pub struct SmtpConfig {
+    /// An HTML look for the messages (`MAIL_BRAND`); `None` sends plain text only.
+    pub brand: Option<Brand>,
     pub host: String,
     pub port: u16,
     pub credentials: Option<(String, String)>,
@@ -66,6 +68,12 @@ impl std::fmt::Debug for SmtpConfig {
             .field("tls", &self.tls)
             .finish()
     }
+}
+
+/// A company look for the HTML version of each message. Plain text is always sent too.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Brand {
+    PaperlessLabs,
 }
 
 /// Where outgoing mail goes.
@@ -104,7 +112,12 @@ impl MailBackend {
             (None, None) => None,
             _ => return Err("SMTP_USERNAME and SMTP_PASSWORD go together: set both or neither".into()),
         };
-        Ok(MailBackend::Smtp(SmtpConfig { host, port, credentials, from, tls }))
+        let brand = match var("MAIL_BRAND").map(|v| v.to_ascii_lowercase()).as_deref() {
+            None | Some("none" | "off" | "plain") => None,
+            Some("paperless-labs" | "paperless_labs") => Some(Brand::PaperlessLabs),
+            Some(other) => return Err(format!("MAIL_BRAND must be paperless-labs or unset, not {other:?}")),
+        };
+        Ok(MailBackend::Smtp(SmtpConfig { brand, host, port, credentials, from, tls }))
     }
 }
 
@@ -118,7 +131,7 @@ pub struct Mail {
 
 enum Transport {
     Off,
-    Smtp { from: Mailbox, transport: Box<AsyncSmtpTransport<Tokio1Executor>> },
+    Smtp { from: Mailbox, brand: Option<Brand>, transport: Box<AsyncSmtpTransport<Tokio1Executor>> },
     Capture(Arc<Mutex<Vec<Mail>>>),
 }
 
@@ -138,7 +151,7 @@ impl Mailer {
             MailBackend::Off => Transport::Off,
             MailBackend::Capture => Transport::Capture(Default::default()),
             MailBackend::Smtp(c) => match build(c, timeout) {
-                Ok(t) => Transport::Smtp { from: c.from.clone(), transport: Box::new(t) },
+                Ok(t) => Transport::Smtp { from: c.from.clone(), brand: c.brand, transport: Box::new(t) },
                 Err(e) => {
                     // from_vars already checked everything that can be checked offline; a failure here is the TLS setup
                     tracing::error!(error = %e, "SMTP transport could not be set up: email is off");
@@ -172,8 +185,8 @@ impl Mailer {
                 sent.lock().unwrap_or_else(|e| e.into_inner()).push(mail);
                 true
             }
-            Transport::Smtp { from, transport } => {
-                let message = match message(from, &mail) {
+            Transport::Smtp { from, brand, transport } => {
+                let message = match message(from, *brand, &mail) {
                     Ok(m) => m,
                     Err(e) => {
                         tracing::warn!(purpose, error = %e, "email not sent: the message could not be built");
@@ -227,15 +240,16 @@ fn build(c: &SmtpConfig, timeout: Duration) -> Result<AsyncSmtpTransport<Tokio1E
     Ok(builder.build())
 }
 
-fn message(from: &Mailbox, mail: &Mail) -> Result<Message, String> {
+fn message(from: &Mailbox, brand: Option<Brand>, mail: &Mail) -> Result<Message, String> {
     let to: Mailbox = mail.to.parse().map_err(|_| "the recipient is not a valid mailbox".to_string())?;
-    Message::builder()
-        .from(from.clone())
-        .to(to)
-        .subject(mail.subject.clone())
-        .header(lettre::message::header::ContentType::TEXT_PLAIN)
-        .body(mail.body.clone())
-        .map_err(|e| e.to_string())
+    let builder = Message::builder().from(from.clone()).to(to).subject(mail.subject.clone());
+    match brand {
+        // plain text and an HTML version made from it, in one message: a text-only client shows the text
+        Some(Brand::PaperlessLabs) => builder
+            .multipart(MultiPart::alternative_plain_html(mail.body.clone(), crate::mail_brand::paperless_labs_html(&mail.subject, &mail.body)))
+            .map_err(|e| e.to_string()),
+        None => builder.header(lettre::message::header::ContentType::TEXT_PLAIN).body(mail.body.clone()).map_err(|e| e.to_string()),
+    }
 }
 
 #[cfg(test)]
@@ -286,6 +300,35 @@ mod tests {
     }
 
     #[test]
+    fn the_brand_is_off_unless_asked_for_and_a_bad_one_stops_the_boot() {
+        let base = [("SMTP_HOST", "smtp.example.com"), ("SMTP_FROM", "no-reply@example.com")];
+        let brand = |extra: &[(&str, &str)]| {
+            let mut all = base.to_vec();
+            all.extend_from_slice(extra);
+            MailBackend::from_vars(vars(&all)).map(|b| match b {
+                MailBackend::Smtp(c) => c.brand,
+                other => panic!("{other:?}"),
+            })
+        };
+        assert_eq!(brand(&[]).unwrap(), None);
+        assert_eq!(brand(&[("MAIL_BRAND", "")]).unwrap(), None);
+        assert_eq!(brand(&[("MAIL_BRAND", "Paperless-Labs")]).unwrap(), Some(Brand::PaperlessLabs));
+        assert!(brand(&[("MAIL_BRAND", "acme")]).unwrap_err().contains("MAIL_BRAND"));
+    }
+
+    #[test]
+    fn a_branded_message_is_multipart_with_the_plain_text_word_for_word() {
+        let from: Mailbox = "Paperless Labs <notifications@example.com>".parse().unwrap();
+        let mail = Mail { to: "a@example.com".into(), subject: "Your Cupel workspace is ready".into(), body: "Hello\n\nhttps://app.example.test/invite#tok\n".into() };
+        let branded = String::from_utf8(message(&from, Some(Brand::PaperlessLabs), &mail).unwrap().formatted()).unwrap();
+        assert!(branded.contains("multipart/alternative"), "{branded}");
+        assert!(branded.contains("text/plain") && branded.contains("text/html"));
+        assert!(branded.contains("https://app.example.test/invite#tok"));
+        let plain = String::from_utf8(message(&from, None, &mail).unwrap().formatted()).unwrap();
+        assert!(!plain.contains("multipart") && !plain.contains("text/html"), "{plain}");
+    }
+
+    #[test]
     fn the_password_is_never_printed() {
         let b = MailBackend::from_vars(vars(&[
             ("SMTP_HOST", "smtp.example.com"),
@@ -312,7 +355,7 @@ mod tests {
     }
 
     fn cfg(port: u16) -> MailBackend {
-        MailBackend::Smtp(SmtpConfig { host: "127.0.0.1".into(), port, credentials: None, from: "no-reply@example.com".parse().unwrap(), tls: TlsMode::None })
+        MailBackend::Smtp(SmtpConfig { host: "127.0.0.1".into(), port, credentials: None, from: "no-reply@example.com".parse().unwrap(), tls: TlsMode::None, brand: None })
     }
 
     fn hello() -> Mail {
