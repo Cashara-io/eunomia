@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Turn a repo into a Cupel project: one shared vault and skills for every agent on the team.",
   "type": "module",
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "MIT",
   "engines": { "node": ">=18" },
   "bin": { "create-eunomia": "dist/cli.js" },
   "files": ["dist", "connect-agents.sh"],
