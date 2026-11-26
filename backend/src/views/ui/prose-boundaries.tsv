@@ -4,19 +4,19 @@ Input	Main	PR
 [12]0	Fail	Fail
 [12].5	Fail	Fail
 [12],000	Fail	Fail
-[3]k	Pass	Pass
-[3] k	Pass	Pass
-[3] thousand	Pass	Pass
+[3]k	Pass	Fail
+[3] k	Pass	Fail
+[3] thousand	Pass	Fail
 [3]%	Fail	Fail
 -[3]	Fail	Fail
 ([3])	Pass	Pass
 x[12]	Pass	Pass
 [12]x 10	Fail	Fail
 [12] x 10	Fail	Fail
-[12] times ten	Pass	Pass
+[12] times ten	Pass	Fail
 [12]e6	Fail	Fail
 [5 m] long	Fail	Fail
-[5] million	Pass	Pass
+[5] million	Pass	Fail
 [12].	Pass	Pass
 [12],	Pass	Pass
 [12])	Pass	Pass
@@ -34,14 +34,14 @@ x[12]	Pass	Pass
 [5 m] squared	Fail	Fail
 [5 m] cubed	Fail	Fail
 [5 m] per second	Fail	Fail
-[5] hundred	Pass	Pass
-[12] dozen	Pass	Pass
-[3] times	Pass	Pass
-[40] percent	Pass	Pass
-[5] k	Pass	Pass
-[12]thousand	Pass	Pass
-[5 m]	Fail	Pass
-[42 orders]	Fail	Pass
+[5] hundred	Pass	Fail
+[12] dozen	Pass	Fail
+[3] times	Pass	Fail
+[40] percent	Pass	Fail
+[5] k	Pass	Fail
+[12]thousand	Pass	Fail
+[5 m]	Pass	Pass
+[42 orders]	Pass	Pass
 [5 m].	Fail	Fail
 [5 m], and	Fail	Fail
 ([5 m])	Fail	Fail
@@ -72,20 +72,20 @@ x[12]	Pass	Pass
 [5 m]\nsquared	Fail	Fail
 ([5 m])\nsquared	Fail	Fail
 [5 m].\nNext	Fail	Fail
-[5 m]\n	Fail	Pass
+[5 m]\n	Pass	Pass
 [5 m]   long	Fail	Fail
 [42] orders today	Pass	Pass
-[5 m]   	Fail	Pass
+[5 m]   	Pass	Pass
 [5 m] / s	Fail	Fail
 [5 m] %	Fail	Fail
 [5 m]²	Fail	Fail
 [5 m]^2	Fail	Fail
 [5 m]]	Fail	Fail
 [5 m]}	Fail	Fail
-[5 m per second]	Fail	Pass
-[5 m squared]	Fail	Pass
-[5 m cubed]	Fail	Pass
-[5 °]	Fail	Pass
+[5 m per second]	Pass	Pass
+[5 m squared]	Pass	Pass
+[5 m cubed]	Pass	Pass
+[5 °]	Pass	Pass
 '[12]'	Fail	Fail
 -([5 m])	Fail	Fail
 ±[5 m]	Fail	Fail
@@ -97,3 +97,31 @@ twice [5 m]	Fail	Fail
 [5 m] . [2]	Fail	Fail
 ([5 m])!	Fail	Fail
 [5 ']'	Fail	Fail
+[5]b	Pass	Fail
+[5] b	Pass	Fail
+[5]B	Pass	Fail
+[5] B	Pass	Fail
+[5]bn	Pass	Fail
+[5] bn	Pass	Fail
+[5]billion	Pass	Fail
+[5] billion	Pass	Fail
+[5]tn	Pass	Fail
+[5] tn	Pass	Fail
+[5]trillion	Pass	Fail
+[5] trillion	Pass	Fail
+[5]mn	Pass	Fail
+[5] mn	Pass	Fail
+[5]mm	Pass	Fail
+[5] mm	Pass	Fail
+[5]MM	Pass	Fail
+[5] MM	Pass	Fail
+[5]m	Pass	Fail
+[5] m	Pass	Fail
+[5]M	Pass	Fail
+[5] M	Pass	Fail
+[5]K	Pass	Fail
+[5] K	Pass	Fail
+[5]lakh	Pass	Fail
+[5] lakh	Pass	Fail
+[5]crore	Pass	Fail
+[5] crore	Pass	Fail

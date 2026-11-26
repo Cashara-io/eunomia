@@ -537,6 +537,8 @@ async fn checked_tree_is_identical_in_text_done_and_reopened_history() {
     use eunomia_backend::sources::mock::{route,serve};
     for (raw, question, expected) in [
         ("Count 12![3](/icon.svg)", "Explain 123", "Count [unverified number]"),
+        ("Count 2 bn customers", "Explain 2", "Count [unverified number] customers"),
+        ("Distance 5 million metres", "Explain 5000000 metres", "Distance 5 million metres"),
         ("<https://example.com/999>", "Give a link", "https://example.com/999"),
         ("Bakery sales <AUD:0.00>.", "Show sales", "Bakery sales AUD:[unverified number]"),
         ("[Report](https://example.com \"Bakery sales $0.00\")", "Show report", "Report"),
