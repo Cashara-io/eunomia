@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "TypeScript client for the Cupel REST API: manage vaults and read and write memories.",
   "type": "module",
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "MIT",
   "engines": { "node": ">=18" },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

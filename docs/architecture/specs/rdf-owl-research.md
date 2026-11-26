@@ -2,7 +2,7 @@
 
 Research for the Eunomia Phase 3 ontology work. Checked with `gh api` on 31 Oct 2026 (Melbourne time). Stars and last-push dates are from GitHub on that day; push dates are shown in Melbourne time (AEDT).
 
-Eunomia context: Rust (axum), SurrealDB 3.3.5 as the ontology and graph store, ClickHouse for events, MCP and REST, PolyForm Noncommercial (source available).
+Eunomia context: Rust (axum), SurrealDB 3.3.5 as the ontology and graph store, ClickHouse for events, MCP and REST, MIT licensed (open source).
 
 ## Licence key
 

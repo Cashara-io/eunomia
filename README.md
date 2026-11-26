@@ -22,12 +22,11 @@ Cupel keeps your people, projects, decisions and documents in one place that
 you host and own, and lets ChatGPT, Claude, Claude Code, Codex and other AI apps
 look things up there.
 
-Free for personal and noncommercial use. Using it in a business needs a paid
-licence ([below](#licence-and-support)).
+Open source under the MIT License ([below](#licence-and-support)).
 
 [![CI](https://github.com/Cashara-io/cupel/actions/workflows/ci.yml/badge.svg)](https://github.com/Cashara-io/cupel/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/Cashara-io/cupel?label=release)](https://github.com/Cashara-io/cupel/releases/latest)
-[![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ![Scattered knowledge becoming a connected memory graph](docs/images/eunomia-cover.png)
 
@@ -394,7 +393,7 @@ the `docs` tool. The full list is in the [docs index](docs/README.md).
 
 ## Licence and support
 
-- **Licence:** licensed by Cashara Pty Ltd, trading as Paperless Labs. Opensource under MIT License.
+- **Licence:** licensed by Cashara Pty Ltd, trading as Paperless Labs. Open source under the [MIT License](LICENSE).
 - **Hosting and support:**
   [developers@buildpaperless.com.au](mailto:developers@buildpaperless.com.au).
 - **Bugs and feature requests:** [GitHub issues](https://github.com/Cashara-io/cupel/issues).
